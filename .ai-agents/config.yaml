@@ -1,0 +1,67 @@
+# AI Agent Framework - User Configuration
+# This file contains user-configurable settings only.
+# Resources (agents, skills, patterns) are discovered dynamically from their directories.
+
+name: "AI Agent Workflow Framework"
+version: "1.3"
+
+# ============================================================
+# System Settings
+# ============================================================
+system:
+  default_agent: conductor
+  language: en-US
+  interaction_mode: semi-auto
+  confirm_before_generate: true
+  confirm_before_save: true
+
+# ============================================================
+# Output Settings
+# ============================================================
+output:
+  no_emojis: true
+  flow_charts:
+    use_mermaid: true
+  data_format: yaml
+  max_description: 500
+
+# ============================================================
+# Pattern Settings
+# ============================================================
+pattern:
+  # Active architecture pattern
+  # Options: ddd, clean-architecture, frontend-react
+  # Use "#init" to auto-detect or "#config" to change
+  active: ddd
+
+  selection:
+    auto_detect: true
+    confirm_with_user: true
+
+# ============================================================
+# Knowledge Settings
+# ============================================================
+knowledge:
+  loading_order:
+    - core/*
+    - "patterns/{active}/*"
+    - principle/*
+    - project/*
+
+  lazy_load:
+    - "patterns/{inactive}/*"
+
+# ============================================================
+# Directory Structure (Advanced)
+# ============================================================
+directories:
+  agents: agents/
+  skills: skills/
+  workflows: workflows/
+  knowledge: knowledge/
+  workspace: workspace/
+  workspace_session: workspace/session.yaml
+  workspace_context: workspace/project-context.yaml
+  workspace_history: workspace/history/
+  workspace_artifacts: workspace/artifacts/
+  workspace_requirements: workspace/requirements/

@@ -1,0 +1,158 @@
+# AI Agent Framework Registry
+# Single source of truth for framework configuration
+
+version: "1.3"
+last_updated: "2026-03-08"
+
+# ============================================================
+# Agent Registry
+# ============================================================
+agents:
+  - id: conductor
+    name: Conductor
+    file: agents/conductor.md
+    commands: [init, status, config, sync-context, update-framework, cleanup]
+
+  - id: analyst
+    name: Analyst
+    file: agents/analyst.md
+    commands: [analyze, analyze-code]
+
+  - id: architect
+    name: Architect
+    file: agents/architect.md
+    commands: [design]
+
+  - id: developer
+    name: Developer
+    file: agents/developer.md
+    commands: [implement, fix, refactor]
+
+  - id: reviewer
+    name: Reviewer
+    file: agents/reviewer.md
+    commands: [review]
+
+  - id: tester
+    name: Tester
+    file: agents/tester.md
+    commands: [test]
+
+# ============================================================
+# Command-to-File Mapping
+# Each command maps to its specific file for efficient loading
+# ============================================================
+commands:
+  # Conductor commands
+  init:
+    agent: conductor
+    file: agents/_commands/init.md
+  status:
+    agent: conductor
+    file: agents/_commands/status.md
+  config:
+    agent: conductor
+    file: agents/_commands/config.md
+  sync-context:
+    agent: conductor
+    file: agents/_commands/sync-context.md
+  update-framework:
+    agent: conductor
+    file: agents/_commands/update-framework.md
+  cleanup:
+    agent: conductor
+    file: agents/_commands/cleanup.md
+
+  # Analyst commands
+  analyze:
+    agent: analyst
+    file: agents/_commands/analyze.md
+  analyze-code:
+    agent: analyst
+    file: agents/_commands/analyze-code.md
+
+  # Architect commands
+  design:
+    agent: architect
+    file: agents/_commands/design.md
+
+  # Developer commands
+  implement:
+    agent: developer
+    file: agents/_commands/implement.md
+  fix:
+    agent: developer
+    file: agents/_commands/fix.md
+  refactor:
+    agent: developer
+    file: agents/_commands/refactor.md
+
+  # Reviewer commands
+  review:
+    agent: reviewer
+    file: agents/_commands/review.md
+
+  # Tester commands
+  test:
+    agent: tester
+    file: agents/_commands/test.md
+
+# ============================================================
+# Context Level Definitions
+# Authority: skills/_system/context-loader.md
+# ============================================================
+
+# ============================================================
+# Workflows
+# ============================================================
+workflows:
+  - id: requirement-to-code
+    file: workflows/requirement-to-code.yaml
+    description: "Complete development workflow from PRD to tested implementation"
+
+  - id: code-review
+    file: workflows/code-review.yaml
+    description: "Standalone code review workflow"
+
+# ============================================================
+# Knowledge Packs
+# ============================================================
+knowledge:
+  core:
+    path: knowledge/core/
+    always_load: true
+    summary: Universal software engineering principles
+
+  patterns:
+    path: knowledge/patterns/
+    load: "based on config pattern.active"
+    summary: Architecture pattern knowledge packs
+
+  principle:
+    path: knowledge/principle/
+    load: "on implementation tasks"
+    summary: Project-specific coding standards
+
+  project:
+    path: knowledge/project/
+    load: "on demand"
+    summary: Custom project knowledge
+
+# ============================================================
+# Platform Adapters
+# ============================================================
+platforms:
+  claude_code:
+    command_prefix: "#"
+    entry_file: "CLAUDE.md"
+    features:
+      - persistent_memory
+      - direct_file_access
+      - slash_commands
+
+  github_copilot:
+    command_prefix: "#"
+    entry_file: ".github/agents/"
+    features:
+      - chat_interface
+      - file_references
