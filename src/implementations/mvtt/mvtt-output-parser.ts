@@ -70,11 +70,15 @@ export class MvttOutputParser {
     return parsed;
   }
 
-  /** Strategy 3: Parse JSON in CLI JSON's result field */
+  /** Strategy 3: Parse JSON in CLI JSON's result field (direct or code block) */
   private tryResultFieldParse(output: string): unknown | null {
     try {
       const meta = JSON.parse(output) as ClaudeCliJsonOutput;
-      return JSON.parse(meta.result);
+      try {
+        return JSON.parse(meta.result);
+      } catch {
+        return this.tryJsonCodeBlock(meta.result);
+      }
     } catch {
       return null;
     }

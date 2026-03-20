@@ -12,7 +12,7 @@ import type { AutomationConfig } from '../../core/types/config.types.js';
  */
 export function createLogger(config: AutomationConfig): pino.Logger {
   return pino({
-    level: process.env.LOG_LEVEL ?? 'info',
+    level: process.env.LOG_LEVEL ?? 'debug',
     transport:
       process.env.NODE_ENV !== 'production'
         ? { target: 'pino-pretty', options: { colorize: true } }
