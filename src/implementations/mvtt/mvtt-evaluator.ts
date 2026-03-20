@@ -41,7 +41,6 @@ export abstract class MvttEvaluator implements IEvaluator {
       cwd: input.projectDir,
       timeout: this.config.worker.defaultTimeout,
       options: {
-        sessionId: `eval-${input.pipelineId}-${input.phase}-${this.dimension}`,
         disallowedTools: permissions.disallowed,
         maxTurns: this.config.evaluator.maxTurns,
         outputFormat: 'json',

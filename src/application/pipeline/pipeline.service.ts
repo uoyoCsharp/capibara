@@ -167,7 +167,7 @@ export class PipelineService {
       currentPhase: 'analyze',
       completedPhases: [],
       phaseAttempts: {},
-      workerSessionId: `worker-${changeId}`,
+      workerSessionId: crypto.randomUUID(),
       artifacts: {} as Record<Phase, string>,
       mode,
     };

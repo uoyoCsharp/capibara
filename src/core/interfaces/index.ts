@@ -12,3 +12,5 @@ export type { IStateStore } from './state-store.interface.js';
 export type { IArtifactStore, Artifact } from './artifact-store.interface.js';
 export type { IEventBus } from './event-bus.interface.js';
 export type { ICommandExecutor } from './command-executor.interface.js';
+export type { IRequirementPool } from './requirement-pool.interface.js';
+export type { IProjectRegistry } from './project-registry.interface.js';

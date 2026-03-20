@@ -20,6 +20,11 @@ export const EVENT_BUS_TOKEN = 'IEventBus';
 export const COST_TRACKER_TOKEN = 'CostTracker';
 export const PIPELINE_DEFINITION_LOADER_TOKEN = 'PipelineDefinitionLoader';
 
+// ---------- Persistence ----------
+export const SQLITE_STORE_TOKEN = 'SqliteStore';
+export const REQUIREMENT_POOL_TOKEN = 'IRequirementPool';
+export const PROJECT_REGISTRY_TOKEN = 'IProjectRegistry';
+
 // ---------- Cross-Cutting Concerns ----------
 export const CONFIG_TOKEN = 'AutomationConfig';
 export const LOGGER_TOKEN = 'Logger';

@@ -74,27 +74,31 @@ export class ClaudeCliAdapter {
     startTime: number,
   ): Promise<ClaudeCliResult> {
     return new Promise<ClaudeCliResult>((resolve, reject) => {
+      const fullCommand = resolved.shell
+        ? `${resolved.command} ${[...resolved.prefixArgs, ...args].join(' ')}`
+        : `${resolved.command} ${[...resolved.prefixArgs, ...args].join(' ')}`;
+      this.logger.debug({ command: fullCommand, shell: resolved.shell }, 'Spawning CLI process');
+
+      // Clean environment to prevent debugger injection from parent process
+      const cleanEnv = { ...process.env };
+      delete cleanEnv.NODE_OPTIONS;
+
       const proc = spawn(resolved.command, [...resolved.prefixArgs, ...args], {
         cwd: options.cwd ?? this.config.cli.projectDir,
-        env: { ...process.env },
+        env: cleanEnv,
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: resolved.shell,
       });
 
-      // Send the prompt via stdin to avoid consuming command-line space.
-      proc.stdin.write(options.prompt);
-      proc.stdin.end();
-
+      let spawned = false;
       let stdout = '';
       let stderr = '';
       let settled = false;
-
-      proc.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
-      proc.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
+      let stdoutEnded = false;
+      let stderrEnded = false;
+      let exitCode: number | null = null;
+      let exited = false;
+      let epipeDetected = false;
 
       const settle = (result: ClaudeCliResult | Error) => {
         if (settled) return;
@@ -107,24 +111,91 @@ export class ClaudeCliAdapter {
       // Timeout protection
       const timer = options.timeout
         ? setTimeout(() => {
+            this.logger.warn('CLI execution timed out');
             proc.kill('SIGTERM');
             settle(new CliTimeoutError(options.timeout!));
           }, options.timeout)
         : null;
 
-      // Wait for BOTH streams to end AND process to close before resolving.
-      // On Windows, relying only on 'close' can miss buffered stream data.
-      let stdoutEnded = false;
-      let stderrEnded = false;
-      let exitCode: number | null = null;
-      let exited = false;
+      // Register spawn listener directly (NOT in setImmediate).
+      // Node.js emits 'spawn' via nextTick which runs BEFORE setImmediate,
+      // so wrapping in setImmediate would cause the listener to miss the event.
+      proc.once('spawn', () => {
+        spawned = true;
+        this.logger.debug('CLI process spawned successfully');
 
+        // Write prompt to stdin only after process is confirmed running
+        try {
+          proc.stdin.write(options.prompt);
+          proc.stdin.end();
+        } catch (writeErr) {
+          this.logger.warn({ err: writeErr }, 'stdin write failed');
+        }
+      });
+
+      // Handle process errors
+      proc.on('error', (err) => {
+        this.logger.error({ err, command: fullCommand }, 'CLI process error');
+        settle(new CliExecutionError(`CLI process error: ${err.message}`));
+      });
+
+      // Handle stdin errors (EPIPE when process exits before reading stdin)
+      proc.stdin.on('error', (err: Error & { code?: string }) => {
+        if (err.message.includes('EPIPE') || err.code === 'EPIPE') {
+          epipeDetected = true;
+          this.logger.debug('CLI process exited before stdin was consumed (EPIPE)');
+          // Don't settle yet - wait for process to fully exit
+        } else {
+          this.logger.warn({ err }, 'stdin error');
+        }
+      });
+
+      // Collect stdout data
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      // Collect stderr data
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      // Try to settle when all conditions are met
       const trySettle = () => {
+        this.logger.debug(
+          { epipeDetected, stdoutLen: stdout.length, stdoutEnded, stderrEnded, exited, exitCode, spawned },
+          'trySettle check',
+        );
+
+        // If EPIPE was detected with no output, it's a failure
+        // Note: exitCode can be 0 (process succeeded) but stdin wasn't consumed
+        if (epipeDetected && !stdout) {
+          this.logger.warn(
+            { exitCode, epipeDetected, stdout: stdout.slice(0, 200) },
+            'EPIPE detected - process exited before consuming stdin',
+          );
+          settle({
+            success: false,
+            output: stdout,
+            sessionId: '',
+            exitCode: exitCode ?? 1,
+            duration: Date.now() - startTime,
+          });
+          return;
+        }
+
         if (!stdoutEnded || !stderrEnded || !exited) return;
 
         const duration = Date.now() - startTime;
         if (stderr) {
           this.logger.warn({ stderr: stderr.slice(0, 500) }, 'CLI stderr output');
+        }
+
+        // If spawned is false, the process never started properly
+        if (!spawned) {
+          this.logger.error('CLI process never spawned');
+          settle(new CliExecutionError('CLI process failed to start'));
+          return;
         }
 
         settle({
@@ -139,7 +210,15 @@ export class ClaudeCliAdapter {
       proc.stdout.on('end', () => { stdoutEnded = true; trySettle(); });
       proc.stderr.on('end', () => { stderrEnded = true; trySettle(); });
       proc.on('close', (code) => { exitCode = code; exited = true; trySettle(); });
-      proc.on('error', (err) => settle(new CliExecutionError(err.message)));
+
+      // Fallback: If process closes very quickly without spawning, handle it
+      proc.on('exit', (code, signal) => {
+        this.logger.debug({ code, signal }, 'Process exited');
+        if (!spawned && code !== 0) {
+          // Process exited with error before even spawning
+          this.logger.error({ code }, 'Process exited before spawning');
+        }
+      });
     });
   }
 

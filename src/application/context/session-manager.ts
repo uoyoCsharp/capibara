@@ -19,7 +19,7 @@ export class SessionManager {
 
   /** Create Worker session for Pipeline */
   createSession(changeId: string): string {
-    const sessionId = `worker-${changeId}`;
+    const sessionId = crypto.randomUUID();
     this.sessions.set(sessionId, {
       sessionId,
       changeId,

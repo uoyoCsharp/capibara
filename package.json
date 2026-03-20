@@ -23,6 +23,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
     "commander": "^13.1.0",
     "dotenv": "^16.5.0",
     "emittery": "^1.1.0",
@@ -32,7 +33,11 @@
     "tsyringe": "^4.8.0",
     "zod": "^3.24.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "prettier": "^3.4.0",
     "rimraf": "^6.0.0",

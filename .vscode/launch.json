@@ -24,6 +24,31 @@
                 "-d",
                 "测试描述"
             ]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run (No Debug)",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "runtimeExecutable": "npx",
+            "runtimeArgs": [
+                "tsx",
+                "src/main.ts"
+            ],
+            "console": "integratedTerminal",
+            "args": [
+                "run",
+                "-t",
+                "测试需求",
+                "-d",
+                "测试描述"
+            ],
+            "env": {
+                "NODE_OPTIONS": "",
+                "NODE_ENV": "production"
+            }
         }
     ]
 }

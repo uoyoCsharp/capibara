@@ -6,7 +6,7 @@
 
 import 'reflect-metadata';
 import { container } from 'tsyringe';
-import { join } from 'node:path';
+import type { DependencyContainer } from 'tsyringe';
 
 import { loadConfig } from './config/config.loader.js';
 import { createLogger } from './infrastructure/observability/pino-logger.js';
@@ -21,6 +21,9 @@ import {
   COST_TRACKER_TOKEN,
   PIPELINE_DEFINITION_LOADER_TOKEN,
   TRIGGER_TOKEN,
+  SQLITE_STORE_TOKEN,
+  REQUIREMENT_POOL_TOKEN,
+  PROJECT_REGISTRY_TOKEN,
 } from './tokens.js';
 
 // Infrastructure
@@ -32,6 +35,9 @@ import { FsArtifactStore } from './infrastructure/persistence/fs-artifact-store.
 import { EmitteryEventBus } from './infrastructure/observability/emittery-event-bus.js';
 import { CostTracker } from './infrastructure/observability/cost-tracker.js';
 import { PipelineDefinitionLoader } from './infrastructure/pipeline/pipeline-definition.loader.js';
+import { SqliteStore } from './infrastructure/persistence/sqlite-store.js';
+import { SqliteProjectRegistry } from './infrastructure/persistence/sqlite-project-registry.js';
+import { SqliteRequirementPool } from './infrastructure/persistence/sqlite-requirement-pool.js';
 
 // MVTT Implementation
 import { registerMvtt } from './implementations/mvtt/index.js';
@@ -42,48 +48,89 @@ import { GitHubIssuesTrigger } from './infrastructure/triggers/github-issues.tri
 // Application
 import { PipelineService } from './application/pipeline/pipeline.service.js';
 import type { ICommandExecutor } from './core/interfaces/command-executor.interface.js';
+import type { AutomationConfig } from './core/types/config.types.js';
+import type { IRequirementPool } from './core/interfaces/requirement-pool.interface.js';
+import type { IProjectRegistry } from './core/interfaces/project-registry.interface.js';
 
 /**
- * Initialize DI container and return PipelineService
- * @param configPath Optional config file path
+ * Light bootstrap - only SQLite, project registry, and requirement pool.
+ * Used by pool/project CLI commands that don't need the full pipeline.
  */
-export function bootstrap(configPath?: string): PipelineService {
-  // 1. Config
+export function bootstrapLight(configPath?: string): {
+  config: AutomationConfig;
+  sqliteStore: SqliteStore;
+  projectRegistry: IProjectRegistry;
+  requirementPool: IRequirementPool;
+} {
   const config = loadConfig(configPath);
-  container.register(CONFIG_TOKEN, { useValue: config });
+  const sqliteStore = SqliteStore.shared();
+  const projectRegistry = new SqliteProjectRegistry(sqliteStore);
+  const requirementPool = new SqliteRequirementPool(sqliteStore);
+
+  return { config, sqliteStore, projectRegistry, requirementPool };
+}
+
+/**
+ * Full bootstrap for pipeline execution.
+ * Accepts an optional config override (used when loading project-specific config).
+ */
+export function bootstrap(configOrPath?: string | AutomationConfig): PipelineService {
+  const config = typeof configOrPath === 'string' || configOrPath === undefined
+    ? loadConfig(configOrPath)
+    : configOrPath;
+
+  // Use a child container to avoid polluting the global singleton registry
+  const child = container.createChildContainer();
+
+  // 1. Config
+  child.register(CONFIG_TOKEN, { useValue: config });
 
   // 2. Logger
   const logger = createLogger(config);
-  container.register(LOGGER_TOKEN, { useValue: logger });
+  child.register(LOGGER_TOKEN, { useValue: logger });
 
-  // 3. Infrastructure
-  container.registerSingleton(CLI_ADAPTER_TOKEN, ClaudeCliAdapter);
-  container.registerSingleton(STATE_STORE_TOKEN, JsonStateStore);
-  container.registerSingleton(ARTIFACT_STORE_TOKEN, FsArtifactStore);
-  container.registerSingleton(EVENT_BUS_TOKEN, EmitteryEventBus);
-  container.registerSingleton(COST_TRACKER_TOKEN, CostTracker);
+  // 3. SQLite (shared singleton)
+  const sqliteStore = SqliteStore.shared();
+  child.register(SQLITE_STORE_TOKEN, { useValue: sqliteStore });
+  child.register(REQUIREMENT_POOL_TOKEN, { useValue: new SqliteRequirementPool(sqliteStore) });
+  child.register(PROJECT_REGISTRY_TOKEN, { useValue: new SqliteProjectRegistry(sqliteStore) });
 
-  // 4. Command Executors (shared by all roles)
-  const cliAdapter = container.resolve<ClaudeCliAdapter>(CLI_ADAPTER_TOKEN);
+  // 4. Infrastructure
+  child.registerSingleton(CLI_ADAPTER_TOKEN, ClaudeCliAdapter);
+  child.registerSingleton(STATE_STORE_TOKEN, JsonStateStore);
+  child.registerSingleton(ARTIFACT_STORE_TOKEN, FsArtifactStore);
+  child.registerSingleton(EVENT_BUS_TOKEN, EmitteryEventBus);
+  child.registerSingleton(COST_TRACKER_TOKEN, CostTracker);
+
+  // 5. Command Executors (shared by all roles)
+  const cliAdapter = child.resolve<ClaudeCliAdapter>(CLI_ADAPTER_TOKEN);
   const executorRegistry = new Map<string, ICommandExecutor>();
   executorRegistry.set('claude-cli', new ClaudeCliExecutor(cliAdapter, logger));
   executorRegistry.set('shell-command', new ShellExecutor(logger));
 
   const defaultExecutor = executorRegistry.get(config.executor?.defaultType ?? 'claude-cli')!;
-  container.register(COMMAND_EXECUTOR_TOKEN, { useValue: defaultExecutor });
+  child.register(COMMAND_EXECUTOR_TOKEN, { useValue: defaultExecutor });
 
-  // 5. MVTT Role Implementations (single call registers all roles, including prompt framework)
-  registerMvtt(container);
+  // 6. MVTT Role Implementations (single call registers all roles, including prompt framework)
+  registerMvtt(child);
 
-  // 6. Pipeline Infrastructure
+  // 7. Pipeline Infrastructure
   const definitionLoader = new PipelineDefinitionLoader(logger);
-  container.register(PIPELINE_DEFINITION_LOADER_TOKEN, { useValue: definitionLoader });
+  child.register(PIPELINE_DEFINITION_LOADER_TOKEN, { useValue: definitionLoader });
 
-  // 7. Trigger (independent from MVTT)
+  // 8. Trigger (independent from MVTT)
   if (config.trigger.type === 'github_issues') {
-    container.registerSingleton(TRIGGER_TOKEN, GitHubIssuesTrigger);
+    child.registerSingleton(TRIGGER_TOKEN, GitHubIssuesTrigger);
   }
 
-  // 8. Application Service
-  return container.resolve(PipelineService);
+  // 9. Application Service
+  return child.resolve(PipelineService);
+}
+
+/**
+ * Create a factory function that produces PipelineService from a given config.
+ * Used by RequirementOrchestrator to re-bootstrap on project switch.
+ */
+export function createPipelineFactory(): (config: AutomationConfig) => PipelineService {
+  return (config: AutomationConfig) => bootstrap(config);
 }

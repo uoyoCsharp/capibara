@@ -20,7 +20,9 @@ export type PipelineEventType =
   | 'messenger:summarized'
   | 'human:intervention_requested'
   | 'human:response_received'
-  | 'cost:threshold_warning';
+  | 'cost:threshold_warning'
+  | 'orchestrator:started'
+  | 'orchestrator:stopped';
 
 export interface PipelineEvent {
   timestamp: string;
