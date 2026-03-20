@@ -1,19 +1,64 @@
 /**
  * MVTT Conductor Implementation
  *
- * Retains "rule engine first + LLM fallback" decision pattern.
- * LLM calls go through ICommandExecutor, no direct CLI dependency.
+ * Pure LLM decision-making based on Messenger-prepared plain text input.
+ * Maintains MVTT workflow knowledge for phase-aware decisions.
  * @module implementations/mvtt/mvtt-conductor
  */
 
 import type { IConductor } from '../../core/interfaces/conductor.interface.js';
 import type { ICommandExecutor } from '../../core/interfaces/command-executor.interface.js';
-import type { EvaluationResult } from '../../core/types/evaluation.types.js';
 import type { ConductorDecision } from '../../core/types/conductor.types.js';
 import type { MvttOutputParser } from './mvtt-output-parser.js';
 import type { AutomationConfig } from '../../core/types/config.types.js';
 import type { Logger } from 'pino';
 import { ROLE_PERMISSIONS } from '../../core/constants/permissions.js';
+
+const CONDUCTOR_SYSTEM_PROMPT = `You are a decision coordinator in a software development pipeline. Based on the provided evaluation summary, make a decision.
+
+Your options:
+- "approve": The work is acceptable and can proceed to the next phase
+- "revise": The work has issues that need to be addressed — provide specific feedback
+- "escalate": The work has fundamental problems requiring human intervention
+
+Output JSON:
+{"action": "approve|revise|escalate", "reason": "brief explanation", "feedback": ["specific suggestion 1", "..."], "priority": "critical|normal"}
+
+Rules:
+1. Only use "escalate" for truly unresolvable issues
+2. For "revise", always provide actionable feedback items
+3. For "approve", feedback array can be omitted
+4. Be decisive — avoid ambiguous recommendations`;
+
+const MVTT_WORKFLOW_KNOWLEDGE = `
+## MVTT Workflow
+
+The software development pipeline follows this workflow:
+  analyze → design → implement → review → test
+
+Phase descriptions:
+- analyze: Requirements analysis — produces structured requirement breakdown
+- design: Architecture design — produces technical blueprint based on analysis
+- implement: Code implementation — produces working code based on design
+- review: Code review — produces review feedback on implementation quality
+- test: Testing — produces test results validating implementation
+
+Key principles:
+- Each phase's output must be sufficient to support the next phase
+- Earlier phases (analyze, design) should prioritize completeness and clarity
+- Later phases (review, test) should validate against earlier phase outputs
+- "approve" means the output is ready for the downstream consumer
+`;
+
+const WORKFLOW_PHASES = ['analyze', 'design', 'implement', 'review', 'test'] as const;
+
+const PHASE_DOWNSTREAM_NEEDS: Record<string, string> = {
+  analyze: 'Design phase needs clear, structured requirements with acceptance criteria',
+  design: 'Implement phase needs precise technical blueprint with interfaces and data flow',
+  implement: 'Review phase needs working code that follows the design blueprint',
+  review: 'Test phase needs validated, reviewed code ready for testing',
+  test: 'Pipeline completion — test results confirm implementation correctness',
+};
 
 export class MvttConductor implements IConductor {
   constructor(
@@ -23,84 +68,56 @@ export class MvttConductor implements IConductor {
     private logger: Logger,
   ) {}
 
-  async decide(evaluations: EvaluationResult[]): Promise<ConductorDecision> {
-    const ruleDecision = this.applyRules(evaluations);
-    if (ruleDecision) {
-      this.logger.info({ action: ruleDecision.action }, 'Conductor decided by rules');
-      return ruleDecision;
-    }
+  async decide(input: string): Promise<ConductorDecision> {
+    this.logger.info('Conductor making decision via LLM');
 
-    this.logger.info('Conductor falling back to LLM');
-    return this.llmDecide(evaluations);
-  }
-
-  /**
-   * Rule engine: match rules by priority
-   * 1. Has critical issues -> revise
-   * 2. All pass -> approve
-   * 3. All pass or pass_with_notes -> approve (with suggestions)
-   * 4. Average score >= threshold -> approve
-   * 5. No match -> null (delegate to LLM)
-   */
-  private applyRules(evaluations: EvaluationResult[]): ConductorDecision | null {
-    const criticalIssues = evaluations.flatMap((e) =>
-      e.issues.filter((i) => i.severity === 'critical'),
-    );
-    if (criticalIssues.length > 0) {
-      return {
-        action: 'revise',
-        reason: `Found ${criticalIssues.length} critical issues`,
-        feedback: criticalIssues.map(
-          (i) => `[${i.category}] ${i.description}${i.suggestion ? `: ${i.suggestion}` : ''}`,
-        ),
-        priority: 'critical',
-      };
-    }
-
-    if (evaluations.every((e) => e.verdict === 'pass')) {
-      return { action: 'approve', reason: 'All evaluations passed' };
-    }
-
-    if (evaluations.every((e) => ['pass', 'pass_with_notes'].includes(e.verdict))) {
-      const notes = evaluations.flatMap((e) => e.issues.filter((i) => i.severity === 'suggestion'));
-      return { action: 'approve', reason: 'Passed with suggestions', notes };
-    }
-
-    const avgScore = evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length;
-    if (avgScore >= this.config.conductor.autoApproveThreshold) {
-      return {
-        action: 'approve',
-        reason: `Average score ${avgScore.toFixed(0)} >= threshold ${this.config.conductor.autoApproveThreshold}`,
-      };
-    }
-
-    return null;
-  }
-
-  private async llmDecide(evaluations: EvaluationResult[]): Promise<ConductorDecision> {
-    const permissions = ROLE_PERMISSIONS.conductor;
+    const phaseContext = this.buildPhaseContext(input);
 
     const response = await this.executor.execute({
       input: [
-        'Please analyze the following evaluation results and make a decision.',
+        'Please analyze the following evaluation summary and make a decision.',
         '',
-        'Evaluation results:',
-        JSON.stringify(evaluations, null, 2),
+        phaseContext,
         '',
-        'Output JSON:',
-        '```json',
-        '{"action":"approve|revise|escalate","reason":"...","feedback":["..."],"priority":"critical|normal"}',
-        '```',
+        'Evaluation summary:',
+        input,
       ].join('\n'),
-      systemPrompt:
-        'You are a decision coordinator. Make comprehensive decisions based on multiple evaluation results. Analyze conflicts, weigh pros and cons, and provide clear action recommendations. Output must be in JSON format.',
+      systemPrompt: CONDUCTOR_SYSTEM_PROMPT + '\n' + MVTT_WORKFLOW_KNOWLEDGE,
       options: {
-        disallowedTools: permissions.disallowed,
+        disallowedTools: ROLE_PERMISSIONS.conductor.disallowed,
         maxTurns: this.config.conductor.maxTurns,
         outputFormat: 'json',
       },
     });
 
-    return this.outputParser.parseConductorDecision(response);
+    const decision = this.outputParser.parseConductorDecision(response);
+    this.logger.info({ action: decision.action, reason: decision.reason }, 'Conductor decided');
+    return decision;
+  }
+
+  private buildPhaseContext(input: string): string {
+    const phase = this.extractPhase(input);
+    if (!phase) return '';
+
+    const idx = WORKFLOW_PHASES.indexOf(phase as (typeof WORKFLOW_PHASES)[number]);
+    if (idx === -1) return '';
+
+    const upstream = WORKFLOW_PHASES.slice(0, idx);
+    const downstream = WORKFLOW_PHASES.slice(idx + 1);
+
+    return [
+      'Current Phase Context:',
+      `- Phase: ${phase}`,
+      `- Position: ${idx + 1} of ${WORKFLOW_PHASES.length} in workflow`,
+      `- Upstream: ${upstream.length > 0 ? upstream.join(' → ') : '(none)'}`,
+      `- Downstream: ${downstream.length > 0 ? downstream.join(' → ') : '(none)'}`,
+      `- Downstream needs: ${PHASE_DOWNSTREAM_NEEDS[phase] ?? 'N/A'}`,
+    ].join('\n');
+  }
+
+  private extractPhase(input: string): string | undefined {
+    const firstLine = input.split('\n')[0];
+    const match = firstLine.match(/Phase:\s*(\S+)/);
+    return match?.[1];
   }
 }

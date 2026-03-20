@@ -52,8 +52,12 @@ export class ShellExecutor implements ICommandExecutor {
       let stderr = '';
       let settled = false;
 
-      proc.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
-      proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
 
       const settle = (response: CommandResponse) => {
         if (settled) return;
@@ -89,9 +93,19 @@ export class ShellExecutor implements ICommandExecutor {
         });
       };
 
-      proc.stdout.on('end', () => { stdoutEnded = true; trySettle(); });
-      proc.stderr.on('end', () => { stderrEnded = true; trySettle(); });
-      proc.on('close', (code) => { exitCode = code; exited = true; trySettle(); });
+      proc.stdout.on('end', () => {
+        stdoutEnded = true;
+        trySettle();
+      });
+      proc.stderr.on('end', () => {
+        stderrEnded = true;
+        trySettle();
+      });
+      proc.on('close', (code) => {
+        exitCode = code;
+        exited = true;
+        trySettle();
+      });
       proc.on('error', (err) => {
         settle({
           success: false,

@@ -1,0 +1,17 @@
+session:
+  last_command: "#review"
+
+active_change:
+  id: "20260320-conductor-messenger-enhance"
+  title: "Conductor 工作流感知 + Messenger 反馈处理增强"
+
+progress:
+  analyze: done
+  design: done
+  implement: done
+  review: done
+
+recent_actions:
+  - "Reviewed 4 files: 0 critical, 1 warning (phase duplication), 2 suggestions. All 5 ADRs compliant."
+  - "Implemented Conductor workflow-aware prompt, Messenger async updateContext with LLM feedback enhancement, interface + call site updates (4 files)"
+  - "Designed Conductor workflow-aware prompt + Messenger async updateContext with LLM feedback enhancement (4 files, 5 ADRs)"

@@ -61,7 +61,11 @@ export class ClaudeCliAdapter {
       return await this.spawnAndCollect(resolved, args, effectiveOptions, startTime);
     } finally {
       if (tempDir) {
-        try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        try {
+          rmSync(tempDir, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
@@ -163,7 +167,15 @@ export class ClaudeCliAdapter {
       // Try to settle when all conditions are met
       const trySettle = () => {
         this.logger.debug(
-          { epipeDetected, stdoutLen: stdout.length, stdoutEnded, stderrEnded, exited, exitCode, spawned },
+          {
+            epipeDetected,
+            stdoutLen: stdout.length,
+            stdoutEnded,
+            stderrEnded,
+            exited,
+            exitCode,
+            spawned,
+          },
           'trySettle check',
         );
 
@@ -207,9 +219,19 @@ export class ClaudeCliAdapter {
         });
       };
 
-      proc.stdout.on('end', () => { stdoutEnded = true; trySettle(); });
-      proc.stderr.on('end', () => { stderrEnded = true; trySettle(); });
-      proc.on('close', (code) => { exitCode = code; exited = true; trySettle(); });
+      proc.stdout.on('end', () => {
+        stdoutEnded = true;
+        trySettle();
+      });
+      proc.stderr.on('end', () => {
+        stderrEnded = true;
+        trySettle();
+      });
+      proc.on('close', (code) => {
+        exitCode = code;
+        exited = true;
+        trySettle();
+      });
 
       // Fallback: If process closes very quickly without spawning, handle it
       proc.on('exit', (code, signal) => {
@@ -239,8 +261,8 @@ export class ClaudeCliAdapter {
           .split('\r\n');
 
         // Prefer the .cmd file; `where` may return the extensionless shell script first
-        const cmdPath = wherePaths.find((p) => p.endsWith('.cmd') || p.endsWith('.bat'))
-          ?? wherePaths[0];
+        const cmdPath =
+          wherePaths.find((p) => p.endsWith('.cmd') || p.endsWith('.bat')) ?? wherePaths[0];
 
         if (cmdPath.endsWith('.cmd') || cmdPath.endsWith('.bat')) {
           const content = readFileSync(cmdPath, 'utf-8');
@@ -248,8 +270,9 @@ export class ClaudeCliAdapter {
 
           // npm .cmd files use pattern: "%_prog%" "%dp0%\node_modules\...\cli.js" %*
           // or: @"%~dp0\node.exe" "%~dp0\node_modules\...\cli.js" %*
-          const scriptMatch = content.match(/"%(?:dp0|~dp0)%\\([^"]+\.js)"/i)
-            || content.match(/"%~dp0\\([^"]+\.js)"/i);
+          const scriptMatch =
+            content.match(/"%(?:dp0|~dp0)%\\([^"]+\.js)"/i) ||
+            content.match(/"%~dp0\\([^"]+\.js)"/i);
 
           if (scriptMatch) {
             const scriptPath = join(cmdDir, scriptMatch[1]);
@@ -332,8 +355,6 @@ export class ClaudeCliAdapter {
 
   /** Redact sensitive file paths in logs */
   private redactArgs(args: string[]): string[] {
-    return args.map((a, i) =>
-      args[i - 1] === '--system-prompt-file' ? '[FILE]' : a,
-    );
+    return args.map((a, i) => (args[i - 1] === '--system-prompt-file' ? '[FILE]' : a));
   }
 }

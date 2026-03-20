@@ -14,9 +14,9 @@ describe('Config Schema', () => {
     expect(result.cli.cliPath).toBe('claude');
     expect(result.cli.maxConcurrentProcesses).toBe(3);
     expect(result.worker.defaultMaxTurns).toBe(25);
-    expect(result.evaluator.dimensions).toEqual(['quality']);
+    expect(result.evaluator.maxTurns).toBe(3);
     expect(result.pipeline.mode).toBe('semi-auto');
-    expect(result.pipeline.phases).toEqual(['analyze', 'design', 'implement', 'review', 'test']);
+    expect(result.pipeline.budgetLimit).toBe(50);
   });
 
   it('should reject missing required projectDir', () => {
@@ -34,12 +34,10 @@ describe('Config Schema', () => {
         maxConcurrentProcesses: 5,
       },
       worker: { defaultMaxTurns: 30, defaultTimeout: 300000 },
-      evaluator: { dimensions: ['quality', 'security'], maxTurns: 5, parseRetries: 3 },
-      messenger: { maxTurns: 3, summarizeThreshold: 3000, fallbackToRaw: false },
+      evaluator: { maxTurns: 5 },
+      messenger: { maxTurns: 3 },
       conductor: {
         maxAttemptsPerPhase: 5,
-        autoApproveThreshold: 70,
-        escalateThreshold: 3,
         maxTurns: 2,
       },
       trigger: { type: 'manual' },
@@ -49,10 +47,10 @@ describe('Config Schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('should reject invalid dimension', () => {
+  it('should reject invalid evaluator maxTurns', () => {
     const result = automationConfigSchema.safeParse({
       cli: { projectDir: '.' },
-      evaluator: { dimensions: ['invalid'] },
+      evaluator: { maxTurns: 'invalid' },
     });
     expect(result.success).toBe(false);
   });

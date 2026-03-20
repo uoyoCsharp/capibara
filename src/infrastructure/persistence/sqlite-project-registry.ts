@@ -37,29 +37,43 @@ export class SqliteProjectRegistry implements IProjectRegistry {
     const now = new Date().toISOString();
 
     // Auto-activate if this is the first project
-    const count = (this.store.db.prepare('SELECT COUNT(*) as cnt FROM projects').get() as { cnt: number }).cnt;
+    const count = (
+      this.store.db.prepare('SELECT COUNT(*) as cnt FROM projects').get() as { cnt: number }
+    ).cnt;
     const isActive = count === 0 ? 1 : 0;
 
-    this.store.db.prepare(`
+    this.store.db
+      .prepare(
+        `
       INSERT INTO projects (id, name, project_dir, config, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.name, input.projectDir, JSON.stringify(input.config ?? {}), isActive, now, now);
+    `,
+      )
+      .run(
+        id,
+        input.name,
+        input.projectDir,
+        JSON.stringify(input.config ?? {}),
+        isActive,
+        now,
+        now,
+      );
 
     return (await this.get(id))!;
   }
 
   async get(id: string): Promise<Project | null> {
-    const row = this.store.db.prepare(
-      'SELECT * FROM projects WHERE id = ?',
-    ).get(id) as ProjectRow | undefined;
+    const row = this.store.db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as
+      | ProjectRow
+      | undefined;
 
     return row ? rowToProject(row) : null;
   }
 
   async list(): Promise<Project[]> {
-    const rows = this.store.db.prepare(
-      'SELECT * FROM projects ORDER BY created_at ASC',
-    ).all() as ProjectRow[];
+    const rows = this.store.db
+      .prepare('SELECT * FROM projects ORDER BY created_at ASC')
+      .all() as ProjectRow[];
 
     return rows.map(rowToProject);
   }
@@ -71,14 +85,17 @@ export class SqliteProjectRegistry implements IProjectRegistry {
     const now = new Date().toISOString();
     const name = patch.name ?? existing.name;
     const projectDir = patch.projectDir ?? existing.projectDir;
-    const config = patch.config !== undefined
-      ? JSON.stringify(patch.config)
-      : JSON.stringify(existing.config);
+    const config =
+      patch.config !== undefined ? JSON.stringify(patch.config) : JSON.stringify(existing.config);
 
-    this.store.db.prepare(`
+    this.store.db
+      .prepare(
+        `
       UPDATE projects SET name = ?, project_dir = ?, config = ?, updated_at = ?
       WHERE id = ?
-    `).run(name, projectDir, config, now, id);
+    `,
+      )
+      .run(name, projectDir, config, now, id);
 
     return (await this.get(id))!;
   }
@@ -88,9 +105,9 @@ export class SqliteProjectRegistry implements IProjectRegistry {
   }
 
   async getActive(): Promise<Project | null> {
-    const row = this.store.db.prepare(
-      'SELECT * FROM projects WHERE is_active = 1',
-    ).get() as ProjectRow | undefined;
+    const row = this.store.db.prepare('SELECT * FROM projects WHERE is_active = 1').get() as
+      | ProjectRow
+      | undefined;
 
     return row ? rowToProject(row) : null;
   }
@@ -102,8 +119,12 @@ export class SqliteProjectRegistry implements IProjectRegistry {
     const now = new Date().toISOString();
 
     this.store.db.transaction(() => {
-      this.store.db.prepare('UPDATE projects SET is_active = 0, updated_at = ? WHERE is_active = 1').run(now);
-      this.store.db.prepare('UPDATE projects SET is_active = 1, updated_at = ? WHERE id = ?').run(now, id);
+      this.store.db
+        .prepare('UPDATE projects SET is_active = 0, updated_at = ? WHERE is_active = 1')
+        .run(now);
+      this.store.db
+        .prepare('UPDATE projects SET is_active = 1, updated_at = ? WHERE id = ?')
+        .run(now, id);
     })();
 
     return (await this.get(id))!;

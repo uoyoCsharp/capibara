@@ -5,7 +5,6 @@
 
 import type { Phase, InteractionMode } from './phase.types.js';
 import type { Requirement } from './requirement.types.js';
-import type { EvaluationResult } from './evaluation.types.js';
 import type { ConductorDecision } from './conductor.types.js';
 
 export type PipelineStatus = 'running' | 'paused' | 'completed' | 'failed';
@@ -36,7 +35,6 @@ export interface PipelineResult {
 /** Single phase execution result */
 export interface PhaseResult {
   attempts: number;
-  finalScore: number;
   duration: number;
   tokenCost: number;
 }
@@ -52,7 +50,7 @@ export interface PipelineState {
   context: {
     requirement: Requirement;
     artifacts: Record<Phase, string>;
-    evaluations: Record<Phase, EvaluationResult[]>;
+    evaluations: Record<Phase, string[]>;
     decisions: Record<Phase, ConductorDecision[]>;
   };
   sessions: {

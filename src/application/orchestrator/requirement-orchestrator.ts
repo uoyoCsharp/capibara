@@ -60,7 +60,9 @@ export class RequirementOrchestrator {
 
     const project = await this.registry.getActive();
     if (!project) {
-      throw new Error('No active project. Run `cpbr project add` then `cpbr project switch` first.');
+      throw new Error(
+        'No active project. Run `cpbr project add` then `cpbr project switch` first.',
+      );
     }
 
     this.activeProjectId = project.id;
@@ -105,7 +107,11 @@ export class RequirementOrchestrator {
           'Active project changed, re-bootstrapping',
         );
         this.activeProjectId = currentActive.id;
-        const config = this.mergeConfig(this.baseConfig, currentActive.config, currentActive.projectDir);
+        const config = this.mergeConfig(
+          this.baseConfig,
+          currentActive.config,
+          currentActive.projectDir,
+        );
         this.pipeline = this.bootstrapFn(config);
       }
 
@@ -115,7 +121,10 @@ export class RequirementOrchestrator {
 
       if (!req) {
         this.state = 'standby';
-        this.logger.debug({ pollInterval: this.pollInterval }, 'No pending requirements, entering standby');
+        this.logger.debug(
+          { pollInterval: this.pollInterval },
+          'No pending requirements, entering standby',
+        );
         await this.sleep(this.pollInterval);
         continue;
       }
@@ -127,10 +136,7 @@ export class RequirementOrchestrator {
   private async executeRequirement(req: Requirement): Promise<void> {
     this.state = 'running';
 
-    this.logger.info(
-      { requirementId: req.id, title: req.title },
-      'Processing requirement',
-    );
+    this.logger.info({ requirementId: req.id, title: req.title }, 'Processing requirement');
 
     await this.pool.update(req.id, { status: 'in-progress' });
 
@@ -147,7 +153,7 @@ export class RequirementOrchestrator {
         this.baseConfig.pipeline.mode,
       );
 
-      const status = result.success ? 'completed' as const : 'failed' as const;
+      const status = result.success ? ('completed' as const) : ('failed' as const);
       await this.pool.update(req.id, { status });
 
       this.logger.info(

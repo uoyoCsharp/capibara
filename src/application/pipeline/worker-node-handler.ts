@@ -1,8 +1,13 @@
 /**
- * Worker Node Handler - Worker -> Evaluator -> Conductor feedback loop
+ * Worker Node Handler - Worker -> Messenger routing -> Evaluator? -> Conductor feedback loop
  *
- * Extracted from the original monolithic NodeExecutor.
- * Handles nodes of type 'worker'.
+ * Messenger acts as the central hub:
+ * 1. Worker executes
+ * 2. Messenger decides if evaluation is needed (shouldEvaluate)
+ * 3a. If yes: Evaluators run in parallel → Messenger synthesizes → prepareForConductor
+ * 3b. If no: Messenger prepares worker output directly for Conductor
+ * 4. Conductor decides: approve / revise / escalate
+ *
  * @module application/pipeline/worker-node-handler
  */
 
@@ -46,7 +51,6 @@ export class WorkerNodeHandler implements INodeHandler {
     const startTime = Date.now();
     context.currentPhase = phase;
     let approved = false;
-    let lastScore = 0;
 
     emitNodeEvent(this.eventBus, context.pipelineId, phase, 'phase:started', {
       nodeId: node.id,
@@ -54,17 +58,79 @@ export class WorkerNodeHandler implements INodeHandler {
     });
 
     while (!approved) {
+      // 1. Worker executes
       const workerResult = await this.executeWorker(phase, node, context);
       stateMachine.setNodeOutput(node.id, workerResult.output);
 
-      const evaluations = await this.runEvaluations(phase, context, workerResult);
-      lastScore = evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length;
+      // 2. Messenger routing: should we evaluate?
+      const needsEvaluation = await this.messenger.shouldEvaluate(workerResult, context);
 
-      const decision = await this.decide(phase, node, context, evaluations, lastScore);
+      let conductorInput: string;
+
+      if (needsEvaluation) {
+        // 3a. Evaluators run in parallel → Messenger synthesizes
+        const artifact = workerResult.artifact || workerResult.output;
+        const evalContext = {
+          pipelineId: context.pipelineId,
+          phase,
+          projectDir: this.config.cli.projectDir,
+        };
+
+        emitNodeEvent(
+          this.eventBus,
+          context.pipelineId,
+          phase,
+          'evaluator:started',
+          {
+            evaluatorCount: this.evaluators.length,
+          },
+          'evaluator',
+        );
+
+        const evalResults = await Promise.all(
+          this.evaluators.map((e) => e.evaluate(artifact, evalContext)),
+        );
+
+        emitNodeEvent(
+          this.eventBus,
+          context.pipelineId,
+          phase,
+          'evaluator:completed',
+          {
+            resultCount: evalResults.length,
+          },
+          'evaluator',
+        );
+
+        const synthesized = await this.messenger.synthesize(evalResults, context);
+        conductorInput = await this.messenger.prepareForConductor(synthesized, context);
+      } else {
+        // 3b. Skip evaluation, prepare worker output directly
+        conductorInput = await this.messenger.prepareForConductor(
+          workerResult.artifact || workerResult.output,
+          context,
+        );
+      }
+
+      // 4. Conductor decides
+      const decision = await this.conductor.decide(conductorInput);
+
+      this.logger.info({ phase, nodeId: node.id, action: decision.action }, 'Node decision');
+
+      emitNodeEvent(
+        this.eventBus,
+        context.pipelineId,
+        phase,
+        'conductor:decided',
+        {
+          action: decision.action,
+        },
+        'conductor',
+      );
 
       if (decision.action === 'approve') {
         approved = true;
-        const updated = this.messenger.updateContext(decision, context);
+        const updated = await this.messenger.updateContext(decision, context);
         Object.assign(context, updated);
       } else if (decision.action === 'escalate') {
         this.logger.warn({ phase, nodeId: node.id }, 'Escalated to human intervention');
@@ -73,7 +139,7 @@ export class WorkerNodeHandler implements INodeHandler {
         });
         break;
       } else {
-        const shouldBreak = this.handleRevision(phase, node, context, decision);
+        const shouldBreak = await this.handleRevision(phase, node, context, decision);
         if (shouldBreak) {
           approved = context.mode === 'auto';
           break;
@@ -82,13 +148,11 @@ export class WorkerNodeHandler implements INodeHandler {
     }
 
     emitNodeEvent(this.eventBus, context.pipelineId, phase, 'phase:completed', {
-      score: lastScore,
       attempts: context.phaseAttempts[phase] ?? 0,
     });
 
     return {
       attempts: context.phaseAttempts[phase] ?? 0,
-      finalScore: lastScore,
       duration: Date.now() - startTime,
       tokenCost: 0,
     };
@@ -106,10 +170,17 @@ export class WorkerNodeHandler implements INodeHandler {
     const costUsd = (workerResult.metadata.costUsd as number) ?? 0;
     this.costTracker.add(costUsd);
 
-    emitNodeEvent(this.eventBus, context.pipelineId, phase, 'worker:completed', {
-      success: workerResult.success,
-      cost: costUsd,
-    }, 'worker');
+    emitNodeEvent(
+      this.eventBus,
+      context.pipelineId,
+      phase,
+      'worker:completed',
+      {
+        success: workerResult.success,
+        cost: costUsd,
+      },
+      'worker',
+    );
 
     await this.artifactStore.save(
       context.changeId,
@@ -120,59 +191,13 @@ export class WorkerNodeHandler implements INodeHandler {
     return workerResult;
   }
 
-  private async runEvaluations(
-    phase: Phase,
-    context: PipelineContext,
-    workerResult: Awaited<ReturnType<IWorker['executeCommand']>>,
-  ) {
-    emitNodeEvent(this.eventBus, context.pipelineId, phase, 'evaluator:started', {
-      dimensions: this.evaluators.map((e) => e.getDimension()),
-    }, 'evaluator');
-
-    const evalInput = await this.messenger.formatForEvaluator(workerResult, context);
-    const evaluations = await Promise.all(this.evaluators.map((e) => e.evaluate(evalInput)));
-
-    emitNodeEvent(this.eventBus, context.pipelineId, phase, 'evaluator:completed', {
-      results: evaluations.map((e) => ({
-        dimension: e.dimension,
-        verdict: e.verdict,
-        score: e.score,
-      })),
-    }, 'evaluator');
-
-    return evaluations;
-  }
-
-  private async decide(
-    phase: Phase,
-    node: PipelineNodeDefinition,
-    context: PipelineContext,
-    evaluations: Awaited<ReturnType<IEvaluator['evaluate']>>[],
-    score: number,
-  ) {
-    await this.messenger.synthesizeFeedback(evaluations, context);
-    const decision = await this.conductor.decide(evaluations);
-
-    this.logger.info(
-      { phase, nodeId: node.id, action: decision.action, score: score.toFixed(1) },
-      'Node decision',
-    );
-
-    emitNodeEvent(this.eventBus, context.pipelineId, phase, 'conductor:decided', {
-      action: decision.action,
-      score,
-    }, 'conductor');
-
-    return decision;
-  }
-
   /** @returns true if max attempts reached and loop should break */
-  private handleRevision(
+  private async handleRevision(
     phase: Phase,
     node: PipelineNodeDefinition,
     context: PipelineContext,
     decision: Awaited<ReturnType<IConductor['decide']>>,
-  ): boolean {
+  ): Promise<boolean> {
     const attempts = (context.phaseAttempts[phase] ?? 0) + 1;
     context.phaseAttempts[phase] = attempts;
 
@@ -182,7 +207,7 @@ export class WorkerNodeHandler implements INodeHandler {
       return true;
     }
 
-    const updated = this.messenger.updateContext(decision, context);
+    const updated = await this.messenger.updateContext(decision, context);
     Object.assign(context, updated);
 
     emitNodeEvent(this.eventBus, context.pipelineId, phase, 'phase:retry', {

@@ -173,10 +173,15 @@ poolCmd
     const { projectRegistry, requirementPool, sqliteStore } = bootstrapLight();
     try {
       const project = await requireActiveProject(projectRegistry);
-      const reqs = await requirementPool.list(project.id, opts.status ? { status: opts.status } : undefined);
+      const reqs = await requirementPool.list(
+        project.id,
+        opts.status ? { status: opts.status } : undefined,
+      );
 
       if (reqs.length === 0) {
-        console.log(`No requirements${opts.status ? ` with status "${opts.status}"` : ''} for ${project.name}.`);
+        console.log(
+          `No requirements${opts.status ? ` with status "${opts.status}"` : ''} for ${project.name}.`,
+        );
         return;
       }
 
@@ -184,7 +189,9 @@ poolCmd
       console.log('─'.repeat(80));
       for (const r of reqs) {
         const prio = r.priority ? ` [P${r.priority}]` : '';
-        console.log(`  ${r.id.slice(0, 8)}...  ${(r.status ?? 'pending').padEnd(12)}  ${r.title}${prio}`);
+        console.log(
+          `  ${r.id.slice(0, 8)}...  ${(r.status ?? 'pending').padEnd(12)}  ${r.title}${prio}`,
+        );
       }
     } finally {
       sqliteStore.close();

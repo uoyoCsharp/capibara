@@ -146,7 +146,7 @@ export class PipelineService {
     this.logger.warn({ pipelineId }, 'Pipeline resume attempted but not yet implemented for DAG');
     throw new Error(
       `Pipeline resume is not yet implemented for DAG-based pipelines. ` +
-      `Pipeline ID: ${pipelineId}. Please start a new pipeline run instead.`,
+        `Pipeline ID: ${pipelineId}. Please start a new pipeline run instead.`,
     );
   }
 

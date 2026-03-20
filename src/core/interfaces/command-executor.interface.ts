@@ -9,10 +9,7 @@
  * @module core/interfaces/command-executor
  */
 
-import type {
-  CommandRequest,
-  CommandResponse,
-} from '../types/command-executor.types.js';
+import type { CommandRequest, CommandResponse } from '../types/command-executor.types.js';
 
 export interface ICommandExecutor {
   /** Executor type identifier */

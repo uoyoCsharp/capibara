@@ -75,9 +75,10 @@ export function bootstrapLight(configPath?: string): {
  * Accepts an optional config override (used when loading project-specific config).
  */
 export function bootstrap(configOrPath?: string | AutomationConfig): PipelineService {
-  const config = typeof configOrPath === 'string' || configOrPath === undefined
-    ? loadConfig(configOrPath)
-    : configOrPath;
+  const config =
+    typeof configOrPath === 'string' || configOrPath === undefined
+      ? loadConfig(configOrPath)
+      : configOrPath;
 
   // Use a child container to avoid polluting the global singleton registry
   const child = container.createChildContainer();

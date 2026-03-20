@@ -35,7 +35,9 @@ export class ClaudeCliExecutor implements ICommandExecutor {
       const parsed = JSON.parse(result.output);
       costUsd = parsed.total_cost_usd ?? 0;
       numTurns = parsed.num_turns ?? 0;
-    } catch { /* non-JSON output, skip */ }
+    } catch {
+      /* non-JSON output, skip */
+    }
 
     return {
       success: result.success,

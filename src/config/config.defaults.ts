@@ -20,19 +20,13 @@ export const CONFIG_DEFAULTS: AutomationConfig = {
     defaultTimeout: 600_000,
   },
   evaluator: {
-    dimensions: ['quality'],
     maxTurns: 3,
-    parseRetries: 2,
   },
   messenger: {
     maxTurns: 2,
-    summarizeThreshold: 5000,
-    fallbackToRaw: true,
   },
   conductor: {
     maxAttemptsPerPhase: 3,
-    autoApproveThreshold: 80,
-    escalateThreshold: 2,
     maxTurns: 1,
   },
   trigger: {

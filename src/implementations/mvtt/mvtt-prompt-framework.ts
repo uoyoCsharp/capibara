@@ -18,14 +18,24 @@ import type { Phase } from '../../core/types/phase.types.js';
 /** Default phases for .ai-agents framework */
 const AI_AGENTS_PHASES: PhaseConfig[] = [
   { id: 'analyze', name: 'Analysis', description: 'Requirements analysis phase' },
-  { id: 'design', name: 'Design', description: 'Architecture design phase', dependencies: ['analyze'] },
-  { id: 'implement', name: 'Implementation', description: 'Code implementation phase', dependencies: ['design'] },
+  {
+    id: 'design',
+    name: 'Design',
+    description: 'Architecture design phase',
+    dependencies: ['analyze'],
+  },
+  {
+    id: 'implement',
+    name: 'Implementation',
+    description: 'Code implementation phase',
+    dependencies: ['design'],
+  },
   { id: 'review', name: 'Review', description: 'Code review phase', dependencies: ['implement'] },
   { id: 'test', name: 'Testing', description: 'Testing phase', dependencies: ['review'] },
 ];
 
 /** Agent file mapping - encapsulated within this adapter */
-const AGENT_FILE_MAP: Record<string, { agent: string; command: string; }> = {
+const AGENT_FILE_MAP: Record<string, { agent: string; command: string }> = {
   analyze: { agent: 'agents/analyst.md', command: 'agents/_commands/analyze.md' },
   design: { agent: 'agents/architect.md', command: 'agents/_commands/design.md' },
   implement: { agent: 'agents/developer.md', command: 'agents/_commands/implement.md' },
@@ -51,7 +61,7 @@ export class MvttPromptFramework {
 
   private cache = new Map<string, string>();
 
-  constructor(private readonly frameworkDir: string) { }
+  constructor(private readonly frameworkDir: string) {}
 
   private async loadFile(relativePath: string): Promise<string> {
     const cached = this.cache.get(relativePath);
@@ -81,9 +91,9 @@ export class MvttPromptFramework {
       throw new Error(`[MvttPromptFramework] Unknown phase: ${phase}`);
     }
 
-    const rolePrompt = "";
-    const commandPrompt = "";
-    const sharedRules = "";
+    const rolePrompt = '';
+    const commandPrompt = '';
+    const sharedRules = '';
 
     return {
       rolePrompt,

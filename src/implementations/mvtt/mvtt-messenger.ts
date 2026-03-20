@@ -1,7 +1,13 @@
 /**
- * MVTT Messenger Implementation - Inter-role message formatting + LLM summarization
+ * MVTT Messenger Implementation - Central routing and synthesis hub
  *
- * Thin layer: assembles prompts via MvttPromptFramework, delegates LLM calls to ICommandExecutor.
+ * Responsibilities:
+ * - Format commands for Worker (via prompt framework)
+ * - Route: determine if Worker output needs Evaluator assessment
+ * - Synthesize: merge multiple Evaluator results into unified text
+ * - Prepare: format content for Conductor decision-making
+ * - Update context based on Conductor decisions (LLM-enhanced for revise path)
+ *
  * @module implementations/mvtt/mvtt-messenger
  */
 
@@ -11,24 +17,17 @@ import type { MvttPromptFramework } from './mvtt-prompt-framework.js';
 import type { Phase } from '../../core/types/phase.types.js';
 import type { PipelineContext } from '../../core/types/pipeline.types.js';
 import type { WorkerCommand, WorkerResult } from '../../core/types/worker.types.js';
-import type { EvaluationInput, EvaluationResult } from '../../core/types/evaluation.types.js';
 import type { ConductorDecision } from '../../core/types/conductor.types.js';
-import type {
-  SummaryFormat,
-  StructuredData,
-  OutputSchema,
-} from '../../core/types/messenger.types.js';
 import type { MvttOutputParser } from './mvtt-output-parser.js';
 import type { AutomationConfig } from '../../core/types/config.types.js';
 import type { Logger } from 'pino';
 import { WORKER_PHASE_PERMISSIONS, ROLE_PERMISSIONS } from '../../core/constants/permissions.js';
 
-const MESSENGER_SYSTEM_PROMPT = `You are a professional content processing assistant. Your responsibility is to summarize, abstract, or structurally transform input content.
+const MESSENGER_SYSTEM_PROMPT = `You are a professional content processing assistant. Your responsibility is to analyze, summarize, and transform content between roles in a software development pipeline.
 Rules:
-1. Strictly output in the required format
-2. Keep key information, remove redundancy
-3. Do not add subjective evaluations or extra suggestions
-4. Output must be in a machine-parseable format`;
+1. Be concise and precise
+2. Preserve key information
+3. Do not add subjective opinions beyond what is asked`;
 
 export class MvttMessenger implements IMessenger {
   constructor(
@@ -71,100 +70,27 @@ export class MvttMessenger implements IMessenger {
     };
   }
 
-  async formatForEvaluator(workerOutput: WorkerResult, context: PipelineContext): Promise<EvaluationInput> {
-    const criteria = await this.framework.getEvaluationCriteria(context.currentPhase);
+  async shouldEvaluate(workerResult: WorkerResult, context: PipelineContext): Promise<boolean> {
+    const content = workerResult.artifact || workerResult.output;
 
-    return {
-      projectSummary: this.extractProjectSummary(context),
-      phaseSummary: this.extractPhaseSummary(context),
-      artifact: workerOutput.artifact || workerOutput.output,
-      evaluationCriteria: criteria.rawContent ?? criteria.items.map(i => i.description).join('\n'),
-      pipelineId: context.pipelineId,
-      phase: context.currentPhase,
-      projectDir: this.config.cli.projectDir,
-    };
-  }
-
-  async summarize(content: string, format: SummaryFormat): Promise<string> {
-    if (content.length < this.config.messenger.summarizeThreshold) {
-      return content;
-    }
-
-    try {
-      const response = await this.executor.execute({
-        input: `Please summarize the following content into ${format.style} format, keeping key information and removing redundant details:\n\n${content}\n\nOutput format requirement: ${format.template}`,
-        systemPrompt: MESSENGER_SYSTEM_PROMPT,
-        cwd: this.config.cli.projectDir,
-        options: {
-          disallowedTools: ROLE_PERMISSIONS.messenger.disallowed,
-          maxTurns: this.config.messenger.maxTurns,
-          outputFormat: 'json',
-        },
-      });
-
-      const parsed = this.outputParser.extractJson<{ summary: string }>(response);
-      return parsed.summary;
-    } catch (err) {
-      this.logger.warn({ err }, 'Messenger summarize failed, falling back to raw');
-      return this.config.messenger.fallbackToRaw ? content : '';
-    }
-  }
-
-  async structurize(rawOutput: string, schema: OutputSchema): Promise<StructuredData> {
-    const response = await this.executor.execute({
-      input: [
-        'Please convert the following content to the specified JSON format.',
-        '',
-        'Original content:',
-        rawOutput,
-        '',
-        'Target JSON Schema:',
-        JSON.stringify(schema),
-        '',
-        'Please strictly output JSON according to Schema, do not include extra text.',
-      ].join('\n'),
-      systemPrompt: MESSENGER_SYSTEM_PROMPT,
-      cwd: this.config.cli.projectDir,
-      options: {
-        disallowedTools: ROLE_PERMISSIONS.messenger.disallowed,
-        maxTurns: this.config.messenger.maxTurns,
-        outputFormat: 'json',
-      },
-    });
-
-    return this.outputParser.extractJson<StructuredData>(response);
-  }
-
-  async synthesizeFeedback(
-    evaluations: EvaluationResult[],
-    context: PipelineContext,
-  ): Promise<string> {
-    const rawFeedback = evaluations
-      .map(
-        (e) =>
-          `[${e.dimension} evaluation - ${e.verdict}]\n${e.issues
-            .map(
-              (i) =>
-                `- [${i.severity}] ${i.category}: ${i.description}${i.suggestion ? ` -> ${i.suggestion}` : ''}`,
-            )
-            .join('\n')}`,
-      )
-      .join('\n\n');
-
-    if (rawFeedback.length < this.config.messenger.summarizeThreshold) {
-      return rawFeedback;
+    if (!workerResult.success) {
+      this.logger.info(
+        { phase: context.currentPhase },
+        'Worker failed, skipping evaluation — sending to conductor directly',
+      );
+      return false;
     }
 
     try {
       const response = await this.executor.execute({
         input: [
-          'Please synthesize the following multiple evaluator feedback into a unified revision suggestion.',
-          '1. Merge duplicate issues',
-          '2. Sort by severity',
-          '3. Provide clear revision guidance for each issue',
+          `Analyze the following artifact from the "${context.currentPhase}" phase.`,
+          'Determine if it contains any issues, errors, risks, or areas that need expert evaluation.',
           '',
-          'Evaluation feedback:',
-          rawFeedback,
+          'Artifact:',
+          content,
+          '',
+          'Respond with JSON: {"needsEvaluation": true/false, "reason": "brief explanation"}',
         ].join('\n'),
         systemPrompt: MESSENGER_SYSTEM_PROMPT,
         cwd: this.config.cli.projectDir,
@@ -175,16 +101,66 @@ export class MvttMessenger implements IMessenger {
         },
       });
 
-      const parsed = this.outputParser.extractJson<{ feedback: string }>(response);
-      return parsed.feedback;
-    } catch {
-      return rawFeedback;
+      const parsed = this.outputParser.extractJson<{ needsEvaluation: boolean }>(response);
+      this.logger.info(
+        { phase: context.currentPhase, needsEvaluation: parsed.needsEvaluation },
+        'shouldEvaluate result',
+      );
+      return parsed.needsEvaluation;
+    } catch (err) {
+      this.logger.warn({ err }, 'shouldEvaluate LLM call failed, defaulting to true');
+      return true;
     }
   }
 
-  updateContext(decision: ConductorDecision, context: PipelineContext): PipelineContext {
+  async synthesize(evaluatorResults: string[], context: PipelineContext): Promise<string> {
+    if (evaluatorResults.length === 0) {
+      return '';
+    }
+
+    if (evaluatorResults.length === 1) {
+      return evaluatorResults[0];
+    }
+
+    try {
+      const response = await this.executor.execute({
+        input: [
+          'Synthesize the following evaluator assessments into a single unified evaluation.',
+          'Merge duplicate issues, highlight the most critical findings, and provide a coherent summary.',
+          '',
+          ...evaluatorResults.map((r, i) => `--- Evaluator ${i + 1} ---\n${r}`),
+        ].join('\n'),
+        systemPrompt: MESSENGER_SYSTEM_PROMPT,
+        cwd: this.config.cli.projectDir,
+        options: {
+          disallowedTools: ROLE_PERMISSIONS.messenger.disallowed,
+          maxTurns: this.config.messenger.maxTurns,
+        },
+      });
+
+      return response.output;
+    } catch (err) {
+      this.logger.warn({ err }, 'synthesize failed, concatenating raw results');
+      return evaluatorResults.join('\n\n---\n\n');
+    }
+  }
+
+  async prepareForConductor(content: string, context: PipelineContext): Promise<string> {
+    const header = [
+      `Phase: ${context.currentPhase}`,
+      `Attempt: ${context.phaseAttempts[context.currentPhase] ?? 0}`,
+      `Pipeline: ${context.pipelineId}`,
+    ].join(' | ');
+
+    return `${header}\n\n${content}`;
+  }
+
+  async updateContext(
+    decision: ConductorDecision,
+    context: PipelineContext,
+  ): Promise<PipelineContext> {
     if (decision.action === 'approve') {
-      const phases = this.framework.getSupportedPhases().map(p => p.id);
+      const phases = this.framework.getSupportedPhases().map((p) => p.id);
       const currentIdx = phases.indexOf(context.currentPhase);
       const nextPhase = phases[currentIdx + 1];
       return {
@@ -195,14 +171,63 @@ export class MvttMessenger implements IMessenger {
       };
     }
 
+    const enhancedFeedback = await this.enhanceFeedback(decision.feedback, context);
     return {
       ...context,
-      revisionFeedback: decision.feedback,
-      phaseAttempts: {
-        ...context.phaseAttempts,
-        [context.currentPhase]: (context.phaseAttempts[context.currentPhase] ?? 0) + 1,
-      },
+      revisionFeedback: enhancedFeedback,
     };
+  }
+
+  private async enhanceFeedback(
+    rawFeedback: string[] | undefined,
+    context: PipelineContext,
+  ): Promise<string[]> {
+    if (!rawFeedback || rawFeedback.length === 0) {
+      return [];
+    }
+
+    try {
+      const response = await this.executor.execute({
+        input: [
+          `You are processing revision feedback for the "${context.currentPhase}" phase of a software development pipeline.`,
+          '',
+          'Original feedback from the Conductor:',
+          rawFeedback.map((f, i) => `${i + 1}. ${f}`).join('\n'),
+          '',
+          'Context:',
+          `- Phase: ${context.currentPhase}`,
+          `- Attempt: ${context.phaseAttempts[context.currentPhase] ?? 0}`,
+          `- Previous revision feedback: ${context.revisionFeedback ? context.revisionFeedback.join('; ') : '(none)'}`,
+          `- Requirement: ${context.requirement.description}`,
+          '',
+          'Transform this feedback into clear, actionable revision instructions:',
+          '1. Make each instruction specific and executable',
+          '2. Add relevant context from the requirement and phase',
+          '3. Remove vague or redundant items',
+          '4. If previous revision feedback exists, reconcile with new feedback (avoid contradictions)',
+          '5. Order by priority (most critical first)',
+          '',
+          'Output JSON: {"instructions": ["instruction 1", "instruction 2", ...]}',
+        ].join('\n'),
+        systemPrompt: MESSENGER_SYSTEM_PROMPT,
+        cwd: this.config.cli.projectDir,
+        options: {
+          disallowedTools: ROLE_PERMISSIONS.messenger.disallowed,
+          maxTurns: this.config.messenger.maxTurns,
+          outputFormat: 'json',
+        },
+      });
+
+      const parsed = this.outputParser.extractJson<{ instructions: string[] }>(response);
+      this.logger.info(
+        { phase: context.currentPhase, instructionCount: parsed.instructions.length },
+        'Enhanced revision feedback',
+      );
+      return parsed.instructions;
+    } catch (err) {
+      this.logger.warn({ err }, 'enhanceFeedback LLM call failed, using raw feedback');
+      return rawFeedback;
+    }
   }
 
   private buildUserPrompt(phase: Phase, context: PipelineContext): string {
@@ -211,13 +236,5 @@ export class MvttMessenger implements IMessenger {
       parts.push(`\n\n## Revision Requirements\n${context.revisionFeedback.join('\n')}`);
     }
     return parts.join('');
-  }
-
-  private extractProjectSummary(context: PipelineContext): string {
-    return `Project: ${context.requirement.title}\nRequirement: ${context.requirement.description}`;
-  }
-
-  private extractPhaseSummary(context: PipelineContext): string {
-    return `Phase: ${context.currentPhase}, Attempt count: ${context.phaseAttempts[context.currentPhase] ?? 0}`;
   }
 }

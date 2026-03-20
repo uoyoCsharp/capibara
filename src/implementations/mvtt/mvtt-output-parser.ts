@@ -1,26 +1,15 @@
 /**
  * MVTT Output Parser - Extracts structured data from CLI/executor output
  *
- * Extracted from CliOutputParser, adapted to work with CommandResponse
- * instead of ClaudeCliResult.
+ * Adapted to work with CommandResponse. Provides multi-strategy JSON extraction
+ * for Conductor decisions and generic structured data.
  * @module implementations/mvtt/mvtt-output-parser
  */
 
 import type { CommandResponse } from '../../core/types/command-executor.types.js';
-import type { EvaluationResult, EvaluationDimension } from '../../core/types/evaluation.types.js';
 import type { ConductorDecision } from '../../core/types/conductor.types.js';
 import type { ClaudeCliJsonOutput } from '../../core/types/cli.types.js';
 import type { Logger } from 'pino';
-
-function isEvaluationOutput(data: unknown): data is Omit<EvaluationResult, 'dimension'> {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    'verdict' in data &&
-    'score' in data &&
-    'issues' in data
-  );
-}
 
 export class MvttOutputParser {
   constructor(private logger: Logger) {}
@@ -50,29 +39,6 @@ export class MvttOutputParser {
 
     this.logger.warn({ output: response.output.slice(0, 500) }, 'All parse strategies failed');
     throw new Error('Failed to extract JSON from executor output');
-  }
-
-  /** Parse evaluation result from executor response */
-  parseEvaluationResult(response: CommandResponse, dimension: EvaluationDimension): EvaluationResult {
-    try {
-      const parsed = this.extractJson(response, isEvaluationOutput);
-      return { ...parsed, dimension };
-    } catch {
-      this.logger.warn({ dimension }, 'Evaluation parse failed, returning fallback');
-      return {
-        dimension,
-        verdict: 'needs_revision',
-        score: 0,
-        issues: [
-          {
-            severity: 'major',
-            category: 'parse_error',
-            description: 'Evaluation result parsing failed, requires manual review',
-          },
-        ],
-        summary: 'Evaluation output format abnormal, cannot auto-parse',
-      };
-    }
   }
 
   /** Parse conductor decision from executor response */

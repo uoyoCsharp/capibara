@@ -8,7 +8,11 @@
  * @module infrastructure/pipeline/default-pipeline-factory
  */
 
-import type { PipelineDefinition, PipelineNodeDefinition, PipelineEdgeDefinition } from '../../core/types/dag.types.js';
+import type {
+  PipelineDefinition,
+  PipelineNodeDefinition,
+  PipelineEdgeDefinition,
+} from '../../core/types/dag.types.js';
 import type { Phase } from '../../core/types/phase.types.js';
 
 const DEFAULT_PHASES: Phase[] = ['analyze', 'design', 'implement', 'review', 'test'];

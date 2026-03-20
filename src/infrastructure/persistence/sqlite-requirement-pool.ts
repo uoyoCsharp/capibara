@@ -4,7 +4,11 @@
  */
 
 import type { IRequirementPool } from '../../core/interfaces/requirement-pool.interface.js';
-import type { Requirement, RequirementInput, RequirementStatus } from '../../core/types/requirement.types.js';
+import type {
+  Requirement,
+  RequirementInput,
+  RequirementStatus,
+} from '../../core/types/requirement.types.js';
 import type { SqliteStore } from './sqlite-store.js';
 
 interface RequirementRow {
@@ -42,43 +46,51 @@ export class SqliteRequirementPool implements IRequirementPool {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    this.store.db.prepare(`
+    this.store.db
+      .prepare(
+        `
       INSERT INTO requirements (id, project_id, title, description, status, source, priority, metadata, created_at, updated_at)
       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      projectId,
-      input.title,
-      input.description,
-      input.source ?? 'manual',
-      input.priority ?? 0,
-      JSON.stringify(input.metadata ?? {}),
-      now,
-      now,
-    );
+    `,
+      )
+      .run(
+        id,
+        projectId,
+        input.title,
+        input.description,
+        input.source ?? 'manual',
+        input.priority ?? 0,
+        JSON.stringify(input.metadata ?? {}),
+        now,
+        now,
+      );
 
     return (await this.get(id))!;
   }
 
   async get(id: string): Promise<Requirement | null> {
-    const row = this.store.db.prepare(
-      'SELECT * FROM requirements WHERE id = ?',
-    ).get(id) as RequirementRow | undefined;
+    const row = this.store.db.prepare('SELECT * FROM requirements WHERE id = ?').get(id) as
+      | RequirementRow
+      | undefined;
 
     return row ? rowToRequirement(row) : null;
   }
 
   async list(projectId: string, filter?: { status?: RequirementStatus }): Promise<Requirement[]> {
     if (filter?.status) {
-      const rows = this.store.db.prepare(
-        'SELECT * FROM requirements WHERE project_id = ? AND status = ? ORDER BY priority DESC, created_at ASC',
-      ).all(projectId, filter.status) as RequirementRow[];
+      const rows = this.store.db
+        .prepare(
+          'SELECT * FROM requirements WHERE project_id = ? AND status = ? ORDER BY priority DESC, created_at ASC',
+        )
+        .all(projectId, filter.status) as RequirementRow[];
       return rows.map(rowToRequirement);
     }
 
-    const rows = this.store.db.prepare(
-      'SELECT * FROM requirements WHERE project_id = ? ORDER BY priority DESC, created_at ASC',
-    ).all(projectId) as RequirementRow[];
+    const rows = this.store.db
+      .prepare(
+        'SELECT * FROM requirements WHERE project_id = ? ORDER BY priority DESC, created_at ASC',
+      )
+      .all(projectId) as RequirementRow[];
     return rows.map(rowToRequirement);
   }
 
@@ -95,10 +107,14 @@ export class SqliteRequirementPool implements IRequirementPool {
     const status = patch.status ?? existing.status;
     const priority = patch.priority ?? existing.priority;
 
-    this.store.db.prepare(`
+    this.store.db
+      .prepare(
+        `
       UPDATE requirements SET title = ?, description = ?, status = ?, priority = ?, updated_at = ?
       WHERE id = ?
-    `).run(title, description, status, priority, now, id);
+    `,
+      )
+      .run(title, description, status, priority, now, id);
 
     return (await this.get(id))!;
   }
@@ -108,12 +124,16 @@ export class SqliteRequirementPool implements IRequirementPool {
   }
 
   async nextPending(projectId: string): Promise<Requirement | null> {
-    const row = this.store.db.prepare(`
+    const row = this.store.db
+      .prepare(
+        `
       SELECT * FROM requirements
       WHERE project_id = ? AND status = 'pending'
       ORDER BY priority DESC, created_at ASC
       LIMIT 1
-    `).get(projectId) as RequirementRow | undefined;
+    `,
+      )
+      .get(projectId) as RequirementRow | undefined;
 
     return row ? rowToRequirement(row) : null;
   }

@@ -17,21 +17,15 @@ const workerSchema = z.object({
 });
 
 const evaluatorSchema = z.object({
-  dimensions: z.array(z.enum(['quality', 'security', 'consistency'])).default(['quality']),
   maxTurns: z.number().int().default(3),
-  parseRetries: z.number().int().default(2),
 });
 
 const messengerSchema = z.object({
   maxTurns: z.number().int().default(2),
-  summarizeThreshold: z.number().int().default(5000),
-  fallbackToRaw: z.boolean().default(true),
 });
 
 const conductorSchema = z.object({
   maxAttemptsPerPhase: z.number().int().min(1).default(3),
-  autoApproveThreshold: z.number().min(0).max(100).default(80),
-  escalateThreshold: z.number().int().default(2),
   maxTurns: z.number().int().default(1),
 });
 

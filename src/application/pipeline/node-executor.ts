@@ -26,7 +26,7 @@ export class NodeExecutor {
     if (!handler) {
       throw new Error(
         `No handler registered for node type: "${node.type}". ` +
-        `Registered types: ${[...this.handlers.keys()].join(', ')}`,
+          `Registered types: ${[...this.handlers.keys()].join(', ')}`,
       );
     }
     return handler.handle(node, context, stateMachine);

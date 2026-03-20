@@ -36,7 +36,9 @@ export class PipelineDefinitionLoader {
       if (ext === '.yaml' || ext === '.yml') {
         try {
           // Dynamic import to avoid hard dependency — users install 'yaml' when needed
-          const yaml = await (Function('return import("yaml")')() as Promise<{ parse: (s: string) => unknown }>);
+          const yaml = await (Function('return import("yaml")')() as Promise<{
+            parse: (s: string) => unknown;
+          }>);
           return yaml.parse(content) as PipelineDefinition;
         } catch {
           throw new Error(

@@ -4,7 +4,6 @@
  */
 
 import type { InteractionMode } from './phase.types.js';
-import type { EvaluationDimension } from './evaluation.types.js';
 
 export interface CliConfig {
   cliPath: string;
@@ -18,21 +17,15 @@ export interface WorkerConfig {
 }
 
 export interface EvaluatorConfig {
-  dimensions: EvaluationDimension[];
   maxTurns: number;
-  parseRetries: number;
 }
 
 export interface MessengerConfig {
   maxTurns: number;
-  summarizeThreshold: number;
-  fallbackToRaw: boolean;
 }
 
 export interface ConductorConfig {
   maxAttemptsPerPhase: number;
-  autoApproveThreshold: number;
-  escalateThreshold: number;
   maxTurns: number;
 }
 

@@ -43,8 +43,7 @@ function resolveClaudePath(): {
   }
 
   const paths = rawWhere.split(/\r?\n/);
-  const cmdPath =
-    paths.find((p) => p.endsWith('.cmd') || p.endsWith('.bat')) ?? paths[0];
+  const cmdPath = paths.find((p) => p.endsWith('.cmd') || p.endsWith('.bat')) ?? paths[0];
 
   console.log(`Selected path: ${cmdPath}`);
   console.log(`Is .cmd/.bat: ${cmdPath.endsWith('.cmd') || cmdPath.endsWith('.bat')}`);
@@ -123,9 +122,7 @@ function runSpawnTest(
   console.log(`  Args: ${JSON.stringify(argsDisplay)}`);
   console.log(`  Shell: ${options.shell ?? false}`);
   console.log(`  Stdin mode: ${options.stdinMode ?? 'ignore'}`);
-  console.log(
-    `  Total args length: ${args.reduce((s, a) => s + a.length, 0)} chars`,
-  );
+  console.log(`  Total args length: ${args.reduce((s, a) => s + a.length, 0)} chars`);
   console.log(SECTION);
 
   return new Promise<DiagResult>((resolve) => {
@@ -189,9 +186,19 @@ function runSpawnTest(
         });
       };
 
-      proc.stdout.on('end', () => { stdoutEnded = true; tryResolve(); });
-      proc.stderr.on('end', () => { stderrEnded = true; tryResolve(); });
-      proc.on('close', (code) => { exitCode = code; exited = true; tryResolve(); });
+      proc.stdout.on('end', () => {
+        stdoutEnded = true;
+        tryResolve();
+      });
+      proc.stderr.on('end', () => {
+        stderrEnded = true;
+        tryResolve();
+      });
+      proc.on('close', (code) => {
+        exitCode = code;
+        exited = true;
+        tryResolve();
+      });
       proc.on('error', (err) => {
         clearTimeout(timer);
         const duration = Date.now() - startTime;
@@ -281,7 +288,14 @@ async function main() {
       await runSpawnTest(
         'D: node+script direct, --print, stdin=ignore',
         resolvedNode,
-        [resolvedScript, '--print', '--output-format', 'json', '--dangerously-skip-permissions', 'Say "hello"'],
+        [
+          resolvedScript,
+          '--print',
+          '--output-format',
+          'json',
+          '--dangerously-skip-permissions',
+          'Say "hello"',
+        ],
         { shell: false, stdinMode: 'ignore' },
       ),
     );
@@ -290,7 +304,14 @@ async function main() {
       await runSpawnTest(
         'E: node+script direct, --print, stdin=pipe (closed)',
         resolvedNode,
-        [resolvedScript, '--print', '--output-format', 'json', '--dangerously-skip-permissions', 'Say "hello"'],
+        [
+          resolvedScript,
+          '--print',
+          '--output-format',
+          'json',
+          '--dangerously-skip-permissions',
+          'Say "hello"',
+        ],
         { shell: false, stdinMode: 'pipe' },
       ),
     );
@@ -313,8 +334,11 @@ async function main() {
       `G: shell=true, long --system-prompt (${longSystemPrompt.length} chars)`,
       cmdPath,
       [
-        '--print', '--output-format', 'json',
-        '--system-prompt', longSystemPrompt,
+        '--print',
+        '--output-format',
+        'json',
+        '--system-prompt',
+        longSystemPrompt,
         '--dangerously-skip-permissions',
         'Say "hello"',
       ],
@@ -330,8 +354,11 @@ async function main() {
         resolvedNode,
         [
           resolvedScript,
-          '--print', '--output-format', 'json',
-          '--system-prompt', longSystemPrompt,
+          '--print',
+          '--output-format',
+          'json',
+          '--system-prompt',
+          longSystemPrompt,
           '--dangerously-skip-permissions',
         ],
         { shell: false, stdinMode: 'pipe', stdinData: 'Say "hello"' },
@@ -346,36 +373,33 @@ async function main() {
   console.log('='.repeat(70));
 
   for (const r of results) {
-    const status =
-      r.error
-        ? (r.error.includes('TIMEOUT') ? 'WAITING (process alive)' : 'ERROR')
-        : r.exitCode === 0
-          ? 'SUCCESS'
-          : `EXIT(${r.exitCode})`;
+    const status = r.error
+      ? r.error.includes('TIMEOUT')
+        ? 'WAITING (process alive)'
+        : 'ERROR'
+      : r.exitCode === 0
+        ? 'SUCCESS'
+        : `EXIT(${r.exitCode})`;
 
     console.log(`\n  [${status.padEnd(22)}] ${r.label}`);
     console.log(`    Duration: ${r.duration}ms`);
     if (r.error) console.log(`    Error: ${r.error.slice(0, 100)}`);
     if (r.stderr && !r.error) console.log(`    Stderr: ${r.stderr.slice(0, 150)}`);
-    if (r.stdout && status === 'SUCCESS')
-      console.log(`    Stdout: ${r.stdout.slice(0, 150)}`);
+    if (r.stdout && status === 'SUCCESS') console.log(`    Stdout: ${r.stdout.slice(0, 150)}`);
   }
 
   console.log(`\n${'='.repeat(70)}`);
   console.log('ANALYSIS:');
 
   // Analyze patterns
-  const quickExits = results.filter(
-    (r) => !r.error && r.duration < 3000 && r.exitCode !== 0,
-  );
+  const quickExits = results.filter((r) => !r.error && r.duration < 3000 && r.exitCode !== 0);
   const timeouts = results.filter((r) => r.error?.includes('TIMEOUT'));
   const successes = results.filter((r) => r.exitCode === 0);
   const spawnErrors = results.filter((r) => r.error?.includes('SPAWN ERROR'));
 
   if (spawnErrors.length > 0) {
     console.log('\n  SPAWN ERRORS detected:');
-    for (const r of spawnErrors)
-      console.log(`    - ${r.label}: ${r.error}`);
+    for (const r of spawnErrors) console.log(`    - ${r.label}: ${r.error}`);
     console.log('  >> Check Claude CLI installation and PATH');
   }
 
@@ -391,15 +415,13 @@ async function main() {
 
   if (timeouts.length > 0) {
     console.log('\n  TIMEOUTS detected (process alive but slow):');
-    for (const r of timeouts)
-      console.log(`    - ${r.label}`);
+    for (const r of timeouts) console.log(`    - ${r.label}`);
     console.log('  >> These tests show the process IS running (good sign)');
   }
 
   if (successes.length > 0) {
     console.log('\n  SUCCESSFUL tests:');
-    for (const r of successes)
-      console.log(`    - ${r.label} (${r.duration}ms)`);
+    for (const r of successes) console.log(`    - ${r.label} (${r.duration}ms)`);
   }
 
   // Specific pattern analysis
@@ -419,9 +441,7 @@ async function main() {
   const testG = results.find((r) => r.label.startsWith('G:'));
   if (testG && testG.exitCode !== 0 && testG.duration < 3000) {
     console.log('\n  >> DIAGNOSIS: Long --system-prompt causes quick exit.');
-    console.log(
-      '     Likely hitting Windows command-line length limit (32K chars).',
-    );
+    console.log('     Likely hitting Windows command-line length limit (32K chars).');
     console.log('     FIX: Write system prompt to temp file or pass via stdin.');
   }
 

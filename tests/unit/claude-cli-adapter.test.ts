@@ -214,10 +214,10 @@ describe('ClaudeCliAdapter', () => {
       completeFakeProc(proc, { stdout: '{}', exitCode: 0 });
       await promise;
 
-      expect(mockRmSync).toHaveBeenCalledWith(
-        '/tmp/capibara-abc123',
-        { recursive: true, force: true },
-      );
+      expect(mockRmSync).toHaveBeenCalledWith('/tmp/capibara-abc123', {
+        recursive: true,
+        force: true,
+      });
     });
 
     it('should clean up temp file even if execution fails', async () => {
@@ -228,10 +228,10 @@ describe('ClaudeCliAdapter', () => {
       proc.emit('error', new Error('spawn failed'));
 
       await expect(promise).rejects.toThrow();
-      expect(mockRmSync).toHaveBeenCalledWith(
-        '/tmp/capibara-abc123',
-        { recursive: true, force: true },
-      );
+      expect(mockRmSync).toHaveBeenCalledWith('/tmp/capibara-abc123', {
+        recursive: true,
+        force: true,
+      });
     });
 
     it('should not create temp file when no systemPrompt is provided', async () => {
@@ -488,10 +488,7 @@ describe('ClaudeCliAdapter', () => {
       completeFakeProc(proc, { stdout: '{}', stderr: 'some warning', exitCode: 0 });
       await promise;
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        { stderr: 'some warning' },
-        'CLI stderr output',
-      );
+      expect(logger.warn).toHaveBeenCalledWith({ stderr: 'some warning' }, 'CLI stderr output');
     });
 
     it('should return empty sessionId when stdout is not valid JSON', async () => {
@@ -576,7 +573,9 @@ describe('ClaudeCliAdapter', () => {
       proc.emit('close', 0);
 
       let resolved = false;
-      promise.then(() => { resolved = true; });
+      promise.then(() => {
+        resolved = true;
+      });
       await vi.advanceTimersByTimeAsync(0);
       expect(resolved).toBe(false);
 
@@ -595,7 +594,9 @@ describe('ClaudeCliAdapter', () => {
       proc.emit('close', 0);
 
       let resolved = false;
-      promise.then(() => { resolved = true; });
+      promise.then(() => {
+        resolved = true;
+      });
       await vi.advanceTimersByTimeAsync(0);
       expect(resolved).toBe(false);
 

@@ -12,7 +12,11 @@
  */
 
 import type { PipelineDefinition, PipelineNodeDefinition } from '../../core/types/dag.types.js';
-import type { PipelineContext, PipelineResult, PhaseResult } from '../../core/types/pipeline.types.js';
+import type {
+  PipelineContext,
+  PipelineResult,
+  PhaseResult,
+} from '../../core/types/pipeline.types.js';
 import type { IEventBus } from '../../core/interfaces/event-bus.interface.js';
 import type { CostTracker } from '../../infrastructure/observability/cost-tracker.js';
 import type { Logger } from 'pino';
@@ -29,16 +33,17 @@ export class DAGExecutor {
     private logger: Logger,
   ) {}
 
-  async execute(
-    definition: PipelineDefinition,
-    context: PipelineContext,
-  ): Promise<PipelineResult> {
+  async execute(definition: PipelineDefinition, context: PipelineContext): Promise<PipelineResult> {
     const startTime = Date.now();
     this.validateDAG(definition);
     this.stateMachine.initialize(definition, context.pipelineId);
 
     this.logger.info(
-      { pipelineId: context.pipelineId, nodes: definition.nodes.length, edges: definition.edges.length },
+      {
+        pipelineId: context.pipelineId,
+        nodes: definition.nodes.length,
+        edges: definition.edges.length,
+      },
       'DAG execution started',
     );
 
@@ -79,9 +84,7 @@ export class DAGExecutor {
             data: { failedNode: nodeId, error: String(result.reason) },
           });
 
-          throw result.reason instanceof Error
-            ? result.reason
-            : new Error(String(result.reason));
+          throw result.reason instanceof Error ? result.reason : new Error(String(result.reason));
         }
       }
     }

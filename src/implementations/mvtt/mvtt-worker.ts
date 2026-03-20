@@ -35,8 +35,7 @@ export class MvttWorker implements IWorker {
       options: {
         sessionId: command.executorOptions?.sessionId,
         resume: command.executorOptions?.resume,
-        maxTurns: command.executorOptions?.maxTurns
-          ?? this.config.worker.defaultMaxTurns,
+        maxTurns: command.executorOptions?.maxTurns ?? this.config.worker.defaultMaxTurns,
         allowedTools: command.executorOptions?.allowedTools,
         disallowedTools: command.executorOptions?.disallowedTools,
         outputFormat: 'json',
