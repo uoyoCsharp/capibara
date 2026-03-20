@@ -11,4 +11,7 @@ export interface IWorker {
 
   /** Get currently bound CLI session ID */
   getSessionId(): string | undefined;
+
+  /** Get registered executor types */
+  getRegisteredStrategies(): string[];
 }

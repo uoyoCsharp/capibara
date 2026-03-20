@@ -50,10 +50,12 @@ const triggerSchema = z.object({
 
 const pipelineSchema = z.object({
   mode: z.enum(['auto', 'semi-auto', 'manual']).default('semi-auto'),
-  phases: z
-    .array(z.enum(['analyze', 'design', 'implement', 'review', 'test']))
-    .default(['analyze', 'design', 'implement', 'review', 'test']),
+  definitionFile: z.string().optional(),
   budgetLimit: z.number().min(0).default(50),
+});
+
+const executorRegistrySchema = z.object({
+  defaultType: z.string().default('claude-cli'),
 });
 
 const persistenceSchema = z.object({
@@ -79,6 +81,7 @@ export const automationConfigSchema = z.object({
   pipeline: pipelineSchema.default({}),
   persistence: persistenceSchema.default({}),
   promptFramework: promptFrameworkSchema.default({}),
+  executor: executorRegistrySchema.default({}),
 });
 
 /** Config input type (allows using default values) */

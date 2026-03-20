@@ -14,3 +14,6 @@ export * from './cli.types.js';
 export * from './events.types.js';
 export * from './config.types.js';
 export * from './prompt-framework.types.js';
+export * from './command-executor.types.js';
+export * from './dag.types.js';
+export * from './node-state.types.js';

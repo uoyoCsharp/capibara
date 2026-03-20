@@ -10,16 +10,12 @@ export interface WorkerCommand {
   input: string;
   /** Merged system prompt (role + rules + command + knowledge base) */
   systemPrompt: string;
-  /** CLI session ID (for Worker's persistent session) */
-  sessionId?: string;
-  /** Whether to resume existing session */
-  resume?: boolean;
-  /** Maximum agentic turns */
-  maxTurns?: number;
-  /** Allowed tools list */
-  allowedTools?: string[];
-  /** Disallowed tools list */
-  disallowedTools?: string[];
+  /** System prompt file path (takes precedence over systemPrompt when provided) */
+  systemPromptFile?: string;
+  /** Command executor type (defaults to 'claude-cli') */
+  executorType?: string;
+  /** Executor-specific parameters */
+  executorOptions?: Record<string, unknown>;
   /** Working directory */
   cwd?: string;
   /** Timeout (milliseconds) */
@@ -30,8 +26,7 @@ export interface WorkerResult {
   success: boolean;
   output: string;
   artifact: string;
-  sessionId: string;
-  tokensUsed: number;
-  costUsd: number;
   duration: number;
+  /** Executor-specific result metadata */
+  metadata: Record<string, unknown>;
 }

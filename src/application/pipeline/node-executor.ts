@@ -1,6 +1,9 @@
 /**
- * Single Phase Executor - Orchestrates Worker -> Evaluator -> Conductor complete loop
- * @module application/pipeline/phase-executor
+ * Node Executor - Executes a single DAG node
+ *
+ * Handles the Worker -> Evaluator -> Conductor feedback loop for a node.
+ * Replaces the old PhaseExecutor's hardcoded loop logic.
+ * @module application/pipeline/node-executor
  */
 
 import type { IWorker } from '../../core/interfaces/worker.interface.js';
@@ -10,17 +13,13 @@ import type { IMessenger } from '../../core/interfaces/messenger.interface.js';
 import type { IArtifactStore } from '../../core/interfaces/artifact-store.interface.js';
 import type { IEventBus } from '../../core/interfaces/event-bus.interface.js';
 import type { AutomationConfig } from '../../core/types/config.types.js';
-import type { Phase, InteractionMode } from '../../core/types/phase.types.js';
 import type { PipelineContext, PhaseResult } from '../../core/types/pipeline.types.js';
-import type { StateMachine } from '../state-machine/state-machine.js';
+import type { PipelineNodeDefinition } from '../../core/types/dag.types.js';
+import type { GenericStateMachine } from '../state-machine/generic-state-machine.js';
 import type { CostTracker } from '../../infrastructure/observability/cost-tracker.js';
 import type { Logger } from 'pino';
 
-/**
- * Execute complete loop for single phase:
- * Worker execute -> Messenger summarize -> Evaluator evaluate -> Conductor decide -> (approve | revise)
- */
-export class PhaseExecutor {
+export class NodeExecutor {
   constructor(
     private worker: IWorker,
     private evaluators: IEvaluator[],
@@ -33,12 +32,17 @@ export class PhaseExecutor {
     private costTracker: CostTracker,
   ) {}
 
+  /**
+   * Execute a single node with the Worker -> Evaluator -> Conductor feedback loop.
+   * For 'worker' nodes, runs the full loop.
+   * Other node types can be extended in the future.
+   */
   async execute(
-    phase: Phase,
+    node: PipelineNodeDefinition,
     context: PipelineContext,
-    stateMachine: StateMachine,
-    mode: InteractionMode,
+    stateMachine: GenericStateMachine,
   ): Promise<PhaseResult> {
+    const phase = node.phase ?? node.id;
     const startTime = Date.now();
     context.currentPhase = phase;
     let approved = false;
@@ -49,7 +53,7 @@ export class PhaseExecutor {
       pipelineId: context.pipelineId,
       phase,
       eventType: 'phase:started',
-      data: { mode },
+      data: { nodeId: node.id, mode: context.mode },
     });
 
     while (!approved) {
@@ -65,7 +69,8 @@ export class PhaseExecutor {
 
       const workerCommand = await this.messenger.formatForWorker(phase, context);
       const workerResult = await this.worker.executeCommand(workerCommand);
-      this.costTracker.add(workerResult.costUsd);
+      const costUsd = (workerResult.metadata.costUsd as number) ?? 0;
+      this.costTracker.add(costUsd);
 
       this.eventBus.emit({
         timestamp: new Date().toISOString(),
@@ -73,7 +78,7 @@ export class PhaseExecutor {
         phase,
         role: 'worker',
         eventType: 'worker:completed',
-        data: { success: workerResult.success, cost: workerResult.costUsd },
+        data: { success: workerResult.success, cost: costUsd },
       });
 
       // Save artifact
@@ -83,7 +88,7 @@ export class PhaseExecutor {
         workerResult.artifact || workerResult.output,
       );
 
-      stateMachine.transition('phase_complete');
+      stateMachine.setNodeOutput(node.id, workerResult.output);
 
       // 2. Evaluator parallel evaluation
       this.eventBus.emit({
@@ -113,8 +118,6 @@ export class PhaseExecutor {
         },
       });
 
-      stateMachine.transition('evaluations_complete');
-
       // 3. Messenger synthesize feedback + Conductor decide
       await this.messenger.synthesizeFeedback(evaluations, context);
       const decision = await this.conductor.decide(evaluations);
@@ -122,8 +125,8 @@ export class PhaseExecutor {
       lastScore = evaluations.reduce((s, e) => s + e.score, 0) / evaluations.length;
 
       this.logger.info(
-        { phase, action: decision.action, score: lastScore.toFixed(1) },
-        'Phase decision',
+        { phase, nodeId: node.id, action: decision.action, score: lastScore.toFixed(1) },
+        'Node decision',
       );
 
       this.eventBus.emit({
@@ -140,10 +143,8 @@ export class PhaseExecutor {
         approved = true;
         const updated = this.messenger.updateContext(decision, context);
         Object.assign(context, updated);
-        stateMachine.transition('approve');
       } else if (decision.action === 'escalate') {
-        // Human intervention needed
-        this.logger.warn({ phase }, 'Escalated to human intervention');
+        this.logger.warn({ phase, nodeId: node.id }, 'Escalated to human intervention');
         this.eventBus.emit({
           timestamp: new Date().toISOString(),
           pipelineId: context.pipelineId,
@@ -153,14 +154,14 @@ export class PhaseExecutor {
         });
         break;
       } else {
-        // revise: retry
+        // revise
         const attempts = (context.phaseAttempts[phase] ?? 0) + 1;
         context.phaseAttempts[phase] = attempts;
 
-        if (attempts >= this.config.conductor.maxAttemptsPerPhase) {
-          this.logger.warn({ phase, attempts }, 'Max attempts reached');
-          if (mode === 'auto') {
-            // Force pass in auto mode to avoid deadlock
+        const maxRetries = this.config.conductor.maxAttemptsPerPhase;
+        if (attempts >= maxRetries) {
+          this.logger.warn({ phase, nodeId: node.id, attempts }, 'Max attempts reached');
+          if (context.mode === 'auto') {
             approved = true;
             this.logger.warn({ phase }, 'Auto-approving after max retries');
           }
@@ -177,8 +178,6 @@ export class PhaseExecutor {
           eventType: 'phase:retry',
           data: { attempt: attempts },
         });
-
-        stateMachine.transition('revise');
       }
     }
 
@@ -194,7 +193,7 @@ export class PhaseExecutor {
       attempts: context.phaseAttempts[phase] ?? 0,
       finalScore: lastScore,
       duration: Date.now() - startTime,
-      tokenCost: 0, // Tracked globally by CostTracker
+      tokenCost: 0,
     };
   }
 }

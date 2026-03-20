@@ -1,0 +1,101 @@
+id: "role-based-pipeline"
+type: "pattern"
+name: "Role-Based Pipeline Architecture"
+version: "1.0"
+description: "Clean Architecture with role-based domain modeling, pipeline orchestration, and feedback loops for agentic workflow automation"
+
+token_estimate:
+  total: 1200
+  breakdown:
+    - file: overview.md
+      tokens: 800
+      load_priority: 1
+      summary: "Architecture layers, role model, pipeline flow, and conventions"
+    - file: review-checklist.md
+      tokens: 400
+      load_priority: 2
+      summary: "Compliance checklist for role-based pipeline architecture"
+
+loading_strategy:
+  level_1_overview:
+    description: "Read manifest only for summary"
+    tokens: 200
+    use_case: "Quick architecture reference"
+
+  level_2_full:
+    description: "Load complete knowledge files"
+    tokens: 1200
+    use_case: "Full implementation and review guidance"
+
+loading:
+  priority: 10
+  auto_load: true
+
+files:
+  - path: "overview.md"
+    description: "Architecture overview, layer rules, role interfaces, pipeline flow"
+    required: true
+    tokens: 800
+
+  - path: "review-checklist.md"
+    description: "Checklist for reviewing code against this architecture"
+    required: false
+    tokens: 400
+
+attributes:
+  terminology:
+    worker: "Worker - executes phase commands via CLI"
+    evaluator: "Evaluator - assesses worker output on a dimension"
+    conductor: "Conductor - makes approve/revise/escalate decisions"
+    messenger: "Messenger - formats context between roles"
+    trigger: "Trigger - initiates pipeline from external events"
+    pipeline: "Pipeline - sequential phase orchestration"
+    phase: "Phase - one step in the dev lifecycle (analyze/design/implement/review/test)"
+    phase_executor: "Phase Executor - single-phase Worker->Evaluator->Conductor loop"
+    composition_root: "Composition Root - centralized DI assembly"
+    state_machine: "State Machine - tracks pipeline state transitions"
+
+  layers:
+    - name: "core"
+      path: "src/core/"
+      description: "Interfaces, types, errors, constants. No external dependencies."
+    - name: "application"
+      path: "src/application/"
+      description: "Pipeline orchestration, state machine, context, human interaction."
+    - name: "roles"
+      path: "src/roles/"
+      description: "Role implementations (worker, evaluator, conductor, messenger, trigger)."
+    - name: "infrastructure"
+      path: "src/infrastructure/"
+      description: "CLI adapter, GitHub client, persistence, observability."
+    - name: "config"
+      path: "src/config/"
+      description: "Configuration loading and validation."
+    - name: "bootstrap"
+      path: "src/composition-root.ts"
+      description: "DI container assembly. Only file that imports from all layers."
+
+  checklist:
+    - "Core layer has zero external dependencies"
+    - "Roles depend only on core interfaces, not on each other"
+    - "Infrastructure implements core interfaces (ports/adapters)"
+    - "Only composition-root.ts imports from all layers"
+    - "DI tokens are centralized in tokens.ts"
+    - "Pipeline phases follow Worker -> Evaluator -> Conductor loop"
+    - "State machine drives all phase transitions"
+    - "File naming follows kebab-case.role.ts convention"
+    - "Interfaces use I-prefix (IWorker, IEvaluator)"
+    - "Tokens use UPPER_SNAKE_TOKEN format"
+
+scenarios:
+  - name: "Add a new role"
+    files: ["overview.md"]
+
+  - name: "Add a new evaluator dimension"
+    files: ["overview.md"]
+
+  - name: "Code review"
+    files: ["review-checklist.md"]
+
+  - name: "Understand architecture"
+    files: ["overview.md"]

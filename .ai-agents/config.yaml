@@ -10,7 +10,7 @@ version: "1.3"
 # ============================================================
 system:
   default_agent: conductor
-  language: en-US
+  language: zh-CN
   interaction_mode: semi-auto
   confirm_before_generate: true
   confirm_before_save: true
@@ -30,9 +30,9 @@ output:
 # ============================================================
 pattern:
   # Active architecture pattern
-  # Options: ddd, clean-architecture, frontend-react
+  # Options: ddd, clean-architecture, frontend-react, role-based-pipeline
   # Use "#init" to auto-detect or "#config" to change
-  active: ddd
+  active: role-based-pipeline
 
   selection:
     auto_detect: true

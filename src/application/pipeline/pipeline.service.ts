@@ -1,5 +1,5 @@
 /**
- * Pipeline Main Orchestration Service - Coordinates full phase execution flow
+ * Pipeline Main Orchestration Service - Coordinates DAG-based pipeline execution
  * @module application/pipeline/pipeline-service
  */
 
@@ -17,13 +17,14 @@ import type { InteractionMode, Phase } from '../../core/types/phase.types.js';
 import type {
   PipelineContext,
   PipelineResult,
-  PipelineState,
   PhaseResult,
 } from '../../core/types/pipeline.types.js';
 import type { CostTracker } from '../../infrastructure/observability/cost-tracker.js';
+import type { PipelineDefinitionLoader } from '../../infrastructure/pipeline/pipeline-definition.loader.js';
 import type { Logger } from 'pino';
-import { StateMachine } from '../state-machine/state-machine.js';
-import { PhaseExecutor } from './phase-executor.js';
+import { GenericStateMachine } from '../state-machine/generic-state-machine.js';
+import { DAGExecutor } from './dag-executor.js';
+import { NodeExecutor } from './node-executor.js';
 import {
   WORKER_TOKEN,
   EVALUATOR_TOKEN,
@@ -35,14 +36,12 @@ import {
   CONFIG_TOKEN,
   LOGGER_TOKEN,
   COST_TRACKER_TOKEN,
+  PIPELINE_DEFINITION_LOADER_TOKEN,
 } from '../../tokens.js';
 import { BudgetExceededError } from '../../core/errors/pipeline.errors.js';
-import { PipelineStateName } from '../state-machine/states.js';
 
 @injectable()
 export class PipelineService {
-  private phaseExecutor: PhaseExecutor;
-
   constructor(
     @inject(WORKER_TOKEN) private worker: IWorker,
     @inject(EVALUATOR_TOKEN) private evaluators: IEvaluator[],
@@ -54,32 +53,27 @@ export class PipelineService {
     @inject(CONFIG_TOKEN) private config: AutomationConfig,
     @inject(LOGGER_TOKEN) private logger: Logger,
     @inject(COST_TRACKER_TOKEN) private costTracker: CostTracker,
-  ) {
-    this.phaseExecutor = new PhaseExecutor(
-      worker,
-      evaluators,
-      conductor,
-      messenger,
-      artifactStore,
-      eventBus,
-      config,
-      logger,
-      costTracker,
-    );
-  }
+    @inject(PIPELINE_DEFINITION_LOADER_TOKEN) private definitionLoader: PipelineDefinitionLoader,
+  ) {}
 
   /**
-   * Execute full Pipeline:
-   * analyze -> design -> implement -> review -> test
+   * Execute full Pipeline using DAG definition
    */
   async run(requirement: Requirement, mode?: InteractionMode): Promise<PipelineResult> {
-    const startTime = Date.now();
     const pipelineMode = mode ?? this.config.pipeline.mode;
     const context = this.createInitialContext(requirement, pipelineMode);
-    const stateMachine = new StateMachine(this.logger, this.eventBus);
+
+    // Load pipeline definition
+    const definition = await this.definitionLoader.load(this.config.pipeline.definitionFile);
 
     this.logger.info(
-      { pipelineId: context.pipelineId, changeId: context.changeId, mode: pipelineMode },
+      {
+        pipelineId: context.pipelineId,
+        changeId: context.changeId,
+        mode: pipelineMode,
+        definitionId: definition.id,
+        nodeCount: definition.nodes.length,
+      },
       'Pipeline started',
     );
 
@@ -87,37 +81,37 @@ export class PipelineService {
       timestamp: new Date().toISOString(),
       pipelineId: context.pipelineId,
       eventType: 'pipeline:started',
-      data: { requirement: requirement.id, mode: pipelineMode },
+      data: { requirement: requirement.id, mode: pipelineMode, definitionId: definition.id },
     });
 
-    // State machine starts
-    stateMachine.transition('new_requirement');
+    // Budget check
+    if (this.costTracker.isOverBudget(this.config.pipeline.budgetLimit)) {
+      throw new BudgetExceededError(this.config.pipeline.budgetLimit);
+    }
 
-    const phases = this.config.pipeline.phases;
-    const phaseResults: Record<string, PhaseResult> = {};
+    // Create execution components
+    const stateMachine = new GenericStateMachine(this.logger, this.eventBus);
+    const nodeExecutor = new NodeExecutor(
+      this.worker,
+      this.evaluators,
+      this.conductor,
+      this.messenger,
+      this.artifactStore,
+      this.eventBus,
+      this.config,
+      this.logger,
+      this.costTracker,
+    );
+    const dagExecutor = new DAGExecutor(
+      nodeExecutor,
+      stateMachine,
+      this.eventBus,
+      this.costTracker,
+      this.logger,
+    );
 
     try {
-      for (let i = 0; i < phases.length; i++) {
-        const phase = phases[i];
-
-        // Budget check
-        if (this.costTracker.isOverBudget(this.config.pipeline.budgetLimit)) {
-          throw new BudgetExceededError(this.config.pipeline.budgetLimit);
-        }
-
-        // First phase triggers start_analyze, subsequent phases driven by approve
-        if (i === 0) {
-          stateMachine.transition(`start_${phase}`);
-        }
-
-        this.logger.info({ phase, index: i + 1, total: phases.length }, 'Phase starting');
-
-        const result = await this.phaseExecutor.execute(phase, context, stateMachine, pipelineMode);
-        phaseResults[phase] = result;
-
-        // Persist current state
-        await this.stateStore.save(this.toState(context, stateMachine));
-      }
+      const result = await dagExecutor.execute(definition, context);
 
       this.eventBus.emit({
         timestamp: new Date().toISOString(),
@@ -131,13 +125,7 @@ export class PipelineService {
         'Pipeline completed',
       );
 
-      return {
-        success: true,
-        changeId: context.changeId,
-        phases: phaseResults as Record<Phase, PhaseResult>,
-        totalCost: this.costTracker.getTotalCost(),
-        totalDuration: Date.now() - startTime,
-      };
+      return result;
     } catch (error) {
       this.eventBus.emit({
         timestamp: new Date().toISOString(),
@@ -151,60 +139,13 @@ export class PipelineService {
     }
   }
 
-  /** Resume Pipeline from persisted state */
+  /** Resume Pipeline from persisted state (TODO: implement for DAG) */
   async resume(pipelineId: string): Promise<PipelineResult> {
-    const state = await this.stateStore.load(pipelineId);
-    if (!state) {
-      throw new Error(`Pipeline ${pipelineId} not found`);
-    }
-
-    this.logger.info(
-      { pipelineId, currentPhase: state.currentPhase, currentState: state.currentState },
-      'Resuming pipeline',
+    this.logger.warn({ pipelineId }, 'Pipeline resume attempted but not yet implemented for DAG');
+    throw new Error(
+      `Pipeline resume is not yet implemented for DAG-based pipelines. ` +
+      `Pipeline ID: ${pipelineId}. Please start a new pipeline run instead.`,
     );
-
-    // Restore context from state
-    const context: PipelineContext = {
-      pipelineId: state.id,
-      requirement: state.context.requirement,
-      changeId: state.changeId,
-      currentPhase: state.currentPhase,
-      completedPhases: Object.keys(state.context.artifacts) as Phase[],
-      phaseAttempts: state.phaseAttempts,
-      workerSessionId: state.sessions.workerSessionId,
-      artifacts: state.context.artifacts,
-      mode: state.metadata.mode,
-    };
-
-    // Restore state machine
-    const stateMachine = new StateMachine(this.logger, this.eventBus);
-    stateMachine.setState(state.currentState as PipelineStateName);
-
-    // Find phases to continue
-    const phases = this.config.pipeline.phases;
-    const currentIdx = phases.indexOf(state.currentPhase);
-    const remainingPhases = phases.slice(currentIdx);
-    const phaseResults: Record<string, PhaseResult> = {};
-    const startTime = Date.now();
-
-    for (const phase of remainingPhases) {
-      if (this.costTracker.isOverBudget(this.config.pipeline.budgetLimit)) {
-        throw new BudgetExceededError(this.config.pipeline.budgetLimit);
-      }
-
-      const result = await this.phaseExecutor.execute(phase, context, stateMachine, context.mode);
-      phaseResults[phase] = result;
-
-      await this.stateStore.save(this.toState(context, stateMachine));
-    }
-
-    return {
-      success: true,
-      changeId: context.changeId,
-      phases: phaseResults as Record<Phase, PhaseResult>,
-      totalCost: this.costTracker.getTotalCost(),
-      totalDuration: Date.now() - startTime,
-    };
   }
 
   /** Create Pipeline initial context */
@@ -223,40 +164,10 @@ export class PipelineService {
       changeId,
       currentPhase: 'analyze',
       completedPhases: [],
-      phaseAttempts: { analyze: 0, design: 0, implement: 0, review: 0, test: 0 },
+      phaseAttempts: {},
       workerSessionId: `worker-${changeId}`,
       artifacts: {} as Record<Phase, string>,
       mode,
-    };
-  }
-
-  /** Convert runtime context to persistable state snapshot */
-  private toState(context: PipelineContext, sm: StateMachine): PipelineState {
-    return {
-      id: context.pipelineId,
-      requirementId: context.requirement.id,
-      changeId: context.changeId,
-      currentState: sm.getState(),
-      currentPhase: context.currentPhase,
-      phaseAttempts: context.phaseAttempts,
-      context: {
-        requirement: context.requirement,
-        artifacts: context.artifacts,
-        evaluations: {} as Record<Phase, never[]>,
-        decisions: {} as Record<Phase, never[]>,
-      },
-      sessions: {
-        workerSessionId: context.workerSessionId,
-        workerSessionPhase: context.currentPhase,
-      },
-      metadata: {
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: 'running',
-        mode: context.mode,
-        totalTokensUsed: 0,
-        totalCost: this.costTracker.getTotalCost(),
-      },
     };
   }
 }

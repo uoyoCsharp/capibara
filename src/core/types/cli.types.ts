@@ -7,6 +7,13 @@ export interface ClaudeCliOptions {
   prompt: string;
   systemPrompt?: string;
   appendSystemPrompt?: string;
+  /**
+   * Path to a file whose contents will be used as the system prompt
+   * via `--system-prompt-file`. When provided this takes precedence
+   * over `systemPrompt` (the two are mutually exclusive at the CLI level).
+   * Reserved for future user-configurable system prompt files.
+   */
+  systemPromptFile?: string;
   sessionId?: string;
   resume?: boolean;
   outputFormat?: 'json' | 'text' | 'stream-json';

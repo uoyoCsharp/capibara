@@ -3,7 +3,7 @@
  * @module core/types/config
  */
 
-import type { Phase, InteractionMode } from './phase.types.js';
+import type { InteractionMode } from './phase.types.js';
 import type { EvaluationDimension } from './evaluation.types.js';
 
 export interface CliConfig {
@@ -51,8 +51,14 @@ export interface TriggerConfig {
 
 export interface PipelineConfig {
   mode: InteractionMode;
-  phases: Phase[];
+  /** Path to pipeline definition YAML/JSON file (optional, defaults to linear pipeline) */
+  definitionFile?: string;
   budgetLimit: number;
+}
+
+export interface ExecutorRegistryConfig {
+  /** Default executor type */
+  defaultType: string;
 }
 
 export interface PersistenceConfig {
@@ -85,4 +91,5 @@ export interface AutomationConfig {
   pipeline: PipelineConfig;
   persistence: PersistenceConfig;
   promptFramework: PromptFrameworkConfig;
+  executor?: ExecutorRegistryConfig;
 }

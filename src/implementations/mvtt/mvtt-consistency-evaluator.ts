@@ -1,33 +1,25 @@
 /**
- * Consistency Evaluator - Verifies artifact consistency with previous phase decisions
- * @module roles/evaluator/consistency-evaluator
+ * MVTT Consistency Evaluator
+ * @module implementations/mvtt/mvtt-consistency-evaluator
  */
 
-import { injectable, inject } from 'tsyringe';
-import { ClaudeCliEvaluator } from './claude-cli.evaluator.js';
 import type { EvaluationDimension } from '../../core/types/evaluation.types.js';
-import {
-  PROCESS_POOL_TOKEN,
-  OUTPUT_PARSER_TOKEN,
-  CONFIG_TOKEN,
-  LOGGER_TOKEN,
-} from '../../tokens.js';
-import type { CliProcessPool } from '../../infrastructure/cli-adapter/process-pool.js';
-import type { CliOutputParser } from '../../infrastructure/cli-adapter/output-parser.js';
+import type { ICommandExecutor } from '../../core/interfaces/command-executor.interface.js';
+import type { MvttOutputParser } from './mvtt-output-parser.js';
 import type { AutomationConfig } from '../../core/types/config.types.js';
 import type { Logger } from 'pino';
+import { MvttEvaluator } from './mvtt-evaluator.js';
 
-@injectable()
-export class ConsistencyEvaluator extends ClaudeCliEvaluator {
+export class MvttConsistencyEvaluator extends MvttEvaluator {
   protected readonly dimension: EvaluationDimension = 'consistency';
 
   constructor(
-    @inject(PROCESS_POOL_TOKEN) processPool: CliProcessPool,
-    @inject(OUTPUT_PARSER_TOKEN) outputParser: CliOutputParser,
-    @inject(CONFIG_TOKEN) config: AutomationConfig,
-    @inject(LOGGER_TOKEN) logger: Logger,
+    executor: ICommandExecutor,
+    outputParser: MvttOutputParser,
+    config: AutomationConfig,
+    logger: Logger,
   ) {
-    super(processPool, outputParser, config, logger);
+    super(executor, outputParser, config, logger);
   }
 
   protected buildSystemPrompt(): string {

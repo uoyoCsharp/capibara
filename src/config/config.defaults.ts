@@ -40,7 +40,6 @@ export const CONFIG_DEFAULTS: AutomationConfig = {
   },
   pipeline: {
     mode: 'semi-auto',
-    phases: ['analyze', 'design', 'implement', 'review', 'test'],
     budgetLimit: 50,
   },
   persistence: {
@@ -50,5 +49,8 @@ export const CONFIG_DEFAULTS: AutomationConfig = {
   promptFramework: {
     type: 'ai-agents',
     rootDir: '.ai-agents',
+  },
+  executor: {
+    defaultType: 'claude-cli',
   },
 };

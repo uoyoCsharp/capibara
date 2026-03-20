@@ -2,15 +2,92 @@
 # Merges: project.yaml + architecture.yaml + requirements.yaml + decisions.yaml
 
 project:
-  name: ""
-  type: ""
-  initialized_at: ""
+  name: "capibara"
+  type: "cli-tool"
+  initialized_at: "2026-03-19"
   tech_stack:
-    language: ""
-    framework: ""
-    build_tool: ""
-    test_framework: ""
-  pattern: "ddd"
+    language: "TypeScript 5.x (strict, ESM)"
+    runtime: "Node.js >= 22 LTS"
+    framework: "commander (CLI) + tsyringe (DI)"
+    build_tool: "tsc (ES2023, NodeNext)"
+    test_framework: "vitest"
+    package_manager: "pnpm"
+    validation: "zod"
+    logging: "pino"
+    event_bus: "emittery"
+  pattern: "role-based-pipeline"
+
+# Architecture overview
+architecture:
+  overview: "Role-Based Pipeline Architecture - Clean Architecture layers with role-based domain modeling (Worker, Evaluator, Conductor, Messenger, Trigger) orchestrated through a state machine-driven pipeline with feedback loops."
+  modules:
+    - name: core
+      path: src/core/
+      purpose: "Domain core: interfaces (IWorker, IEvaluator, IConductor, IMessenger, ITrigger, IStateStore, IArtifactStore, IEventBus, IPromptFramework), types, errors, constants"
+      layer: domain
+      key_files:
+        - core/interfaces/worker.interface.ts
+        - core/interfaces/evaluator.interface.ts
+        - core/interfaces/conductor.interface.ts
+        - core/types/phase.types.ts
+        - core/types/pipeline.types.ts
+        - core/errors/base.error.ts
+
+    - name: application
+      path: src/application/
+      purpose: "Pipeline orchestration (PipelineService, PhaseExecutor), state machine, context building, human interaction strategies"
+      layer: application
+      key_files:
+        - application/pipeline/pipeline.service.ts
+        - application/pipeline/phase-executor.ts
+        - application/state-machine/state-machine.ts
+        - application/state-machine/states.ts
+        - application/context/session-manager.ts
+        - application/human-interaction/human-interaction.handler.ts
+
+    - name: roles
+      path: src/roles/
+      purpose: "Role implementations: ClaudeCliWorker, QualityEvaluator, SecurityEvaluator, ConsistencyEvaluator, RuleEngineConductor, ClaudeCliMessenger, GitHubIssuesTrigger"
+      layer: domain
+      key_files:
+        - roles/worker/claude-cli.worker.ts
+        - roles/evaluator/quality.evaluator.ts
+        - roles/conductor/rule-engine.conductor.ts
+        - roles/messenger/claude-cli.messenger.ts
+        - roles/trigger/github-issues.trigger.ts
+
+    - name: infrastructure
+      path: src/infrastructure/
+      purpose: "CLI adapter (Claude CLI process management), GitHub client, persistence (JSON state store, FS artifact store), observability (pino logger, emittery event bus, cost tracker), prompt framework adapter"
+      layer: infrastructure
+      key_files:
+        - infrastructure/cli-adapter/claude-cli.adapter.ts
+        - infrastructure/cli-adapter/process-pool.ts
+        - infrastructure/persistence/json-state-store.ts
+        - infrastructure/persistence/fs-artifact-store.ts
+        - infrastructure/observability/emittery-event-bus.ts
+        - infrastructure/prompt-framework/ai-agents-framework.ts
+
+    - name: config
+      path: src/config/
+      purpose: "Configuration loading (dotenv), validation (zod schema), defaults"
+      layer: cross-cutting
+      key_files:
+        - config/config.loader.ts
+        - config/config.schema.ts
+        - config/config.defaults.ts
+
+    - name: bootstrap
+      path: src/
+      purpose: "DI assembly (composition-root.ts), token definitions (tokens.ts), CLI entry (main.ts)"
+      layer: bootstrap
+      key_files:
+        - composition-root.ts
+        - tokens.ts
+        - main.ts
+
+  components: []
+  decisions: []
 
 # Requirements summary (written by #analyze)
 requirements:
@@ -18,10 +95,3 @@ requirements:
   actors: []
   business_rules: []
   clarifications: []
-
-# Architecture design (written by #design)
-architecture:
-  overview: ""
-  modules: []
-  components: []
-  decisions: []    # ADR list (merged from former decisions.yaml)
