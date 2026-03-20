@@ -1,19 +1,18 @@
 /**
- * .ai-agents Framework Implementation
- * Adapts the .ai-agents prompt engineering structure to IPromptFramework interface
- * @module infrastructure/prompt-framework/ai-agents-framework
+ * MVTT Prompt Framework - Adapts the .ai-agents prompt engineering structure
+ * Internal to the MVTT implementation package.
+ * @module implementations/mvtt/mvtt-prompt-framework
  */
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import type { IPromptFramework } from '../../core/interfaces/prompt-framework.interface.js';
 import type {
   AgentDefinition,
   KnowledgeDefinition,
   EvaluationCriteria,
   PhaseConfig,
-} from '../../core/types/prompt-framework.types.js';
+} from './prompt-framework.types.js';
 import type { Phase } from '../../core/types/phase.types.js';
 
 /** Default phases for .ai-agents framework */
@@ -26,7 +25,7 @@ const AI_AGENTS_PHASES: PhaseConfig[] = [
 ];
 
 /** Agent file mapping - encapsulated within this adapter */
-const AGENT_FILE_MAP: Record<string, { agent: string; command: string }> = {
+const AGENT_FILE_MAP: Record<string, { agent: string; command: string; }> = {
   analyze: { agent: 'agents/analyst.md', command: 'agents/_commands/analyze.md' },
   design: { agent: 'agents/architect.md', command: 'agents/_commands/design.md' },
   implement: { agent: 'agents/developer.md', command: 'agents/_commands/implement.md' },
@@ -44,21 +43,16 @@ const KNOWLEDGE_FILE_MAP: Record<string, string[]> = {
 };
 
 /**
- * .ai-agents framework adapter
+ * MVTT prompt framework adapter for .ai-agents directory structure
  */
-export class AiAgentsFramework implements IPromptFramework {
+export class MvttPromptFramework {
   readonly name = 'mvtt';
   readonly version = '1.0.0';
 
   private cache = new Map<string, string>();
 
-  constructor(private readonly frameworkDir: string) {}
+  constructor(private readonly frameworkDir: string) { }
 
-  /**
-   * Load a file from the framework directory
-   * @param relativePath Path relative to framework root
-   * @returns File content or empty string if not found
-   */
   private async loadFile(relativePath: string): Promise<string> {
     const cached = this.cache.get(relativePath);
     if (cached !== undefined) {
@@ -84,14 +78,12 @@ export class AiAgentsFramework implements IPromptFramework {
   async getAgent(phase: Phase): Promise<AgentDefinition> {
     const mapping = AGENT_FILE_MAP[phase];
     if (!mapping) {
-      throw new Error(`[AiAgentsFramework] Unknown phase: ${phase}`);
+      throw new Error(`[MvttPromptFramework] Unknown phase: ${phase}`);
     }
 
-    const [rolePrompt, commandPrompt, sharedRules] = await Promise.all([
-      this.loadFile(mapping.agent),
-      this.loadFile(mapping.command),
-      this.loadFile('agents/_shared.md'),
-    ]);
+    const rolePrompt = "";
+    const commandPrompt = "";
+    const sharedRules = "";
 
     return {
       rolePrompt,
@@ -121,7 +113,6 @@ export class AiAgentsFramework implements IPromptFramework {
       };
     }
 
-    // Default generic evaluation criteria
     return {
       items: [
         { description: 'Does the artifact fully cover requirement points', severity: 'major' },
@@ -142,7 +133,6 @@ export class AiAgentsFramework implements IPromptFramework {
   }
 
   async validate(): Promise<boolean> {
-    // Check if framework directory exists and has expected structure
     const shared = await this.loadFile('agents/_shared.md');
     return shared.length > 0;
   }

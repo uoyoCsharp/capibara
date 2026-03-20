@@ -1,6 +1,6 @@
 /**
  * GitHub Issues Trigger - Listens to GitHub Issues as requirement source
- * @module roles/trigger/github-issues-trigger
+ * @module infrastructure/triggers/github-issues-trigger
  */
 
 import { inject, injectable } from 'tsyringe';
@@ -36,13 +36,6 @@ export class GitHubIssuesTrigger implements ITrigger {
     );
 
     // TODO: Phase C - Use Octokit to poll Issues
-    // while (true) {
-    //   const issues = await this.fetchNewIssues();
-    //   for (const issue of issues) {
-    //     yield this.toRequirement(issue);
-    //   }
-    //   await this.sleep(githubConfig.pollInterval * 1000);
-    // }
   }
 
   async acknowledge(requirementId: string): Promise<void> {

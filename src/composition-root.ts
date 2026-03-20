@@ -18,9 +18,7 @@ import {
   STATE_STORE_TOKEN,
   ARTIFACT_STORE_TOKEN,
   EVENT_BUS_TOKEN,
-  PROMPT_FRAMEWORK_TOKEN,
   COST_TRACKER_TOKEN,
-  DAG_EXECUTOR_TOKEN,
   PIPELINE_DEFINITION_LOADER_TOKEN,
   TRIGGER_TOKEN,
 } from './tokens.js';
@@ -32,7 +30,6 @@ import { ShellExecutor } from './infrastructure/executors/shell.executor.js';
 import { JsonStateStore } from './infrastructure/persistence/json-state-store.js';
 import { FsArtifactStore } from './infrastructure/persistence/fs-artifact-store.js';
 import { EmitteryEventBus } from './infrastructure/observability/emittery-event-bus.js';
-import { AiAgentsFramework } from './infrastructure/prompt-framework/ai-agents-framework.js';
 import { CostTracker } from './infrastructure/observability/cost-tracker.js';
 import { PipelineDefinitionLoader } from './infrastructure/pipeline/pipeline-definition.loader.js';
 
@@ -40,14 +37,10 @@ import { PipelineDefinitionLoader } from './infrastructure/pipeline/pipeline-def
 import { registerMvtt } from './implementations/mvtt/index.js';
 
 // Trigger (independent from MVTT)
-import { GitHubIssuesTrigger } from './roles/trigger/github-issues.trigger.js';
+import { GitHubIssuesTrigger } from './infrastructure/triggers/github-issues.trigger.js';
 
 // Application
 import { PipelineService } from './application/pipeline/pipeline.service.js';
-import { DAGExecutor } from './application/pipeline/dag-executor.js';
-import { NodeExecutor } from './application/pipeline/node-executor.js';
-import { GenericStateMachine } from './application/state-machine/generic-state-machine.js';
-import type { IPromptFramework } from './core/interfaces/prompt-framework.interface.js';
 import type { ICommandExecutor } from './core/interfaces/command-executor.interface.js';
 
 /**
@@ -79,50 +72,18 @@ export function bootstrap(configPath?: string): PipelineService {
   const defaultExecutor = executorRegistry.get(config.executor?.defaultType ?? 'claude-cli')!;
   container.register(COMMAND_EXECUTOR_TOKEN, { useValue: defaultExecutor });
 
-  // 5. Prompt Framework
-  const framework = createPromptFramework(config);
-  container.registerInstance(PROMPT_FRAMEWORK_TOKEN, framework);
-
-  // 6. MVTT Role Implementations (single call registers all roles)
+  // 5. MVTT Role Implementations (single call registers all roles, including prompt framework)
   registerMvtt(container);
 
-  // 7. Pipeline Infrastructure
+  // 6. Pipeline Infrastructure
   const definitionLoader = new PipelineDefinitionLoader(logger);
   container.register(PIPELINE_DEFINITION_LOADER_TOKEN, { useValue: definitionLoader });
 
-  // 8. Trigger (independent from MVTT)
+  // 7. Trigger (independent from MVTT)
   if (config.trigger.type === 'github_issues') {
     container.registerSingleton(TRIGGER_TOKEN, GitHubIssuesTrigger);
   }
 
-  // 9. Application Service
+  // 8. Application Service
   return container.resolve(PipelineService);
-}
-
-/**
- * Create prompt framework instance based on config
- */
-function createPromptFramework(config: ReturnType<typeof loadConfig>): IPromptFramework {
-  const { promptFramework } = config;
-  const projectDir = config.cli.projectDir;
-
-  switch (promptFramework.type) {
-    case 'ai-agents': {
-      const rootDir = promptFramework.rootDir || '.ai-agents';
-      return new AiAgentsFramework(join(projectDir, rootDir));
-    }
-
-    case 'custom': {
-      throw new Error(
-        `Custom prompt framework is not yet implemented. ` +
-          `Please specify 'ai-agents' as the framework type.`,
-      );
-    }
-
-    default:
-      throw new Error(
-        `Unknown prompt framework type: ${promptFramework.type}. ` +
-          `Supported types: 'ai-agents'`,
-      );
-  }
 }

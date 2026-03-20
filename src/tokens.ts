@@ -17,9 +17,7 @@ export const COMMAND_EXECUTOR_TOKEN = 'ICommandExecutor';
 export const STATE_STORE_TOKEN = 'IStateStore';
 export const ARTIFACT_STORE_TOKEN = 'IArtifactStore';
 export const EVENT_BUS_TOKEN = 'IEventBus';
-export const PROMPT_FRAMEWORK_TOKEN = 'IPromptFramework';
 export const COST_TRACKER_TOKEN = 'CostTracker';
-export const DAG_EXECUTOR_TOKEN = 'DAGExecutor';
 export const PIPELINE_DEFINITION_LOADER_TOKEN = 'PipelineDefinitionLoader';
 
 // ---------- Cross-Cutting Concerns ----------

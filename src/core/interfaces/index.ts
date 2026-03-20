@@ -11,5 +11,4 @@ export type { ITrigger } from './trigger.interface.js';
 export type { IStateStore } from './state-store.interface.js';
 export type { IArtifactStore, Artifact } from './artifact-store.interface.js';
 export type { IEventBus } from './event-bus.interface.js';
-export type { IPromptFramework } from './prompt-framework.interface.js';
 export type { ICommandExecutor } from './command-executor.interface.js';

@@ -1,13 +1,13 @@
 /**
  * MVTT Messenger Implementation - Inter-role message formatting + LLM summarization
  *
- * Thin layer: assembles prompts via IPromptFramework, delegates LLM calls to ICommandExecutor.
+ * Thin layer: assembles prompts via MvttPromptFramework, delegates LLM calls to ICommandExecutor.
  * @module implementations/mvtt/mvtt-messenger
  */
 
 import type { IMessenger } from '../../core/interfaces/messenger.interface.js';
 import type { ICommandExecutor } from '../../core/interfaces/command-executor.interface.js';
-import type { IPromptFramework } from '../../core/interfaces/prompt-framework.interface.js';
+import type { MvttPromptFramework } from './mvtt-prompt-framework.js';
 import type { Phase } from '../../core/types/phase.types.js';
 import type { PipelineContext } from '../../core/types/pipeline.types.js';
 import type { WorkerCommand, WorkerResult } from '../../core/types/worker.types.js';
@@ -34,7 +34,7 @@ export class MvttMessenger implements IMessenger {
   constructor(
     private executor: ICommandExecutor,
     private outputParser: MvttOutputParser,
-    private framework: IPromptFramework,
+    private framework: MvttPromptFramework,
     private config: AutomationConfig,
     private logger: Logger,
   ) {}

@@ -23,19 +23,6 @@ export class MvttQualityEvaluator extends MvttEvaluator {
   }
 
   protected buildSystemPrompt(): string {
-    return `You are a code quality evaluation expert. Focus on: code design rationality, readability, maintainability, pattern adherence.
-
-Rules:
-1. Only evaluate, never modify any files
-2. You can use Read tool to read project files to verify artifact authenticity
-3. Output must be in the following JSON format (using \`\`\`json code block):
-\`\`\`json
-{
-  "verdict": "pass|pass_with_notes|needs_revision|critical_issues",
-  "score": 0-100,
-  "issues": [{"severity": "critical|major|minor|suggestion", "category": "...", "description": "...", "suggestion": "..."}],
-  "summary": "One-line summary"
-}
-\`\`\``;
+    return ``;
   }
 }

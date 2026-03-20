@@ -25,6 +25,7 @@ import type { Logger } from 'pino';
 import { GenericStateMachine } from '../state-machine/generic-state-machine.js';
 import { DAGExecutor } from './dag-executor.js';
 import { NodeExecutor } from './node-executor.js';
+import { WorkerNodeHandler } from './worker-node-handler.js';
 import {
   WORKER_TOKEN,
   EVALUATOR_TOKEN,
@@ -91,7 +92,7 @@ export class PipelineService {
 
     // Create execution components
     const stateMachine = new GenericStateMachine(this.logger, this.eventBus);
-    const nodeExecutor = new NodeExecutor(
+    const workerHandler = new WorkerNodeHandler(
       this.worker,
       this.evaluators,
       this.conductor,
@@ -102,6 +103,7 @@ export class PipelineService {
       this.logger,
       this.costTracker,
     );
+    const nodeExecutor = new NodeExecutor([workerHandler]);
     const dagExecutor = new DAGExecutor(
       nodeExecutor,
       stateMachine,

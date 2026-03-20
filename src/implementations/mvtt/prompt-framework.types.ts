@@ -1,9 +1,9 @@
 /**
- * Prompt Framework Type Definitions
- * @module core/types/prompt-framework
+ * MVTT Prompt Framework Type Definitions
+ * @module implementations/mvtt/prompt-framework.types
  */
 
-import type { Phase } from './phase.types.js';
+import type { Phase } from '../../core/types/phase.types.js';
 
 /** Agent definition for a phase */
 export interface AgentDefinition {

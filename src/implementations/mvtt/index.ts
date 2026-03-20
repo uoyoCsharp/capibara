@@ -9,6 +9,7 @@
  * @module implementations/mvtt
  */
 
+import { join } from 'node:path';
 import type { DependencyContainer } from 'tsyringe';
 import type { ICommandExecutor } from '../../core/interfaces/command-executor.interface.js';
 import type { IEvaluator } from '../../core/interfaces/evaluator.interface.js';
@@ -22,13 +23,13 @@ import { MvttConsistencyEvaluator } from './mvtt-consistency-evaluator.js';
 import { MvttConductor } from './mvtt-conductor.js';
 import { MvttMessenger } from './mvtt-messenger.js';
 import { MvttOutputParser } from './mvtt-output-parser.js';
+import { MvttPromptFramework } from './mvtt-prompt-framework.js';
 import {
   WORKER_TOKEN,
   EVALUATOR_TOKEN,
   CONDUCTOR_TOKEN,
   MESSENGER_TOKEN,
   COMMAND_EXECUTOR_TOKEN,
-  PROMPT_FRAMEWORK_TOKEN,
   CONFIG_TOKEN,
   LOGGER_TOKEN,
   EVENT_BUS_TOKEN,
@@ -80,12 +81,17 @@ export function registerMvtt(container: DependencyContainer): void {
     ),
   });
 
+  // Prompt Framework — internal to MVTT, not exposed as DI token
+  const { promptFramework: pfConfig } = config;
+  const frameworkDir = join(config.cli.projectDir, pfConfig.rootDir || '.ai-agents');
+  const framework = new MvttPromptFramework(frameworkDir);
+
   // Messenger
   container.register(MESSENGER_TOKEN, {
     useFactory: (c) => new MvttMessenger(
       c.resolve<ICommandExecutor>(COMMAND_EXECUTOR_TOKEN),
       outputParser,
-      c.resolve(PROMPT_FRAMEWORK_TOKEN),
+      framework,
       c.resolve<AutomationConfig>(CONFIG_TOKEN),
       c.resolve<Logger>(LOGGER_TOKEN),
     ),
@@ -101,3 +107,4 @@ export { MvttConsistencyEvaluator } from './mvtt-consistency-evaluator.js';
 export { MvttConductor } from './mvtt-conductor.js';
 export { MvttMessenger } from './mvtt-messenger.js';
 export { MvttOutputParser } from './mvtt-output-parser.js';
+export { MvttPromptFramework } from './mvtt-prompt-framework.js';
