@@ -28,3 +28,8 @@ export const PROJECT_REGISTRY_TOKEN = 'IProjectRegistry';
 // ---------- Cross-Cutting Concerns ----------
 export const CONFIG_TOKEN = 'AutomationConfig';
 export const LOGGER_TOKEN = 'Logger';
+
+// ---------- Application Services ----------
+export const EXECUTION_LOG_STORE_TOKEN = 'IExecutionLogStore';
+export const PROGRESS_QUERY_SERVICE_TOKEN = 'IProgressQueryService';
+export const HUMAN_INTERACTION_HANDLER_TOKEN = 'HumanInteractionHandler';

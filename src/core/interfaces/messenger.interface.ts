@@ -21,6 +21,6 @@ export interface IMessenger {
   /** Format content (from Worker directly or synthesized Evaluator results) for Conductor input */
   prepareForConductor(content: string, context: PipelineContext): Promise<string>;
 
-  /** Update context based on Conductor decision (async: LLM feedback enhancement for revise path) */
+  /** Update context based on Conductor decision */
   updateContext(decision: ConductorDecision, context: PipelineContext): Promise<PipelineContext>;
 }

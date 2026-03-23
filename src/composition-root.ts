@@ -24,6 +24,9 @@ import {
   SQLITE_STORE_TOKEN,
   REQUIREMENT_POOL_TOKEN,
   PROJECT_REGISTRY_TOKEN,
+  EXECUTION_LOG_STORE_TOKEN,
+  PROGRESS_QUERY_SERVICE_TOKEN,
+  HUMAN_INTERACTION_HANDLER_TOKEN,
 } from './tokens.js';
 
 // Infrastructure
@@ -38,6 +41,10 @@ import { PipelineDefinitionLoader } from './infrastructure/pipeline/pipeline-def
 import { SqliteStore } from './infrastructure/persistence/sqlite-store.js';
 import { SqliteProjectRegistry } from './infrastructure/persistence/sqlite-project-registry.js';
 import { SqliteRequirementPool } from './infrastructure/persistence/sqlite-requirement-pool.js';
+import { JsonExecutionLogStore } from './infrastructure/persistence/json-execution-log-store.js';
+import { ProgressQueryService } from './application/progress/progress-query.service.js';
+import { HumanInteractionHandler } from './application/human-interaction/human-interaction.handler.js';
+import { TerminalStrategy } from './application/human-interaction/strategies/terminal.strategy.js';
 
 // MVTT Implementation
 import { registerMvtt } from './implementations/mvtt/index.js';
@@ -102,6 +109,15 @@ export function bootstrap(configOrPath?: string | AutomationConfig): PipelineSer
   child.registerSingleton(ARTIFACT_STORE_TOKEN, FsArtifactStore);
   child.registerSingleton(EVENT_BUS_TOKEN, EmitteryEventBus);
   child.registerSingleton(COST_TRACKER_TOKEN, CostTracker);
+  child.registerSingleton(EXECUTION_LOG_STORE_TOKEN, JsonExecutionLogStore);
+
+  // 4a. Application Services
+  child.registerSingleton(PROGRESS_QUERY_SERVICE_TOKEN, ProgressQueryService);
+  child.registerSingleton(HUMAN_INTERACTION_HANDLER_TOKEN, HumanInteractionHandler);
+
+  // W3 fix: Initialize default TerminalStrategy for human interaction
+  const humanHandler = child.resolve<HumanInteractionHandler>(HUMAN_INTERACTION_HANDLER_TOKEN);
+  humanHandler.initializeWithDefaultStrategy(new TerminalStrategy());
 
   // 5. Command Executors (shared by all roles)
   const cliAdapter = child.resolve<ClaudeCliAdapter>(CLI_ADAPTER_TOKEN);

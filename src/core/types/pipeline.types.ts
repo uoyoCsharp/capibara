@@ -5,9 +5,26 @@
 
 import type { Phase, InteractionMode } from './phase.types.js';
 import type { Requirement } from './requirement.types.js';
-import type { ConductorDecision } from './conductor.types.js';
+import type { ConductorDecision, ConductorAction } from './conductor.types.js';
 
 export type PipelineStatus = 'running' | 'paused' | 'completed' | 'failed';
+
+/** Interaction record for human intervention context display */
+export interface InteractionRecord {
+  round: number;
+  phase: Phase;
+  timestamp: string;
+  /** Worker output (truncated) */
+  workerOutput: string;
+  workerOutputTruncated: boolean;
+  /** Evaluator results summary (if evaluated) */
+  evaluatorSummary?: string;
+  /** Conductor decision */
+  conductorDecision: ConductorAction;
+  conductorReason: string;
+  /** Feedback given (if revised) */
+  feedback?: string;
+}
 
 /** Pipeline execution runtime context */
 export interface PipelineContext {
@@ -21,6 +38,10 @@ export interface PipelineContext {
   revisionFeedback?: string[];
   artifacts: Record<Phase, string>;
   mode: InteractionMode;
+  /** Current round number (increments per worker execution in a phase) */
+  currentRound: number;
+  /** Last N interaction records (max 3), stored in reverse chronological order */
+  interactionHistory: InteractionRecord[];
 }
 
 /** Pipeline final execution result */
@@ -52,6 +73,10 @@ export interface PipelineState {
     artifacts: Record<Phase, string>;
     evaluations: Record<Phase, string[]>;
     decisions: Record<Phase, ConductorDecision[]>;
+    /** W2 fix: Persist interaction history for human intervention context */
+    interactionHistory: InteractionRecord[];
+    /** Current round number */
+    currentRound: number;
   };
   sessions: {
     workerSessionId: string;

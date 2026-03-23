@@ -11,6 +11,7 @@ import type { IMessenger } from '../../core/interfaces/messenger.interface.js';
 import type { IStateStore } from '../../core/interfaces/state-store.interface.js';
 import type { IArtifactStore } from '../../core/interfaces/artifact-store.interface.js';
 import type { IEventBus } from '../../core/interfaces/event-bus.interface.js';
+import type { IExecutionLogStore } from '../../core/interfaces/execution-log-store.interface.js';
 import type { AutomationConfig } from '../../core/types/config.types.js';
 import type { Requirement } from '../../core/types/requirement.types.js';
 import type { InteractionMode, Phase } from '../../core/types/phase.types.js';
@@ -26,6 +27,7 @@ import { GenericStateMachine } from '../state-machine/generic-state-machine.js';
 import { DAGExecutor } from './dag-executor.js';
 import { NodeExecutor } from './node-executor.js';
 import { WorkerNodeHandler } from './worker-node-handler.js';
+import type { HumanInteractionHandler } from '../human-interaction/human-interaction.handler.js';
 import {
   WORKER_TOKEN,
   EVALUATOR_TOKEN,
@@ -38,6 +40,8 @@ import {
   LOGGER_TOKEN,
   COST_TRACKER_TOKEN,
   PIPELINE_DEFINITION_LOADER_TOKEN,
+  EXECUTION_LOG_STORE_TOKEN,
+  HUMAN_INTERACTION_HANDLER_TOKEN,
 } from '../../tokens.js';
 import { BudgetExceededError } from '../../core/errors/pipeline.errors.js';
 
@@ -55,6 +59,8 @@ export class PipelineService {
     @inject(LOGGER_TOKEN) private logger: Logger,
     @inject(COST_TRACKER_TOKEN) private costTracker: CostTracker,
     @inject(PIPELINE_DEFINITION_LOADER_TOKEN) private definitionLoader: PipelineDefinitionLoader,
+    @inject(EXECUTION_LOG_STORE_TOKEN) private executionLogStore: IExecutionLogStore,
+    @inject(HUMAN_INTERACTION_HANDLER_TOKEN) private humanInteractionHandler: HumanInteractionHandler,
   ) {}
 
   /**
@@ -102,6 +108,8 @@ export class PipelineService {
       this.config,
       this.logger,
       this.costTracker,
+      this.executionLogStore,
+      this.humanInteractionHandler,
     );
     const nodeExecutor = new NodeExecutor([workerHandler]);
     const dagExecutor = new DAGExecutor(
@@ -170,6 +178,8 @@ export class PipelineService {
       workerSessionId: crypto.randomUUID(),
       artifacts: {} as Record<Phase, string>,
       mode,
+      currentRound: 0,
+      interactionHistory: [],
     };
   }
 }

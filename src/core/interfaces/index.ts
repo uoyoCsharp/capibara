@@ -14,3 +14,5 @@ export type { IEventBus } from './event-bus.interface.js';
 export type { ICommandExecutor } from './command-executor.interface.js';
 export type { IRequirementPool } from './requirement-pool.interface.js';
 export type { IProjectRegistry } from './project-registry.interface.js';
+export type { IExecutionLogStore } from './execution-log-store.interface.js';
+export { EXECUTION_LOG_STORE_TOKEN } from './execution-log-store.interface.js';
