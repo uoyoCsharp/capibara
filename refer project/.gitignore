@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+out/
+mac-arm64/
+dist/
+coverage/
+*.tsbuildinfo
+win-unpacked
+.blockmap
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Signing certificates (NEVER commit these)
+*.p12
+*.cer
+*.pem
+*.key
+*.p8
+*.provisionprofile
+*.mobileprovision
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local reference material
+oldreference/
+
+# Markdown docs
+*.md
+!/README.md
+!/docs/*.md
+*.zip
+*.blockmap
+*.exe
+
+# Local design scratch files
+homepagedesign.html
+
+# Landing page (deployed separately to Cloudflare Pages)
+landing/
+
+# Package manager logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+CLAUDE.md
+build/release/AgentCompany-0.4.61-arm64.dmg
+CLAUDE.md
+CLAUDE.md
+build/release/AgentCompany-0.4.90-arm64.dmg
