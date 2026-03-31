@@ -19,10 +19,9 @@
 9. [自动化规则引擎](#9-自动化规则引擎)
 10. [韧性与恢复](#10-韧性与恢复)
 11. [可观测性与反馈](#11-可观测性与反馈)
-12. [用户交互（CLI 命令设计）](#12-用户交互cli-命令设计)
-13. [配置体系](#13-配置体系)
-14. [功能优先级总结](#14-功能优先级总结)
-15. [关键设计决策记录](#15-关键设计决策记录)
+12. [配置体系](#12-配置体系)
+13. [功能优先级总结](#13-功能优先级总结)
+14. [关键设计决策记录](#14-关键设计决策记录)
 
 ---
 
@@ -48,11 +47,11 @@
 
 | 维度 | Capibara (目标) | AgentCompany (参考) |
 |------|----------------|-------------------|
-| 形态 | CLI 工具（V3 演进为 Electron） | Electron 桌面应用 |
+| 形态 | Electron 桌面应用 | Electron 桌面应用 |
 | 核心模型 | 动态组织架构树 + BMAD 技能 | Company -> Department -> Agent |
 | 执行模式 | 事件驱动唤醒闭环 | 持续自治运转 + 唤醒闭环 |
 | 技能体系 | BMAD Method 40+ skills | 自定义 prompt builder |
-| LLM 适配 | MVP: Claude CLI；V3: 多连接器 | 多连接器 (Claude/Codex/Gemini) |
+| LLM 适配 | MVP: Claude CLI；V2: 多连接器 | 多连接器 (Claude/Codex/Gemini) |
 | 数据持久化 | SQLite 统一存储 | SQLite (25+ 表) |
 
 ---
@@ -75,7 +74,7 @@
 | 角色属性：技能/知识库/职责 | **MVP** | 绑定 BMAD skills，注入 prompt |
 | 角色状态管理 | **MVP** | active/paused/idle，控制是否可被分派 |
 | 预设组织模板 | **MVP** | software-team, product-team 等 |
-| 用户自定义组织架构 | **MVP** | YAML 定义 + CLI 加载 |
+| 用户自定义组织架构 | **MVP** | YAML 定义 + Electron UI 加载 |
 | 角色预算上限 | V2 | 每个角色的 LLM 消耗上限，超限自动暂停 |
 | 动态角色创建（「招聘」） | V2 | 运行时由上级角色决定需要新增下属 |
 | 部门分组 | V2 | 角色按部门归类（前端组、后端组） |
@@ -428,7 +427,7 @@ MVP 阶段通信主要通过「任务的 review 反馈」和「任务描述」�
 
 **D-SKILL-1: BMAD 产出物与 Capibara 任务产出物共存**
 
-Capibara 管理任务和产出物的元数据（存 SQLite），但实际文件存储在 `_bmad-output/` 目录中，保持和 BMAD 标准结构兼容。用户可以直接用 BMAD CLI 查看产出物。
+Capibara 管理任务和产出物的元数据（存 SQLite），但实际文件存储在 `_bmad-output/` 目录中，保持和 BMAD 标准结构兼容。用户可以在 Electron UI 中查看产出物。
 
 **D-SKILL-2: 知识库双层架构**
 
@@ -559,99 +558,19 @@ V2 阶段将这些规则抽象为声明式配置，支持用户自定义。
 | 功能点 | 优先级 | 说明 |
 |--------|--------|------|
 | 执行日志存储 | **MVP** | 每个 run 的完整输出记录 |
-| 任务进度查询 | **MVP** | `cpbr status` 展示组织树 + 任务状态 |
+| 任务进度查询 | **MVP** | Electron Dashboard 展示组织树 + 任务状态 |
 | 成本追踪 | **MVP** | 已有 CostTracker，需扩展到角色维度 |
-| 组织树可视化（CLI） | **MVP** | 树状展示角色层级和当前状态 |
+| 组织树可视化 | **MVP** | Electron UI 树状展示角色层级和当前状态 |
 | 审批历史查询 | **MVP** | 查看某任务的审批链记录 |
 | 事件总线 | **MVP** | 已有 EventBus，扩展事件类型 |
-| 实时进度通知 | V2 | 终端实时展示执行进度 |
+| 实时进度通知 | V2 | 桌面实时展示执行进度 |
 | HTML 报告 | V2 | 生成项目执行报告 |
-| Electron UI | V3 | 图形化展示组织架构 + 任务看板 |
-
-### 11.3 CLI 状态展示示例
-
-```
-$ cpbr status
-
-Project: My App (active)
-Budget: $12.30 / $50.00 (24.6%)
-Mode: semi-auto
-
-Organization:
-  CTO [idle]
-  +-- Tech Manager [in_progress] -> Task: "Design API architecture"
-      +-- Frontend Dev [awaiting_review] -> Task: "Implement login page"
-      +-- Backend Dev [idle]
-      +-- UX Designer [done] -> Task: "Create wireframes"
-      +-- QA Engineer [idle]
-
-Tasks (5 total, 2 active):
-  #1 "Build user auth feature" [in_progress] assigned: CTO
-    #1.1 "Design API architecture" [in_progress] assigned: Tech Manager
-      #1.1.1 "Create wireframes" [approved] assigned: UX Designer
-      #1.1.2 "Implement login page" [awaiting_review] assigned: Frontend Dev
-      #1.1.3 "Implement auth API" [pending] assigned: Backend Dev
-
-Recent Activity:
-  14:32 Frontend Dev completed "Implement login page" -> awaiting Tech Manager review
-  14:15 UX Designer completed "Create wireframes" -> approved by Tech Manager
-  13:50 Tech Manager delegated tasks to Frontend Dev, Backend Dev, UX Designer
-```
 
 ---
 
-## 12. 用户交互（CLI 命令设计）
+## 12. 配置体系
 
-### 12.1 组织架构管理
-
-```bash
-cpbr org init [--template software-team]    # 从预设模板初始化组织架构
-cpbr org load <yaml-file>                   # 从自定义 YAML 加载组织架构
-cpbr org show                               # 树状展示组织架构
-cpbr org reset                              # 重置组织架构
-```
-
-### 12.2 角色管理
-
-```bash
-cpbr role list                              # 列出所有角色及状态
-cpbr role info <roleId>                     # 查看角色详情（技能、知识库、状态、成本）
-cpbr role pause <roleId>                    # 暂停角色
-cpbr role resume <roleId>                   # 恢复角色
-cpbr role add <name> --parent <parentId> --skills <...>  # 动态添加角色 (V2)
-```
-
-### 12.3 任务管理
-
-```bash
-cpbr task create -t <title> -d <desc>       # 创建顶层任务（需求输入）
-cpbr task list [--role <roleId>] [--status <status>]  # 列出任务
-cpbr task info <taskId>                     # 任务详情 + 审批历史 + 产出物
-cpbr task log <taskId>                      # 查看执行日志
-```
-
-### 12.4 执行控制
-
-```bash
-cpbr start [--mode full-auto|semi-auto]     # 启动编排器
-cpbr stop                                   # 优雅停止（等待当前 run 完成）
-cpbr status                                 # 全局状态总览
-```
-
-### 12.5 项目管理（保留现有）
-
-```bash
-cpbr project add -n <name> --dir <path>     # 添加项目
-cpbr project list                           # 列出项目
-cpbr project switch <id>                    # 切换活跃项目
-cpbr project remove <id>                    # 移除项目
-```
-
----
-
-## 13. 配置体系
-
-### 13.1 配置文件结构
+### 12.1 配置文件结构
 
 ```yaml
 # capibara.config.yaml
@@ -685,18 +604,17 @@ logging:
   pretty: true                        # 美化日志输出
 ```
 
-### 13.2 配置层级
+### 12.2 配置层级
 
 ```
 默认值 (config.defaults.ts)
   <- 全局配置 (~/.capibara/config.yaml)
     <- 项目配置 (<projectDir>/capibara.config.yaml)
-      <- CLI 参数 (--mode, --budget 等)
 ```
 
 ---
 
-## 14. 功能优先级总结
+## 13. 功能优先级总结
 
 ### MVP（第一个可用版本）
 
@@ -709,7 +627,7 @@ logging:
 5. **唤醒闭环**：事件驱动的 完成 -> 审核 -> 分派 -> 执行 循环
 6. **全智能/半智能两种模式**：关键节点可配置人工介入
 7. **失败重试 + 升级链**：沿组织树向上升级
-8. **CLI 交互 + 状态展示**：org/role/task/status 命令
+8. **Electron 桌面应用**：图形化组织架构 + 任务看板 + 状态展示
 
 ### V2（核心增强）
 

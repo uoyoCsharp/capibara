@@ -6,34 +6,49 @@
 - **Module system**: ESM (`"type": "module"`)
 - **Package manager**: pnpm
 
+## Platform
+- **Electron** 41.1.0 (Main/Preload/Renderer three-layer process model)
+- **electron-vite** 5.0.0 (Build tooling)
+- **electron-builder** 26.8.1 (Packaging)
+
 ## Core Dependencies
 | Package | Purpose |
 |---------|---------|
-| `commander` | CLI command parsing and entry organization |
 | `tsyringe` + `reflect-metadata` | Dependency injection (decorator-based) |
 | `zod` | Configuration and input validation |
 | `dotenv` | Environment variable loading |
 | `pino` + `pino-pretty` | Structured logging |
 | `emittery` | Event bus (typed, async) |
+| `better-sqlite3` | SQLite database |
+
+## Frontend Dependencies
+| Package | Purpose |
+|---------|---------|
+| `React` 19.2.4 | UI framework |
+| `Zustand` 5.0.12 | State management |
+| `TailwindCSS` 4.2.2 | Styling |
+| `Framer Motion` 12.38.0 | Animations |
+| `React Router` 7 | Routing (memory mode) |
 
 ## Dev Dependencies
 | Package | Purpose |
 |---------|---------|
 | `typescript` | Compiler |
-| `tsx` | Dev-time TypeScript execution |
 | `vitest` | Unit + integration testing |
+| `playwright` | E2E testing |
 | `prettier` | Code formatting |
 | `rimraf` | Clean builds |
 
 ## Build & Run
-- **Build**: `pnpm build` (tsc)
-- **Dev**: `pnpm dev` (tsx)
+- **Dev**: `pnpm dev` (electron-vite dev server)
+- **Build**: `pnpm build` (electron-vite build)
 - **Test**: `pnpm test` (vitest)
-- **CLI binary**: `cpbr` (via `dist/main.js`)
+- **Package**: `pnpm build:electron` (electron-builder)
 
 ## Architecture Constraints
 1. DI only in composition-root; domain layer never imports container API
 2. Business layer uses interface injection, never direct `new` for infrastructure
-3. CLI is entry-only; no business logic in CLI layer
+3. Main process handles business logic; Renderer is UI-only (no Node.js access)
 4. Zod validates all config at startup (fail-fast)
 5. tsyringe tokens centralized in `tokens.ts`; default singleton lifecycle
+6. IPC communication via context bridge with Zod validation

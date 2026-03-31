@@ -53,7 +53,6 @@ Capibara is a **company-grade organization architecture AI assistant** that simu
 ### 2.1 Platform
 
 - **Primary UI**: Electron desktop application (Main/Preload/Renderer three-layer process model)
-- **Secondary Interface**: CLI for automation and scripting
 - **Monorepo**: pnpm workspace with adapter packages
 
 ### 2.2 Unified Agent Model
@@ -264,19 +263,6 @@ The system shall support a three-layer skill provider interface:
 - **Activity Timeline**: Recent events and state changes
 - **Dashboard**: Narrative status + metrics + active work + alerts
 
-### FR-14: CLI Secondary Interface
-
-**Priority: MVP**
-
-- `cpbr org init [--template name]` — Initialize from preset template
-- `cpbr org show` — Display organization tree
-- `cpbr role list` / `cpbr role info <id>` — Role management
-- `cpbr task create -t <title> -d <desc>` — Create top-level task (requirement input)
-- `cpbr task list` / `cpbr task info <id>` — Task queries
-- `cpbr start` — Start orchestrator
-- `cpbr stop` — Graceful stop
-- `cpbr status` — Narrative status output (CLI-friendly version)
-
 ---
 
 ## 4. Non-Functional Requirements
@@ -430,7 +416,7 @@ As a human user, I want to send messages and vote in any discussion group with e
 | D-ARCH-9 | Event notification | Event digester with time-window aggregation | Prevents notification storms; inspired by database WAL batch flush |
 | D-ARCH-10 | Prompt construction | User-configured 3 elements + system auto-injected 4 contexts | Separation of concerns: user controls identity/knowledge/skills, system handles org/task/discussion/actions |
 | D-ARCH-11 | Organization creation | Templates + AI assistant conversational guidance | Lowers barrier for new users while maintaining flexibility for experts |
-| D-ARCH-12 | Platform | Electron primary + CLI secondary | Rich UI for discussions/narrative/org visualization; CLI for automation |
+| D-ARCH-12 | Platform | Electron desktop application | Rich UI for discussions/narrative/org visualization |
 
 ---
 
@@ -470,7 +456,6 @@ As a human user, I want to send messages and vote in any discussion group with e
 | DI Container | tsyringe | (existing) |
 | Event Bus | Emittery | (existing) |
 | Logging | Pino | (existing) |
-| CLI | Commander | (existing) |
 | Testing | Vitest + Playwright | latest + 1.58.2 |
 | Package Manager | pnpm (monorepo) | latest |
 
@@ -480,7 +465,7 @@ As a human user, I want to send messages and vote in any discussion group with e
 
 ### MVP (V1)
 
-All FR-01 through FR-14 as defined above.
+All FR-01 through FR-13 as defined above.
 
 ### V2 Enhancements
 
@@ -508,6 +493,6 @@ All FR-01 through FR-14 as defined above.
 
 1. **Full Loop**: User inputs a requirement → system completes analysis-to-delivery autonomously
 2. **Meaningful Collaboration**: Discussion groups contain >3 rounds of substantive inter-role debate per Epic
-3. **Narrative Clarity**: `cpbr status` / Dashboard narrative allows uninformed reader to understand project state in 30 seconds
+3. **Narrative Clarity**: Dashboard narrative allows uninformed reader to understand project state in 30 seconds
 4. **Skill Flexibility**: Switching Skill Provider (e.g., BMAD to custom prompts) requires zero business code changes
 5. **Human Control**: Per-role human intervention works correctly; human votes have equal authority in discussions
