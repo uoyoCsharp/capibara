@@ -1,0 +1,102 @@
+---
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+inputDocuments: 
+  - "_bmad-output/planning-artifacts/prd.md"
+  - "_bmad-output/project-context.md"
+  - "docs/functional-analysis.md"
+---
+
+# UX Design Specification capibara
+
+**Author:** uoyo
+**Date:** 2026-03-31
+
+---
+
+## Executive Summary
+
+### Project Vision
+
+Capibara is an enterprise-grade AI organization orchestration platform. It completely disrupts the traditional fixed-role AI pipeline by simulating a realistic organizational hierarchy and dynamic collaboration models. The system autonomously or semi-autonomously completes the closed loop of requirements analysis, task decomposition, assignment, execution, and approval. Its core relies on a variable-depth task tree, discussion-driven autonomous consensus decision-making, and a highly anthropomorphic narrative engine.
+
+### Target Users
+
+1. **Software Developers and Tech Leads:** Users who want to automate multi-step development workflows while ensuring project quality by configuring critical human intervention nodes.
+2. **Power Users:** Users who wish to utilize the platform's pluggable skill system (like BMAD Methods) to custom-build AI organizational structures and collaboration rules tailored to specific vertical domains.
+
+### Key Design Challenges
+
+- **Visualizing Complex Hierarchies:** Clearly and intuitively presenting the variable-depth Task Tree, its state closures, and the collaborative status of the multi-tiered Organization Tree without making the interface cluttered or dry.
+- **Interactive Presentation of High-Density Collaboration:** Elegantly integrating natural language communication with structured actions (e.g., voting, approving, rejecting for revision, decomposing and delegating) within a project group chat UI, making the establishment of consensus immediately apparent.
+- **Context Preservation During Human Intervention:** When the workflow reaches a "Semi-auto" human intervention bottleneck, providing aggregated displays and narrative summaries so users can instantly grasp the background and make accurate intervention decisions (APPROVE/REVISE/DELEGATE).
+
+### Design Opportunities
+
+- **Narrative Dashboard with Human Touch:** Discarding traditional, dry tabular reporting in favor of a Narrative Engine that reimagines the project's progress and health, providing a reading experience akin to a human report.
+- **Gamified Organization Building Experience:** Packaging the creation of roles (including skill selection, knowledge base attachment, persona setting, etc.) into an intuitive and engaging "employee profiling and recruitment experience" similar to a business simulation game.
+
+## Core User Experience
+
+### Defining Experience
+The most frequent and critical core actions are **"Intervention and Decision Making"** and **"Global Progress Control"**. The system's AI agents handle all tedious execution work, leaving the human's value in making judgments (as a supervisor) and steering the direction (as a decision-maker). Therefore, the core experience must allow users to grasp the essential context of highly concurrent tasks within extreme timeframes (measured in minutes) and make precise decisions at "semi-auto" critical points.
+
+### Platform Strategy
+Given the concurrency of tasks and the need for deep context, Capibara utilizes an **Electron desktop application**.
+- **Native Desktop Feel:** Relies on system-level notifications (for approvals and escalating interventions), full-screen immersive code and architecture review, and keyboard shortcuts for efficient navigation.
+- **High-Density Collaborative Layout:** Combining the characteristics of modern IDEs (VS Code) and team collaboration tools (Slack/Discord), it supports multi-pane and split-column displays to balance breadth (task trees) and depth (discussion flows and code details).
+
+### Effortless Interactions
+- **Glanceable Approvals:** When an approval flows to a human role, the system automatically summarizes all previous execution processes and key disagreements through a Narrative Summary. Users can quickly choose APPROVE or input requirements to reject via REVISE without needing to dig through code history.
+- **Simulated Org Setup:** The process of building the architecture and assigning knowledge bases is akin to playing a simulation game, utilizing drag-and-drop or simple configurations rather than rigid backend forms.
+
+### Critical Success Moments
+- **Aha Moment 1 (Organizational Autonomy):** When a user inputs an Epic-level requirement, they no longer need to manually create multiple Jira cards. Instead, they watch as the CTO automatically breaks down the architecture, the Tech Manager assigns tasks to different developers, and formal discussions take place in dedicated groups to automatically reach consensus and merge code.
+- **Aha Moment 2 (Humanistic Reporting):** The next morning, rather than seeing a dry Dashboard data table, the user first reads the "Yesterday's Team Morning Report" generated by the narrative engine. The system proactively reports the project's health, budget consumption, and blocked nodes in a human voice.
+
+## UI / UX Foundation
+
+### Emotional & Visual Tone
+- **Trust & Transparency:** Displaying a methodical, "white-box execution feel" without black boxes. AI behavioral trajectories are fully traceable, ensuring users feel everything is under control.
+- **Clean, Light & Accessible:** Moving away from typical dark geeky styles, utilizing a **Light Mode, minimalist design** supported by generous whitespace and clear typography. This makes the product highly approachable for various user demographics (including product managers, designers, and general managers), lowering the psychological barrier to entry.
+- **Organic Collaboration:** Interface elements must break the "cold pipeline" feel, shaping a sense of a "physical company and real group" through avatars, status indicator lights, and communication bubbles that bring out the organization's "human touch."
+
+### Design System Strategy
+- **Component Library:** Built on modern headless UI component libraries (like Radix UI or Shadcn/ui) paired with Tailwind CSS. Drawing on good practices from the refer project (AgentCompany), components are designed with clear borders and light shadows to separate hierarchies.
+- **Color Specifications:**
+  - *Main Background:* Light base background (White/Off-white), using panels of varying grays to delineate areas.
+  - *Status Colors:* Highly semantic and distinct status colors. Green (Approve/Done), Orange/Yellow (Revise/Blocked/Wait), Red (Concern/Escalate/Budget Alert). The primary color should be a tech-oriented yet gentle blue (Blue/Indigo).
+- **Animation:** Restrained micro-animations, punctuating operational states representing the execution lifecycle (e.g., an Agent inferencing via the LLM) and smooth transitions between pages.
+
+## Key User Journeys
+
+### 1. Organization & Skills Setup
+- **Scenario:** A user configures AI roles upon first use or when starting a new project.
+- **Interaction Flow:** Enter [Organization Panel] -> Load preset templates (e.g., BMAD Standard Dev Team) -> Interface visualizes the hierarchical structure map -> Click any node to slide out a drawer from the side to configure the Persona, bind knowledge bases, or link LLM skill sets (BMAD L1/L3) -> Check the `requiresHumanApproval` node for necessary human intervention.
+
+### 2. Initiating an Epic & Observing Flow
+- **Scenario:** The user posits a top-level goal; the AI begins self-decomposition and generates a collaboration flow.
+- **Interaction Flow:** Input goal description -> System assigns it to the corresponding department/team and starts -> Automatically spawns a new Epic-level dialogue group -> The tree diagram on the left or top sprouts child nodes (Tasks / Stories) hierarchically and flashes "In Progress" -> The dialogue box automatically populates with the structured analysis, breakdown, and dispatch work processes of various AI managers.
+
+### 3. Human-in-the-Loop Intervention
+- **Scenario:** A task is completed, code is pushed for review, hitting a role node configured for manual confirmation, awaiting the user's final decision.
+- **Interaction Flow:** System-level desktop notification pops up -> The corresponding Epic list on the main interface highlights with a "red dot" -> The user clicks to enter the discussion group and sees a highly aggregated "Approval Panel Card" directly above the latest message -> This contains a narrative summary of upstream tasks, links to relevant artifacts, and three large buttons (APPROVE / REVISE (activates inline feedback input) / DELEGATE). Upon action, the user's decision integrates into the chat flow as a system card, and the system proceeds with the execution loop.
+
+### 4. Narrative Status Review
+- **Scenario:** The user reviews the overall dashboard from a "manager's" perspective in the morning or at the end of a project phase.
+- **Interaction Flow:** Log into the [Global Dashboard] -> The page eschews plain numbers and charts, instead presenting a formatted "Project Progress Story" generated by the Narrative Engine -> Accompanied by minimalist budget progress bars and high-risk "Blocked Tasks" list alerts -> Clicking the highlighted hyperlinks within the text instantly navigates to the corresponding execution area.
+
+## UX Patterns
+
+### Pattern 1: Quick Global Nav & Modular Pages
+Referencing modern management system designs like AgentCompany, all information is not squeezed into a single interface. Instead, core functional areas are clearly delineated via a **fixed left (or top) quick global navigation bar**:
+- **Dashboard (Home):** The initial landing screen. Through data overview cards, daily project reports generated by the narrative engine, and time-tracking charts, users entering the software can instantly grasp the current project status and any blocking alerts from a "manager's perspective".
+- **Organization:** A dedicated page space. Used for visually managing the enterprise architecture tree, supporting drag-and-drop creation of roles, skill assignment, and department orchestration.
+- **Tasks & Epics:** Lists ongoing requirement trees. Only after clicking a specific requirement does it enter the immersive group discussion and code artifact review page, maintaining focus within the workflow.
+- **Skills & Knowledge:** Exclusive resource management center.
+
+### Pattern 2: Chat-as-Action Cards
+In traditional chat applications, text is everything. In Capibara, behaviors carrying specific structured voting semantics (APPROVE / REVISE / DELEGATE, etc.) and complex outputs are displayed using forms akin to "Rich Bots/Embeds" cards. Users can complete click interactions directly within the group message cards, thereby driving the backend event state machine to progress.
+
+### Pattern 3: Contextual Drawers for Deep Dives
+Building on the modularization of major functions into separate pages, to avoid "context loss" caused by repeated jumping:
+- **Contextual Drawer:** For instance, clicking on an Agent role on the Organization page slides out a full drawer on the right to configure its system Prompt or skill list, without having to navigate away from the current tree structure. When reading a detailed narrative summary within an approval chat, it can be expanded via a drawer, keeping the main communication stream in sight.

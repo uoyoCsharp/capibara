@@ -1,0 +1,198 @@
+import 'reflect-metadata';
+import { container } from 'tsyringe';
+
+import { loadConfig } from './config/config.loader.js';
+import type { CapibaraConfig } from './core/types/config.types.js';
+import {
+  CONFIG_TOKEN,
+  LOGGER_TOKEN,
+  SQLITE_CONNECTION_TOKEN,
+  EVENT_BUS_TOKEN,
+  ORGANIZATION_REPO_TOKEN,
+  ROLE_REPO_TOKEN,
+  TASK_REPO_TOKEN,
+  DISCUSSION_REPO_TOKEN,
+  RUN_REPO_TOKEN,
+  SKILL_REPO_TOKEN,
+  COST_ENTRY_REPO_TOKEN,
+  NARRATIVE_REPO_TOKEN,
+  PENDING_WAKE_REPO_TOKEN,
+  PROMPT_BUILDER_TOKEN,
+  EXECUTOR_TOKEN,
+  DISCUSSION_SERVICE_TOKEN,
+  EXECUTION_ENGINE_TOKEN,
+  MCP_IPC_SERVER_TOKEN,
+} from './core/tokens.js';
+
+import { SqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.js';
+import { runMigrations } from './infrastructure/persistence/sqlite/migrations.js';
+import { SqliteOrganizationRepository } from './infrastructure/persistence/sqlite/sqlite-organization.repository.js';
+import { SqliteRoleRepository } from './infrastructure/persistence/sqlite/sqlite-role.repository.js';
+import { SqliteTaskRepository } from './infrastructure/persistence/sqlite/sqlite-task.repository.js';
+import { SqliteDiscussionRepository } from './infrastructure/persistence/sqlite/sqlite-discussion.repository.js';
+import { SqliteRunRepository } from './infrastructure/persistence/sqlite/sqlite-run.repository.js';
+import { SqliteSkillRepository } from './infrastructure/persistence/sqlite/sqlite-skill.repository.js';
+import { SqliteCostEntryRepository } from './infrastructure/persistence/sqlite/sqlite-cost-entry.repository.js';
+import { SqliteNarrativeRepository } from './infrastructure/persistence/sqlite/sqlite-narrative.repository.js';
+import { SqlitePendingWakeRepository } from './infrastructure/persistence/sqlite/sqlite-pending-wake.repository.js';
+import { EmitteryEventBus } from './infrastructure/observability/emittery-event-bus.js';
+import { PinoLogger } from './infrastructure/observability/pino-logger.js';
+import { UtilityProcessExecutor } from './infrastructure/executors/utility-process.executor.js';
+import { PromptBuilder } from './application/skills/prompt-builder.js';
+import { SkillSeeder } from './application/skills/skill-seeder.js';
+import { OrgTemplateService } from './application/templates/org-template.service.js';
+import { TaskStateMachine } from './application/state-machine/task.state-machine.js';
+import { TaskService } from './application/tasks/task.service.js';
+import { DecompositionAdvisor } from './application/tasks/decomposition.advisor.js';
+import { ConsensusDetector } from './application/consensus/consensus.detector.js';
+import { DiscussionService } from './application/discussion/discussion.service.js';
+import { ExecutionContext } from './application/context/execution.context.js';
+import { OrgContext } from './application/context/org.context.js';
+import { ExecutionEngine } from './application/execution/execution.engine.js';
+import { McpConfigGenerator } from './infrastructure/mcp/mcp-config-generator.js';
+import { McpToolRegistry } from './infrastructure/mcp/mcp-tool-registry.js';
+import { McpToolHandlers } from './infrastructure/mcp/mcp-tool-handlers.js';
+import { McpIpcServer } from './infrastructure/mcp/mcp-ipc-server.js';
+
+import { registerOrganizationHandlers } from './ipc-handlers/organization.handlers.js';
+import { registerSnapshotHandlers } from './ipc-handlers/snapshot.handlers.js';
+import { registerRoleHandlers } from './ipc-handlers/role.handlers.js';
+import { registerSkillHandlers } from './ipc-handlers/skill.handlers.js';
+import { registerTemplateHandlers } from './ipc-handlers/template.handlers.js';
+import { registerTaskHandlers } from './ipc-handlers/task.handlers.js';
+import { registerDiscussionHandlers } from './ipc-handlers/discussion.handlers.js';
+import { registerRunHandlers } from './ipc-handlers/run.handlers.js';
+
+import type { IOrganizationRepository } from './core/interfaces/i-organization.repository.js';
+import type { IRoleRepository } from './core/interfaces/i-role.repository.js';
+import type { ITaskRepository } from './core/interfaces/i-task.repository.js';
+import type { IDiscussionRepository } from './core/interfaces/i-discussion.repository.js';
+import type { IRunRepository } from './core/interfaces/i-run.repository.js';
+import type { ISkillRepository } from './core/interfaces/i-skill.repository.js';
+import type { ICostEntryRepository } from './core/interfaces/i-cost-entry.repository.js';
+import type { INarrativeRepository } from './core/interfaces/i-narrative.repository.js';
+import type { IPendingWakeRepository } from './core/interfaces/i-pending-wake.repository.js';
+import type { IEventBus } from './core/interfaces/i-event-bus.js';
+import type { ILogger } from './core/interfaces/i-logger.js';
+import type { IPromptBuilder } from './core/interfaces/i-prompt-builder.js';
+import type { IExecutor } from './core/interfaces/i-executor.js';
+
+export async function bootstrap(): Promise<void> {
+  // ─── Config ──────────────────────────────────────────────
+  const config = loadConfig();
+  container.register<CapibaraConfig>(CONFIG_TOKEN, { useValue: config });
+
+  // ─── Logger ──────────────────────────────────────────────
+  const logger = new PinoLogger(config.logging.level);
+  container.register<ILogger>(LOGGER_TOKEN, { useValue: logger });
+
+  // ─── SQLite ──────────────────────────────────────────────
+  const sqliteConn = new SqliteConnection(config.database.sqlitePath);
+  container.register(SQLITE_CONNECTION_TOKEN, { useValue: sqliteConn });
+
+  // Run migrations
+  runMigrations(sqliteConn.getDb());
+  logger.info('Database migrations applied', { path: config.database.sqlitePath });
+
+  // ─── Event Bus ───────────────────────────────────────────
+  const eventBus = new EmitteryEventBus();
+  container.register<IEventBus>(EVENT_BUS_TOKEN, { useValue: eventBus });
+
+  // ─── Repositories ────────────────────────────────────────
+  const orgRepo = new SqliteOrganizationRepository(sqliteConn);
+  container.register<IOrganizationRepository>(ORGANIZATION_REPO_TOKEN, { useValue: orgRepo });
+
+  const roleRepo = new SqliteRoleRepository(sqliteConn);
+  container.register<IRoleRepository>(ROLE_REPO_TOKEN, { useValue: roleRepo });
+
+  const taskRepo = new SqliteTaskRepository(sqliteConn);
+  container.register<ITaskRepository>(TASK_REPO_TOKEN, { useValue: taskRepo });
+
+  const discussionRepo = new SqliteDiscussionRepository(sqliteConn);
+  container.register<IDiscussionRepository>(DISCUSSION_REPO_TOKEN, { useValue: discussionRepo });
+
+  const runRepo = new SqliteRunRepository(sqliteConn);
+  container.register<IRunRepository>(RUN_REPO_TOKEN, { useValue: runRepo });
+
+  const skillRepo = new SqliteSkillRepository(sqliteConn);
+  container.register<ISkillRepository>(SKILL_REPO_TOKEN, { useValue: skillRepo });
+
+  const costRepo = new SqliteCostEntryRepository(sqliteConn);
+  container.register<ICostEntryRepository>(COST_ENTRY_REPO_TOKEN, { useValue: costRepo });
+
+  const narrativeRepo = new SqliteNarrativeRepository(sqliteConn);
+  container.register<INarrativeRepository>(NARRATIVE_REPO_TOKEN, { useValue: narrativeRepo });
+
+  const pendingWakeRepo = new SqlitePendingWakeRepository(sqliteConn);
+  container.register<IPendingWakeRepository>(PENDING_WAKE_REPO_TOKEN, { useValue: pendingWakeRepo });
+
+  // ─── Application Services ────────────────────────────────
+  const promptBuilder = new PromptBuilder();
+  container.register<IPromptBuilder>(PROMPT_BUILDER_TOKEN, { useValue: promptBuilder });
+
+  const executor = new UtilityProcessExecutor(logger);
+  container.register<IExecutor>(EXECUTOR_TOKEN, { useValue: executor });
+
+  const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger);
+
+  const taskStateMachine = new TaskStateMachine(taskRepo, eventBus, logger);
+  const taskService = new TaskService(taskRepo, roleRepo, eventBus, logger, taskStateMachine);
+  const decompositionAdvisor = new DecompositionAdvisor(config, taskRepo, logger);
+
+  const consensusDetector = new ConsensusDetector(discussionRepo, roleRepo, eventBus, logger);
+  const discussionService = new DiscussionService(
+    config, logger, eventBus, discussionRepo, taskRepo, roleRepo,
+    consensusDetector, taskStateMachine,
+  );
+  discussionService.start();
+
+  // ─── Execution Engine & MCP ──────────────────────────────
+  const orgContext = new OrgContext(orgRepo, roleRepo, taskRepo, logger);
+  const executionContext = new ExecutionContext(taskRepo, roleRepo, skillRepo, discussionRepo, orgContext);
+
+  const mcpConfigGen = new McpConfigGenerator(logger);
+
+  const mcpToolRegistry = new McpToolRegistry(logger);
+  const mcpToolHandlers = new McpToolHandlers(taskRepo, discussionRepo, eventBus, logger);
+  mcpToolHandlers.registerAll(mcpToolRegistry);
+
+  const mcpIpcServer = new McpIpcServer(logger, mcpToolRegistry);
+  container.register<McpIpcServer>(MCP_IPC_SERVER_TOKEN, { useValue: mcpIpcServer });
+
+  const executionEngine = new ExecutionEngine(
+    config, logger, eventBus, runRepo, roleRepo, taskRepo, costRepo,
+    executor, promptBuilder, executionContext, mcpConfigGen,
+  );
+
+  // Start MCP IPC server and configure the config generator with its port
+  await mcpIpcServer.start().then((serverPort) => {
+    mcpConfigGen.setPort(serverPort);
+  });
+
+  // ─── Seed Skills ─────────────────────────────────────────
+  const skillSeeder = new SkillSeeder(skillRepo, logger);
+  await skillSeeder.seedAll();
+
+  // ─── IPC Handlers ────────────────────────────────────────
+  registerSnapshotHandlers(orgRepo, logger);
+  registerOrganizationHandlers(orgRepo, logger);
+  registerRoleHandlers(roleRepo, logger);
+  registerSkillHandlers(skillRepo, logger);
+  registerTemplateHandlers(templateService, logger);
+  registerTaskHandlers(taskService, logger);
+  registerDiscussionHandlers(discussionService, logger);
+  registerRunHandlers(runRepo, executionEngine, logger);
+
+  logger.info('Capibara bootstrap complete');
+}
+
+export function shutdown(): void {
+  try {
+    const mcpServer = container.resolve<McpIpcServer>(MCP_IPC_SERVER_TOKEN);
+    mcpServer.stop();
+  } catch {
+    // MCP server may not have been started
+  }
+  const conn = container.resolve<SqliteConnection>(SQLITE_CONNECTION_TOKEN);
+  conn.close();
+}
