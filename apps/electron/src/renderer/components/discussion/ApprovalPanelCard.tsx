@@ -59,13 +59,13 @@ export function ApprovalPanelCard({
   };
 
   return (
-    <div className="mx-5 mb-3 rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm overflow-hidden">
+    <div className="mx-5 mb-3 rounded-[var(--card-radius)] border-2 border-warning bg-warning-subtle shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-amber-100 border-b border-amber-200">
-        <ShieldCheck size={18} weight="fill" className="text-amber-600" />
-        <span className="text-sm font-semibold text-amber-800">Human Approval Required</span>
+      <div className="flex items-center gap-2 px-4 py-3 bg-warning/15 border-b border-warning/30">
+        <ShieldCheck size={18} weight="fill" className="text-warning" />
+        <span className="text-sm font-semibold text-warning-text">Human Approval Required</span>
         {assigneeRole && (
-          <span className="ml-auto text-xs text-amber-600">
+          <span className="ml-auto text-xs text-warning-text/70">
             Reviewer: {assigneeRole.name}
           </span>
         )}
@@ -74,10 +74,10 @@ export function ApprovalPanelCard({
       <div className="px-4 py-3 space-y-3">
         {/* Task summary */}
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Task</p>
-          <p className="text-sm text-gray-900 font-medium">{task.title}</p>
+          <p className="text-xs font-medium text-text-muted mb-1">Task</p>
+          <p className="text-sm text-text-primary font-medium">{task.title}</p>
           {task.description && (
-            <p className="text-xs text-gray-600 mt-1 line-clamp-2">{task.description}</p>
+            <p className="text-xs text-text-secondary mt-1 line-clamp-2">{task.description}</p>
           )}
         </div>
 
@@ -85,14 +85,14 @@ export function ApprovalPanelCard({
         {childTasks.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <TreeStructure size={14} className="text-gray-400" />
-              <p className="text-xs font-medium text-gray-500">
+              <TreeStructure size={14} className="text-text-muted" />
+              <p className="text-xs font-medium text-text-muted">
                 Subtasks: {completedChildren.length}/{childTasks.length} completed
               </p>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-1.5">
+            <div className="w-full bg-surface-sunken rounded-full h-1.5">
               <div
-                className="bg-green-500 h-1.5 rounded-full transition-all"
+                className="bg-success h-1.5 rounded-full transition-all"
                 style={{ width: `${childTasks.length > 0 ? (completedChildren.length / childTasks.length) * 100 : 0}%` }}
               />
             </div>
@@ -102,26 +102,26 @@ export function ApprovalPanelCard({
         {/* Vote statistics */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <ChartBar size={14} className="text-gray-400" />
-            <p className="text-xs font-medium text-gray-500">Vote Summary</p>
+            <ChartBar size={14} className="text-text-muted" />
+            <p className="text-xs font-medium text-text-muted">Vote Summary</p>
           </div>
           <div className="flex gap-3 text-xs">
-            <span className="text-green-700">Approve: {voteStats.APPROVE}</span>
-            <span className="text-orange-600">Revise: {voteStats.REVISE}</span>
-            <span className="text-red-600">Concern: {voteStats.CONCERN}</span>
-            <span className="text-blue-600">Delegate: {voteStats.DELEGATE}</span>
+            <span className="text-success-text">Approve: {voteStats.APPROVE}</span>
+            <span className="text-warning-text">Revise: {voteStats.REVISE}</span>
+            <span className="text-danger-text">Concern: {voteStats.CONCERN}</span>
+            <span className="text-info-text">Delegate: {voteStats.DELEGATE}</span>
           </div>
         </div>
 
         {/* Key concerns */}
         {concerns.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-red-600 mb-1">
+            <p className="text-xs font-medium text-danger-text mb-1">
               Open Concerns ({concerns.length})
             </p>
             <ul className="space-y-1">
               {concerns.slice(-3).map((c) => (
-                <li key={c.id} className="text-xs text-gray-600 pl-2 border-l-2 border-red-200">
+                <li key={c.id} className="text-xs text-text-secondary pl-2 border-l-2 border-danger/30">
                   {c.content.slice(0, 120)}{c.content.length > 120 ? '...' : ''}
                 </li>
               ))}
@@ -132,20 +132,20 @@ export function ApprovalPanelCard({
         {/* Recent revisions */}
         {revisions.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-orange-600 mb-1">
+            <p className="text-xs font-medium text-warning-text mb-1">
               Revision History ({revisions.length})
             </p>
-            <p className="text-xs text-gray-600 pl-2 border-l-2 border-orange-200">
+            <p className="text-xs text-text-secondary pl-2 border-l-2 border-warning/30">
               Latest: {revisions[revisions.length - 1].content.slice(0, 120)}
             </p>
           </div>
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 pt-2 border-t border-amber-200">
+        <div className="flex items-center gap-2 pt-2 border-t border-warning/30">
           <button
             onClick={onApprove}
-            className="flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-success px-4 py-2 text-sm font-medium text-text-inverse hover:opacity-90 transition-colors"
           >
             <ShieldCheck size={16} />
             Approve
@@ -155,8 +155,8 @@ export function ApprovalPanelCard({
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
               mode === 'revise'
-                ? 'bg-orange-500 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                ? 'bg-warning text-text-inverse'
+                : 'bg-surface-sunken text-text-secondary hover:bg-border-default',
             )}
           >
             <ArrowsClockwise size={16} />
@@ -167,8 +167,8 @@ export function ApprovalPanelCard({
             className={clsx(
               'flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
               mode === 'delegate'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                ? 'bg-info text-text-inverse'
+                : 'bg-surface-sunken text-text-secondary hover:bg-border-default',
             )}
           >
             <UserSwitch size={16} />
@@ -184,14 +184,14 @@ export function ApprovalPanelCard({
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="Describe what needs to be revised..."
               rows={3}
-              className="w-full rounded-lg border border-orange-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="w-full rounded-lg border border-warning/30 bg-surface-card px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-warning"
             />
             <button
               onClick={handleReviseSubmit}
               disabled={!feedback.trim()}
               className={clsx(
-                'rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-colors',
-                feedback.trim() ? 'bg-orange-500 hover:bg-orange-600' : 'bg-gray-300 cursor-not-allowed',
+                'rounded-lg px-4 py-1.5 text-sm font-medium text-text-inverse transition-colors',
+                feedback.trim() ? 'bg-warning hover:opacity-90' : 'bg-border-default cursor-not-allowed',
               )}
             >
               Submit Revision
@@ -205,7 +205,7 @@ export function ApprovalPanelCard({
             <select
               value={selectedRoleId}
               onChange={(e) => setSelectedRoleId(e.target.value)}
-              className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full rounded-lg border border-info/30 bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-info"
             >
               <option value="">Select a role to delegate to...</option>
               {delegatableRoles.map((r) => (
@@ -216,8 +216,8 @@ export function ApprovalPanelCard({
               onClick={handleDelegateSubmit}
               disabled={!selectedRoleId}
               className={clsx(
-                'rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-colors',
-                selectedRoleId ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-300 cursor-not-allowed',
+                'rounded-lg px-4 py-1.5 text-sm font-medium text-text-inverse transition-colors',
+                selectedRoleId ? 'bg-info hover:opacity-90' : 'bg-border-default cursor-not-allowed',
               )}
             >
               Confirm Delegation

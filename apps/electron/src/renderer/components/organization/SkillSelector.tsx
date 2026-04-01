@@ -14,7 +14,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   implementation: 'bg-green-100 text-green-700',
   review: 'bg-orange-100 text-orange-700',
   test: 'bg-pink-100 text-pink-700',
-  general: 'bg-gray-100 text-gray-700',
+  general: 'bg-neutral-subtle text-neutral-text',
 };
 
 export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
@@ -83,21 +83,21 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
       {/* Toggle dropdown */}
       <button
         type="button"
-        className="w-full text-left rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 hover:border-gray-300"
+        className="w-full text-left rounded-lg border border-border-default px-3 py-2 text-sm text-text-tertiary hover:border-border-strong"
         onClick={() => setIsOpen(!isOpen)}
       >
         {isOpen ? 'Close skill selector' : `Select skills (${selectedIds.length} selected)`}
       </button>
 
       {isOpen && (
-        <div className="mt-2 rounded-lg border border-gray-200 bg-white shadow-sm max-h-48 overflow-auto">
+        <div className="mt-2 rounded-lg border border-border-default bg-surface-card shadow-sm max-h-48 overflow-auto">
           {/* Search */}
-          <div className="sticky top-0 bg-white border-b border-gray-100 px-3 py-2">
+          <div className="sticky top-0 bg-surface-card border-b border-border-subtle px-3 py-2">
             <div className="flex items-center gap-2">
-              <MagnifyingGlass size={14} className="text-gray-400" />
+              <MagnifyingGlass size={14} className="text-text-muted" />
               <input
                 type="text"
-                className="flex-1 text-xs focus:outline-none"
+                className="flex-1 text-xs text-text-primary bg-transparent focus:outline-none placeholder-text-muted"
                 placeholder="Search skills..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -105,20 +105,20 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
             </div>
           </div>
 
-          {/* Skill list grouped by category */}
+          {/* Skill list */}
           <div className="p-1">
             {filteredSkills.map((skill) => (
               <label
                 key={skill.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-sunken cursor-pointer"
               >
                 <input
                   type="checkbox"
-                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="rounded border-border-default text-accent focus:ring-accent"
                   checked={selectedIds.includes(skill.id)}
                   onChange={() => toggle(skill.id)}
                 />
-                <span className="flex-1 text-xs text-gray-700">{skill.name}</span>
+                <span className="flex-1 text-xs text-text-secondary">{skill.name}</span>
                 <span
                   className={clsx(
                     'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
@@ -130,7 +130,7 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
               </label>
             ))}
             {filteredSkills.length === 0 && (
-              <p className="text-xs text-gray-400 px-2 py-2">No skills found</p>
+              <p className="text-xs text-text-muted px-2 py-2">No skills found</p>
             )}
           </div>
         </div>

@@ -8,10 +8,10 @@ interface HumanVotePanelProps {
 }
 
 const VOTE_OPTIONS: Array<{ tag: NonNullable<VoteTag>; label: string; color: string; hoverColor: string }> = [
-  { tag: 'APPROVE', label: '✓ Approve', color: 'bg-green-600', hoverColor: 'hover:bg-green-700' },
-  { tag: 'REVISE', label: '↻ Revise', color: 'bg-orange-500', hoverColor: 'hover:bg-orange-600' },
-  { tag: 'CONCERN', label: '⚠ Concern', color: 'bg-red-500', hoverColor: 'hover:bg-red-600' },
-  { tag: 'DELEGATE', label: '→ Delegate', color: 'bg-blue-500', hoverColor: 'hover:bg-blue-600' },
+  { tag: 'APPROVE', label: '✓ Approve', color: 'bg-success', hoverColor: 'hover:opacity-90' },
+  { tag: 'REVISE', label: '↻ Revise', color: 'bg-warning', hoverColor: 'hover:opacity-90' },
+  { tag: 'CONCERN', label: '⚠ Concern', color: 'bg-danger', hoverColor: 'hover:opacity-90' },
+  { tag: 'DELEGATE', label: '→ Delegate', color: 'bg-info', hoverColor: 'hover:opacity-90' },
 ];
 
 export function HumanVotePanel({ groupId, onSubmit }: HumanVotePanelProps) {
@@ -33,10 +33,10 @@ export function HumanVotePanel({ groupId, onSubmit }: HumanVotePanelProps) {
   };
 
   return (
-    <div className="border-t border-gray-200 px-5 py-3">
+    <div className="border-t border-border-default px-5 py-3">
       {/* Vote buttons */}
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs text-gray-500 mr-1">Vote:</span>
+        <span className="text-xs text-text-tertiary mr-1">Vote:</span>
         {VOTE_OPTIONS.map((opt) => (
           <button
             key={opt.tag}
@@ -44,8 +44,8 @@ export function HumanVotePanel({ groupId, onSubmit }: HumanVotePanelProps) {
             className={clsx(
               'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
               selectedVote === opt.tag
-                ? `${opt.color} text-white`
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                ? `${opt.color} text-text-inverse`
+                : 'bg-surface-sunken text-text-secondary hover:bg-border-default',
             )}
           >
             {opt.label}
@@ -65,16 +65,16 @@ export function HumanVotePanel({ groupId, onSubmit }: HumanVotePanelProps) {
               : 'Type a message...'
           }
           rows={2}
-          className="flex-1 resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className="flex-1 resize-none rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
         />
         <button
           onClick={handleSend}
           disabled={!content.trim()}
           className={clsx(
-            'rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors',
+            'rounded-lg px-4 py-2 text-sm font-medium text-text-inverse transition-colors',
             content.trim()
-              ? 'bg-indigo-600 hover:bg-indigo-700'
-              : 'bg-gray-300 cursor-not-allowed',
+              ? 'bg-accent hover:bg-accent-hover'
+              : 'bg-border-default cursor-not-allowed',
           )}
         >
           Send

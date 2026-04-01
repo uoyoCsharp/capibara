@@ -47,24 +47,24 @@ export function DiscussionGroupPanel({
   }, [onRefresh]);
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-surface-card">
       {/* Header */}
-      <div className="border-b border-gray-200 px-5 py-4">
+      <div className="border-b border-border-default px-5 py-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <ChatCircleDots size={20} className="text-indigo-500" />
-            <h3 className="text-base font-semibold text-gray-900 truncate">
+            <ChatCircleDots size={20} className="text-accent" />
+            <h3 className="text-base font-semibold text-text-primary truncate">
               {task?.title ?? 'Discussion'}
             </h3>
             {isArchived && (
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+              <span className="rounded-full bg-neutral-subtle px-2 py-0.5 text-xs font-medium text-neutral-text">
                 Archived
               </span>
             )}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-lg p-1 text-text-muted hover:bg-surface-sunken hover:text-text-secondary"
           >
             <X size={18} />
           </button>
@@ -72,8 +72,8 @@ export function DiscussionGroupPanel({
 
         {/* Task info */}
         {task && (
-          <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
-            <span className="capitalize font-medium text-gray-600">{task.type}</span>
+          <div className="flex items-center gap-3 text-xs text-text-tertiary mb-2">
+            <span className="capitalize font-medium text-text-secondary">{task.type}</span>
             <span>•</span>
             <span className="capitalize">{task.status.replace('_', ' ')}</span>
           </div>
@@ -102,9 +102,9 @@ export function DiscussionGroupPanel({
 
       {/* Summary card if available */}
       {group.summary && (
-        <div className="mx-5 mb-2 rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-3">
-          <p className="text-xs font-medium text-indigo-700 mb-1">Discussion Summary</p>
-          <p className="text-xs text-indigo-600 whitespace-pre-wrap">{group.summary}</p>
+        <div className="mx-5 mb-2 rounded-lg bg-accent-subtle border border-accent/20 px-4 py-3">
+          <p className="text-xs font-medium text-accent-text mb-1">Discussion Summary</p>
+          <p className="text-xs text-accent-text/80 whitespace-pre-wrap">{group.summary}</p>
         </div>
       )}
 

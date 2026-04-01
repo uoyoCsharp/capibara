@@ -69,9 +69,9 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 
   if (!orgId) {
     return (
-      <div className="p-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-2">Dashboard</h1>
-        <p className="text-gray-500">
+      <div className="p-[var(--page-padding)]">
+        <h1 className="text-2xl font-semibold text-text-primary mb-2">Dashboard</h1>
+        <p className="text-text-secondary">
           Select an organization to view the dashboard.
         </p>
       </div>
@@ -79,15 +79,15 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   }
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-[var(--page-padding)] max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+      <div className="flex items-center justify-between mb-[var(--section-gap)]">
+        <h1 className="text-2xl font-semibold text-text-primary">Dashboard</h1>
         <div className="flex items-center gap-2">
           <button
             onClick={fetchData}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-surface-sunken px-3 py-1.5 text-sm text-text-secondary hover:bg-border-default transition-colors"
           >
             <ArrowClockwise size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -95,7 +95,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
           >
             <Lightning size={14} />
             {generating ? 'Generating...' : 'Generate Report'}
@@ -107,22 +107,22 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       {costSummary && <BudgetBar summary={costSummary} />}
 
       {/* Narrative */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 mb-6">
+      <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)] shadow-sm">
         <div className="flex items-center gap-2 mb-4">
-          <ListChecks size={20} className="text-indigo-500" />
-          <h2 className="text-lg font-medium text-gray-800">Project Progress</h2>
+          <ListChecks size={20} className="text-accent" />
+          <h2 className="text-lg font-medium text-text-primary">Project Progress</h2>
           {narrative && (
-            <span className="ml-auto text-xs text-gray-400">
+            <span className="ml-auto text-xs text-text-muted">
               Generated: {new Date(narrative.generatedAt).toLocaleString()}
             </span>
           )}
         </div>
         {narrative ? (
-          <div className="prose prose-sm max-w-none text-gray-700">
+          <div className="prose prose-sm max-w-none text-text-secondary">
             <NarrativeContent text={narrative.renderedText} />
           </div>
         ) : (
-          <p className="text-sm text-gray-400 leading-relaxed">
+          <p className="text-sm text-text-muted leading-relaxed">
             No narrative generated yet. Click "Generate Report" to create a project status report.
           </p>
         )}
@@ -139,26 +139,26 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 function BudgetBar({ summary }: { summary: CostSummaryRecord }) {
   const { totalCost, budgetLimit, budgetPercent } = summary;
   const barColor =
-    budgetPercent >= 95 ? 'bg-red-500' :
-    budgetPercent >= 80 ? 'bg-amber-500' :
-    'bg-green-500';
+    budgetPercent >= 95 ? 'bg-danger' :
+    budgetPercent >= 80 ? 'bg-warning' :
+    'bg-success';
   const textColor =
-    budgetPercent >= 95 ? 'text-red-700' :
-    budgetPercent >= 80 ? 'text-amber-700' :
-    'text-green-700';
+    budgetPercent >= 95 ? 'text-danger-text' :
+    budgetPercent >= 80 ? 'text-warning-text' :
+    'text-success-text';
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 mb-6">
+    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)] shadow-sm">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <CurrencyDollar size={18} className="text-gray-400" />
-          <span className="text-sm font-medium text-gray-700">Budget Usage</span>
+          <CurrencyDollar size={18} className="text-text-muted" />
+          <span className="text-sm font-medium text-text-secondary">Budget Usage</span>
         </div>
         <span className={clsx('text-sm font-semibold', textColor)}>
           ${totalCost.toFixed(2)} / ${budgetLimit.toFixed(2)} ({budgetPercent}%)
         </span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-2.5">
+      <div className="w-full bg-surface-sunken rounded-full h-2.5">
         <div
           className={clsx('h-2.5 rounded-full transition-all', barColor)}
           style={{ width: `${Math.min(budgetPercent, 100)}%` }}
@@ -166,7 +166,7 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord }) {
       </div>
       {budgetPercent >= 80 && (
         <p className={clsx('text-xs mt-1.5', textColor)}>
-          {budgetPercent >= 95 ? '⚠️ Budget critical — execution paused' : '⚠️ Approaching budget limit'}
+          {budgetPercent >= 95 ? 'Budget critical — execution paused' : 'Approaching budget limit'}
         </p>
       )}
     </div>
@@ -190,10 +190,10 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
   const sorted = [...byRole.entries()].sort((a, b) => b[1].total - a[1].total);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6 mb-6">
+    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)] shadow-sm">
       <div className="flex items-center gap-2 mb-4">
-        <ChartLineUp size={20} className="text-indigo-500" />
-        <h2 className="text-lg font-medium text-gray-800">Cost by Role</h2>
+        <ChartLineUp size={20} className="text-accent" />
+        <h2 className="text-lg font-medium text-text-primary">Cost by Role</h2>
       </div>
       <div className="space-y-3">
         {sorted.map(([roleId, data]) => {
@@ -202,14 +202,14 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
           return (
             <div key={roleId}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-gray-700">{data.name}</span>
-                <span className="text-xs text-gray-500">
+                <span className="text-sm text-text-secondary">{data.name}</span>
+                <span className="text-xs text-text-tertiary">
                   ${data.total.toFixed(2)} ({data.count} runs)
                 </span>
               </div>
-              <div className="w-full bg-gray-100 rounded-full h-1.5">
+              <div className="w-full bg-surface-sunken rounded-full h-1.5">
                 <div
-                  className="bg-indigo-400 h-1.5 rounded-full transition-all"
+                  className="bg-accent h-1.5 rounded-full transition-all"
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -222,24 +222,23 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
 }
 
 function NarrativeContent({ text }: { text: string }) {
-  // Simple markdown-to-JSX rendering for the narrative
   const lines = text.split('\n');
   return (
     <div className="space-y-1">
       {lines.map((line, i) => {
         if (line.startsWith('## ')) {
-          return <h2 key={i} className="text-lg font-semibold text-gray-900 mt-4 mb-1">{line.slice(3)}</h2>;
+          return <h2 key={i} className="text-lg font-semibold text-text-primary mt-4 mb-1">{line.slice(3)}</h2>;
         }
         if (line.startsWith('### ')) {
-          return <h3 key={i} className="text-base font-semibold text-gray-800 mt-3 mb-1">{line.slice(4)}</h3>;
+          return <h3 key={i} className="text-base font-semibold text-text-primary mt-3 mb-1">{line.slice(4)}</h3>;
         }
         if (line.startsWith('- ')) {
-          return <li key={i} className="text-sm text-gray-700 ml-4 list-disc">{renderBold(line.slice(2))}</li>;
+          return <li key={i} className="text-sm text-text-secondary ml-4 list-disc">{renderBold(line.slice(2))}</li>;
         }
         if (line.trim() === '') {
           return <div key={i} className="h-1" />;
         }
-        return <p key={i} className="text-sm text-gray-700">{renderBold(line)}</p>;
+        return <p key={i} className="text-sm text-text-secondary">{renderBold(line)}</p>;
       })}
     </div>
   );

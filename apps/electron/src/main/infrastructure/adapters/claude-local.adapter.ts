@@ -13,7 +13,7 @@
  * Reference: AgentCompany adapter-claude-local/src/server/execute.ts
  */
 
-import type { ChildProcess } from 'node:child_process';
+import { type ChildProcess, execSync } from 'node:child_process';
 import type {
   ICliAdapter,
   AdapterExecutionContext,
@@ -60,7 +60,19 @@ export class ClaudeLocalAdapter implements ICliAdapter {
 
   abort(runId: string): void {
     const child = this.childTracker.get(runId);
-    if (child) {
+    if (!child || !child.pid) return;
+
+    if (process.platform === 'win32') {
+      // On Windows, the child is cmd.exe wrapping the actual CLI process.
+      // child.kill() only terminates cmd.exe, leaving the CLI orphaned.
+      // Use taskkill /T /F to kill the entire process tree.
+      try {
+        execSync(`taskkill /T /F /PID ${child.pid}`, { stdio: 'ignore' });
+      } catch {
+        // Process may have already exited
+      }
+    } else {
+      // On Unix, send SIGTERM then SIGKILL after grace period
       child.kill('SIGTERM');
       setTimeout(() => {
         if (!child.killed) child.kill('SIGKILL');

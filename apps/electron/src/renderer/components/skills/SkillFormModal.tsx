@@ -74,15 +74,15 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay">
+      <div className="bg-surface-card rounded-[var(--card-radius)] shadow-modal w-full max-w-lg mx-4 max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
+          <h2 className="text-lg font-semibold text-text-primary">
             {isEditing ? 'Edit Custom Skill' : 'Create Custom Skill'}
           </h2>
           <button
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            className="p-1 rounded-lg text-text-muted hover:text-text-secondary hover:bg-surface-sunken"
             onClick={onClose}
           >
             <X size={20} />
@@ -92,16 +92,16 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
         {/* Body */}
         <div className="flex-1 overflow-auto p-6 space-y-4">
           {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-600">
+            <div className="rounded-lg bg-danger-subtle border border-danger/30 px-4 py-2 text-sm text-danger-text">
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Name *</label>
             <input
               type="text"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
               placeholder="My Custom Skill"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -110,22 +110,22 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Command *</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Command *</label>
             <input
               type="text"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
               placeholder="/my-skill"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               maxLength={200}
             />
-            <p className="text-xs text-gray-400 mt-1">Unique command identifier (e.g., /my-skill)</p>
+            <p className="text-xs text-text-muted mt-1">Unique command identifier (e.g., /my-skill)</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Description</label>
             <textarea
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent resize-y placeholder-text-muted"
               rows={2}
               placeholder="What this skill does..."
               value={description}
@@ -135,9 +135,9 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Category</label>
             <select
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
               value={category}
               onChange={(e) => setCategory(e.target.value as SkillCategory)}
             >
@@ -148,32 +148,32 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-text-secondary mb-1">
               Prompt Content
             </label>
             <textarea
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:ring-2 focus:ring-accent resize-y placeholder-text-muted"
               rows={8}
               placeholder="Enter the prompt template content..."
               value={promptContent}
               onChange={(e) => setPromptContent(e.target.value)}
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-text-muted mt-1">
               The prompt content that will be injected when this skill is used by a role.
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle">
           <button
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleSave}
             disabled={!name.trim() || !command.trim() || isSaving}
           >

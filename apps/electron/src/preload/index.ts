@@ -3,6 +3,10 @@ import { IPC_CHANNELS } from '@shared/contracts';
 import type { CapibaraApi, DesktopEvent } from '@shared/contracts';
 
 const api: CapibaraApi = {
+  // Auth
+  login: (input) => ipcRenderer.invoke(IPC_CHANNELS.login, input),
+  logout: () => ipcRenderer.invoke(IPC_CHANNELS.logout),
+
   loadSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.loadSnapshot),
 
   // Organization

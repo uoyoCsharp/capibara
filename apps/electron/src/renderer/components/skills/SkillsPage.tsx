@@ -25,13 +25,13 @@ const CATEGORY_COLORS: Record<string, string> = {
   implementation: 'bg-green-100 text-green-700',
   review: 'bg-orange-100 text-orange-700',
   test: 'bg-pink-100 text-pink-700',
-  general: 'bg-gray-100 text-gray-700',
+  general: 'bg-neutral-subtle text-neutral-text',
 };
 
 const SOURCE_COLORS: Record<string, string> = {
-  builtin: 'bg-emerald-100 text-emerald-700',
-  template: 'bg-sky-100 text-sky-700',
-  custom: 'bg-amber-100 text-amber-700',
+  builtin: 'bg-success-subtle text-success-text',
+  template: 'bg-info-subtle text-info-text',
+  custom: 'bg-warning-subtle text-warning-text',
 };
 
 export function SkillsPage() {
@@ -81,16 +81,16 @@ export function SkillsPage() {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-[var(--page-padding)]">
+      <div className="flex items-center justify-between mb-[var(--section-gap)]">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Skills & Knowledge</h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <h1 className="text-2xl font-semibold text-text-primary">Skills & Knowledge</h1>
+          <p className="text-text-secondary text-sm mt-1">
             Browse, search, and manage skills. Upload custom prompt templates.
           </p>
         </div>
         <button
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
           onClick={() => { setEditingSkill(null); setShowForm(true); }}
         >
           <Plus size={16} />
@@ -99,24 +99,24 @@ export function SkillsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-[var(--section-gap)]">
         <div className="flex-1 relative">
           <MagnifyingGlass
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
           />
           <input
             type="text"
-            className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full rounded-lg border border-border-default bg-surface-card pl-9 pr-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
             placeholder="Search by name, command, or description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="flex items-center gap-1.5">
-          <Funnel size={16} className="text-gray-400" />
+          <Funnel size={16} className="text-text-muted" />
           <select
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value as SkillCategory | '')}
           >
@@ -126,7 +126,7 @@ export function SkillsPage() {
             ))}
           </select>
           <select
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
             value={filterSource}
             onChange={(e) => setFilterSource(e.target.value as SkillSource | '')}
           >
@@ -141,29 +141,29 @@ export function SkillsPage() {
       {/* Skills Grid */}
       {isLoading ? (
         <div className="text-center py-12">
-          <p className="text-sm text-gray-400">Loading skills...</p>
+          <p className="text-sm text-text-muted">Loading skills...</p>
         </div>
       ) : skills.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center">
-          <p className="text-sm text-gray-400">
+        <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
+          <p className="text-sm text-text-muted">
             {search || filterCategory || filterSource
               ? 'No skills match your filters.'
               : 'No skills found. They will be seeded on next app restart.'}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-[var(--element-gap)]">
           {skills.map((skill) => (
             <div
               key={skill.id}
-              className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow"
+              className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] hover:shadow-md transition-shadow"
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-semibold text-gray-900 truncate">
+                  <h3 className="text-sm font-semibold text-text-primary truncate">
                     {skill.name}
                   </h3>
-                  <code className="text-xs text-indigo-600 font-mono">{skill.command}</code>
+                  <code className="text-xs text-accent-text font-mono">{skill.command}</code>
                 </div>
                 <div className="flex items-center gap-1 ml-2 flex-shrink-0">
                   <span
@@ -184,20 +184,20 @@ export function SkillsPage() {
                   </span>
                 </div>
               </div>
-              <p className="text-xs text-gray-500 line-clamp-2 mb-3">
+              <p className="text-xs text-text-tertiary line-clamp-2 mb-3">
                 {skill.description}
               </p>
               {skill.source === 'custom' && (
-                <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                <div className="flex items-center gap-2 pt-2 border-t border-border-subtle">
                   <button
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600"
+                    className="flex items-center gap-1 text-xs text-text-tertiary hover:text-accent"
                     onClick={() => { setEditingSkill(skill); setShowForm(true); }}
                   >
                     <Pencil size={12} />
                     Edit
                   </button>
                   <button
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"
+                    className="flex items-center gap-1 text-xs text-text-tertiary hover:text-danger"
                     onClick={() => handleDelete(skill.id)}
                   >
                     <Trash size={12} />

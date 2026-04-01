@@ -11,14 +11,14 @@ import { DiscussionPage } from './components/discussion/DiscussionPage';
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
 
-  const { organizations, currentOrgId, isLoading } = useCapibaraSnapshot();
+  const { currentOrgId, isLoading } = useCapibaraSnapshot();
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#fafafa]">
+      <div className="flex h-screen w-screen items-center justify-center bg-surface-base">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600" />
-          <p className="text-sm text-gray-400">Loading Capibara...</p>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border-default border-t-accent" />
+          <p className="text-sm text-text-muted">Loading Capibara...</p>
         </div>
       </div>
     );
@@ -42,7 +42,7 @@ export function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#fafafa]">
+    <div className="flex h-screen w-screen overflow-hidden bg-surface-base">
       <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
       <main className="flex-1 overflow-auto">
         {renderPage()}

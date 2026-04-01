@@ -127,19 +127,19 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
   const visible = filtered.slice(0, visibleCount);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
+    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Clock size={20} className="text-indigo-500" />
-          <h2 className="text-lg font-medium text-gray-800">Activity Timeline</h2>
-          <span className="text-xs text-gray-400">({filtered.length} events)</span>
+          <Clock size={20} className="text-accent" />
+          <h2 className="text-lg font-medium text-text-primary">Activity Timeline</h2>
+          <span className="text-xs text-text-muted">({filtered.length} events)</span>
         </div>
         <div className="flex items-center gap-2">
-          <FunnelSimple size={14} className="text-gray-400" />
+          <FunnelSimple size={14} className="text-text-muted" />
           <select
             value={filter}
             onChange={(e) => { setFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}
-            className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            className="text-xs border border-border-default rounded-md px-2 py-1 text-text-secondary bg-surface-card focus:outline-none focus:ring-1 focus:ring-accent"
           >
             <option value="all">All events</option>
             <option value="run_succeeded">Runs succeeded</option>
@@ -151,9 +151,9 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
       </div>
 
       {loading && events.length === 0 ? (
-        <p className="text-sm text-gray-400">Loading activity...</p>
+        <p className="text-sm text-text-muted">Loading activity...</p>
       ) : visible.length === 0 ? (
-        <p className="text-sm text-gray-400">No activity yet for this organization.</p>
+        <p className="text-sm text-text-muted">No activity yet for this organization.</p>
       ) : (
         <div className="space-y-0">
           {visible.map((event, idx) => (
@@ -169,7 +169,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
       {visibleCount < filtered.length && (
         <button
           onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-          className="mt-3 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+          className="mt-3 text-xs text-accent hover:text-accent-hover font-medium"
         >
           Show more ({filtered.length - visibleCount} remaining)
         </button>
@@ -189,18 +189,18 @@ function TimelineItem({ event, isLast }: { event: TimelineEvent; isLast: boolean
         <div className={clsx('w-7 h-7 rounded-full flex items-center justify-center shrink-0', color.bg)}>
           <Icon size={14} className={color.icon} weight="bold" />
         </div>
-        {!isLast && <div className="w-px flex-1 bg-gray-200 my-1" />}
+        {!isLast && <div className="w-px flex-1 bg-border-default my-1" />}
       </div>
 
       {/* Content */}
       <div className="pb-4 min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium text-gray-800">{event.title}</span>
-          <span className="text-xs text-gray-400">
+          <span className="text-sm font-medium text-text-primary">{event.title}</span>
+          <span className="text-xs text-text-muted">
             {new Date(event.timestamp).toLocaleString()}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mt-0.5">{event.description}</p>
+        <p className="text-xs text-text-tertiary mt-0.5">{event.description}</p>
       </div>
     </div>
   );
@@ -215,9 +215,9 @@ const EVENT_ICONS: Record<string, typeof CheckCircle> = {
 };
 
 const EVENT_COLORS: Record<string, { bg: string; icon: string }> = {
-  run_succeeded: { bg: 'bg-green-100', icon: 'text-green-600' },
-  run_failed: { bg: 'bg-red-100', icon: 'text-red-600' },
-  task_completed: { bg: 'bg-emerald-100', icon: 'text-emerald-600' },
-  task_status: { bg: 'bg-blue-100', icon: 'text-blue-600' },
-  escalation: { bg: 'bg-amber-100', icon: 'text-amber-600' },
+  run_succeeded: { bg: 'bg-success-subtle', icon: 'text-success' },
+  run_failed: { bg: 'bg-danger-subtle', icon: 'text-danger' },
+  task_completed: { bg: 'bg-success-subtle', icon: 'text-success' },
+  task_status: { bg: 'bg-info-subtle', icon: 'text-info' },
+  escalation: { bg: 'bg-warning-subtle', icon: 'text-warning' },
 };

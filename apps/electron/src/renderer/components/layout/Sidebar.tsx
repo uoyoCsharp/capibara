@@ -23,13 +23,13 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; icon: typeof House }> = [
 
 export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   return (
-    <aside className="flex h-full w-56 flex-col border-r border-gray-200 bg-white">
+    <aside className="flex h-full w-[var(--sidebar-width)] flex-col border-r border-border-default bg-[var(--sidebar-bg)]">
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2 px-5 border-b border-gray-100">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white text-sm font-bold">
+      <div className="flex h-14 items-center gap-2.5 px-5 border-b border-border-subtle">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-text-inverse text-sm font-bold">
           C
         </div>
-        <span className="text-base font-semibold text-gray-900">Capibara</span>
+        <span className="text-base font-semibold text-text-primary">Capibara</span>
       </div>
 
       {/* Navigation */}
@@ -45,14 +45,14 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               className={clsx(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                  ? 'bg-[var(--sidebar-item-active-bg)] text-[var(--sidebar-item-active-text)]'
+                  : 'text-text-secondary hover:bg-[var(--sidebar-item-hover)] hover:text-text-primary',
               )}
             >
               <Icon
                 size={20}
                 weight={isActive ? 'fill' : 'regular'}
-                className={isActive ? 'text-indigo-600' : 'text-gray-400'}
+                className={isActive ? 'text-accent' : 'text-text-muted'}
               />
               {item.label}
             </button>
@@ -61,8 +61,8 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-gray-100 px-5 py-3">
-        <p className="text-xs text-gray-400">v0.1.0</p>
+      <div className="border-t border-border-subtle px-5 py-3">
+        <p className="text-xs text-text-muted">v0.1.0</p>
       </div>
     </aside>
   );

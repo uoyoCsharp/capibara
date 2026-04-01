@@ -139,16 +139,16 @@ export function DiscussionPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-gray-400">Loading...</p>
+        <p className="text-sm text-text-muted">Loading...</p>
       </div>
     );
   }
 
   if (organizations.length === 0) {
     return (
-      <div className="p-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-2">Discussions</h1>
-        <p className="text-gray-500 mb-8">
+      <div className="p-[var(--page-padding)]">
+        <h1 className="text-2xl font-semibold text-text-primary mb-2">Discussions</h1>
+        <p className="text-text-secondary mb-8">
           Create an organization first to see discussions.
         </p>
       </div>
@@ -158,12 +158,12 @@ export function DiscussionPage() {
   return (
     <div className="flex h-full">
       {/* Sidebar: Group list */}
-      <div className="w-80 border-r border-gray-200 bg-white flex flex-col">
+      <div className="w-80 border-r border-border-default bg-surface-card flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h1 className="text-lg font-semibold text-gray-900 mb-3">Discussions</h1>
+        <div className="px-5 py-4 border-b border-border-subtle">
+          <h1 className="text-lg font-semibold text-text-primary mb-3">Discussions</h1>
           <select
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
             value={currentOrgId ?? ''}
             onChange={(e) => {
               setCurrentOrgId(e.target.value);
@@ -182,8 +182,8 @@ export function DiscussionPage() {
         <div className="flex-1 overflow-auto py-2">
           {groups.length === 0 ? (
             <div className="px-5 py-8 text-center">
-              <ChatCircleDots size={32} className="mx-auto text-gray-300 mb-2" />
-              <p className="text-sm text-gray-400">
+              <ChatCircleDots size={32} className="mx-auto text-text-disabled mb-2" />
+              <p className="text-sm text-text-muted">
                 No discussion groups yet. Create an epic task to auto-generate one.
               </p>
             </div>
@@ -195,21 +195,21 @@ export function DiscussionPage() {
                 <button
                   key={group.id}
                   onClick={() => setSelectedGroupId(group.id)}
-                  className={`w-full text-left px-5 py-3 border-b border-gray-50 transition-colors ${
+                  className={`w-full text-left px-5 py-3 border-b border-border-subtle transition-colors ${
                     isSelected
-                      ? 'bg-indigo-50 border-l-2 border-l-indigo-500'
-                      : 'hover:bg-gray-50'
+                      ? 'bg-accent-subtle border-l-2 border-l-accent'
+                      : 'hover:bg-surface-sunken'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-sm font-medium text-gray-900 truncate">
+                    <span className="text-sm font-medium text-text-primary truncate">
                       {task?.title ?? 'Unknown Epic'}
                     </span>
                     {group.status === 'archived' && (
-                      <span className="text-xs text-gray-400 ml-2">Archived</span>
+                      <span className="text-xs text-text-muted ml-2">Archived</span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-text-tertiary">
                     Created {new Date(group.createdAt).toLocaleDateString()}
                   </div>
                 </button>
@@ -235,8 +235,8 @@ export function DiscussionPage() {
         ) : (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <ChatCircleDots size={48} className="mx-auto text-gray-300 mb-3" />
-              <p className="text-sm text-gray-400">
+              <ChatCircleDots size={48} className="mx-auto text-text-disabled mb-3" />
+              <p className="text-sm text-text-muted">
                 Select a discussion group to view messages and vote.
               </p>
             </div>

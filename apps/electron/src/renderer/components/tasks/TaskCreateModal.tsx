@@ -55,16 +55,16 @@ export function TaskCreateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay">
+      <div className="w-full max-w-lg rounded-[var(--card-radius)] bg-surface-card shadow-modal">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between border-b border-border-subtle px-6 py-4">
+          <h2 className="text-lg font-semibold text-text-primary">
             {parentId ? 'Create Child Task' : 'Create New Task'}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-lg p-1 text-text-muted hover:bg-surface-sunken hover:text-text-secondary"
           >
             <X size={20} />
           </button>
@@ -74,10 +74,10 @@ export function TaskCreateModal({
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Title</label>
             <input
               type="text"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent placeholder-text-muted"
               placeholder="Enter task title..."
               value={title}
               onChange={(e) => {
@@ -86,14 +86,14 @@ export function TaskCreateModal({
               }}
               autoFocus
             />
-            {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+            {error && <p className="mt-1 text-xs text-danger">{error}</p>}
           </div>
 
           {/* Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Type</label>
             <select
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
               value={type}
               onChange={(e) => setType(e.target.value as TaskType)}
             >
@@ -107,9 +107,9 @@ export function TaskCreateModal({
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Description</label>
             <textarea
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent resize-none placeholder-text-muted"
               rows={4}
               placeholder="Describe the task..."
               value={description}
@@ -119,9 +119,9 @@ export function TaskCreateModal({
 
           {/* Assignee Role */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Assignee Role</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1">Assignee Role</label>
             <select
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
               value={assigneeRoleId ?? ''}
               onChange={(e) => setAssigneeRoleId(e.target.value || null)}
             >
@@ -139,13 +139,13 @@ export function TaskCreateModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover"
             >
               Create Task
             </button>

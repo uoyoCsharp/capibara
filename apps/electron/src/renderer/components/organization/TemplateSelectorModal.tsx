@@ -15,10 +15,10 @@ function RolePreview({ role, depth }: { role: TemplateRoleDefinition; depth: num
   return (
     <>
       <div
-        className="flex items-center gap-2 text-xs text-gray-600"
+        className="flex items-center gap-2 text-xs text-text-secondary"
         style={{ paddingLeft: `${depth * 16}px` }}
       >
-        <Users size={12} className="text-gray-400 flex-shrink-0" />
+        <Users size={12} className="text-text-muted flex-shrink-0" />
         <span>{role.name}</span>
       </div>
       {role.children.map((child) => (
@@ -76,13 +76,13 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay">
+      <div className="bg-surface-card rounded-[var(--card-radius)] shadow-modal w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">Choose Organization Template</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
+          <h2 className="text-lg font-semibold text-text-primary">Choose Organization Template</h2>
           <button
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            className="p-1 rounded-lg text-text-muted hover:text-text-secondary hover:bg-surface-sunken"
             onClick={onClose}
           >
             <X size={20} />
@@ -94,28 +94,28 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
           {templates.map((template) => (
             <button
               key={template.id}
-              className={`w-full text-left rounded-xl border p-4 transition-colors ${
+              className={`w-full text-left rounded-[var(--card-radius)] border p-4 transition-colors ${
                 selectedId === template.id
-                  ? 'border-indigo-300 bg-indigo-50 ring-1 ring-indigo-200'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
+                  ? 'border-accent bg-accent-subtle ring-1 ring-[var(--accent-ring)]'
+                  : 'border-border-default hover:border-border-strong bg-surface-card'
               }`}
               onClick={() => setSelectedId(template.id)}
             >
               <div className="flex items-start gap-3">
                 <TreeStructure
                   size={24}
-                  className={selectedId === template.id ? 'text-indigo-500' : 'text-gray-400'}
+                  className={selectedId === template.id ? 'text-accent' : 'text-text-muted'}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{template.name}</span>
-                    <span className="text-xs text-gray-400">
+                    <span className="font-medium text-text-primary">{template.name}</span>
+                    <span className="text-xs text-text-muted">
                       {countRoles(template.rootRoles)} roles
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">{template.description}</p>
+                  <p className="text-sm text-text-tertiary mt-1">{template.description}</p>
                   {/* Role hierarchy preview */}
-                  <div className="mt-3 space-y-1 bg-gray-50 rounded-lg p-3">
+                  <div className="mt-3 space-y-1 bg-surface-sunken rounded-lg p-3">
                     {template.rootRoles.map((role) => (
                       <RolePreview key={role.name} role={role} depth={0} />
                     ))}
@@ -129,12 +129,12 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
           {selectedTemplate && (
             <div className="space-y-3 pt-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-text-secondary mb-1">
                   Organization Name *
                 </label>
                 <input
                   type="text"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
                   placeholder="My AI Team"
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
@@ -142,12 +142,12 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-text-secondary mb-1">
                   Description
                 </label>
                 <input
                   type="text"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
                   placeholder="Optional description"
                   value={orgDescription}
                   onChange={(e) => setOrgDescription(e.target.value)}
@@ -159,15 +159,15 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle">
           <button
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleLoad}
             disabled={!selectedId || !orgName.trim() || isCreating}
           >

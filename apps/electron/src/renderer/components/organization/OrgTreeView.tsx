@@ -36,9 +36,9 @@ function buildTree(roles: RoleRecord[]): TreeNode[] {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active: 'bg-green-400',
-  paused: 'bg-orange-400',
-  idle: 'bg-gray-300',
+  active: 'bg-success',
+  paused: 'bg-warning',
+  idle: 'bg-neutral',
 };
 
 function RoleNode({
@@ -63,14 +63,14 @@ function RoleNode({
       <div
         className={clsx(
           'group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors',
-          isSelected ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'hover:bg-gray-50',
+          isSelected ? 'bg-accent-subtle ring-1 ring-[var(--accent-ring)]' : 'hover:bg-surface-sunken',
         )}
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
         onClick={() => onSelectRole(node.role.id)}
       >
         {/* Expand/collapse toggle */}
         <button
-          className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600"
+          className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-text-muted hover:text-text-secondary"
           onClick={(e) => {
             e.stopPropagation();
             setExpanded(!expanded);
@@ -89,7 +89,7 @@ function RoleNode({
           weight="fill"
           className={clsx(
             'flex-shrink-0',
-            isSelected ? 'text-indigo-500' : 'text-gray-400',
+            isSelected ? 'text-accent' : 'text-text-muted',
           )}
         />
 
@@ -99,7 +99,7 @@ function RoleNode({
             <span
               className={clsx(
                 'text-sm font-medium truncate',
-                isSelected ? 'text-indigo-700' : 'text-gray-800',
+                isSelected ? 'text-accent-text' : 'text-text-primary',
               )}
             >
               {node.role.name}
@@ -107,12 +107,12 @@ function RoleNode({
             <span
               className={clsx(
                 'w-2 h-2 rounded-full flex-shrink-0',
-                STATUS_COLORS[node.role.status] ?? 'bg-gray-300',
+                STATUS_COLORS[node.role.status] ?? 'bg-neutral',
               )}
             />
           </div>
           {node.role.persona && (
-            <p className="text-xs text-gray-400 truncate max-w-[280px]">
+            <p className="text-xs text-text-muted truncate max-w-[280px]">
               {node.role.persona.slice(0, 80)}
             </p>
           )}
@@ -120,7 +120,7 @@ function RoleNode({
 
         {/* Quick add child */}
         <button
-          className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+          className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded text-text-muted hover:text-accent hover:bg-accent-subtle transition-all"
           title="Add child role"
           onClick={(e) => {
             e.stopPropagation();
@@ -156,13 +156,13 @@ export function OrgTreeView({
   const tree = buildTree(roles);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white py-2">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 mb-1">
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card py-2">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle mb-1">
+        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
           Role Hierarchy
         </span>
         <button
-          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+          className="flex items-center gap-1 text-xs text-accent hover:text-accent-hover font-medium"
           onClick={() => onAddRole(null)}
         >
           <Plus size={12} />

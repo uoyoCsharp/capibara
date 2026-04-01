@@ -123,25 +123,25 @@ export function OrganizationPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-gray-400">Loading...</p>
+        <p className="text-sm text-text-muted">Loading...</p>
       </div>
     );
   }
 
   return (
     <div className="flex h-full">
-      <div className="flex-1 p-8 overflow-auto">
-        <div className="flex items-center justify-between mb-6">
+      <div className="flex-1 p-[var(--page-padding)] overflow-auto">
+        <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Organization</h1>
-            <p className="text-gray-500 text-sm mt-1">
+            <h1 className="text-2xl font-semibold text-text-primary">Organization</h1>
+            <p className="text-text-secondary text-sm mt-1">
               Manage your AI organization tree. Create roles, configure personas, and assign skills.
             </p>
           </div>
           <div className="flex gap-2">
             {organizations.length > 0 && (
               <select
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
                 value={currentOrgId ?? ''}
                 onChange={(e) => setCurrentOrgId(e.target.value)}
               >
@@ -153,14 +153,14 @@ export function OrganizationPage() {
               </select>
             )}
             <button
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
               onClick={() => setShowTemplateSelector(true)}
             >
               <TreeStructure size={16} />
               From Template
             </button>
             <button
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken transition-colors"
               onClick={() => setShowCreateOrg(true)}
             >
               <Plus size={16} />
@@ -189,11 +189,11 @@ export function OrganizationPage() {
             }}
           />
         ) : currentOrg ? (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center">
-            <TreeStructure size={48} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-sm text-gray-500 mb-4">No roles yet. Add a role to start building your org tree.</p>
+          <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
+            <TreeStructure size={48} className="mx-auto text-text-disabled mb-4" />
+            <p className="text-sm text-text-tertiary mb-4">No roles yet. Add a role to start building your org tree.</p>
             <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover"
               onClick={() =>
                 handleCreateRole({
                   orgId: currentOrgId!,
@@ -213,9 +213,9 @@ export function OrganizationPage() {
             </button>
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center">
-            <TreeStructure size={48} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-sm text-gray-500 mb-4">
+          <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
+            <TreeStructure size={48} className="mx-auto text-text-disabled mb-4" />
+            <p className="text-sm text-text-tertiary mb-4">
               No organization yet. Create one from a template or start blank.
             </p>
           </div>

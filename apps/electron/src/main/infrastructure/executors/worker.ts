@@ -166,18 +166,8 @@ function cancelRun(runId: string): void {
 
   // Mark for cancel + delegate abort to adapter
   cancelledRuns.add(runId);
-  // Find which adapter is running this — we look up the active job's executor
-  for (const job of queue) {
-    if (job.runId === runId) {
-      try {
-        const adapter = getAdapter(job.executor);
-        adapter.abort(runId);
-      } catch { /* adapter not found */ }
-      return;
-    }
-  }
-  // If the run is active (not queued), try all registered adapters
-  // Since adapters track their own running processes, this is safe
+  // Active runs are no longer in the queue — adapters track their own
+  // running child processes via childTracker, so calling abort is sufficient.
   try {
     const adapter = getAdapter('claude-cli');
     adapter.abort(runId);

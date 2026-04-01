@@ -15,12 +15,12 @@ import { TaskCreateModal } from '../tasks/TaskCreateModal';
 import { TaskDetailDrawer } from '../tasks/TaskDetailDrawer';
 
 const RUN_STATUS_COLORS: Record<RunStatus, string> = {
-  queued: 'bg-yellow-100 text-yellow-700',
-  running: 'bg-blue-100 text-blue-700',
-  succeeded: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
-  cancelled: 'bg-gray-100 text-gray-500',
-  interrupted: 'bg-orange-100 text-orange-700',
+  queued: 'bg-warning-subtle text-warning-text',
+  running: 'bg-info-subtle text-info-text',
+  succeeded: 'bg-success-subtle text-success-text',
+  failed: 'bg-danger-subtle text-danger-text',
+  cancelled: 'bg-neutral-subtle text-neutral-text',
+  interrupted: 'bg-warning-subtle text-warning-text',
 };
 
 export function ExecutionPage() {
@@ -217,16 +217,16 @@ export function ExecutionPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-gray-400">Loading...</p>
+        <p className="text-sm text-text-muted">Loading...</p>
       </div>
     );
   }
 
   if (organizations.length === 0) {
     return (
-      <div className="p-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-2">Tasks & Execution</h1>
-        <p className="text-gray-500 mb-8">
+      <div className="p-[var(--page-padding)]">
+        <h1 className="text-2xl font-semibold text-text-primary mb-2">Tasks & Execution</h1>
+        <p className="text-text-secondary mb-8">
           Create an organization first to start adding tasks.
         </p>
       </div>
@@ -235,19 +235,19 @@ export function ExecutionPage() {
 
   return (
     <div className="flex h-full">
-      <div className="flex-1 p-8 overflow-auto">
+      <div className="flex-1 p-[var(--page-padding)] overflow-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Tasks & Execution</h1>
-            <p className="text-gray-500 text-sm mt-1">
+            <h1 className="text-2xl font-semibold text-text-primary">Tasks & Execution</h1>
+            <p className="text-text-secondary text-sm mt-1">
               View and manage your task tree. Create epics, stories, and track execution progress.
             </p>
           </div>
           <div className="flex items-center gap-3">
             {/* Org selector */}
             <select
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
               value={currentOrgId ?? ''}
               onChange={(e) => {
                 setCurrentOrgId(e.target.value);
@@ -264,7 +264,7 @@ export function ExecutionPage() {
 
             <button
               onClick={() => handleAddTask(null)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
             >
               <Plus size={16} />
               New Task
@@ -273,13 +273,13 @@ export function ExecutionPage() {
         </div>
 
         {/* Tab Bar */}
-        <div className="flex border-b border-gray-200 mb-6">
+        <div className="flex border-b border-border-default mb-[var(--section-gap)]">
           <button
             onClick={() => setActiveTab('tasks')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'tasks'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-text-tertiary hover:text-text-secondary'
             }`}
           >
             Tasks ({tasks.length})
@@ -288,13 +288,13 @@ export function ExecutionPage() {
             onClick={() => setActiveTab('runs')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'runs'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-text-tertiary hover:text-text-secondary'
             }`}
           >
             Runs ({runs.length})
             {(runCounts['running'] ?? 0) > 0 && (
-              <span className="ml-1.5 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+              <span className="ml-1.5 inline-flex items-center rounded-full bg-info-subtle px-2 py-0.5 text-xs text-info-text">
                 {runCounts['running']} active
               </span>
             )}
@@ -305,29 +305,29 @@ export function ExecutionPage() {
           <>
             {/* Status summary bar */}
             {tasks.length > 0 && (
-              <div className="flex items-center gap-4 mb-6 text-xs text-gray-500">
-                <span className="font-medium text-gray-700">{tasks.length} tasks</span>
+              <div className="flex items-center gap-4 mb-[var(--section-gap)] text-xs text-text-tertiary">
+                <span className="font-medium text-text-secondary">{tasks.length} tasks</span>
                 {statusCounts['done'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    <span className="w-2 h-2 rounded-full bg-success" />
                     {statusCounts['done']} done
                   </span>
                 )}
                 {statusCounts['in_progress'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-orange-400" />
+                    <span className="w-2 h-2 rounded-full bg-warning" />
                     {statusCounts['in_progress']} in progress
                   </span>
                 )}
                 {statusCounts['blocked'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-red-400" />
+                    <span className="w-2 h-2 rounded-full bg-danger" />
                     {statusCounts['blocked']} blocked
                   </span>
                 )}
                 {statusCounts['pending'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-gray-300" />
+                    <span className="w-2 h-2 rounded-full bg-neutral" />
                     {statusCounts['pending']} pending
                   </span>
                 )}
@@ -335,7 +335,7 @@ export function ExecutionPage() {
             )}
 
             {/* Task Tree */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)]">
               <TaskTreeView
                 tasks={tasks}
                 selectedTaskId={selectedTaskId}
@@ -352,9 +352,9 @@ export function ExecutionPage() {
         {activeTab === 'runs' && (
           <div className="space-y-3">
             {runs.length === 0 ? (
-              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-                <Lightning size={32} className="mx-auto text-gray-300 mb-3" />
-                <p className="text-sm text-gray-500">
+              <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-8 text-center">
+                <Lightning size={32} className="mx-auto text-text-disabled mb-3" />
+                <p className="text-sm text-text-tertiary">
                   No runs yet. Assign a task to a role and start execution.
                 </p>
               </div>
@@ -362,7 +362,7 @@ export function ExecutionPage() {
               <div className="flex items-center justify-end mb-2">
                 <button
                   onClick={loadRuns}
-                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
                 >
                   <ArrowClockwise size={14} />
                   Refresh
@@ -374,10 +374,10 @@ export function ExecutionPage() {
               <div
                 key={run.id}
                 onClick={() => setSelectedRunId(run.id === selectedRunId ? null : run.id)}
-                className={`rounded-xl border bg-white p-4 cursor-pointer transition-colors ${
+                className={`rounded-[var(--card-radius)] border bg-surface-card p-[var(--card-padding)] cursor-pointer transition-colors ${
                   selectedRunId === run.id
-                    ? 'border-indigo-300 ring-1 ring-indigo-200'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-accent ring-1 ring-[var(--accent-ring)]'
+                    : 'border-border-default hover:border-border-strong'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -387,15 +387,15 @@ export function ExecutionPage() {
                     >
                       {run.status}
                     </span>
-                    <span className="text-sm font-medium text-gray-900 truncate max-w-[300px]">
+                    <span className="text-sm font-medium text-text-primary truncate max-w-[300px]">
                       {taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <div className="flex items-center gap-3 text-xs text-text-muted">
                     <span>{roleNames.get(run.roleId) ?? 'Unknown'}</span>
                     <span>{new Date(run.createdAt).toLocaleString()}</span>
                     {run.costUsd > 0 && (
-                      <span className="text-green-600 font-medium">${run.costUsd.toFixed(4)}</span>
+                      <span className="text-success font-medium">${run.costUsd.toFixed(4)}</span>
                     )}
                     {(run.status === 'queued' || run.status === 'running') && (
                       <button
@@ -403,7 +403,7 @@ export function ExecutionPage() {
                           e.stopPropagation();
                           void handleCancelRun(run.id);
                         }}
-                        className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-md bg-danger-subtle px-2 py-1 text-xs font-medium text-danger-text hover:bg-danger/10 transition-colors"
                       >
                         <Stop size={12} />
                         Cancel
@@ -414,33 +414,33 @@ export function ExecutionPage() {
 
                 {/* Expanded run details */}
                 {selectedRunId === run.id && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="mt-4 pt-4 border-t border-border-subtle">
                     <div className="grid grid-cols-2 gap-4 text-xs mb-4">
                       <div>
-                        <span className="text-gray-400">Trigger:</span>{' '}
-                        <span className="text-gray-700">{run.trigger}</span>
+                        <span className="text-text-muted">Trigger:</span>{' '}
+                        <span className="text-text-secondary">{run.trigger}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400">Started:</span>{' '}
-                        <span className="text-gray-700">
+                        <span className="text-text-muted">Started:</span>{' '}
+                        <span className="text-text-secondary">
                           {run.startedAt ? new Date(run.startedAt).toLocaleString() : '-'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-gray-400">Finished:</span>{' '}
-                        <span className="text-gray-700">
+                        <span className="text-text-muted">Finished:</span>{' '}
+                        <span className="text-text-secondary">
                           {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-gray-400">Cost:</span>{' '}
-                        <span className="text-gray-700">${run.costUsd.toFixed(4)}</span>
+                        <span className="text-text-muted">Cost:</span>{' '}
+                        <span className="text-text-secondary">${run.costUsd.toFixed(4)}</span>
                       </div>
                     </div>
                     {run.outputLog && (
                       <div>
-                        <p className="text-xs text-gray-400 mb-1">Output Log</p>
-                        <pre className="bg-gray-900 text-gray-100 rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
+                        <p className="text-xs text-text-muted mb-1">Output Log</p>
+                        <pre className="bg-surface-sunken text-text-primary rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
                           {run.outputLog.slice(0, 5000)}
                           {run.outputLog.length > 5000 && '\n... (truncated)'}
                         </pre>
