@@ -31,10 +31,13 @@ export class PromptBuilder implements IPromptBuilder {
 
     // Current Task
     lines.push('## Current Task');
+    lines.push(`- Task ID: ${context.task.id}`);
     lines.push(`- Task: ${context.task.title}`);
     lines.push(`- Type: ${context.task.type}`);
     lines.push(`- Description: ${context.task.description}`);
     lines.push(`- Status: ${context.task.status}`);
+    lines.push(`- Organization ID: ${context.task.orgId}`);
+    lines.push(`- Your Role ID: ${context.role.id}`);
     lines.push('');
 
     // Available Skills
@@ -48,15 +51,22 @@ export class PromptBuilder implements IPromptBuilder {
 
     // System Tools
     lines.push('## System Tools (available as MCP tools)');
-    lines.push('- capibara_task_complete: Mark your task as completed');
-    lines.push('- capibara_task_create_subtask: Decompose work to subordinates');
-    lines.push('- capibara_discussion_post: Post to discussion group / vote');
+    lines.push(`- capibara_task_complete: Mark your task as completed. Use taskId="${context.task.id}"`);
+    lines.push(`- capibara_task_create_subtask: Create subtasks. Use parentTaskId="${context.task.id}"`);
+    if (context.discussionSummary) {
+      lines.push(`- capibara_discussion_post: Post to discussion group / vote. Use discussionGroupId="${context.discussionSummary.groupId}", authorRoleId="${context.role.id}"`);
+    } else {
+      lines.push('- capibara_discussion_post: Post to discussion group / vote');
+    }
+    lines.push('- capibara_context_get_task: Get details about any task');
+    lines.push(`- capibara_context_get_org_tree: Get org tree. Use orgId="${context.task.orgId}"`);
     lines.push('- capibara_escalate: Escalate to your superior');
     lines.push('');
 
     // Discussion Context
     if (context.discussionSummary) {
       lines.push('## Discussion Context');
+      lines.push(`- Discussion Group ID: ${context.discussionSummary.groupId}`);
       const ds = context.discussionSummary;
       const { voteStats } = ds;
       lines.push(
@@ -77,9 +87,11 @@ export class PromptBuilder implements IPromptBuilder {
 
     // Instructions
     lines.push('## Instructions');
-    lines.push('Complete your task, then use capibara_task_complete to submit results.');
-    lines.push('If you need to decompose work, use capibara_task_create_subtask.');
-    lines.push('For review tasks, use capibara_discussion_post with the appropriate voteTag.');
+    lines.push(`IMPORTANT: When calling MCP tools, always use the exact IDs provided above. Your task ID is "${context.task.id}".`);
+    lines.push('1. Complete your assigned task.');
+    lines.push(`2. When done, call capibara_task_complete with taskId="${context.task.id}" and a summary of your work.`);
+    lines.push('3. If you need to decompose work, use capibara_task_create_subtask.');
+    lines.push('4. For review tasks, use capibara_discussion_post with the appropriate voteTag (APPROVE, REVISE, CONCERN, or DELEGATE).');
 
     return lines.join('\n');
   }

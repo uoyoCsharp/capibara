@@ -94,11 +94,18 @@ export class McpToolHandlers {
       voteTag: (args.voteTag as VoteTag) ?? null,
     });
 
+    // Emit message event so UI updates in real time
+    this.eventBus.emit({
+      type: 'discussion:message-added',
+      timestamp: new Date().toISOString(),
+      payload: { groupId: msg.groupId, messageId: msg.id },
+    });
+
     if (msg.voteTag) {
       this.eventBus.emit({
         type: 'discussion:vote-added',
         timestamp: new Date().toISOString(),
-        payload: { groupId: msg.groupId, messageId: msg.id, voteTag: msg.voteTag },
+        payload: { groupId: msg.groupId, messageId: msg.id, voteTag: msg.voteTag, authorRoleId: msg.authorRoleId },
       });
     }
 

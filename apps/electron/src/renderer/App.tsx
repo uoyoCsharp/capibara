@@ -10,6 +10,7 @@ import { DiscussionPage } from './components/discussion/DiscussionPage';
 
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
+
   const { organizations, currentOrgId, isLoading } = useCapibaraSnapshot();
 
   if (isLoading) {

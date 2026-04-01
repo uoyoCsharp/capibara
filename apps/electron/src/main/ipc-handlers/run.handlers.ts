@@ -72,7 +72,7 @@ export function registerRunHandlers(
       return ok(run);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error('Failed to start run', { error: msg });
+      logger.warn('Failed to start run', { error: msg });
       return fail('EXECUTION_ERROR', msg);
     }
   });

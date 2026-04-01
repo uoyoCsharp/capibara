@@ -12,6 +12,7 @@ export interface PromptContext {
 }
 
 export interface DiscussionSummary {
+  groupId: string;
   recentMessages: Array<{ authorName: string; content: string; voteTag: string | null }>;
   voteStats: VoteStats;
   latestReviseFeedback: string | null;

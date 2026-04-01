@@ -57,6 +57,7 @@ import { OrgOrchestrator } from './application/orchestrator/org.orchestrator.js'
 import { EventDigester } from './application/progress/event.digester.js';
 import { NarrativeEngine } from './application/progress/narrative.engine.js';
 import { NotificationService } from './application/notifications/notification.service.js';
+import { EventBroadcaster } from './application/notifications/event-broadcaster.js';
 import { McpConfigGenerator } from './infrastructure/mcp/mcp-config-generator.js';
 import { McpToolRegistry } from './infrastructure/mcp/mcp-tool-registry.js';
 import { McpToolHandlers } from './infrastructure/mcp/mcp-tool-handlers.js';
@@ -149,7 +150,11 @@ export async function bootstrap(): Promise<void> {
   const workerPath = join(dirname(__dirname), 'main', 'capibara-worker.js');
   const workerService = new WorkerService(workerPath, logger);
   executor.setWorkerService(workerService);
-  workerService.start();
+  try {
+    workerService.start();
+  } catch (err) {
+    logger.error('Worker service failed to start', { error: String(err) });
+  }
   container.register<WorkerService>(WORKER_SERVICE_TOKEN, { useValue: workerService });
 
   const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger);
@@ -163,7 +168,9 @@ export async function bootstrap(): Promise<void> {
     config, logger, eventBus, discussionRepo, taskRepo, roleRepo,
     consensusDetector, taskStateMachine,
   );
-  discussionService.start();
+  try { discussionService.start(); } catch (err) {
+    logger.error('Discussion service failed to start', { error: String(err) });
+  }
 
   // ─── Execution Engine & MCP ──────────────────────────────
   const orgContext = new OrgContext(orgRepo, roleRepo, taskRepo, logger);
@@ -184,9 +191,12 @@ export async function bootstrap(): Promise<void> {
   );
 
   // Start MCP IPC server and configure the config generator with its port
-  await mcpIpcServer.start().then((serverPort) => {
+  try {
+    const serverPort = await mcpIpcServer.start();
     mcpConfigGen.setPort(serverPort);
-  });
+  } catch (err) {
+    logger.error('MCP IPC server failed to start', { error: String(err) });
+  }
 
   // ─── Orchestrator (Epic 7) ─────────────────────────────────
   const orchestrator = new OrgOrchestrator(
@@ -194,7 +204,9 @@ export async function bootstrap(): Promise<void> {
     pendingWakeRepo, costRepo,
   );
   orchestrator.setExecutionEngine(executionEngine);
-  orchestrator.start();
+  try { orchestrator.start(); } catch (err) {
+    logger.error('Orchestrator failed to start', { error: String(err) });
+  }
   container.register<OrgOrchestrator>(ORG_ORCHESTRATOR_TOKEN, { useValue: orchestrator });
 
   // ─── Narrative Engine (Epic 9) ────────────────────────────────
@@ -204,7 +216,15 @@ export async function bootstrap(): Promise<void> {
 
   // ─── Notification Service (Epic 8) ───────────────────────────
   const notificationService = new NotificationService(eventBus, logger);
-  notificationService.start();
+  try { notificationService.start(); } catch (err) {
+    logger.error('Notification service failed to start', { error: String(err) });
+  }
+
+  // ─── Event Broadcaster (forwards domain events to renderer) ────
+  const eventBroadcaster = new EventBroadcaster(eventBus, logger);
+  try { eventBroadcaster.start(); } catch (err) {
+    logger.error('Event broadcaster failed to start', { error: String(err) });
+  }
 
   // ─── Event Digester (Epic 7) ──────────────────────────────
   const eventDigester = new EventDigester(eventBus, logger);
@@ -240,7 +260,9 @@ export async function bootstrap(): Promise<void> {
 
   // ─── Seed Skills ─────────────────────────────────────────
   const skillSeeder = new SkillSeeder(skillRepo, logger);
-  await skillSeeder.seedAll();
+  try { await skillSeeder.seedAll(); } catch (err) {
+    logger.error('Skill seeder failed', { error: String(err) });
+  }
 
   // ─── IPC Handlers ────────────────────────────────────────
   registerSnapshotHandlers(orgRepo, logger);

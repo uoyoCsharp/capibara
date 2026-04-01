@@ -40,7 +40,7 @@ export class TaskStateMachine {
     this.eventBus.emit({
       type: 'task:status-changed',
       timestamp: new Date().toISOString(),
-      payload: { taskId, orgId: task.orgId, from: task.status, to },
+      payload: { taskId, orgId: task.orgId, from: task.status, to, newStatus: to },
     });
   }
 }

@@ -109,8 +109,12 @@ export function OrganizationPage() {
         setShowCreateOrg(false);
         setCurrentOrgId(result.data.id);
         await loadOrgs();
+      } else {
+        console.error('[CreateOrg] failed:', result.error);
       }
-    } catch { /* IPC may fail */ }
+    } catch (err) {
+      console.error('[CreateOrg] IPC error:', err);
+    }
   };
 
   const currentOrg = organizations.find((o) => o.id === currentOrgId);

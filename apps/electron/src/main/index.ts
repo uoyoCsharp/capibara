@@ -10,6 +10,8 @@ const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
+  const preloadPath = join(__dirname, '../preload/index.cjs');
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -19,7 +21,7 @@ function createWindow(): void {
     title: 'Capibara',
     icon: resolve(__dirname, '../../assets/icon.png'),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -44,7 +46,11 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   // Bootstrap DI, database, IPC handlers
-  await bootstrap();
+  try {
+    await bootstrap();
+  } catch (err) {
+    console.error('[Capibara] Bootstrap failed:', err);
+  }
 
   createWindow();
 

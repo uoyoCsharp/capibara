@@ -78,6 +78,7 @@ export class ExecutionContext {
     const latestReviseMsg = recentMessages.find((m) => m.voteTag === 'REVISE');
 
     return {
+      groupId: group.id,
       recentMessages: recentMessages.map((m) => ({
         authorName: m.authorRoleId ? (roleNames.get(m.authorRoleId) ?? 'Unknown') : 'System',
         content: m.content,

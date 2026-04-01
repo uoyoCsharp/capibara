@@ -65,9 +65,11 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
       });
       if (result.ok) {
         onLoaded();
+      } else {
+        console.error('[LoadTemplate] failed:', result.error);
       }
-    } catch {
-      // IPC may fail
+    } catch (err) {
+      console.error('[LoadTemplate] IPC error:', err);
     } finally {
       setIsCreating(false);
     }

@@ -98,19 +98,20 @@ export function ExecutionPage() {
     loadOrgData(currentOrgId);
   }, [currentOrgId, loadOrgData]);
 
-  // Auto-refresh runs every 5 seconds when there are active runs
+  // Subscribe to real-time events
   useEffect(() => {
-    const hasActiveRuns = runs.some((r) => r.status === 'queued' || r.status === 'running');
-    if (!hasActiveRuns || !currentOrgId) return;
-    const orgId = currentOrgId;
-    const interval = setInterval(async () => {
-      try {
-        const result = await window.capibara.getRunsByOrgId(orgId);
-        if (result.ok) setRuns(result.data);
-      } catch { /* IPC may fail */ }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [runs, currentOrgId]);
+    if (typeof window.capibara?.subscribe !== 'function') return;
+    const unsub = window.capibara.subscribe((event) => {
+      if (!currentOrgId) return;
+      if (
+        (event.type === 'run:changed' && event.orgId === currentOrgId) ||
+        (event.type === 'task:changed' && event.orgId === currentOrgId)
+      ) {
+        void loadOrgData(currentOrgId);
+      }
+    });
+    return unsub;
+  }, [currentOrgId, loadOrgData]);
 
   const roleNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -178,6 +179,8 @@ export function ExecutionPage() {
       if (result.ok) {
         await loadRuns();
         setActiveTab('runs');
+      } else {
+        console.warn('[StartRun]', result.error?.message);
       }
     } catch { /* IPC may fail */ }
   };
@@ -460,6 +463,15 @@ export function ExecutionPage() {
           onStatusChange={handleStatusChange}
           onDelete={handleDeleteTask}
           onStartRun={handleStartRun}
+          hasActiveRun={
+            selectedTask.assigneeRoleId
+              ? runs.some(
+                  (r) =>
+                    r.roleId === selectedTask.assigneeRoleId &&
+                    (r.status === 'queued' || r.status === 'running'),
+                )
+              : false
+          }
         />
       )}
 
