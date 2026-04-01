@@ -33,9 +33,9 @@ export function HumanVotePanel({ groupId, onSubmit }: HumanVotePanelProps) {
   };
 
   return (
-    <div className="border-t border-border-default px-5 py-3">
+    <div className="border-t border-border-default px-5 py-4">
       {/* Vote buttons */}
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-3">
         <span className="text-xs text-text-tertiary mr-1">Vote:</span>
         {VOTE_OPTIONS.map((opt) => (
           <button

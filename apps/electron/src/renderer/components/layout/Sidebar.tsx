@@ -4,6 +4,7 @@ import {
   ListChecks,
   ChatCircleDots,
   Lightbulb,
+  Question,
 } from '@phosphor-icons/react';
 import type { SectionId } from '@shared/contracts';
 import { clsx } from 'clsx';
@@ -26,10 +27,12 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     <aside className="flex h-full w-[var(--sidebar-width)] flex-col border-r border-border-default bg-[var(--sidebar-bg)]">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 px-5 border-b border-border-subtle">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-text-inverse text-sm font-bold">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-text-inverse text-sm font-bold font-[family-name:var(--font-display)]">
           C
         </div>
-        <span className="text-base font-semibold text-text-primary">Capibara</span>
+        <span className="text-base font-semibold text-text-primary font-[family-name:var(--font-display)]">
+          Capibara
+        </span>
       </div>
 
       {/* Navigation */}
@@ -61,8 +64,11 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-border-subtle px-5 py-3">
-        <p className="text-xs text-text-muted">v0.1.0</p>
+      <div className="border-t border-border-subtle px-3 py-2">
+        <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-text-muted hover:text-text-secondary hover:bg-[var(--sidebar-item-hover)] transition-colors">
+          <Question size={16} />
+          Help & Feedback
+        </button>
       </div>
     </aside>
   );

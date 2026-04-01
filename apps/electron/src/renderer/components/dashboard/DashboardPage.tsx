@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowClockwise, Lightning, CurrencyDollar, ListChecks, ChartLineUp } from '@phosphor-icons/react';
 import { clsx } from 'clsx';
+import { toast } from '../../store/toast.store';
 import type { NarrativeRecord, CostSummaryRecord, CostEntryRecord, RoleRecord } from '@shared/contracts';
 
 declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi };
@@ -28,6 +29,8 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       if (narRes.ok) setNarrative(narRes.data);
       if (costRes.ok) setCostSummary(costRes.data);
       if (rolesRes.ok) setRoles(rolesRes.data);
+    } catch {
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -62,6 +65,8 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       // Also refresh cost
       const costRes = await window.capibara.getCostSummary(orgId);
       if (costRes.ok) setCostSummary(costRes.data);
+    } catch {
+      toast.error('Failed to generate report');
     } finally {
       setGenerating(false);
     }
@@ -70,24 +75,27 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   if (!orgId) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-2xl font-semibold text-text-primary mb-2">Dashboard</h1>
-        <p className="text-text-secondary">
-          Select an organization to view the dashboard.
+        <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)] mb-2">Dashboard</h1>
+        <p className="text-text-secondary text-sm mt-1">
+          Select or create an organization from the sidebar to see your project dashboard, budget tracking, and AI agent activity.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="p-[var(--page-padding)] max-w-5xl">
+    <div className="p-[var(--page-padding)] max-w-5xl space-y-0">
       {/* Header */}
-      <div className="flex items-center justify-between mb-[var(--section-gap)]">
-        <h1 className="text-2xl font-semibold text-text-primary">Dashboard</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)]">Dashboard</h1>
+          <p className="text-text-secondary text-sm mt-1">Track progress, budget, and AI agent activity.</p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={fetchData}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg bg-surface-sunken px-3 py-1.5 text-sm text-text-secondary hover:bg-border-default transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-text-tertiary hover:underline transition-colors"
           >
             <ArrowClockwise size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -95,7 +103,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
           >
             <Lightning size={14} />
             {generating ? 'Generating...' : 'Generate Report'}
@@ -107,10 +115,10 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       {costSummary && <BudgetBar summary={costSummary} />}
 
       {/* Narrative */}
-      <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)] shadow-sm">
+      <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)]">
         <div className="flex items-center gap-2 mb-4">
           <ListChecks size={20} className="text-accent" />
-          <h2 className="text-lg font-medium text-text-primary">Project Progress</h2>
+          <h2 className="text-lg font-medium text-text-primary font-[family-name:var(--font-display)]">Project Progress</h2>
           {narrative && (
             <span className="ml-auto text-xs text-text-muted">
               Generated: {new Date(narrative.generatedAt).toLocaleString()}
@@ -123,7 +131,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
           </div>
         ) : (
           <p className="text-sm text-text-muted leading-relaxed">
-            No narrative generated yet. Click "Generate Report" to create a project status report.
+            No report generated yet. Click Generate Report to create an AI-powered summary of your project's progress, task status, and team activity.
           </p>
         )}
       </div>
@@ -148,7 +156,7 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord }) {
     'text-success-text';
 
   return (
-    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)] shadow-sm">
+    <div className="border-t border-border-default pt-4 pb-4 mb-[var(--section-gap)]">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <CurrencyDollar size={18} className="text-text-muted" />
@@ -190,10 +198,10 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
   const sorted = [...byRole.entries()].sort((a, b) => b[1].total - a[1].total);
 
   return (
-    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)] shadow-sm">
+    <div className="bg-surface-sunken rounded-[var(--card-radius)] p-[var(--card-padding)] mb-[var(--section-gap)]">
       <div className="flex items-center gap-2 mb-4">
         <ChartLineUp size={20} className="text-accent" />
-        <h2 className="text-lg font-medium text-text-primary">Cost by Role</h2>
+        <h2 className="text-lg font-medium text-text-primary font-[family-name:var(--font-display)]">Cost by Role</h2>
       </div>
       <div className="space-y-3">
         {sorted.map(([roleId, data]) => {

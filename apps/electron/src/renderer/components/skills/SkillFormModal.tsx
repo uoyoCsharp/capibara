@@ -90,7 +90,7 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-auto p-6 space-y-4">
+        <div className="flex-1 overflow-auto p-6 space-y-5">
           {error && (
             <div className="rounded-lg bg-danger-subtle border border-danger/30 px-4 py-2 text-sm text-danger-text">
               {error}

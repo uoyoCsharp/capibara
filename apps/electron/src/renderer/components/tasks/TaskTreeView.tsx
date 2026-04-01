@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CaretRight, CaretDown, Plus, Trash, ListBullets } from '@phosphor-icons/react';
 import type { TaskRecord, TaskStatus, TaskType } from '@shared/contracts';
 import { clsx } from 'clsx';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 interface TaskTreeViewProps {
   tasks: TaskRecord[];
@@ -86,7 +87,7 @@ function TaskNodeItem({
   pendingApprovalTaskIds,
   onSelectTask,
   onAddTask,
-  onDeleteTask,
+  onRequestDelete,
   onStatusChange,
   roleNames,
 }: {
@@ -96,7 +97,7 @@ function TaskNodeItem({
   pendingApprovalTaskIds?: Set<string>;
   onSelectTask: (id: string) => void;
   onAddTask: (parentId: string) => void;
-  onDeleteTask: (id: string) => void;
+  onRequestDelete: (id: string) => void;
   onStatusChange: (id: string, status: TaskStatus) => void;
   roleNames: Map<string, string>;
 }) {
@@ -196,7 +197,7 @@ function TaskNodeItem({
             title="Delete task"
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteTask(node.task.id);
+              onRequestDelete(node.task.id);
             }}
           >
             <Trash size={14} />
@@ -206,7 +207,7 @@ function TaskNodeItem({
 
       {/* Children */}
       {expanded && hasChildren && (
-        <div>
+        <div className="space-y-1 mt-1">
           {node.children.map((child) => (
             <TaskNodeItem
               key={child.task.id}
@@ -216,7 +217,7 @@ function TaskNodeItem({
               pendingApprovalTaskIds={pendingApprovalTaskIds}
               onSelectTask={onSelectTask}
               onAddTask={onAddTask}
-              onDeleteTask={onDeleteTask}
+              onRequestDelete={onRequestDelete}
               onStatusChange={onStatusChange}
               roleNames={roleNames}
             />
@@ -237,6 +238,7 @@ export function TaskTreeView({
   onStatusChange,
   roleNames,
 }: TaskTreeViewProps) {
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const tree = buildTree(tasks);
 
   if (tree.length === 0) {
@@ -244,7 +246,7 @@ export function TaskTreeView({
       <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
         <ListBullets size={40} className="mx-auto text-text-disabled mb-3" />
         <p className="text-sm text-text-muted mb-4">
-          No tasks yet. Create an epic to get started.
+          Your task board is empty. Create an epic to organize your project — epics contain stories, which break down into individual tasks for AI agents.
         </p>
         <button
           className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
@@ -258,7 +260,7 @@ export function TaskTreeView({
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       {tree.map((node) => (
         <TaskNodeItem
           key={node.task.id}
@@ -268,11 +270,23 @@ export function TaskTreeView({
           pendingApprovalTaskIds={pendingApprovalTaskIds}
           onSelectTask={onSelectTask}
           onAddTask={onAddTask}
-          onDeleteTask={onDeleteTask}
+          onRequestDelete={setConfirmDelete}
           onStatusChange={onStatusChange}
           roleNames={roleNames}
         />
       ))}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete Task?"
+          message="This will permanently delete this task and may affect child tasks. This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            onDeleteTask(confirmDelete);
+            setConfirmDelete(null);
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }

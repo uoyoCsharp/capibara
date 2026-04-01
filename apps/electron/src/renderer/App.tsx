@@ -7,6 +7,7 @@ import { OrganizationPage } from './components/organization/OrganizationPage';
 import { SkillsPage } from './components/skills/SkillsPage';
 import { ExecutionPage } from './components/execution/ExecutionPage';
 import { DiscussionPage } from './components/discussion/DiscussionPage';
+import { ToastContainer } from './components/shared/ToastContainer';
 
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
@@ -18,7 +19,7 @@ export function App() {
       <div className="flex h-screen w-screen items-center justify-center bg-surface-base">
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border-default border-t-accent" />
-          <p className="text-sm text-text-muted">Loading Capibara...</p>
+          <p className="text-sm text-text-muted font-[family-name:var(--font-body)]">Loading Capibara...</p>
         </div>
       </div>
     );
@@ -47,6 +48,7 @@ export function App() {
       <main className="flex-1 overflow-auto">
         {renderPage()}
       </main>
+      <ToastContainer />
     </div>
   );
 }

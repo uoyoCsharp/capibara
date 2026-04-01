@@ -25,7 +25,7 @@ export function VoteStatsBar({ stats }: VoteStatsBarProps) {
   ).filter((tag) => stats[tag] > 0);
 
   return (
-    <div className="flex items-center gap-4 text-xs">
+    <div className="flex items-center gap-5 text-xs">
       {entries.length === 0 && (
         <span className="text-text-muted">No votes yet</span>
       )}

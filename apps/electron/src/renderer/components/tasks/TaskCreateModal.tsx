@@ -71,7 +71,7 @@ export function TaskCreateModal({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">Title</label>

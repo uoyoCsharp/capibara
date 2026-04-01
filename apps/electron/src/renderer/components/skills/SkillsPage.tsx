@@ -3,6 +3,8 @@ import { MagnifyingGlass, Plus, Pencil, Trash, Funnel } from '@phosphor-icons/re
 import type { SkillRecord, SkillCategory, SkillSource } from '@shared/contracts';
 import { clsx } from 'clsx';
 import { SkillFormModal } from './SkillFormModal';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { toast } from '../../store/toast.store';
 
 const CATEGORIES: Array<{ value: SkillCategory; label: string }> = [
   { value: 'analysis', label: 'Analysis' },
@@ -20,11 +22,11 @@ const SOURCES: Array<{ value: SkillSource; label: string }> = [
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  analysis: 'bg-purple-100 text-purple-700',
-  design: 'bg-blue-100 text-blue-700',
-  implementation: 'bg-green-100 text-green-700',
-  review: 'bg-orange-100 text-orange-700',
-  test: 'bg-pink-100 text-pink-700',
+  analysis: 'bg-info-subtle text-info-text',
+  design: 'bg-accent-subtle text-accent-text',
+  implementation: 'bg-success-subtle text-success-text',
+  review: 'bg-warning-subtle text-warning-text',
+  test: 'bg-danger-subtle text-danger-text',
   general: 'bg-neutral-subtle text-neutral-text',
 };
 
@@ -42,6 +44,7 @@ export function SkillsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const loadSkills = useCallback(async (q: string, cat: SkillCategory | '', src: SkillSource | '') => {
     try {
@@ -54,7 +57,7 @@ export function SkillsPage() {
         setSkills(result.data);
       }
     } catch {
-      // IPC may fail
+      toast.error('Failed to load skills');
     } finally {
       setIsLoading(false);
     }
@@ -71,7 +74,9 @@ export function SkillsPage() {
       if (result.ok) {
         await loadSkills(search, filterCategory, filterSource);
       }
-    } catch { /* IPC may fail */ }
+    } catch {
+      toast.error('Failed to delete skill');
+    }
   };
 
   const handleSaved = async () => {
@@ -84,7 +89,7 @@ export function SkillsPage() {
     <div className="p-[var(--page-padding)]">
       <div className="flex items-center justify-between mb-[var(--section-gap)]">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Skills & Knowledge</h1>
+          <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)]">Skills & Knowledge</h1>
           <p className="text-text-secondary text-sm mt-1">
             Browse, search, and manage skills. Upload custom prompt templates.
           </p>
@@ -147,18 +152,18 @@ export function SkillsPage() {
         <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
           <p className="text-sm text-text-muted">
             {search || filterCategory || filterSource
-              ? 'No skills match your filters.'
-              : 'No skills found. They will be seeded on next app restart.'}
+              ? 'No skills match your current filters. Try adjusting your search or category selection.'
+              : 'Skills are prompt templates that give AI agents specialized abilities. They\'ll be loaded on the next app restart.'}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-[var(--element-gap)]">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {skills.map((skill) => (
             <div
               key={skill.id}
-              className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] hover:shadow-md transition-shadow"
+              className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] hover:border-l-accent hover:border-l-2 transition-colors"
             >
-              <div className="flex items-start justify-between mb-2">
+              <div className="flex items-start justify-between mb-3">
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-semibold text-text-primary truncate">
                     {skill.name}
@@ -184,7 +189,7 @@ export function SkillsPage() {
                   </span>
                 </div>
               </div>
-              <p className="text-xs text-text-tertiary line-clamp-2 mb-3">
+              <p className="text-xs text-text-tertiary line-clamp-2 mb-4">
                 {skill.description}
               </p>
               {skill.source === 'custom' && (
@@ -198,7 +203,7 @@ export function SkillsPage() {
                   </button>
                   <button
                     className="flex items-center gap-1 text-xs text-text-tertiary hover:text-danger"
-                    onClick={() => handleDelete(skill.id)}
+                    onClick={() => setConfirmDeleteId(skill.id)}
                   >
                     <Trash size={12} />
                     Delete
@@ -216,6 +221,20 @@ export function SkillsPage() {
           skill={editingSkill}
           onClose={() => { setShowForm(false); setEditingSkill(null); }}
           onSaved={handleSaved}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {confirmDeleteId && (
+        <ConfirmDialog
+          title="Delete Skill?"
+          message="This will permanently remove this custom skill. Any roles using it will lose access."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            handleDelete(confirmDeleteId);
+            setConfirmDeleteId(null);
+          }}
+          onCancel={() => setConfirmDeleteId(null)}
         />
       )}
     </div>

@@ -66,7 +66,7 @@ export function DiscussionMessageList({ messages, roles }: DiscussionMessageList
   }
 
   return (
-    <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
+    <div className="flex-1 overflow-auto px-5 py-5 space-y-4">
       {messages.map((msg) => {
         const authorName = getAuthorName(msg, roles);
         const isVote = msg.voteTag !== null;

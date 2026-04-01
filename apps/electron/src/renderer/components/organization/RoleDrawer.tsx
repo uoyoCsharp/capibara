@@ -92,7 +92,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-auto px-5 py-4 space-y-5">
+      <div className="flex-1 overflow-auto px-5 py-5 space-y-6">
         {/* Name */}
         <div>
           <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1.5">
@@ -220,7 +220,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-5 py-3 border-t border-border-subtle">
+      <div className="flex items-center justify-between px-5 py-4 border-t border-border-subtle">
         <button
           className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-danger hover:bg-danger-subtle transition-colors"
           onClick={handleDelete}

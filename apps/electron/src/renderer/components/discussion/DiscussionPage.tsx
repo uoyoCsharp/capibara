@@ -10,6 +10,7 @@ import type {
   VoteTag,
 } from '@shared/contracts';
 import { DiscussionGroupPanel } from './DiscussionGroupPanel';
+import { toast } from '../../store/toast.store';
 
 export function DiscussionPage() {
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
@@ -32,7 +33,7 @@ export function DiscussionPage() {
         }
       }
     } catch {
-      // IPC may fail
+      toast.error('Failed to load organizations');
     }
   }, []);
 
@@ -53,7 +54,7 @@ export function DiscussionPage() {
       if (taskRes.ok) setTasks(taskRes.data);
       if (roleRes.ok) setRoles(roleRes.data);
     } catch {
-      // IPC may fail
+      toast.error('Failed to load discussion data');
     }
   }, []);
 
@@ -61,7 +62,7 @@ export function DiscussionPage() {
     try {
       const result = await window.capibara.getDiscussionMessages(groupId);
       if (result.ok) setMessages(result.data);
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to load messages'); }
   }, []);
 
   const loadVoteStats = useCallback(async (groupId: string) => {
@@ -111,7 +112,7 @@ export function DiscussionPage() {
         await loadMessages(selectedGroupId);
         await loadVoteStats(selectedGroupId);
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to post message'); }
   };
 
   const handleRefresh = useCallback(() => {
@@ -147,9 +148,9 @@ export function DiscussionPage() {
   if (organizations.length === 0) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-2xl font-semibold text-text-primary mb-2">Discussions</h1>
+        <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)] mb-2">Discussions</h1>
         <p className="text-text-secondary mb-8">
-          Create an organization first to see discussions.
+          Create an organization first to start discussions. Discussions are automatically created for epic-level tasks, where AI agents debate and vote on decisions.
         </p>
       </div>
     );
@@ -158,10 +159,10 @@ export function DiscussionPage() {
   return (
     <div className="flex h-full">
       {/* Sidebar: Group list */}
-      <div className="w-80 border-r border-border-default bg-surface-card flex flex-col">
+      <div className="w-80 shrink-0 border-r border-border-default bg-surface-card flex flex-col">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border-subtle">
-          <h1 className="text-lg font-semibold text-text-primary mb-3">Discussions</h1>
+          <h1 className="text-lg font-semibold text-text-primary font-[family-name:var(--font-display)] mb-3">Discussions</h1>
           <select
             className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
             value={currentOrgId ?? ''}
@@ -179,12 +180,12 @@ export function DiscussionPage() {
         </div>
 
         {/* Group list */}
-        <div className="flex-1 overflow-auto py-2">
+        <div className="flex-1 overflow-auto py-3">
           {groups.length === 0 ? (
             <div className="px-5 py-8 text-center">
               <ChatCircleDots size={32} className="mx-auto text-text-disabled mb-2" />
               <p className="text-sm text-text-muted">
-                No discussion groups yet. Create an epic task to auto-generate one.
+                No discussions yet. Discussions appear automatically when you create epic-level tasks in the Execution tab.
               </p>
             </div>
           ) : (
@@ -195,7 +196,7 @@ export function DiscussionPage() {
                 <button
                   key={group.id}
                   onClick={() => setSelectedGroupId(group.id)}
-                  className={`w-full text-left px-5 py-3 border-b border-border-subtle transition-colors ${
+                  className={`w-full text-left px-5 py-3.5 border-b border-border-subtle transition-colors ${
                     isSelected
                       ? 'bg-accent-subtle border-l-2 border-l-accent'
                       : 'hover:bg-surface-sunken'
@@ -237,7 +238,7 @@ export function DiscussionPage() {
             <div className="text-center">
               <ChatCircleDots size={48} className="mx-auto text-text-disabled mb-3" />
               <p className="text-sm text-text-muted">
-                Select a discussion group to view messages and vote.
+                Select a discussion to view the conversation, see how AI agents voted, and add your own input.
               </p>
             </div>
           </div>

@@ -128,7 +128,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
 
   return (
     <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] shadow-sm">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <Clock size={20} className="text-accent" />
           <h2 className="text-lg font-medium text-text-primary">Activity Timeline</h2>
@@ -193,7 +193,7 @@ function TimelineItem({ event, isLast }: { event: TimelineEvent; isLast: boolean
       </div>
 
       {/* Content */}
-      <div className="pb-4 min-w-0">
+      <div className="pb-5 min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="text-sm font-medium text-text-primary">{event.title}</span>
           <span className="text-xs text-text-muted">

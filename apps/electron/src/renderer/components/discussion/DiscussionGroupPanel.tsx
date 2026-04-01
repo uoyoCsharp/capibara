@@ -49,8 +49,8 @@ export function DiscussionGroupPanel({
   return (
     <div className="flex flex-col h-full bg-surface-card">
       {/* Header */}
-      <div className="border-b border-border-default px-5 py-4">
-        <div className="flex items-center justify-between mb-2">
+      <div className="border-b border-border-default px-5 py-5">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <ChatCircleDots size={20} className="text-accent" />
             <h3 className="text-base font-semibold text-text-primary truncate">

@@ -13,6 +13,7 @@ import type {
 import { TaskTreeView } from '../tasks/TaskTreeView';
 import { TaskCreateModal } from '../tasks/TaskCreateModal';
 import { TaskDetailDrawer } from '../tasks/TaskDetailDrawer';
+import { toast } from '../../store/toast.store';
 
 const RUN_STATUS_COLORS: Record<RunStatus, string> = {
   queued: 'bg-warning-subtle text-warning-text',
@@ -49,7 +50,7 @@ export function ExecutionPage() {
         }
       }
     } catch {
-      // IPC may fail
+      toast.error('Failed to load organizations');
     }
   }, []);
 
@@ -70,7 +71,7 @@ export function ExecutionPage() {
       if (roleRes.ok) setRoles(roleRes.data);
       if (runRes.ok) setRuns(runRes.data);
     } catch {
-      // IPC may fail
+      toast.error('Failed to load tasks and roles');
     }
   }, []);
 
@@ -79,7 +80,7 @@ export function ExecutionPage() {
     try {
       const result = await window.capibara.getRunsByOrgId(currentOrgId);
       if (result.ok) setRuns(result.data);
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to refresh runs'); }
   }, [currentOrgId]);
 
   const loadTasks = useCallback(async () => {
@@ -87,7 +88,7 @@ export function ExecutionPage() {
     try {
       const result = await window.capibara.getTasksByOrgId(currentOrgId);
       if (result.ok) setTasks(result.data);
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to refresh tasks'); }
   }, [currentOrgId]);
 
   useEffect(() => {
@@ -136,7 +137,7 @@ export function ExecutionPage() {
         setCreateModal({ open: false, parentId: null, parentType: null });
         await loadTasks();
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to create task'); }
   };
 
   const handleStatusChange = async (id: string, status: TaskStatus) => {
@@ -145,7 +146,7 @@ export function ExecutionPage() {
       if (result.ok) {
         await loadTasks();
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to update task status'); }
   };
 
   const handleDeleteTask = async (id: string) => {
@@ -155,7 +156,7 @@ export function ExecutionPage() {
         if (selectedTaskId === id) setSelectedTaskId(null);
         await loadTasks();
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to delete task'); }
   };
 
   const handleAddTask = (parentId: string | null) => {
@@ -182,7 +183,7 @@ export function ExecutionPage() {
       } else {
         console.warn('[StartRun]', result.error?.message);
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to start run'); }
   };
 
   const handleCancelRun = async (runId: string) => {
@@ -191,7 +192,7 @@ export function ExecutionPage() {
       if (result.ok) {
         await loadRuns();
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to cancel run'); }
   };
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
@@ -225,9 +226,9 @@ export function ExecutionPage() {
   if (organizations.length === 0) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-2xl font-semibold text-text-primary mb-2">Tasks & Execution</h1>
+        <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)] mb-2">Tasks & Execution</h1>
         <p className="text-text-secondary mb-8">
-          Create an organization first to start adding tasks.
+          Create an organization first to start managing tasks. Organizations let you define AI agent teams and assign work.
         </p>
       </div>
     );
@@ -239,7 +240,7 @@ export function ExecutionPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-2xl font-semibold text-text-primary">Tasks & Execution</h1>
+            <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)]">Tasks & Execution</h1>
             <p className="text-text-secondary text-sm mt-1">
               View and manage your task tree. Create epics, stories, and track execution progress.
             </p>
@@ -305,7 +306,7 @@ export function ExecutionPage() {
           <>
             {/* Status summary bar */}
             {tasks.length > 0 && (
-              <div className="flex items-center gap-4 mb-[var(--section-gap)] text-xs text-text-tertiary">
+              <div className="flex items-center gap-5 mb-[var(--section-gap)] text-xs text-text-tertiary">
                 <span className="font-medium text-text-secondary">{tasks.length} tasks</span>
                 {statusCounts['done'] && (
                   <span className="flex items-center gap-1">
@@ -350,12 +351,12 @@ export function ExecutionPage() {
         )}
 
         {activeTab === 'runs' && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {runs.length === 0 ? (
               <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-8 text-center">
                 <Lightning size={32} className="mx-auto text-text-disabled mb-3" />
                 <p className="text-sm text-text-tertiary">
-                  No runs yet. Assign a task to a role and start execution.
+                  No runs yet. Select a task, assign it to a role, and click Execute to start an AI agent run.
                 </p>
               </div>
             ) : (
@@ -380,7 +381,7 @@ export function ExecutionPage() {
                     : 'border-border-default hover:border-border-strong'
                 }`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${RUN_STATUS_COLORS[run.status]}`}
@@ -391,7 +392,7 @@ export function ExecutionPage() {
                       {taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-text-muted">
+                  <div className="flex items-center gap-4 text-xs text-text-muted shrink-0">
                     <span>{roleNames.get(run.roleId) ?? 'Unknown'}</span>
                     <span>{new Date(run.createdAt).toLocaleString()}</span>
                     {run.costUsd > 0 && (

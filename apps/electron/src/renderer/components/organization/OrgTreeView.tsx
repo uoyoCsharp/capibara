@@ -132,8 +132,9 @@ function RoleNode({
       </div>
 
       {/* Children */}
-      {expanded &&
-        node.children.map((child) => (
+      {expanded && (
+        <div className="space-y-0.5 mt-0.5">
+        {node.children.map((child) => (
           <RoleNode
             key={child.role.id}
             node={child}
@@ -143,6 +144,8 @@ function RoleNode({
             onAddRole={onAddRole}
           />
         ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -156,8 +159,8 @@ export function OrgTreeView({
   const tree = buildTree(roles);
 
   return (
-    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card py-2">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle mb-1">
+    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card py-3">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle mb-2">
         <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
           Role Hierarchy
         </span>
@@ -169,16 +172,18 @@ export function OrgTreeView({
           Add Root
         </button>
       </div>
-      {tree.map((node) => (
-        <RoleNode
-          key={node.role.id}
-          node={node}
-          depth={0}
-          selectedRoleId={selectedRoleId}
-          onSelectRole={onSelectRole}
-          onAddRole={(parentId) => onAddRole(parentId)}
-        />
-      ))}
+      <div className="space-y-1 px-1">
+        {tree.map((node) => (
+          <RoleNode
+            key={node.role.id}
+            node={node}
+            depth={0}
+            selectedRoleId={selectedRoleId}
+            onSelectRole={onSelectRole}
+            onAddRole={(parentId) => onAddRole(parentId)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

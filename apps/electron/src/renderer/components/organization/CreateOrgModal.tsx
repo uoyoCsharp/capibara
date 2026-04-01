@@ -23,7 +23,7 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-1">
               Name *

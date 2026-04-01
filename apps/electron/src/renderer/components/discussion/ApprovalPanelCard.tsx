@@ -71,7 +71,7 @@ export function ApprovalPanelCard({
         )}
       </div>
 
-      <div className="px-4 py-3 space-y-3">
+      <div className="px-4 py-4 space-y-4">
         {/* Task summary */}
         <div>
           <p className="text-xs font-medium text-text-muted mb-1">Task</p>

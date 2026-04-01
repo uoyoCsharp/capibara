@@ -8,6 +8,8 @@ import type {
   DiscussionMessageRecord,
 } from '@shared/contracts';
 import { clsx } from 'clsx';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { toast } from '../../store/toast.store';
 
 interface TaskDetailDrawerProps {
   task: TaskRecord;
@@ -68,6 +70,7 @@ export function TaskDetailDrawer({
   const [latestRun, setLatestRun] = useState<RunRecord | null>(null);
   const [messages, setMessages] = useState<DiscussionMessageRecord[]>([]);
   const [contextTab, setContextTab] = useState<'output' | 'discussion'>('output');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Load run history and discussion for this task
   useEffect(() => {
@@ -83,7 +86,7 @@ export function TaskDetailDrawer({
         } else {
           setLatestRun(null);
         }
-      } catch { /* IPC may fail */ }
+      } catch { toast.error('Failed to load run history'); }
 
       try {
         const groupRes = await window.capibara.getDiscussionGroupByTaskNodeId(task.id);
@@ -104,7 +107,7 @@ export function TaskDetailDrawer({
     <div className="w-[var(--drawer-width)] border-l border-border-default bg-surface-card h-full overflow-auto flex flex-col shadow-lg">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
-        <h3 className="text-base font-semibold text-text-primary truncate">Task Details</h3>
+        <h3 className="text-base font-semibold text-text-primary font-[family-name:var(--font-display)] truncate">Task Details</h3>
         <button
           onClick={onClose}
           className="rounded-lg p-1 text-text-muted hover:bg-surface-sunken hover:text-text-secondary"
@@ -114,7 +117,7 @@ export function TaskDetailDrawer({
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-5 py-4 space-y-5 overflow-auto">
+      <div className="flex-1 px-5 py-5 space-y-6 overflow-auto">
         {/* Review banner */}
         {needsReview && (
           <div className="rounded-lg bg-warning-subtle border border-warning px-4 py-3">
@@ -321,9 +324,9 @@ export function TaskDetailDrawer({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-border-subtle px-5 py-3 flex items-center justify-between">
+      <div className="border-t border-border-subtle px-5 py-4 flex items-center justify-between">
         <button
-          onClick={() => onDelete(task.id)}
+          onClick={() => setShowDeleteConfirm(true)}
           className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-danger hover:bg-danger-subtle transition-colors"
         >
           <Trash size={16} />
@@ -345,6 +348,18 @@ export function TaskDetailDrawer({
           </button>
         )}
       </div>
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete Task?"
+          message="This will permanently delete this task. This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            onDelete(task.id);
+            setShowDeleteConfirm(false);
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   );
 }

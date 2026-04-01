@@ -11,6 +11,7 @@ import { OrgTreeView } from './OrgTreeView';
 import { RoleDrawer } from './RoleDrawer';
 import { TemplateSelectorModal } from './TemplateSelectorModal';
 import { CreateOrgModal } from './CreateOrgModal';
+import { toast } from '../../store/toast.store';
 
 export function OrganizationPage() {
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
@@ -31,7 +32,7 @@ export function OrganizationPage() {
         }
       }
     } catch {
-      // IPC may fail
+      toast.error('Failed to load organizations');
     }
   }, []);
 
@@ -46,7 +47,7 @@ export function OrganizationPage() {
         setRoles(result.data);
       }
     } catch {
-      // IPC may fail
+      toast.error('Failed to load roles');
     }
   }, []);
 
@@ -64,7 +65,7 @@ export function OrganizationPage() {
       if (result.ok) {
         await loadRoles(currentOrgId);
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to create role'); }
   };
 
   const handleUpdateRole = async (input: UpdateRoleInput) => {
@@ -73,7 +74,7 @@ export function OrganizationPage() {
       if (result.ok) {
         await loadRoles(currentOrgId);
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to update role'); }
   };
 
   const handleDeleteRole = async (id: string) => {
@@ -83,18 +84,19 @@ export function OrganizationPage() {
         setSelectedRoleId(null);
         await loadRoles(currentOrgId);
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to delete role'); }
   };
 
   const handleTemplateLoaded = async () => {
     setShowTemplateSelector(false);
+    toast.success('Template loaded successfully');
     try {
       await loadOrgs();
       const result = await window.capibara.getOrganizations();
       if (result.ok && result.data.length > 0) {
         setCurrentOrgId(result.data[result.data.length - 1].id);
       }
-    } catch { /* IPC may fail */ }
+    } catch { toast.error('Failed to load template'); }
   };
 
   const handleCreateBlankOrg = async (name: string, description: string) => {
@@ -107,6 +109,7 @@ export function OrganizationPage() {
       });
       if (result.ok) {
         setShowCreateOrg(false);
+        toast.success('Organization created successfully');
         setCurrentOrgId(result.data.id);
         await loadOrgs();
       } else {
@@ -114,6 +117,7 @@ export function OrganizationPage() {
       }
     } catch (err) {
       console.error('[CreateOrg] IPC error:', err);
+      toast.error('Failed to create organization');
     }
   };
 
@@ -133,7 +137,7 @@ export function OrganizationPage() {
       <div className="flex-1 p-[var(--page-padding)] overflow-auto">
         <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-2xl font-semibold text-text-primary">Organization</h1>
+            <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)]">Organization</h1>
             <p className="text-text-secondary text-sm mt-1">
               Manage your AI organization tree. Create roles, configure personas, and assign skills.
             </p>
@@ -191,7 +195,7 @@ export function OrganizationPage() {
         ) : currentOrg ? (
           <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
             <TreeStructure size={48} className="mx-auto text-text-disabled mb-4" />
-            <p className="text-sm text-text-tertiary mb-4">No roles yet. Add a role to start building your org tree.</p>
+            <p className="text-sm text-text-tertiary mb-4">This organization has no roles yet. Roles define your AI agents — each with a persona, skills, and permissions. Add a root role to get started.</p>
             <button
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover"
               onClick={() =>
@@ -216,7 +220,7 @@ export function OrganizationPage() {
           <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
             <TreeStructure size={48} className="mx-auto text-text-disabled mb-4" />
             <p className="text-sm text-text-tertiary mb-4">
-              No organization yet. Create one from a template or start blank.
+              Welcome to Capibara! Start by creating an organization — it's your AI agent team. You can load a pre-built template or create a blank org and add roles manually.
             </p>
           </div>
         )}

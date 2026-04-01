@@ -90,7 +90,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
         </div>
 
         {/* Template Cards */}
-        <div className="flex-1 overflow-auto p-6 space-y-4">
+        <div className="flex-1 overflow-auto p-6 space-y-5">
           {templates.map((template) => (
             <button
               key={template.id}
@@ -127,7 +127,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
 
           {/* Org naming */}
           {selectedTemplate && (
-            <div className="space-y-3 pt-2">
+            <div className="space-y-4 pt-3">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">
                   Organization Name *
