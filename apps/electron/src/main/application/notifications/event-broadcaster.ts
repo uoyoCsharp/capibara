@@ -28,6 +28,7 @@ export class EventBroadcaster {
     this.eventBus.on('run:succeeded', forward);
     this.eventBus.on('run:failed', forward);
     this.eventBus.on('run:cancelled', forward);
+    this.eventBus.on('run:log', forward);
 
     // Discussion events
     this.eventBus.on('discussion:group-created', forward);
@@ -36,6 +37,7 @@ export class EventBroadcaster {
 
     this.logger.info('EventBroadcaster started — forwarding domain events to renderer');
   }
+
 
   private broadcast(event: DomainEvent): void {
     const payload = event.payload as Record<string, unknown>;
@@ -58,13 +60,43 @@ export class EventBroadcaster {
 
       case 'run:queued':
       case 'run:started':
-      case 'run:succeeded':
-      case 'run:failed':
-      case 'run:cancelled':
         desktopEvent = {
           type: 'run:changed',
           orgId: payload.orgId,
+        };
+        break;
+
+      case 'run:succeeded':
+      case 'run:failed':
+      case 'run:cancelled': {
+        // Send both run:changed (for list refresh) and run:completed (for toast)
+        const completionEvent = {
+          type: 'run:completed' as const,
+          runId: payload.runId as string,
+          orgId: payload.orgId as string,
+          taskNodeId: payload.taskNodeId as string,
+          roleId: payload.roleId as string,
+          status: event.type === 'run:succeeded' ? 'succeeded' : event.type === 'run:failed' ? 'failed' : 'cancelled',
+          costUsd: (payload.costUsd as number) ?? 0,
+        };
+        for (const win of windows) {
+          try {
+            win.webContents.send(IPC_CHANNELS.rendererEvent, completionEvent);
+          } catch { /* Window may be destroyed */ }
+        }
+        desktopEvent = {
+          type: 'run:changed',
+          orgId: payload.orgId,
+        };
+        break;
+      }
+
+      case 'run:log':
+        desktopEvent = {
+          type: 'run:log',
           runId: payload.runId,
+          stream: payload.stream,
+          chunk: payload.chunk,
         };
         break;
 

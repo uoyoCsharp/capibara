@@ -9,6 +9,7 @@ import {
   CaretRight,
 } from '@phosphor-icons/react';
 import type { SectionId } from '@shared/contracts';
+import { useActiveRuns } from '../../hooks/useActiveRuns';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
@@ -30,6 +31,8 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; icon: typeof House }> = [
 ];
 
 export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse }: SidebarProps) {
+  const { count } = useActiveRuns();
+
   return (
     <aside
       className={cn(
@@ -68,7 +71,7 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
               onClick={() => onNavigate(item.id)}
               title={collapsed ? item.label : undefined}
               className={cn(
-                'w-full h-10',
+                'w-full h-10 relative',
                 collapsed ? 'justify-center px-0' : 'justify-start gap-3',
                 isActive
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
@@ -81,6 +84,21 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
                 className="shrink-0"
               />
               {!collapsed && item.label}
+              {item.id === 'execution' && count > 0 && !collapsed && (
+                <span className="ml-auto flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                  </span>
+                  <span className="text-[10px] font-semibold text-green-600">{count}</span>
+                </span>
+              )}
+              {item.id === 'execution' && count > 0 && collapsed && (
+                <span className="absolute top-1 right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                </span>
+              )}
             </Button>
           );
         })}

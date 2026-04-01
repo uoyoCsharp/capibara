@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { SectionId } from '@shared/contracts';
+import { useState, useEffect } from 'react';
+import type { SectionId, DesktopEvent } from '@shared/contracts';
 import { useCapibaraSnapshot } from './hooks/useCapibaraSnapshot';
 import { Sidebar } from './components/layout/Sidebar';
 import { DashboardPage } from './components/dashboard/DashboardPage';
@@ -8,12 +8,36 @@ import { SkillsPage } from './components/skills/SkillsPage';
 import { ExecutionPage } from './components/execution/ExecutionPage';
 import { DiscussionPage } from './components/discussion/DiscussionPage';
 import { ToastContainer } from './components/shared/ToastContainer';
+import { toast } from './store/toast.store';
 
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { currentOrgId, isLoading } = useCapibaraSnapshot();
+
+  // Run completion toast notifications
+  useEffect(() => {
+    if (typeof window.capibara?.subscribe !== 'function') return;
+
+    const unsub = window.capibara.subscribe((event: DesktopEvent) => {
+      if (event.type === 'run:completed') {
+        switch (event.status) {
+          case 'succeeded':
+            toast.success(`Run completed — $${event.costUsd.toFixed(4)}`);
+            break;
+          case 'failed':
+            toast.error('Run failed — click Execution to see details');
+            break;
+          case 'cancelled':
+            toast.info('Run cancelled');
+            break;
+        }
+      }
+    });
+
+    return unsub;
+  }, []);
 
   if (isLoading) {
     return (

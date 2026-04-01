@@ -51,7 +51,7 @@ export class ExecutionEngine {
     this.executor.onLog((runId, stream, chunk) => {
       void this.runRepo.appendOutputLog(runId, chunk);
       this.eventBus.emit({
-        type: 'run:started', // reuse event for streaming (renderer listens)
+        type: 'run:log',
         timestamp: new Date().toISOString(),
         payload: { runId, stream, chunk },
       });

@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, Menu, shell } from 'electron';
 import { bootstrap, shutdown } from './composition-root.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -52,6 +52,7 @@ app.whenReady().then(async () => {
     console.error('[Capibara] Bootstrap failed:', err);
   }
 
+  Menu.setApplicationMenu(null);
   createWindow();
 
   app.on('activate', () => {

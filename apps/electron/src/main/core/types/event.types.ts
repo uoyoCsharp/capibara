@@ -13,6 +13,7 @@ export type DomainEventType =
   | 'run:succeeded'
   | 'run:failed'
   | 'run:cancelled'
+  | 'run:log'
   | 'run:timed-out'
   | 'org:created'
   | 'org:updated'

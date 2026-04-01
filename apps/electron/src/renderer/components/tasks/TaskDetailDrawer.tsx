@@ -8,6 +8,8 @@ import type {
   DiscussionMessageRecord,
 } from '@shared/contracts';
 import { cn } from '../../lib/utils';
+import { useRunLogs } from '../../hooks/useRunLogs';
+import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
@@ -84,6 +86,13 @@ export function TaskDetailDrawer({
   const [contextTab, setContextTab] = useState<string>('output');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const activeRunId = latestRun && (latestRun.status === 'running' || latestRun.status === 'queued')
+    ? latestRun.id : null;
+  const { log: streamingLog, scrollRef } = useRunLogs(activeRunId);
+  const elapsed = useElapsedTimer(
+    latestRun?.status === 'running' ? latestRun.startedAt : null
+  );
+
   // Load run history and discussion for this task
   useEffect(() => {
     (async () => {
@@ -110,6 +119,28 @@ export function TaskDetailDrawer({
         }
       } catch { setMessages([]); }
     })();
+  }, [task.id]);
+
+  // Refresh run data on run events
+  useEffect(() => {
+    if (typeof window.capibara?.subscribe !== 'function') return;
+    const unsub = window.capibara.subscribe((event) => {
+      if (event.type === 'run:changed' || event.type === 'run:completed') {
+        // Reload the latest run for this task
+        (async () => {
+          try {
+            const runRes = await window.capibara.getRunsByTaskId(task.id);
+            if (runRes.ok && runRes.data.length > 0) {
+              const sorted = [...runRes.data].sort(
+                (a, b) => b.createdAt.localeCompare(a.createdAt),
+              );
+              setLatestRun(sorted[0]);
+            }
+          } catch { /* ignore */ }
+        })();
+      }
+    });
+    return unsub;
   }, [task.id]);
 
   const roleNameMap = new Map(roles.map((r) => [r.id, r.name]));
@@ -259,12 +290,22 @@ export function TaskDetailDrawer({
                     >
                       {latestRun.status}
                     </Badge>
+                    {elapsed && (
+                      <span className="font-mono text-blue-600">{elapsed}</span>
+                    )}
                     {latestRun.costUsd > 0 && (
                       <span className="text-green-600">${latestRun.costUsd.toFixed(4)}</span>
                     )}
                     <span>{new Date(latestRun.createdAt).toLocaleString()}</span>
                   </div>
-                  {latestRun.outputLog ? (
+                  {activeRunId ? (
+                    <pre
+                      ref={scrollRef}
+                      className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed"
+                    >
+                      {streamingLog || 'Waiting for output...'}
+                    </pre>
+                  ) : latestRun.outputLog ? (
                     <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
                       {latestRun.outputLog.slice(0, 8000)}
                       {latestRun.outputLog.length > 8000 && '\n... (truncated)'}

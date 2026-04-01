@@ -89,7 +89,9 @@ export type DesktopEvent =
   | { type: 'discussion:changed'; orgId: string }
   | { type: 'discussion:message-added'; groupId: string }
   | { type: 'run:changed'; orgId: string }
+  | { type: 'run:log'; runId: string; stream: 'stdout' | 'stderr'; chunk: string }
   | { type: 'run:output'; runId: string; chunk: string }
+  | { type: 'run:completed'; runId: string; orgId: string; taskNodeId: string; roleId: string; status: 'succeeded' | 'failed' | 'cancelled'; costUsd: number }
   | { type: 'notification'; title: string; body: string }
   | { type: 'approval:required'; taskId: string; taskTitle: string; orgId: string; roleId: string; roleName: string; groupId: string }
   | { type: 'budget:roles-paused'; orgId: string; totalCost: number; budgetLimit: number };

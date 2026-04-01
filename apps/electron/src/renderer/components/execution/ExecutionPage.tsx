@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Play, Stop, ArrowClockwise, Lightning } from '@phosphor-icons/react';
+import { Plus, Play, Stop, ArrowClockwise, Lightning, Timer } from '@phosphor-icons/react';
 import type {
   OrganizationRecord,
   TaskRecord,
@@ -10,6 +10,7 @@ import type {
   CreateTaskInput,
   RunStatus,
 } from '@shared/contracts';
+import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { cn } from '../../lib/utils';
 import { TaskTreeView } from '../tasks/TaskTreeView';
 import { TaskCreateModal } from '../tasks/TaskCreateModal';
@@ -29,6 +30,111 @@ const RUN_STATUS_COLORS: Record<RunStatus, string> = {
   cancelled: 'bg-muted text-muted-foreground',
   interrupted: 'bg-yellow-500/10 text-yellow-600',
 };
+
+interface RunCardProps {
+  run: RunRecord;
+  isSelected: boolean;
+  taskTitle: string;
+  roleName: string;
+  onSelect: () => void;
+  onCancel: (runId: string) => void;
+}
+
+function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: RunCardProps) {
+  const elapsed = useElapsedTimer(run.status === 'running' ? run.startedAt : null);
+
+  return (
+    <Card
+      onClick={onSelect}
+      className={cn(
+        'cursor-pointer transition-colors',
+        isSelected
+          ? 'border-primary ring-1 ring-primary/30'
+          : 'hover:border-foreground/20',
+      )}
+    >
+      <CardContent className="p-[var(--card-padding)]">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Badge
+              variant="secondary"
+              className={cn('text-xs font-medium', RUN_STATUS_COLORS[run.status])}
+            >
+              {run.status}
+            </Badge>
+            {elapsed && (
+              <span className="flex items-center gap-1 text-xs font-mono text-blue-600">
+                <Timer size={12} className="animate-spin" style={{ animationDuration: '3s' }} />
+                {elapsed}
+              </span>
+            )}
+            <span className="text-sm font-medium text-foreground truncate max-w-[300px]">
+              {taskTitle}
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+            <span>{roleName}</span>
+            <span>{new Date(run.createdAt).toLocaleString()}</span>
+            {run.costUsd > 0 && (
+              <span className="text-green-600 font-medium">${run.costUsd.toFixed(4)}</span>
+            )}
+            {(run.status === 'queued' || run.status === 'running') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel(run.id);
+                }}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Stop size={12} />
+                Cancel
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Expanded run details */}
+        {isSelected && (
+          <div className="mt-4 pt-4 border-t border-border">
+            <div className="grid grid-cols-2 gap-4 text-xs mb-4">
+              <div>
+                <span className="text-muted-foreground">Trigger:</span>{' '}
+                <span className="text-foreground">{run.trigger}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Started:</span>{' '}
+                <span className="text-foreground">
+                  {run.startedAt ? new Date(run.startedAt).toLocaleString() : '-'}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Finished:</span>{' '}
+                <span className="text-foreground">
+                  {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-'}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Cost:</span>{' '}
+                <span className="text-foreground">${run.costUsd.toFixed(4)}</span>
+              </div>
+            </div>
+            {run.outputLog && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Output Log</p>
+                <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
+                  {run.outputLog.slice(0, 5000)}
+                  {run.outputLog.length > 5000 && '\n... (truncated)'}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function ExecutionPage() {
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
@@ -369,90 +475,15 @@ export function ExecutionPage() {
               )}
 
               {runs.map((run) => (
-                <Card
+                <RunCard
                   key={run.id}
-                  onClick={() => setSelectedRunId(run.id === selectedRunId ? null : run.id)}
-                  className={cn(
-                    'cursor-pointer transition-colors',
-                    selectedRunId === run.id
-                      ? 'border-primary ring-1 ring-primary/30'
-                      : 'hover:border-foreground/20',
-                  )}
-                >
-                  <CardContent className="p-[var(--card-padding)]">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant="secondary"
-                          className={cn('text-xs font-medium', RUN_STATUS_COLORS[run.status])}
-                        >
-                          {run.status}
-                        </Badge>
-                        <span className="text-sm font-medium text-foreground truncate max-w-[300px]">
-                          {taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-                        <span>{roleNames.get(run.roleId) ?? 'Unknown'}</span>
-                        <span>{new Date(run.createdAt).toLocaleString()}</span>
-                        {run.costUsd > 0 && (
-                          <span className="text-green-600 font-medium">${run.costUsd.toFixed(4)}</span>
-                        )}
-                        {(run.status === 'queued' || run.status === 'running') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleCancelRun(run.id);
-                            }}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          >
-                            <Stop size={12} />
-                            Cancel
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Expanded run details */}
-                    {selectedRunId === run.id && (
-                      <div className="mt-4 pt-4 border-t border-border">
-                        <div className="grid grid-cols-2 gap-4 text-xs mb-4">
-                          <div>
-                            <span className="text-muted-foreground">Trigger:</span>{' '}
-                            <span className="text-foreground">{run.trigger}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Started:</span>{' '}
-                            <span className="text-foreground">
-                              {run.startedAt ? new Date(run.startedAt).toLocaleString() : '-'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Finished:</span>{' '}
-                            <span className="text-foreground">
-                              {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Cost:</span>{' '}
-                            <span className="text-foreground">${run.costUsd.toFixed(4)}</span>
-                          </div>
-                        </div>
-                        {run.outputLog && (
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">Output Log</p>
-                            <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
-                              {run.outputLog.slice(0, 5000)}
-                              {run.outputLog.length > 5000 && '\n... (truncated)'}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  run={run}
+                  isSelected={selectedRunId === run.id}
+                  taskTitle={taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
+                  roleName={roleNames.get(run.roleId) ?? 'Unknown'}
+                  onSelect={() => setSelectedRunId(run.id === selectedRunId ? null : run.id)}
+                  onCancel={(runId) => void handleCancelRun(runId)}
+                />
               ))}
             </div>
           </TabsContent>
