@@ -113,11 +113,11 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
           </div>
 
           {/* Skill list */}
-          <div className="p-1">
+          <div className="p-2">
             {filteredSkills.map((skill) => (
               <label
                 key={skill.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer"
+                className="flex items-center gap-2 px-2 py-2 rounded hover:bg-muted cursor-pointer"
               >
                 <Checkbox
                   checked={selectedIds.includes(skill.id)}

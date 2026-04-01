@@ -210,7 +210,7 @@ export function DiscussionPage() {
                       : 'hover:bg-muted',
                   )}
                 >
-                  <div className="flex items-center justify-between mb-0.5">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-foreground truncate">
                       {task?.title ?? 'Unknown Epic'}
                     </span>

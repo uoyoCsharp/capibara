@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Progress } from '../ui/progress';
 import type { NarrativeRecord, CostSummaryRecord, CostEntryRecord, RoleRecord } from '@shared/contracts';
 
-declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi };
+declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi; };
 
 interface DashboardPageProps {
   orgId: string | null;
@@ -77,8 +77,8 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 
   if (!orgId) {
     return (
-      <div className="p-[var(--page-padding)]">
-        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">Dashboard</h1>
+      <div className="p-(--page-padding)">
+        <h1 className="text-3xl font-semibold text-foreground font-display mb-2">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Select or create an organization from the sidebar to see your project dashboard, budget tracking, and AI agent activity.
         </p>
@@ -87,7 +87,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   }
 
   return (
-    <div className="p-[var(--page-padding)] max-w-5xl space-y-0">
+    <div className="p-(--page-padding) max-w-5xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -119,7 +119,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 
       {/* Narrative */}
       <Card className="mb-[var(--section-gap)]">
-        <CardHeader className="pb-0">
+        <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <ListChecks size={20} className="text-primary" />
             <CardTitle className="text-lg font-medium font-[family-name:var(--font-display)]">Project Progress</CardTitle>
@@ -151,12 +151,12 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   );
 }
 
-function BudgetBar({ summary }: { summary: CostSummaryRecord }) {
+function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
   const { totalCost, budgetLimit, budgetPercent } = summary;
   const textColor =
     budgetPercent >= 95 ? 'text-destructive' :
-    budgetPercent >= 80 ? 'text-yellow-600' :
-    'text-green-600';
+      budgetPercent >= 80 ? 'text-yellow-600' :
+        'text-green-600';
 
   return (
     <div className="border-t border-border pt-4 pb-4 mb-[var(--section-gap)]">
@@ -174,8 +174,8 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord }) {
         className={cn(
           'h-2.5',
           budgetPercent >= 95 ? '[&>div]:bg-destructive' :
-          budgetPercent >= 80 ? '[&>div]:bg-yellow-500' :
-          '[&>div]:bg-green-500',
+            budgetPercent >= 80 ? '[&>div]:bg-yellow-500' :
+              '[&>div]:bg-green-500',
         )}
       />
       {budgetPercent >= 80 && (
@@ -187,9 +187,9 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord }) {
   );
 }
 
-function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: RoleRecord[] }) {
+function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: RoleRecord[]; }) {
   // Group by role
-  const byRole = new Map<string, { name: string; total: number; count: number }>();
+  const byRole = new Map<string, { name: string; total: number; count: number; }>();
   for (const e of entries) {
     const existing = byRole.get(e.roleId) ?? {
       name: roles.find((r) => r.id === e.roleId)?.name ?? 'Unknown',
@@ -235,7 +235,7 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
   );
 }
 
-function NarrativeContent({ text }: { text: string }) {
+function NarrativeContent({ text }: { text: string; }) {
   const lines = text.split('\n');
   return (
     <div className="space-y-1">

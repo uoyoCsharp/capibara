@@ -39,7 +39,7 @@ export function ConfirmDialog({
             </div>
             <div>
               <AlertDialogTitle>{title}</AlertDialogTitle>
-              <AlertDialogDescription className="mt-1">{message}</AlertDialogDescription>
+              <AlertDialogDescription className="mt-2">{message}</AlertDialogDescription>
             </div>
           </div>
         </AlertDialogHeader>

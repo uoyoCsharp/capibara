@@ -184,7 +184,7 @@ function TaskNodeItem({
         )}
 
         {/* Actions (visible on hover) */}
-        <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+        <div className="hidden group-hover:flex items-center gap-1.5 shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -214,7 +214,7 @@ function TaskNodeItem({
 
       {/* Children */}
       {expanded && hasChildren && (
-        <div className="space-y-1 mt-1">
+        <div className="space-y-1.5 mt-1.5">
           {node.children.map((child) => (
             <TaskNodeItem
               key={child.task.id}

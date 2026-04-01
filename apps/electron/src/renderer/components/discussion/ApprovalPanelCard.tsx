@@ -120,7 +120,7 @@ export function ApprovalPanelCard({
             <p className="text-xs font-medium text-destructive mb-1">
               Open Concerns ({concerns.length})
             </p>
-            <ul className="space-y-1">
+            <ul className="space-y-2">
               {concerns.slice(-3).map((c) => (
                 <li key={c.id} className="text-xs text-muted-foreground pl-2 border-l-2 border-destructive/30">
                   {c.content.slice(0, 120)}{c.content.length > 120 ? '...' : ''}
@@ -143,7 +143,7 @@ export function ApprovalPanelCard({
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 pt-2 border-t border-yellow-500/30">
+        <div className="flex items-center gap-2 pt-4 border-t border-yellow-500/30">
           <Button
             onClick={onApprove}
             className="bg-green-500 hover:bg-green-500/90 text-white"

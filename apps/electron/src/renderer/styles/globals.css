@@ -153,13 +153,6 @@
 }
 
 /* ─── Base Resets ─────────────────────────────────────────────────── */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  border-color: hsl(var(--border));
-}
-
 body {
   font-family: var(--font-body);
   background-color: hsl(var(--background));

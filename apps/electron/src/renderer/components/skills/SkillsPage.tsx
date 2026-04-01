@@ -186,7 +186,7 @@ export function SkillsPage() {
                     </h3>
                     <code className="text-xs text-primary font-mono">{skill.command}</code>
                   </div>
-                  <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
                     <Badge
                       variant="secondary"
                       className={cn(
@@ -211,7 +211,7 @@ export function SkillsPage() {
                   {skill.description}
                 </p>
                 {skill.source === 'custom' && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-border">
+                  <div className="flex items-center gap-2 pt-4 border-t border-border">
                     <Button
                       variant="ghost"
                       size="sm"

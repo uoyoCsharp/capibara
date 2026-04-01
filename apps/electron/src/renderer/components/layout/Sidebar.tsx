@@ -5,15 +5,20 @@ import {
   ChatCircleDots,
   Lightbulb,
   Question,
+  CaretLeft,
+  CaretRight,
 } from '@phosphor-icons/react';
 import type { SectionId } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
+import logoImg from '../../assets/logo.png';
 
 interface SidebarProps {
   activeSection: SectionId;
   onNavigate: (section: SectionId) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 const NAV_ITEMS: Array<{ id: SectionId; label: string; icon: typeof House }> = [
@@ -24,21 +29,34 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; icon: typeof House }> = [
   { id: 'discussion', label: 'Discussions', icon: ChatCircleDots },
 ];
 
-export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
+export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse }: SidebarProps) {
   return (
-    <aside className="flex h-full w-[var(--sidebar-width)] flex-col border-r bg-sidebar-background">
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 px-5 border-b">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-          C
-        </div>
-        <span className="text-base font-semibold text-foreground">
-          Capibara
-        </span>
-      </div>
+    <aside
+      className={cn(
+        'flex h-full flex-col border-r bg-sidebar-background transition-[width] duration-200 ease-in-out',
+        collapsed ? 'w-16' : 'w-[var(--sidebar-width)]',
+      )}
+    >
+      {/* Logo — clickable to navigate to dashboard */}
+      <button
+        type="button"
+        onClick={() => onNavigate('dashboard')}
+        className={cn(
+          'flex h-14 items-center gap-2.5 border-b hover:bg-sidebar-accent transition-colors',
+          collapsed ? 'justify-center px-0' : 'px-5',
+        )}
+        title="Go to Dashboard"
+      >
+        <img src={logoImg} alt="Capibara" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+        {!collapsed && (
+          <span className="text-base font-semibold text-foreground whitespace-nowrap">
+            Capibara
+          </span>
+        )}
+      </button>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className={cn('flex-1 py-4 space-y-1.5', collapsed ? 'px-2' : 'px-3')}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
@@ -48,8 +66,10 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               key={item.id}
               variant="ghost"
               onClick={() => onNavigate(item.id)}
+              title={collapsed ? item.label : undefined}
               className={cn(
-                'w-full justify-start gap-3 h-10',
+                'w-full h-10',
+                collapsed ? 'justify-center px-0' : 'justify-start gap-3',
                 isActive
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                   : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
@@ -58,8 +78,9 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               <Icon
                 size={20}
                 weight={isActive ? 'fill' : 'regular'}
+                className="shrink-0"
               />
-              {item.label}
+              {!collapsed && item.label}
             </Button>
           );
         })}
@@ -67,10 +88,36 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
 
       {/* Footer */}
       <Separator />
-      <div className="px-3 py-2">
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-xs text-muted-foreground">
-          <Question size={16} />
-          Help & Feedback
+      <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
+        <Button
+          variant="ghost"
+          size="sm"
+          title={collapsed ? 'Help & Feedback' : undefined}
+          className={cn(
+            'w-full text-xs text-muted-foreground',
+            collapsed ? 'justify-center px-0' : 'justify-start gap-2',
+          )}
+        >
+          <Question size={16} className="shrink-0" />
+          {!collapsed && 'Help & Feedback'}
+        </Button>
+      </div>
+
+      {/* Collapse toggle */}
+      <Separator />
+      <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleCollapse}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className={cn(
+            'w-full text-xs text-muted-foreground',
+            collapsed ? 'justify-center px-0' : 'justify-start gap-2',
+          )}
+        >
+          {collapsed ? <CaretRight size={16} /> : <CaretLeft size={16} />}
+          {!collapsed && 'Collapse'}
         </Button>
       </div>
     </aside>

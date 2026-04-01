@@ -220,7 +220,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
               <Label className="text-xs uppercase tracking-wider mb-2">
                 Permissions
               </Label>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="perm-approve"

@@ -135,7 +135,7 @@ function RoleNode({
 
       {/* Children */}
       {expanded && (
-        <div className="space-y-0.5 mt-0.5">
+        <div className="space-y-1.5 mt-1.5">
         {node.children.map((child) => (
           <RoleNode
             key={child.role.id}
@@ -162,7 +162,7 @@ export function OrgTreeView({
 
   return (
     <Card className="py-3">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border mb-2">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border mb-3">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Role Hierarchy
         </span>

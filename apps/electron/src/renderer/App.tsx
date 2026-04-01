@@ -11,6 +11,7 @@ import { ToastContainer } from './components/shared/ToastContainer';
 
 export function App() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { currentOrgId, isLoading } = useCapibaraSnapshot();
 
@@ -44,7 +45,12 @@ export function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
-      <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
+      <Sidebar
+        activeSection={activeSection}
+        onNavigate={setActiveSection}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+      />
       <main className="flex-1 overflow-auto">
         {renderPage()}
       </main>
