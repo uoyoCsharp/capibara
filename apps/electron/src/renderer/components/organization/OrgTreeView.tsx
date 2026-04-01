@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { CaretRight, CaretDown, Plus, UserCircle } from '@phosphor-icons/react';
 import type { RoleRecord } from '@shared/contracts';
-import { clsx } from 'clsx';
+import { cn } from '../../lib/utils';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 
 interface OrgTreeViewProps {
   roles: RoleRecord[];
@@ -61,16 +63,16 @@ function RoleNode({
   return (
     <div>
       <div
-        className={clsx(
+        className={cn(
           'group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors',
-          isSelected ? 'bg-accent-subtle ring-1 ring-[var(--accent-ring)]' : 'hover:bg-surface-sunken',
+          isSelected ? 'bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted',
         )}
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
         onClick={() => onSelectRole(node.role.id)}
       >
         {/* Expand/collapse toggle */}
         <button
-          className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-text-muted hover:text-text-secondary"
+          className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground"
           onClick={(e) => {
             e.stopPropagation();
             setExpanded(!expanded);
@@ -87,9 +89,9 @@ function RoleNode({
         <UserCircle
           size={28}
           weight="fill"
-          className={clsx(
+          className={cn(
             'flex-shrink-0',
-            isSelected ? 'text-accent' : 'text-text-muted',
+            isSelected ? 'text-primary' : 'text-muted-foreground',
           )}
         />
 
@@ -97,22 +99,22 @@ function RoleNode({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span
-              className={clsx(
+              className={cn(
                 'text-sm font-medium truncate',
-                isSelected ? 'text-accent-text' : 'text-text-primary',
+                isSelected ? 'text-primary' : 'text-foreground',
               )}
             >
               {node.role.name}
             </span>
             <span
-              className={clsx(
+              className={cn(
                 'w-2 h-2 rounded-full flex-shrink-0',
                 STATUS_COLORS[node.role.status] ?? 'bg-neutral',
               )}
             />
           </div>
           {node.role.persona && (
-            <p className="text-xs text-text-muted truncate max-w-[280px]">
+            <p className="text-xs text-muted-foreground truncate max-w-[280px]">
               {node.role.persona.slice(0, 80)}
             </p>
           )}
@@ -120,7 +122,7 @@ function RoleNode({
 
         {/* Quick add child */}
         <button
-          className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded text-text-muted hover:text-accent hover:bg-accent-subtle transition-all"
+          className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
           title="Add child role"
           onClick={(e) => {
             e.stopPropagation();
@@ -159,18 +161,20 @@ export function OrgTreeView({
   const tree = buildTree(roles);
 
   return (
-    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card py-3">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle mb-2">
-        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+    <Card className="py-3">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border mb-2">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Role Hierarchy
         </span>
-        <button
-          className="flex items-center gap-1 text-xs text-accent hover:text-accent-hover font-medium"
+        <Button
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
           onClick={() => onAddRole(null)}
         >
           <Plus size={12} />
           Add Root
-        </button>
+        </Button>
       </div>
       <div className="space-y-1 px-1">
         {tree.map((node) => (
@@ -184,6 +188,6 @@ export function OrgTreeView({
           />
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

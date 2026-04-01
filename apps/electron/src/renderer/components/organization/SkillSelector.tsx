@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import type { SkillRecord } from '@shared/contracts';
-import { clsx } from 'clsx';
+import { cn } from '../../lib/utils';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
+import { Input } from '../ui/input';
+import { Card } from '../ui/card';
 
 interface SkillSelectorProps {
   selectedIds: string[];
@@ -14,7 +19,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   implementation: 'bg-green-100 text-green-700',
   review: 'bg-orange-100 text-orange-700',
   test: 'bg-pink-100 text-pink-700',
-  general: 'bg-neutral-subtle text-neutral-text',
+  general: 'bg-secondary text-secondary-foreground',
 };
 
 export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
@@ -61,10 +66,11 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
       {selectedSkills.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {selectedSkills.map((skill) => (
-            <span
+            <Badge
               key={skill.id}
-              className={clsx(
-                'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium',
+              variant="secondary"
+              className={cn(
+                'gap-1 rounded-full',
                 CATEGORY_COLORS[skill.category] ?? CATEGORY_COLORS.general,
               )}
             >
@@ -75,29 +81,30 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
               >
                 <X size={10} />
               </button>
-            </span>
+            </Badge>
           ))}
         </div>
       )}
 
       {/* Toggle dropdown */}
-      <button
+      <Button
         type="button"
-        className="w-full text-left rounded-lg border border-border-default px-3 py-2 text-sm text-text-tertiary hover:border-border-strong"
+        variant="outline"
+        className="w-full justify-start text-muted-foreground font-normal"
         onClick={() => setIsOpen(!isOpen)}
       >
         {isOpen ? 'Close skill selector' : `Select skills (${selectedIds.length} selected)`}
-      </button>
+      </Button>
 
       {isOpen && (
-        <div className="mt-2 rounded-lg border border-border-default bg-surface-card shadow-sm max-h-48 overflow-auto">
+        <Card className="mt-2 max-h-48 overflow-auto p-0">
           {/* Search */}
-          <div className="sticky top-0 bg-surface-card border-b border-border-subtle px-3 py-2">
+          <div className="sticky top-0 bg-card border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
-              <MagnifyingGlass size={14} className="text-text-muted" />
+              <MagnifyingGlass size={14} className="text-muted-foreground" />
               <input
                 type="text"
-                className="flex-1 text-xs text-text-primary bg-transparent focus:outline-none placeholder-text-muted"
+                className="flex-1 text-xs text-foreground bg-transparent focus:outline-none placeholder:text-muted-foreground"
                 placeholder="Search skills..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -110,17 +117,15 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
             {filteredSkills.map((skill) => (
               <label
                 key={skill.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-sunken cursor-pointer"
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer"
               >
-                <input
-                  type="checkbox"
-                  className="rounded border-border-default text-accent focus:ring-accent"
+                <Checkbox
                   checked={selectedIds.includes(skill.id)}
-                  onChange={() => toggle(skill.id)}
+                  onCheckedChange={() => toggle(skill.id)}
                 />
-                <span className="flex-1 text-xs text-text-secondary">{skill.name}</span>
+                <span className="flex-1 text-xs text-muted-foreground">{skill.name}</span>
                 <span
-                  className={clsx(
+                  className={cn(
                     'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                     CATEGORY_COLORS[skill.category] ?? CATEGORY_COLORS.general,
                   )}
@@ -130,10 +135,10 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
               </label>
             ))}
             {filteredSkills.length === 0 && (
-              <p className="text-xs text-text-muted px-2 py-2">No skills found</p>
+              <p className="text-xs text-muted-foreground px-2 py-2">No skills found</p>
             )}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

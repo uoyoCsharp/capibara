@@ -5,17 +5,17 @@ interface VoteStatsBarProps {
 }
 
 const VOTE_COLORS = {
-  APPROVE: 'bg-success',
-  REVISE: 'bg-warning',
-  CONCERN: 'bg-danger',
-  DELEGATE: 'bg-info',
+  APPROVE: 'bg-green-500',
+  REVISE: 'bg-yellow-500',
+  CONCERN: 'bg-destructive',
+  DELEGATE: 'bg-blue-500',
 };
 
 const VOTE_TEXT_COLORS = {
-  APPROVE: 'text-success-text',
-  REVISE: 'text-warning-text',
-  CONCERN: 'text-danger-text',
-  DELEGATE: 'text-info-text',
+  APPROVE: 'text-green-600',
+  REVISE: 'text-yellow-600',
+  CONCERN: 'text-destructive',
+  DELEGATE: 'text-blue-600',
 };
 
 export function VoteStatsBar({ stats }: VoteStatsBarProps) {
@@ -27,7 +27,7 @@ export function VoteStatsBar({ stats }: VoteStatsBarProps) {
   return (
     <div className="flex items-center gap-5 text-xs">
       {entries.length === 0 && (
-        <span className="text-text-muted">No votes yet</span>
+        <span className="text-muted-foreground">No votes yet</span>
       )}
       {entries.map((tag) => (
         <span key={tag} className={`flex items-center gap-1.5 font-medium ${VOTE_TEXT_COLORS[tag]}`}>
@@ -36,7 +36,7 @@ export function VoteStatsBar({ stats }: VoteStatsBarProps) {
         </span>
       ))}
       {total > 0 && (
-        <span className="text-text-muted ml-auto">{total} total</span>
+        <span className="text-muted-foreground ml-auto">{total} total</span>
       )}
     </div>
   );

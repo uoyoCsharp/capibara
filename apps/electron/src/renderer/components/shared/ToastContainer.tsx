@@ -1,5 +1,6 @@
 import { X, CheckCircle, WarningCircle, Info, Warning } from '@phosphor-icons/react';
 import { useToastStore, type ToastType } from '../../store/toast.store';
+import { cn } from '../../lib/utils';
 
 const ICONS: Record<ToastType, typeof CheckCircle> = {
   success: CheckCircle,
@@ -9,10 +10,10 @@ const ICONS: Record<ToastType, typeof CheckCircle> = {
 };
 
 const COLORS: Record<ToastType, string> = {
-  success: 'border-l-success bg-success-subtle text-success-text',
-  error: 'border-l-danger bg-danger-subtle text-danger-text',
-  warning: 'border-l-warning bg-warning-subtle text-warning-text',
-  info: 'border-l-info bg-info-subtle text-info-text',
+  success: 'border-l-green-500 bg-green-500/10 text-green-600 dark:text-green-400',
+  error: 'border-l-destructive bg-destructive/10 text-destructive',
+  warning: 'border-l-yellow-500 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+  info: 'border-l-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400',
 };
 
 export function ToastContainer() {
@@ -28,7 +29,10 @@ export function ToastContainer() {
         return (
           <div
             key={t.id}
-            className={`flex items-start gap-2.5 rounded-lg border-l-4 px-4 py-3 shadow-md ${COLORS[t.type]}`}
+            className={cn(
+              'flex items-start gap-2.5 rounded-lg border-l-4 px-4 py-3 shadow-md bg-card',
+              COLORS[t.type],
+            )}
             style={{ animation: 'toast-enter 200ms ease-out' }}
           >
             <Icon size={18} weight="fill" className="shrink-0 mt-0.5" />

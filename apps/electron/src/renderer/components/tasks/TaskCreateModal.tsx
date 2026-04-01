@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react';
 import { X } from '@phosphor-icons/react';
 import type { TaskType, RoleRecord, CreateTaskInput } from '@shared/contracts';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+} from '../ui/dialog';
 
 interface TaskCreateModalProps {
   orgId: string;
@@ -55,29 +67,21 @@ export function TaskCreateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay">
-      <div className="w-full max-w-lg rounded-[var(--card-radius)] bg-surface-card shadow-modal">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-subtle px-6 py-4">
-          <h2 className="text-lg font-semibold text-text-primary">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
             {parentId ? 'Create Child Task' : 'Create New Task'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1 text-text-muted hover:bg-surface-sunken hover:text-text-secondary"
-          >
-            <X size={20} />
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Title</label>
-            <input
+          <div className="space-y-2">
+            <Label>Title</Label>
+            <Input
               type="text"
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent placeholder-text-muted"
               placeholder="Enter task title..."
               value={title}
               onChange={(e) => {
@@ -86,72 +90,73 @@ export function TaskCreateModal({
               }}
               autoFocus
             />
-            {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+            {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
 
           {/* Type */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Type</label>
-            <select
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+          <div className="space-y-2">
+            <Label>Type</Label>
+            <Select
               value={type}
-              onChange={(e) => setType(e.target.value as TaskType)}
+              onValueChange={(value) => setType(value as TaskType)}
             >
-              {TASK_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)} — {TYPE_DESCRIPTIONS[t]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)} — {TYPE_DESCRIPTIONS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Description</label>
-            <textarea
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent resize-none placeholder-text-muted"
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Textarea
               rows={4}
               placeholder="Describe the task..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              className="resize-none"
             />
           </div>
 
           {/* Assignee Role */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Assignee Role</label>
-            <select
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-              value={assigneeRoleId ?? ''}
-              onChange={(e) => setAssigneeRoleId(e.target.value || null)}
+          <div className="space-y-2">
+            <Label>Assignee Role</Label>
+            <Select
+              value={assigneeRoleId ?? '_unassigned'}
+              onValueChange={(value) => setAssigneeRoleId(value === '_unassigned' ? null : value)}
             >
-              <option value="">Unassigned</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_unassigned">Unassigned</SelectItem>
+                {roles.map((role) => (
+                  <SelectItem key={role.id} value={role.id}>
+                    {role.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
-            >
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover"
-            >
+            </Button>
+            <Button type="submit">
               Create Task
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

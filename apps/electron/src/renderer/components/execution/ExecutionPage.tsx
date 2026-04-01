@@ -10,18 +10,24 @@ import type {
   CreateTaskInput,
   RunStatus,
 } from '@shared/contracts';
+import { cn } from '../../lib/utils';
 import { TaskTreeView } from '../tasks/TaskTreeView';
 import { TaskCreateModal } from '../tasks/TaskCreateModal';
 import { TaskDetailDrawer } from '../tasks/TaskDetailDrawer';
 import { toast } from '../../store/toast.store';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Card, CardContent } from '../ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 const RUN_STATUS_COLORS: Record<RunStatus, string> = {
-  queued: 'bg-warning-subtle text-warning-text',
-  running: 'bg-info-subtle text-info-text',
-  succeeded: 'bg-success-subtle text-success-text',
-  failed: 'bg-danger-subtle text-danger-text',
-  cancelled: 'bg-neutral-subtle text-neutral-text',
-  interrupted: 'bg-warning-subtle text-warning-text',
+  queued: 'bg-yellow-500/10 text-yellow-600',
+  running: 'bg-blue-500/10 text-blue-600',
+  succeeded: 'bg-green-500/10 text-green-600',
+  failed: 'bg-destructive/10 text-destructive',
+  cancelled: 'bg-muted text-muted-foreground',
+  interrupted: 'bg-yellow-500/10 text-yellow-600',
 };
 
 export function ExecutionPage() {
@@ -33,7 +39,7 @@ export function ExecutionPage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'runs'>('tasks');
+  const [activeTab, setActiveTab] = useState<string>('tasks');
   const [createModal, setCreateModal] = useState<{
     open: boolean;
     parentId: string | null;
@@ -218,7 +224,7 @@ export function ExecutionPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-text-muted">Loading...</p>
+        <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     );
   }
@@ -226,8 +232,8 @@ export function ExecutionPage() {
   if (organizations.length === 0) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)] mb-2">Tasks & Execution</h1>
-        <p className="text-text-secondary mb-8">
+        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">Tasks & Execution</h1>
+        <p className="text-muted-foreground mb-8">
           Create an organization first to start managing tasks. Organizations let you define AI agent teams and assign work.
         </p>
       </div>
@@ -240,95 +246,82 @@ export function ExecutionPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)]">Tasks & Execution</h1>
-            <p className="text-text-secondary text-sm mt-1">
+            <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">Tasks & Execution</h1>
+            <p className="text-muted-foreground text-sm mt-1">
               View and manage your task tree. Create epics, stories, and track execution progress.
             </p>
           </div>
           <div className="flex items-center gap-3">
             {/* Org selector */}
-            <select
-              className="rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+            <Select
               value={currentOrgId ?? ''}
-              onChange={(e) => {
-                setCurrentOrgId(e.target.value);
+              onValueChange={(value) => {
+                setCurrentOrgId(value);
                 setSelectedTaskId(null);
                 setSelectedRunId(null);
               }}
             >
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {organizations.map((org) => (
+                  <SelectItem key={org.id} value={org.id}>
+                    {org.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            <button
-              onClick={() => handleAddTask(null)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
-            >
+            <Button onClick={() => handleAddTask(null)}>
               <Plus size={16} />
               New Task
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Tab Bar */}
-        <div className="flex border-b border-border-default mb-[var(--section-gap)]">
-          <button
-            onClick={() => setActiveTab('tasks')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'tasks'
-                ? 'border-accent text-accent'
-                : 'border-transparent text-text-tertiary hover:text-text-secondary'
-            }`}
-          >
-            Tasks ({tasks.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('runs')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'runs'
-                ? 'border-accent text-accent'
-                : 'border-transparent text-text-tertiary hover:text-text-secondary'
-            }`}
-          >
-            Runs ({runs.length})
-            {(runCounts['running'] ?? 0) > 0 && (
-              <span className="ml-1.5 inline-flex items-center rounded-full bg-info-subtle px-2 py-0.5 text-xs text-info-text">
-                {runCounts['running']} active
-              </span>
-            )}
-          </button>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-[var(--section-gap)]">
+          <TabsList>
+            <TabsTrigger value="tasks">
+              Tasks ({tasks.length})
+            </TabsTrigger>
+            <TabsTrigger value="runs" className="gap-1.5">
+              Runs ({runs.length})
+              {(runCounts['running'] ?? 0) > 0 && (
+                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 text-xs">
+                  {runCounts['running']} active
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-        {activeTab === 'tasks' && (
-          <>
+          <TabsContent value="tasks">
             {/* Status summary bar */}
             {tasks.length > 0 && (
-              <div className="flex items-center gap-5 mb-[var(--section-gap)] text-xs text-text-tertiary">
-                <span className="font-medium text-text-secondary">{tasks.length} tasks</span>
+              <div className="flex items-center gap-5 mb-[var(--section-gap)] text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{tasks.length} tasks</span>
                 {statusCounts['done'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-success" />
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
                     {statusCounts['done']} done
                   </span>
                 )}
                 {statusCounts['in_progress'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-warning" />
+                    <span className="w-2 h-2 rounded-full bg-yellow-500" />
                     {statusCounts['in_progress']} in progress
                   </span>
                 )}
                 {statusCounts['blocked'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-danger" />
+                    <span className="w-2 h-2 rounded-full bg-destructive" />
                     {statusCounts['blocked']} blocked
                   </span>
                 )}
                 {statusCounts['pending'] && (
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-neutral" />
+                    <span className="w-2 h-2 rounded-full bg-muted-foreground" />
                     {statusCounts['pending']} pending
                   </span>
                 )}
@@ -336,123 +329,134 @@ export function ExecutionPage() {
             )}
 
             {/* Task Tree */}
-            <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)]">
-              <TaskTreeView
-                tasks={tasks}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={setSelectedTaskId}
-                onAddTask={handleAddTask}
-                onDeleteTask={handleDeleteTask}
-                onStatusChange={handleStatusChange}
-                roleNames={roleNames}
-              />
-            </div>
-          </>
-        )}
+            <Card>
+              <CardContent className="p-[var(--card-padding)]">
+                <TaskTreeView
+                  tasks={tasks}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={setSelectedTaskId}
+                  onAddTask={handleAddTask}
+                  onDeleteTask={handleDeleteTask}
+                  onStatusChange={handleStatusChange}
+                  roleNames={roleNames}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {activeTab === 'runs' && (
-          <div className="space-y-4">
-            {runs.length === 0 ? (
-              <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-8 text-center">
-                <Lightning size={32} className="mx-auto text-text-disabled mb-3" />
-                <p className="text-sm text-text-tertiary">
-                  No runs yet. Select a task, assign it to a role, and click Execute to start an AI agent run.
-                </p>
-              </div>
-            ) : (
-              <div className="flex items-center justify-end mb-2">
-                <button
-                  onClick={loadRuns}
-                  className="inline-flex items-center gap-1 text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-                >
-                  <ArrowClockwise size={14} />
-                  Refresh
-                </button>
-              </div>
-            )}
-
-            {runs.map((run) => (
-              <div
-                key={run.id}
-                onClick={() => setSelectedRunId(run.id === selectedRunId ? null : run.id)}
-                className={`rounded-[var(--card-radius)] border bg-surface-card p-[var(--card-padding)] cursor-pointer transition-colors ${
-                  selectedRunId === run.id
-                    ? 'border-accent ring-1 ring-[var(--accent-ring)]'
-                    : 'border-border-default hover:border-border-strong'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${RUN_STATUS_COLORS[run.status]}`}
-                    >
-                      {run.status}
-                    </span>
-                    <span className="text-sm font-medium text-text-primary truncate max-w-[300px]">
-                      {taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-text-muted shrink-0">
-                    <span>{roleNames.get(run.roleId) ?? 'Unknown'}</span>
-                    <span>{new Date(run.createdAt).toLocaleString()}</span>
-                    {run.costUsd > 0 && (
-                      <span className="text-success font-medium">${run.costUsd.toFixed(4)}</span>
-                    )}
-                    {(run.status === 'queued' || run.status === 'running') && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleCancelRun(run.id);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-md bg-danger-subtle px-2 py-1 text-xs font-medium text-danger-text hover:bg-danger/10 transition-colors"
-                      >
-                        <Stop size={12} />
-                        Cancel
-                      </button>
-                    )}
-                  </div>
+          <TabsContent value="runs">
+            <div className="space-y-4">
+              {runs.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Lightning size={32} className="mx-auto text-muted-foreground/50 mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      No runs yet. Select a task, assign it to a role, and click Execute to start an AI agent run.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="flex items-center justify-end mb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={loadRuns}
+                  >
+                    <ArrowClockwise size={14} />
+                    Refresh
+                  </Button>
                 </div>
+              )}
 
-                {/* Expanded run details */}
-                {selectedRunId === run.id && (
-                  <div className="mt-4 pt-4 border-t border-border-subtle">
-                    <div className="grid grid-cols-2 gap-4 text-xs mb-4">
-                      <div>
-                        <span className="text-text-muted">Trigger:</span>{' '}
-                        <span className="text-text-secondary">{run.trigger}</span>
-                      </div>
-                      <div>
-                        <span className="text-text-muted">Started:</span>{' '}
-                        <span className="text-text-secondary">
-                          {run.startedAt ? new Date(run.startedAt).toLocaleString() : '-'}
+              {runs.map((run) => (
+                <Card
+                  key={run.id}
+                  onClick={() => setSelectedRunId(run.id === selectedRunId ? null : run.id)}
+                  className={cn(
+                    'cursor-pointer transition-colors',
+                    selectedRunId === run.id
+                      ? 'border-primary ring-1 ring-primary/30'
+                      : 'hover:border-foreground/20',
+                  )}
+                >
+                  <CardContent className="p-[var(--card-padding)]">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <Badge
+                          variant="secondary"
+                          className={cn('text-xs font-medium', RUN_STATUS_COLORS[run.status])}
+                        >
+                          {run.status}
+                        </Badge>
+                        <span className="text-sm font-medium text-foreground truncate max-w-[300px]">
+                          {taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
                         </span>
                       </div>
-                      <div>
-                        <span className="text-text-muted">Finished:</span>{' '}
-                        <span className="text-text-secondary">
-                          {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-text-muted">Cost:</span>{' '}
-                        <span className="text-text-secondary">${run.costUsd.toFixed(4)}</span>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                        <span>{roleNames.get(run.roleId) ?? 'Unknown'}</span>
+                        <span>{new Date(run.createdAt).toLocaleString()}</span>
+                        {run.costUsd > 0 && (
+                          <span className="text-green-600 font-medium">${run.costUsd.toFixed(4)}</span>
+                        )}
+                        {(run.status === 'queued' || run.status === 'running') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleCancelRun(run.id);
+                            }}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Stop size={12} />
+                            Cancel
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    {run.outputLog && (
-                      <div>
-                        <p className="text-xs text-text-muted mb-1">Output Log</p>
-                        <pre className="bg-surface-sunken text-text-primary rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
-                          {run.outputLog.slice(0, 5000)}
-                          {run.outputLog.length > 5000 && '\n... (truncated)'}
-                        </pre>
+
+                    {/* Expanded run details */}
+                    {selectedRunId === run.id && (
+                      <div className="mt-4 pt-4 border-t border-border">
+                        <div className="grid grid-cols-2 gap-4 text-xs mb-4">
+                          <div>
+                            <span className="text-muted-foreground">Trigger:</span>{' '}
+                            <span className="text-foreground">{run.trigger}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Started:</span>{' '}
+                            <span className="text-foreground">
+                              {run.startedAt ? new Date(run.startedAt).toLocaleString() : '-'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Finished:</span>{' '}
+                            <span className="text-foreground">
+                              {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Cost:</span>{' '}
+                            <span className="text-foreground">${run.costUsd.toFixed(4)}</span>
+                          </div>
+                        </div>
+                        {run.outputLog && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Output Log</p>
+                            <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
+                              {run.outputLog.slice(0, 5000)}
+                              {run.outputLog.length > 5000 && '\n... (truncated)'}
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Detail Drawer */}

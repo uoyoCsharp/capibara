@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { CaretRight, CaretDown, Plus, Trash, ListBullets } from '@phosphor-icons/react';
 import type { TaskRecord, TaskStatus, TaskType } from '@shared/contracts';
-import { clsx } from 'clsx';
+import { cn } from '../../lib/utils';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 
 interface TaskTreeViewProps {
   tasks: TaskRecord[];
@@ -41,14 +43,14 @@ function buildTree(tasks: TaskRecord[]): TreeNode[] {
 }
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: 'bg-neutral',
-  in_progress: 'bg-warning',
-  awaiting_review: 'bg-warning',
-  revision: 'bg-warning',
-  approved: 'bg-success',
-  done: 'bg-success',
-  blocked: 'bg-danger',
-  cancelled: 'bg-neutral',
+  pending: 'bg-muted-foreground',
+  in_progress: 'bg-yellow-500',
+  awaiting_review: 'bg-yellow-500',
+  revision: 'bg-yellow-500',
+  approved: 'bg-green-500',
+  done: 'bg-green-500',
+  blocked: 'bg-destructive',
+  cancelled: 'bg-muted-foreground',
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -65,11 +67,11 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 const TYPE_BADGE_COLORS: Record<TaskType, string> = {
   epic: 'bg-purple-100 text-purple-700',
   story: 'bg-blue-100 text-blue-700',
-  task: 'bg-accent-subtle text-accent-text',
-  subtask: 'bg-neutral-subtle text-neutral-text',
-  spike: 'bg-warning-subtle text-warning-text',
-  bug: 'bg-danger-subtle text-danger-text',
-  chore: 'bg-neutral-subtle text-neutral-text',
+  task: 'bg-primary/10 text-primary',
+  subtask: 'bg-muted text-muted-foreground',
+  spike: 'bg-yellow-500/10 text-yellow-600',
+  bug: 'bg-destructive/10 text-destructive',
+  chore: 'bg-muted text-muted-foreground',
 };
 
 function hasDescendantApproval(node: TreeNode, ids?: Set<string>): boolean {
@@ -113,16 +115,16 @@ function TaskNodeItem({
   return (
     <div>
       <div
-        className={clsx(
+        className={cn(
           'group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors',
-          isSelected ? 'bg-accent-subtle ring-1 ring-[var(--accent-ring)]' : 'hover:bg-surface-sunken',
+          isSelected ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-muted',
         )}
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
         onClick={() => onSelectTask(node.task.id)}
       >
         {/* Expand/collapse toggle */}
         <button
-          className="shrink-0 w-5 h-5 flex items-center justify-center text-text-muted hover:text-text-secondary"
+          className="shrink-0 w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground"
           onClick={(e) => {
             e.stopPropagation();
             setExpanded(!expanded);
@@ -137,7 +139,7 @@ function TaskNodeItem({
 
         {/* Status indicator */}
         <span
-          className={clsx(
+          className={cn(
             'w-2.5 h-2.5 rounded-full shrink-0',
             STATUS_COLORS[node.task.status],
           )}
@@ -145,21 +147,22 @@ function TaskNodeItem({
         />
 
         {/* Type badge */}
-        <span
-          className={clsx(
-            'text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded shrink-0',
+        <Badge
+          variant="secondary"
+          className={cn(
+            'text-[10px] font-semibold uppercase px-1.5 py-0.5 shrink-0',
             TYPE_BADGE_COLORS[node.task.type],
           )}
         >
           {node.task.type}
-        </span>
+        </Badge>
 
         {/* Title */}
         <span
-          className={clsx(
+          className={cn(
             'text-sm font-medium truncate flex-1',
-            isSelected ? 'text-accent-text' : 'text-text-primary',
-            node.task.status === 'cancelled' && 'line-through text-text-disabled',
+            isSelected ? 'text-primary' : 'text-foreground',
+            node.task.status === 'cancelled' && 'line-through text-muted-foreground/50',
           )}
         >
           {node.task.title}
@@ -168,22 +171,24 @@ function TaskNodeItem({
         {/* Approval notification badge (red dot) */}
         {hasApprovalPending && (
           <span
-            className="w-2.5 h-2.5 rounded-full bg-danger shrink-0 animate-pulse"
+            className="w-2.5 h-2.5 rounded-full bg-destructive shrink-0 animate-pulse"
             title="Approval required"
           />
         )}
 
         {/* Assignee */}
         {assigneeName && (
-          <span className="text-xs text-text-muted shrink-0 truncate max-w-30">
+          <span className="text-xs text-muted-foreground shrink-0 truncate max-w-30">
             {assigneeName}
           </span>
         )}
 
         {/* Actions (visible on hover) */}
         <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-          <button
-            className="p-1 rounded text-text-muted hover:text-accent hover:bg-accent-subtle"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-primary"
             title="Add child task"
             onClick={(e) => {
               e.stopPropagation();
@@ -191,9 +196,11 @@ function TaskNodeItem({
             }}
           >
             <Plus size={14} />
-          </button>
-          <button
-            className="p-1 rounded text-text-muted hover:text-danger hover:bg-danger-subtle"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-destructive"
             title="Delete task"
             onClick={(e) => {
               e.stopPropagation();
@@ -201,7 +208,7 @@ function TaskNodeItem({
             }}
           >
             <Trash size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -243,18 +250,15 @@ export function TaskTreeView({
 
   if (tree.length === 0) {
     return (
-      <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
-        <ListBullets size={40} className="mx-auto text-text-disabled mb-3" />
-        <p className="text-sm text-text-muted mb-4">
+      <div className="rounded-[var(--card-radius)] border border-dashed border-border bg-card p-12 text-center">
+        <ListBullets size={40} className="mx-auto text-muted-foreground/50 mb-3" />
+        <p className="text-sm text-muted-foreground mb-4">
           Your task board is empty. Create an epic to organize your project — epics contain stories, which break down into individual tasks for AI agents.
         </p>
-        <button
-          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
-          onClick={() => onAddTask(null)}
-        >
+        <Button onClick={() => onAddTask(null)}>
           <Plus size={16} />
           Create Epic
-        </button>
+        </Button>
       </div>
     );
   }

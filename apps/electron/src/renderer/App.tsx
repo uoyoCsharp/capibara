@@ -16,10 +16,10 @@ export function App() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-surface-base">
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border-default border-t-accent" />
-          <p className="text-sm text-text-muted font-[family-name:var(--font-body)]">Loading Capibara...</p>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
+          <p className="text-sm text-muted-foreground">Loading Capibara...</p>
         </div>
       </div>
     );
@@ -43,7 +43,7 @@ export function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-surface-base">
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
       <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
       <main className="flex-1 overflow-auto">
         {renderPage()}

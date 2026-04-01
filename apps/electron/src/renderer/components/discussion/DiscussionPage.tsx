@@ -9,8 +9,11 @@ import type {
   RoleRecord,
   VoteTag,
 } from '@shared/contracts';
+import { cn } from '../../lib/utils';
 import { DiscussionGroupPanel } from './DiscussionGroupPanel';
 import { toast } from '../../store/toast.store';
+import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 export function DiscussionPage() {
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
@@ -140,7 +143,7 @@ export function DiscussionPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-text-muted">Loading...</p>
+        <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     );
   }
@@ -148,8 +151,8 @@ export function DiscussionPage() {
   if (organizations.length === 0) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)] mb-2">Discussions</h1>
-        <p className="text-text-secondary mb-8">
+        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">Discussions</h1>
+        <p className="text-muted-foreground mb-8">
           Create an organization first to start discussions. Discussions are automatically created for epic-level tasks, where AI agents debate and vote on decisions.
         </p>
       </div>
@@ -159,32 +162,36 @@ export function DiscussionPage() {
   return (
     <div className="flex h-full">
       {/* Sidebar: Group list */}
-      <div className="w-80 shrink-0 border-r border-border-default bg-surface-card flex flex-col">
+      <div className="w-80 shrink-0 border-r border-border bg-card flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-border-subtle">
-          <h1 className="text-lg font-semibold text-text-primary font-[family-name:var(--font-display)] mb-3">Discussions</h1>
-          <select
-            className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+        <div className="px-5 py-4 border-b border-border">
+          <h1 className="text-lg font-semibold text-foreground font-[family-name:var(--font-display)] mb-3">Discussions</h1>
+          <Select
             value={currentOrgId ?? ''}
-            onChange={(e) => {
-              setCurrentOrgId(e.target.value);
+            onValueChange={(value) => {
+              setCurrentOrgId(value);
               setSelectedGroupId(null);
               setMessages([]);
               setVoteStats(null);
             }}
           >
-            {organizations.map((org) => (
-              <option key={org.id} value={org.id}>{org.name}</option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {organizations.map((org) => (
+                <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Group list */}
         <div className="flex-1 overflow-auto py-3">
           {groups.length === 0 ? (
             <div className="px-5 py-8 text-center">
-              <ChatCircleDots size={32} className="mx-auto text-text-disabled mb-2" />
-              <p className="text-sm text-text-muted">
+              <ChatCircleDots size={32} className="mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-sm text-muted-foreground">
                 No discussions yet. Discussions appear automatically when you create epic-level tasks in the Execution tab.
               </p>
             </div>
@@ -196,21 +203,22 @@ export function DiscussionPage() {
                 <button
                   key={group.id}
                   onClick={() => setSelectedGroupId(group.id)}
-                  className={`w-full text-left px-5 py-3.5 border-b border-border-subtle transition-colors ${
+                  className={cn(
+                    'w-full text-left px-5 py-3.5 border-b border-border transition-colors',
                     isSelected
-                      ? 'bg-accent-subtle border-l-2 border-l-accent'
-                      : 'hover:bg-surface-sunken'
-                  }`}
+                      ? 'bg-primary/10 border-l-2 border-l-primary'
+                      : 'hover:bg-muted',
+                  )}
                 >
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-sm font-medium text-text-primary truncate">
+                    <span className="text-sm font-medium text-foreground truncate">
                       {task?.title ?? 'Unknown Epic'}
                     </span>
                     {group.status === 'archived' && (
-                      <span className="text-xs text-text-muted ml-2">Archived</span>
+                      <Badge variant="secondary" className="ml-2 text-xs">Archived</Badge>
                     )}
                   </div>
-                  <div className="text-xs text-text-tertiary">
+                  <div className="text-xs text-muted-foreground">
                     Created {new Date(group.createdAt).toLocaleDateString()}
                   </div>
                 </button>
@@ -236,8 +244,8 @@ export function DiscussionPage() {
         ) : (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <ChatCircleDots size={48} className="mx-auto text-text-disabled mb-3" />
-              <p className="text-sm text-text-muted">
+              <ChatCircleDots size={48} className="mx-auto text-muted-foreground/50 mb-3" />
+              <p className="text-sm text-muted-foreground">
                 Select a discussion to view the conversation, see how AI agents voted, and add your own input.
               </p>
             </div>

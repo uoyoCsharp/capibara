@@ -12,6 +12,8 @@ import { DiscussionMessageList } from './DiscussionMessageList';
 import { VoteStatsBar } from './VoteStatsBar';
 import { HumanVotePanel } from './HumanVotePanel';
 import { ApprovalPanelCard } from './ApprovalPanelCard';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 
 interface DiscussionGroupPanelProps {
   group: DiscussionGroupRecord;
@@ -47,34 +49,33 @@ export function DiscussionGroupPanel({
   }, [onRefresh]);
 
   return (
-    <div className="flex flex-col h-full bg-surface-card">
+    <div className="flex flex-col h-full bg-card">
       {/* Header */}
-      <div className="border-b border-border-default px-5 py-5">
+      <div className="border-b border-border px-5 py-5">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <ChatCircleDots size={20} className="text-accent" />
-            <h3 className="text-base font-semibold text-text-primary truncate">
+            <ChatCircleDots size={20} className="text-primary" />
+            <h3 className="text-base font-semibold text-foreground truncate">
               {task?.title ?? 'Discussion'}
             </h3>
             {isArchived && (
-              <span className="rounded-full bg-neutral-subtle px-2 py-0.5 text-xs font-medium text-neutral-text">
-                Archived
-              </span>
+              <Badge variant="secondary">Archived</Badge>
             )}
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onClose}
-            className="rounded-lg p-1 text-text-muted hover:bg-surface-sunken hover:text-text-secondary"
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         {/* Task info */}
         {task && (
-          <div className="flex items-center gap-3 text-xs text-text-tertiary mb-2">
-            <span className="capitalize font-medium text-text-secondary">{task.type}</span>
-            <span>•</span>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+            <span className="capitalize font-medium text-foreground">{task.type}</span>
+            <span>-</span>
             <span className="capitalize">{task.status.replace('_', ' ')}</span>
           </div>
         )}
@@ -102,9 +103,9 @@ export function DiscussionGroupPanel({
 
       {/* Summary card if available */}
       {group.summary && (
-        <div className="mx-5 mb-2 rounded-lg bg-accent-subtle border border-accent/20 px-4 py-3">
-          <p className="text-xs font-medium text-accent-text mb-1">Discussion Summary</p>
-          <p className="text-xs text-accent-text/80 whitespace-pre-wrap">{group.summary}</p>
+        <div className="mx-5 mb-2 rounded-lg bg-primary/10 border border-primary/20 px-4 py-3">
+          <p className="text-xs font-medium text-primary mb-1">Discussion Summary</p>
+          <p className="text-xs text-primary/80 whitespace-pre-wrap">{group.summary}</p>
         </div>
       )}
 

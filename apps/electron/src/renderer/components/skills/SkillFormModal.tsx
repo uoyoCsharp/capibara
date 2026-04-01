@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import { X } from '@phosphor-icons/react';
 import type { SkillRecord, SkillCategory } from '@shared/contracts';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+} from '../ui/dialog';
 
 interface SkillFormModalProps {
   skill: SkillRecord | null;
@@ -74,34 +86,26 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay">
-      <div className="bg-surface-card rounded-[var(--card-radius)] shadow-modal w-full max-w-lg mx-4 max-h-[85vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-          <h2 className="text-lg font-semibold text-text-primary">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>
             {isEditing ? 'Edit Custom Skill' : 'Create Custom Skill'}
-          </h2>
-          <button
-            className="p-1 rounded-lg text-text-muted hover:text-text-secondary hover:bg-surface-sunken"
-            onClick={onClose}
-          >
-            <X size={20} />
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-auto p-6 space-y-5">
+        <div className="flex-1 overflow-auto space-y-5 py-2">
           {error && (
-            <div className="rounded-lg bg-danger-subtle border border-danger/30 px-4 py-2 text-sm text-danger-text">
+            <div className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-2 text-sm text-destructive">
               {error}
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Name *</label>
-            <input
+          <div className="space-y-2">
+            <Label>Name *</Label>
+            <Input
               type="text"
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
               placeholder="My Custom Skill"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -109,23 +113,22 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Command *</label>
-            <input
+          <div className="space-y-2">
+            <Label>Command *</Label>
+            <Input
               type="text"
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
+              className="font-mono"
               placeholder="/my-skill"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               maxLength={200}
             />
-            <p className="text-xs text-text-muted mt-1">Unique command identifier (e.g., /my-skill)</p>
+            <p className="text-xs text-muted-foreground">Unique command identifier (e.g., /my-skill)</p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Description</label>
-            <textarea
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent resize-y placeholder-text-muted"
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Textarea
               rows={2}
               placeholder="What this skill does..."
               value={description}
@@ -134,53 +137,50 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">Category</label>
-            <select
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+          <div className="space-y-2">
+            <Label>Category</Label>
+            <Select
               value={category}
-              onChange={(e) => setCategory(e.target.value as SkillCategory)}
+              onValueChange={(value) => setCategory(value as SkillCategory)}
             >
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
-              Prompt Content
-            </label>
-            <textarea
-              className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm font-mono text-text-primary focus:outline-none focus:ring-2 focus:ring-accent resize-y placeholder-text-muted"
+          <div className="space-y-2">
+            <Label>Prompt Content</Label>
+            <Textarea
+              className="font-mono"
               rows={8}
               placeholder="Enter the prompt template content..."
               value={promptContent}
               onChange={(e) => setPromptContent(e.target.value)}
             />
-            <p className="text-xs text-text-muted mt-1">
+            <p className="text-xs text-muted-foreground">
               The prompt content that will be injected when this skill is used by a role.
             </p>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle">
-          <button
-            className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
-            onClick={onClose}
-          >
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          </Button>
+          <Button
             onClick={handleSave}
             disabled={!name.trim() || !command.trim() || isSaving}
           >
             {isSaving ? 'Saving...' : isEditing ? 'Update Skill' : 'Create Skill'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

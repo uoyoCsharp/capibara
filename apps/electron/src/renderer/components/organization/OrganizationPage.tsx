@@ -13,6 +13,15 @@ import { TemplateSelectorModal } from './TemplateSelectorModal';
 import { CreateOrgModal } from './CreateOrgModal';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { toast } from '../../store/toast.store';
+import { Button } from '../ui/button';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from '../ui/select';
+import { Card } from '../ui/card';
 
 export function OrganizationPage() {
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
@@ -152,7 +161,7 @@ export function OrganizationPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-text-muted">Loading...</p>
+        <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     );
   }
@@ -162,48 +171,51 @@ export function OrganizationPage() {
       <div className="flex-1 p-[var(--page-padding)] overflow-auto">
         <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)]">Organization</h1>
-            <p className="text-text-secondary text-sm mt-1">
+            <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">Organization</h1>
+            <p className="text-muted-foreground text-sm mt-1">
               Manage your AI organization tree. Create roles, configure personas, and assign skills.
             </p>
           </div>
           <div className="flex gap-2">
             {organizations.length > 0 && (
-              <select
-                className="rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
+              <Select
                 value={currentOrgId ?? ''}
-                onChange={(e) => setCurrentOrgId(e.target.value)}
+                onValueChange={(val) => setCurrentOrgId(val)}
               >
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-auto min-w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {organizations.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {currentOrg && (
-              <button
-                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+              <Button
+                variant="outline"
+                size="icon"
+                className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => setShowDeleteOrg(true)}
                 title="Delete Organization"
               >
                 <Trash size={16} />
-              </button>
+              </Button>
             )}
-            <button
-              className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
-              onClick={() => setShowTemplateSelector(true)}
-            >
+            <Button onClick={() => setShowTemplateSelector(true)}>
               <TreeStructure size={16} />
               From Template
-            </button>
-            <button
-              className="flex items-center gap-1.5 rounded-lg border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken transition-colors"
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setShowCreateOrg(true)}
             >
               <Plus size={16} />
               Blank Org
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -227,11 +239,10 @@ export function OrganizationPage() {
             }}
           />
         ) : currentOrg ? (
-          <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
-            <TreeStructure size={48} className="mx-auto text-text-disabled mb-4" />
-            <p className="text-sm text-text-tertiary mb-4">This organization has no roles yet. Roles define your AI agents — each with a persona, skills, and permissions. Add a root role to get started.</p>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover"
+          <Card className="border-dashed p-12 text-center">
+            <TreeStructure size={48} className="mx-auto text-muted-foreground/50 mb-4" />
+            <p className="text-sm text-muted-foreground mb-4">This organization has no roles yet. Roles define your AI agents — each with a persona, skills, and permissions. Add a root role to get started.</p>
+            <Button
               onClick={() =>
                 handleCreateRole({
                   orgId: currentOrgId!,
@@ -248,15 +259,15 @@ export function OrganizationPage() {
             >
               <Plus size={16} />
               Add Root Role
-            </button>
-          </div>
+            </Button>
+          </Card>
         ) : (
-          <div className="rounded-[var(--card-radius)] border border-dashed border-border-strong bg-surface-card p-12 text-center">
-            <TreeStructure size={48} className="mx-auto text-text-disabled mb-4" />
-            <p className="text-sm text-text-tertiary mb-4">
+          <Card className="border-dashed p-12 text-center">
+            <TreeStructure size={48} className="mx-auto text-muted-foreground/50 mb-4" />
+            <p className="text-sm text-muted-foreground mb-4">
               Welcome to Capibara! Start by creating an organization — it's your AI agent team. You can load a pre-built template or create a blank org and add roles manually.
             </p>
-          </div>
+          </Card>
         )}
       </div>
 

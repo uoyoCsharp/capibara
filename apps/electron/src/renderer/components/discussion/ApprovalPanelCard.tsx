@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ShieldCheck, ArrowsClockwise, UserSwitch, TreeStructure, ChartBar } from '@phosphor-icons/react';
-import { clsx } from 'clsx';
+import { cn } from '../../lib/utils';
 import type {
   TaskRecord,
   VoteStatsRecord,
@@ -8,6 +8,10 @@ import type {
   VoteTag,
   DiscussionMessageRecord,
 } from '@shared/contracts';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { Progress } from '../ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface ApprovalPanelCardProps {
   task: TaskRecord;
@@ -58,14 +62,16 @@ export function ApprovalPanelCard({
     setMode('idle');
   };
 
+  const subtaskPercent = childTasks.length > 0 ? (completedChildren.length / childTasks.length) * 100 : 0;
+
   return (
-    <div className="mx-5 mb-3 rounded-[var(--card-radius)] border-2 border-warning bg-warning-subtle shadow-sm overflow-hidden">
+    <div className="mx-5 mb-3 rounded-[var(--card-radius)] border-2 border-yellow-500 bg-yellow-500/10 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-warning/15 border-b border-warning/30">
-        <ShieldCheck size={18} weight="fill" className="text-warning" />
-        <span className="text-sm font-semibold text-warning-text">Human Approval Required</span>
+      <div className="flex items-center gap-2 px-4 py-3 bg-yellow-500/15 border-b border-yellow-500/30">
+        <ShieldCheck size={18} weight="fill" className="text-yellow-500" />
+        <span className="text-sm font-semibold text-yellow-600">Human Approval Required</span>
         {assigneeRole && (
-          <span className="ml-auto text-xs text-warning-text/70">
+          <span className="ml-auto text-xs text-yellow-600/70">
             Reviewer: {assigneeRole.name}
           </span>
         )}
@@ -74,10 +80,10 @@ export function ApprovalPanelCard({
       <div className="px-4 py-4 space-y-4">
         {/* Task summary */}
         <div>
-          <p className="text-xs font-medium text-text-muted mb-1">Task</p>
-          <p className="text-sm text-text-primary font-medium">{task.title}</p>
+          <p className="text-xs font-medium text-muted-foreground mb-1">Task</p>
+          <p className="text-sm text-foreground font-medium">{task.title}</p>
           {task.description && (
-            <p className="text-xs text-text-secondary mt-1 line-clamp-2">{task.description}</p>
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
           )}
         </div>
 
@@ -85,43 +91,38 @@ export function ApprovalPanelCard({
         {childTasks.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <TreeStructure size={14} className="text-text-muted" />
-              <p className="text-xs font-medium text-text-muted">
+              <TreeStructure size={14} className="text-muted-foreground" />
+              <p className="text-xs font-medium text-muted-foreground">
                 Subtasks: {completedChildren.length}/{childTasks.length} completed
               </p>
             </div>
-            <div className="w-full bg-surface-sunken rounded-full h-1.5">
-              <div
-                className="bg-success h-1.5 rounded-full transition-all"
-                style={{ width: `${childTasks.length > 0 ? (completedChildren.length / childTasks.length) * 100 : 0}%` }}
-              />
-            </div>
+            <Progress value={subtaskPercent} className="h-1.5 [&>div]:bg-green-500" />
           </div>
         )}
 
         {/* Vote statistics */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <ChartBar size={14} className="text-text-muted" />
-            <p className="text-xs font-medium text-text-muted">Vote Summary</p>
+            <ChartBar size={14} className="text-muted-foreground" />
+            <p className="text-xs font-medium text-muted-foreground">Vote Summary</p>
           </div>
           <div className="flex gap-3 text-xs">
-            <span className="text-success-text">Approve: {voteStats.APPROVE}</span>
-            <span className="text-warning-text">Revise: {voteStats.REVISE}</span>
-            <span className="text-danger-text">Concern: {voteStats.CONCERN}</span>
-            <span className="text-info-text">Delegate: {voteStats.DELEGATE}</span>
+            <span className="text-green-600">Approve: {voteStats.APPROVE}</span>
+            <span className="text-yellow-600">Revise: {voteStats.REVISE}</span>
+            <span className="text-destructive">Concern: {voteStats.CONCERN}</span>
+            <span className="text-blue-600">Delegate: {voteStats.DELEGATE}</span>
           </div>
         </div>
 
         {/* Key concerns */}
         {concerns.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-danger-text mb-1">
+            <p className="text-xs font-medium text-destructive mb-1">
               Open Concerns ({concerns.length})
             </p>
             <ul className="space-y-1">
               {concerns.slice(-3).map((c) => (
-                <li key={c.id} className="text-xs text-text-secondary pl-2 border-l-2 border-danger/30">
+                <li key={c.id} className="text-xs text-muted-foreground pl-2 border-l-2 border-destructive/30">
                   {c.content.slice(0, 120)}{c.content.length > 120 ? '...' : ''}
                 </li>
               ))}
@@ -132,96 +133,94 @@ export function ApprovalPanelCard({
         {/* Recent revisions */}
         {revisions.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-warning-text mb-1">
+            <p className="text-xs font-medium text-yellow-600 mb-1">
               Revision History ({revisions.length})
             </p>
-            <p className="text-xs text-text-secondary pl-2 border-l-2 border-warning/30">
+            <p className="text-xs text-muted-foreground pl-2 border-l-2 border-yellow-500/30">
               Latest: {revisions[revisions.length - 1].content.slice(0, 120)}
             </p>
           </div>
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 pt-2 border-t border-warning/30">
-          <button
+        <div className="flex items-center gap-2 pt-2 border-t border-yellow-500/30">
+          <Button
             onClick={onApprove}
-            className="flex items-center gap-1.5 rounded-lg bg-success px-4 py-2 text-sm font-medium text-text-inverse hover:opacity-90 transition-colors"
+            className="bg-green-500 hover:bg-green-500/90 text-white"
           >
             <ShieldCheck size={16} />
             Approve
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={mode === 'revise' ? 'default' : 'secondary'}
             onClick={() => setMode(mode === 'revise' ? 'idle' : 'revise')}
-            className={clsx(
-              'flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-              mode === 'revise'
-                ? 'bg-warning text-text-inverse'
-                : 'bg-surface-sunken text-text-secondary hover:bg-border-default',
-            )}
+            className={cn(mode === 'revise' && 'bg-yellow-500 hover:bg-yellow-500/90 text-white')}
           >
             <ArrowsClockwise size={16} />
             Revise
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={mode === 'delegate' ? 'default' : 'secondary'}
             onClick={() => setMode(mode === 'delegate' ? 'idle' : 'delegate')}
-            className={clsx(
-              'flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-              mode === 'delegate'
-                ? 'bg-info text-text-inverse'
-                : 'bg-surface-sunken text-text-secondary hover:bg-border-default',
-            )}
+            className={cn(mode === 'delegate' && 'bg-blue-500 hover:bg-blue-500/90 text-white')}
           >
             <UserSwitch size={16} />
             Delegate
-          </button>
+          </Button>
         </div>
 
         {/* Revise feedback input */}
         {mode === 'revise' && (
           <div className="space-y-2">
-            <textarea
+            <Textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="Describe what needs to be revised..."
               rows={3}
-              className="w-full rounded-lg border border-warning/30 bg-surface-card px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-warning"
+              className="border-yellow-500/30 focus-visible:ring-yellow-500"
             />
-            <button
+            <Button
               onClick={handleReviseSubmit}
               disabled={!feedback.trim()}
-              className={clsx(
-                'rounded-lg px-4 py-1.5 text-sm font-medium text-text-inverse transition-colors',
-                feedback.trim() ? 'bg-warning hover:opacity-90' : 'bg-border-default cursor-not-allowed',
+              className={cn(
+                feedback.trim()
+                  ? 'bg-yellow-500 hover:bg-yellow-500/90 text-white'
+                  : '',
               )}
             >
               Submit Revision
-            </button>
+            </Button>
           </div>
         )}
 
         {/* Delegate role selector */}
         {mode === 'delegate' && (
           <div className="space-y-2">
-            <select
-              value={selectedRoleId}
-              onChange={(e) => setSelectedRoleId(e.target.value)}
-              className="w-full rounded-lg border border-info/30 bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-info"
+            <Select
+              value={selectedRoleId || '_none'}
+              onValueChange={(value) => setSelectedRoleId(value === '_none' ? '' : value)}
             >
-              <option value="">Select a role to delegate to...</option>
-              {delegatableRoles.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
-            <button
+              <SelectTrigger className="border-blue-500/30 focus:ring-blue-500">
+                <SelectValue placeholder="Select a role to delegate to..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Select a role to delegate to...</SelectItem>
+                {delegatableRoles.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
               onClick={handleDelegateSubmit}
               disabled={!selectedRoleId}
-              className={clsx(
-                'rounded-lg px-4 py-1.5 text-sm font-medium text-text-inverse transition-colors',
-                selectedRoleId ? 'bg-info hover:opacity-90' : 'bg-border-default cursor-not-allowed',
+              className={cn(
+                selectedRoleId
+                  ? 'bg-blue-500 hover:bg-blue-500/90 text-white'
+                  : '',
               )}
             >
               Confirm Delegation
-            </button>
+            </Button>
           </div>
         )}
       </div>

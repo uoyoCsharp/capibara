@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowClockwise, Lightning, CurrencyDollar, ListChecks, ChartLineUp } from '@phosphor-icons/react';
-import { clsx } from 'clsx';
+import { cn } from '../../lib/utils';
 import { toast } from '../../store/toast.store';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Progress } from '../ui/progress';
 import type { NarrativeRecord, CostSummaryRecord, CostEntryRecord, RoleRecord } from '@shared/contracts';
 
 declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi };
@@ -75,8 +78,8 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   if (!orgId) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)] mb-2">Dashboard</h1>
-        <p className="text-text-secondary text-sm mt-1">
+        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">Dashboard</h1>
+        <p className="text-muted-foreground text-sm mt-1">
           Select or create an organization from the sidebar to see your project dashboard, budget tracking, and AI agent activity.
         </p>
       </div>
@@ -88,26 +91,26 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-semibold text-text-primary font-[family-name:var(--font-display)]">Dashboard</h1>
-          <p className="text-text-secondary text-sm mt-1">Track progress, budget, and AI agent activity.</p>
+          <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">Dashboard</h1>
+          <p className="text-muted-foreground text-sm mt-1">Track progress, budget, and AI agent activity.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={fetchData}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-text-tertiary hover:underline transition-colors"
           >
             <ArrowClockwise size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
           >
             <Lightning size={14} />
             {generating ? 'Generating...' : 'Generate Report'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -115,26 +118,30 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       {costSummary && <BudgetBar summary={costSummary} />}
 
       {/* Narrative */}
-      <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] mb-[var(--section-gap)]">
-        <div className="flex items-center gap-2 mb-4">
-          <ListChecks size={20} className="text-accent" />
-          <h2 className="text-lg font-medium text-text-primary font-[family-name:var(--font-display)]">Project Progress</h2>
-          {narrative && (
-            <span className="ml-auto text-xs text-text-muted">
-              Generated: {new Date(narrative.generatedAt).toLocaleString()}
-            </span>
-          )}
-        </div>
-        {narrative ? (
-          <div className="prose prose-sm max-w-none text-text-secondary">
-            <NarrativeContent text={narrative.renderedText} />
+      <Card className="mb-[var(--section-gap)]">
+        <CardHeader className="pb-0">
+          <div className="flex items-center gap-2">
+            <ListChecks size={20} className="text-primary" />
+            <CardTitle className="text-lg font-medium font-[family-name:var(--font-display)]">Project Progress</CardTitle>
+            {narrative && (
+              <span className="ml-auto text-xs text-muted-foreground">
+                Generated: {new Date(narrative.generatedAt).toLocaleString()}
+              </span>
+            )}
           </div>
-        ) : (
-          <p className="text-sm text-text-muted leading-relaxed">
-            No report generated yet. Click Generate Report to create an AI-powered summary of your project's progress, task status, and team activity.
-          </p>
-        )}
-      </div>
+        </CardHeader>
+        <CardContent>
+          {narrative ? (
+            <div className="prose prose-sm max-w-none text-muted-foreground">
+              <NarrativeContent text={narrative.renderedText} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              No report generated yet. Click Generate Report to create an AI-powered summary of your project's progress, task status, and team activity.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Cost breakdown */}
       {costSummary && costSummary.entries.length > 0 && (
@@ -146,34 +153,33 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 
 function BudgetBar({ summary }: { summary: CostSummaryRecord }) {
   const { totalCost, budgetLimit, budgetPercent } = summary;
-  const barColor =
-    budgetPercent >= 95 ? 'bg-danger' :
-    budgetPercent >= 80 ? 'bg-warning' :
-    'bg-success';
   const textColor =
-    budgetPercent >= 95 ? 'text-danger-text' :
-    budgetPercent >= 80 ? 'text-warning-text' :
-    'text-success-text';
+    budgetPercent >= 95 ? 'text-destructive' :
+    budgetPercent >= 80 ? 'text-yellow-600' :
+    'text-green-600';
 
   return (
-    <div className="border-t border-border-default pt-4 pb-4 mb-[var(--section-gap)]">
+    <div className="border-t border-border pt-4 pb-4 mb-[var(--section-gap)]">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <CurrencyDollar size={18} className="text-text-muted" />
-          <span className="text-sm font-medium text-text-secondary">Budget Usage</span>
+          <CurrencyDollar size={18} className="text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">Budget Usage</span>
         </div>
-        <span className={clsx('text-sm font-semibold', textColor)}>
+        <span className={cn('text-sm font-semibold', textColor)}>
           ${totalCost.toFixed(2)} / ${budgetLimit.toFixed(2)} ({budgetPercent}%)
         </span>
       </div>
-      <div className="w-full bg-surface-sunken rounded-full h-2.5">
-        <div
-          className={clsx('h-2.5 rounded-full transition-all', barColor)}
-          style={{ width: `${Math.min(budgetPercent, 100)}%` }}
-        />
-      </div>
+      <Progress
+        value={Math.min(budgetPercent, 100)}
+        className={cn(
+          'h-2.5',
+          budgetPercent >= 95 ? '[&>div]:bg-destructive' :
+          budgetPercent >= 80 ? '[&>div]:bg-yellow-500' :
+          '[&>div]:bg-green-500',
+        )}
+      />
       {budgetPercent >= 80 && (
-        <p className={clsx('text-xs mt-1.5', textColor)}>
+        <p className={cn('text-xs mt-1.5', textColor)}>
           {budgetPercent >= 95 ? 'Budget critical — execution paused' : 'Approaching budget limit'}
         </p>
       )}
@@ -198,10 +204,10 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
   const sorted = [...byRole.entries()].sort((a, b) => b[1].total - a[1].total);
 
   return (
-    <div className="bg-surface-sunken rounded-[var(--card-radius)] p-[var(--card-padding)] mb-[var(--section-gap)]">
+    <div className="bg-muted rounded-[var(--card-radius)] p-[var(--card-padding)] mb-[var(--section-gap)]">
       <div className="flex items-center gap-2 mb-4">
-        <ChartLineUp size={20} className="text-accent" />
-        <h2 className="text-lg font-medium text-text-primary font-[family-name:var(--font-display)]">Cost by Role</h2>
+        <ChartLineUp size={20} className="text-primary" />
+        <h2 className="text-lg font-medium text-foreground font-[family-name:var(--font-display)]">Cost by Role</h2>
       </div>
       <div className="space-y-3">
         {sorted.map(([roleId, data]) => {
@@ -210,14 +216,14 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
           return (
             <div key={roleId}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-text-secondary">{data.name}</span>
-                <span className="text-xs text-text-tertiary">
+                <span className="text-sm text-muted-foreground">{data.name}</span>
+                <span className="text-xs text-muted-foreground">
                   ${data.total.toFixed(2)} ({data.count} runs)
                 </span>
               </div>
-              <div className="w-full bg-surface-sunken rounded-full h-1.5">
+              <div className="w-full bg-muted rounded-full h-1.5">
                 <div
-                  className="bg-accent h-1.5 rounded-full transition-all"
+                  className="bg-primary h-1.5 rounded-full transition-all"
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -235,18 +241,18 @@ function NarrativeContent({ text }: { text: string }) {
     <div className="space-y-1">
       {lines.map((line, i) => {
         if (line.startsWith('## ')) {
-          return <h2 key={i} className="text-lg font-semibold text-text-primary mt-4 mb-1">{line.slice(3)}</h2>;
+          return <h2 key={i} className="text-lg font-semibold text-foreground mt-4 mb-1">{line.slice(3)}</h2>;
         }
         if (line.startsWith('### ')) {
-          return <h3 key={i} className="text-base font-semibold text-text-primary mt-3 mb-1">{line.slice(4)}</h3>;
+          return <h3 key={i} className="text-base font-semibold text-foreground mt-3 mb-1">{line.slice(4)}</h3>;
         }
         if (line.startsWith('- ')) {
-          return <li key={i} className="text-sm text-text-secondary ml-4 list-disc">{renderBold(line.slice(2))}</li>;
+          return <li key={i} className="text-sm text-muted-foreground ml-4 list-disc">{renderBold(line.slice(2))}</li>;
         }
         if (line.trim() === '') {
           return <div key={i} className="h-1" />;
         }
-        return <p key={i} className="text-sm text-text-secondary">{renderBold(line)}</p>;
+        return <p key={i} className="text-sm text-muted-foreground">{renderBold(line)}</p>;
       })}
     </div>
   );

@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react';
-import { X, TreeStructure, Users, FolderOpen } from '@phosphor-icons/react';
+import { TreeStructure, Users, FolderOpen } from '@phosphor-icons/react';
 import type { TemplateRecord, TemplateRoleDefinition } from '@shared/contracts';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { cn } from '../../lib/utils';
 
 interface TemplateSelectorModalProps {
   onClose: () => void;
@@ -15,10 +27,10 @@ function RolePreview({ role, depth }: { role: TemplateRoleDefinition; depth: num
   return (
     <>
       <div
-        className="flex items-center gap-2 text-xs text-text-secondary"
+        className="flex items-center gap-2 text-xs text-muted-foreground"
         style={{ paddingLeft: `${depth * 16}px` }}
       >
-        <Users size={12} className="text-text-muted flex-shrink-0" />
+        <Users size={12} className="text-muted-foreground flex-shrink-0" />
         <span>{role.name}</span>
       </div>
       {role.children.map((child) => (
@@ -85,46 +97,43 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay">
-      <div className="bg-surface-card rounded-[var(--card-radius)] shadow-modal w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-          <h2 className="text-lg font-semibold text-text-primary">Choose Organization Template</h2>
-          <button
-            className="p-1 rounded-lg text-text-muted hover:text-text-secondary hover:bg-surface-sunken"
-            onClick={onClose}
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Choose Organization Template</DialogTitle>
+          <DialogDescription className="sr-only">
+            Select a template to create a new organization
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Template Cards */}
-        <div className="flex-1 overflow-auto p-6 space-y-5">
+        <div className="flex-1 overflow-auto space-y-5">
           {templates.map((template) => (
             <button
               key={template.id}
-              className={`w-full text-left rounded-[var(--card-radius)] border p-4 transition-colors ${
+              className={cn(
+                'w-full text-left rounded-lg border p-4 transition-colors',
                 selectedId === template.id
-                  ? 'border-accent bg-accent-subtle ring-1 ring-[var(--accent-ring)]'
-                  : 'border-border-default hover:border-border-strong bg-surface-card'
-              }`}
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'border-border hover:border-border bg-card',
+              )}
               onClick={() => setSelectedId(template.id)}
             >
               <div className="flex items-start gap-3">
                 <TreeStructure
                   size={24}
-                  className={selectedId === template.id ? 'text-accent' : 'text-text-muted'}
+                  className={selectedId === template.id ? 'text-primary' : 'text-muted-foreground'}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-text-primary">{template.name}</span>
-                    <span className="text-xs text-text-muted">
+                    <span className="font-medium text-foreground">{template.name}</span>
+                    <span className="text-xs text-muted-foreground">
                       {countRoles(template.rootRoles)} roles
                     </span>
                   </div>
-                  <p className="text-sm text-text-tertiary mt-1">{template.description}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{template.description}</p>
                   {/* Role hierarchy preview */}
-                  <div className="mt-3 space-y-1 bg-surface-sunken rounded-lg p-3">
+                  <div className="mt-3 space-y-1 bg-muted rounded-lg p-3">
                     {template.rootRoles.map((role) => (
                       <RolePreview key={role.name} role={role} depth={0} />
                     ))}
@@ -138,12 +147,11 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
           {selectedTemplate && (
             <div className="space-y-4 pt-3">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
+                <Label htmlFor="tmpl-org-name" className="mb-1">
                   Organization Name *
-                </label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
+                </Label>
+                <Input
+                  id="tmpl-org-name"
                   placeholder="My AI Team"
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
@@ -151,12 +159,11 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
+                <Label htmlFor="tmpl-org-desc" className="mb-1">
                   Description
-                </label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg border border-border-default bg-surface-card px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder-text-muted"
+                </Label>
+                <Input
+                  id="tmpl-org-desc"
                   placeholder="Optional description"
                   value={orgDescription}
                   onChange={(e) => setOrgDescription(e.target.value)}
@@ -164,48 +171,43 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">
+                <Label htmlFor="tmpl-workspace" className="mb-1">
                   Workspace Folder *
-                </label>
+                </Label>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 rounded-lg border border-border-default bg-surface-sunken px-3 py-2 text-sm text-text-primary placeholder-text-muted cursor-default"
+                  <Input
+                    id="tmpl-workspace"
+                    className="flex-1 bg-muted cursor-default"
                     placeholder="Select a folder..."
                     value={workspacePath}
                     readOnly
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="rounded-lg border border-border-default px-3 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken flex items-center gap-1.5"
+                    variant="outline"
                     onClick={handleSelectFolder}
                   >
                     <FolderOpen size={16} />
                     Browse
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-subtle">
-          <button
-            className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken"
-            onClick={onClose}
-          >
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          </Button>
+          <Button
             onClick={handleLoad}
             disabled={!selectedId || !orgName.trim() || !workspacePath || isCreating}
           >
             {isCreating ? 'Creating...' : 'Create Organization'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

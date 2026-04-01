@@ -9,7 +9,11 @@ import {
   Clock,
   FunnelSimple,
 } from '@phosphor-icons/react';
-import { clsx } from 'clsx';
+import { cn } from '../../lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { RunRecord, TaskRecord, RoleRecord } from '@shared/contracts';
 
 declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi };
@@ -127,54 +131,65 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
   const visible = filtered.slice(0, visibleCount);
 
   return (
-    <div className="rounded-[var(--card-radius)] border border-border-default bg-surface-card p-[var(--card-padding)] shadow-sm">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2">
-          <Clock size={20} className="text-accent" />
-          <h2 className="text-lg font-medium text-text-primary">Activity Timeline</h2>
-          <span className="text-xs text-text-muted">({filtered.length} events)</span>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock size={20} className="text-primary" />
+            <CardTitle className="text-lg font-medium">Activity Timeline</CardTitle>
+            <Badge variant="secondary" className="text-xs">
+              {filtered.length} events
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <FunnelSimple size={14} className="text-muted-foreground" />
+            <Select
+              value={filter}
+              onValueChange={(value) => { setFilter(value); setVisibleCount(PAGE_SIZE); }}
+            >
+              <SelectTrigger className="w-[160px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All events</SelectItem>
+                <SelectItem value="run_succeeded">Runs succeeded</SelectItem>
+                <SelectItem value="run_failed">Runs failed</SelectItem>
+                <SelectItem value="task_completed">Tasks completed</SelectItem>
+                <SelectItem value="escalation">Escalations</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <FunnelSimple size={14} className="text-text-muted" />
-          <select
-            value={filter}
-            onChange={(e) => { setFilter(e.target.value); setVisibleCount(PAGE_SIZE); }}
-            className="text-xs border border-border-default rounded-md px-2 py-1 text-text-secondary bg-surface-card focus:outline-none focus:ring-1 focus:ring-accent"
+      </CardHeader>
+      <CardContent>
+        {loading && events.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Loading activity...</p>
+        ) : visible.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No activity yet for this organization.</p>
+        ) : (
+          <div className="space-y-0">
+            {visible.map((event, idx) => (
+              <TimelineItem
+                key={event.id}
+                event={event}
+                isLast={idx === visible.length - 1}
+              />
+            ))}
+          </div>
+        )}
+
+        {visibleCount < filtered.length && (
+          <Button
+            variant="link"
+            size="sm"
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="mt-3 px-0"
           >
-            <option value="all">All events</option>
-            <option value="run_succeeded">Runs succeeded</option>
-            <option value="run_failed">Runs failed</option>
-            <option value="task_completed">Tasks completed</option>
-            <option value="escalation">Escalations</option>
-          </select>
-        </div>
-      </div>
-
-      {loading && events.length === 0 ? (
-        <p className="text-sm text-text-muted">Loading activity...</p>
-      ) : visible.length === 0 ? (
-        <p className="text-sm text-text-muted">No activity yet for this organization.</p>
-      ) : (
-        <div className="space-y-0">
-          {visible.map((event, idx) => (
-            <TimelineItem
-              key={event.id}
-              event={event}
-              isLast={idx === visible.length - 1}
-            />
-          ))}
-        </div>
-      )}
-
-      {visibleCount < filtered.length && (
-        <button
-          onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-          className="mt-3 text-xs text-accent hover:text-accent-hover font-medium"
-        >
-          Show more ({filtered.length - visibleCount} remaining)
-        </button>
-      )}
-    </div>
+            Show more ({filtered.length - visibleCount} remaining)
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -186,21 +201,21 @@ function TimelineItem({ event, isLast }: { event: TimelineEvent; isLast: boolean
     <div className="flex gap-3">
       {/* Timeline line + icon */}
       <div className="flex flex-col items-center">
-        <div className={clsx('w-7 h-7 rounded-full flex items-center justify-center shrink-0', color.bg)}>
+        <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0', color.bg)}>
           <Icon size={14} className={color.icon} weight="bold" />
         </div>
-        {!isLast && <div className="w-px flex-1 bg-border-default my-1" />}
+        {!isLast && <div className="w-px flex-1 bg-border my-1" />}
       </div>
 
       {/* Content */}
       <div className="pb-5 min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium text-text-primary">{event.title}</span>
-          <span className="text-xs text-text-muted">
+          <span className="text-sm font-medium text-foreground">{event.title}</span>
+          <span className="text-xs text-muted-foreground">
             {new Date(event.timestamp).toLocaleString()}
           </span>
         </div>
-        <p className="text-xs text-text-tertiary mt-0.5">{event.description}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{event.description}</p>
       </div>
     </div>
   );
@@ -215,9 +230,9 @@ const EVENT_ICONS: Record<string, typeof CheckCircle> = {
 };
 
 const EVENT_COLORS: Record<string, { bg: string; icon: string }> = {
-  run_succeeded: { bg: 'bg-success-subtle', icon: 'text-success' },
-  run_failed: { bg: 'bg-danger-subtle', icon: 'text-danger' },
-  task_completed: { bg: 'bg-success-subtle', icon: 'text-success' },
-  task_status: { bg: 'bg-info-subtle', icon: 'text-info' },
-  escalation: { bg: 'bg-warning-subtle', icon: 'text-warning' },
+  run_succeeded: { bg: 'bg-green-500/10', icon: 'text-green-500' },
+  run_failed: { bg: 'bg-destructive/10', icon: 'text-destructive' },
+  task_completed: { bg: 'bg-green-500/10', icon: 'text-green-500' },
+  task_status: { bg: 'bg-blue-500/10', icon: 'text-blue-500' },
+  escalation: { bg: 'bg-yellow-500/10', icon: 'text-yellow-500' },
 };
