@@ -189,7 +189,8 @@ So that data persistence is ready for entity repositories with async Promise<T> 
 **And** the connection service is registered in composition-root.ts via DI token
 **And** a version-based migration system exists using `CREATE TABLE IF NOT EXISTS` pattern
 **And** all repository interfaces in `core/interfaces/` use `Promise<T>` return types (per ADR-01)
-**And** the `organizations` table is created as the first migration (id, name, description, status, budget_limit, org_template_id, created_at, updated_at)
+**And** the `organizations` table is created as the first migration (id, name, description, status, budget_limit, org_template_id, workspace_path, created_at, updated_at)
+**And** `workspace_path` is `TEXT NOT NULL` and must be a valid directory path
 **And** table names use plural `snake_case`, column names use `snake_case`
 **And** database file path is configurable (default: `~/.capibara/capibara.sqlite`)
 
@@ -267,6 +268,9 @@ So that org tree data can be persisted and queried.
 **Given** the SQLite foundation from Epic 1
 **When** the org domain entities are created
 **Then** `IOrganizationRepository` interface defines CRUD operations with `Promise<T>` return types
+**And** `IOrganizationRepository` includes a `delete(id)` method that cascades to all associated data (roles, tasks, discussion_groups, discussion_messages, runs, cost_entries, pending_wakes, narratives)
+**And** cascade deletion uses SQLite foreign key `ON DELETE CASCADE` or explicit transaction-based cleanup
+**And** deletion is atomic — performed within a single database transaction
 **And** `IRoleRepository` interface defines: `findById`, `findByOrgId`, `findByParentId`, `findChildren`, `create`, `update`, `updateStatus`, `delete`
 **And** `roles` table is created via migration with columns: id, org_id, name, parent_id, persona, knowledge_base_refs (JSON), skill_ids (JSON), can_approve, can_delegate, requires_human_approval, status (active/paused/idle), created_at, updated_at
 **And** `SqliteOrganizationRepository` and `SqliteRoleRepository` implement the interfaces
@@ -353,9 +357,31 @@ So that I can quickly understand and choose the right starting structure.
 **When** the user creates a new organization
 **Then** a template selector modal displays available templates as cards
 **And** each card shows: template name, description, and a preview of the hierarchical structure
-**And** selecting a template instantly creates the organization with all pre-filled roles
+**And** before or after template selection, the user must specify a workspace directory path via a folder picker dialog (Electron's `dialog.showOpenDialog` with `properties: ['openDirectory']`)
+**And** the workspace path is validated: must be an existing directory, must be writable
+**And** selecting a template creates the organization with the specified `workspace_path` and all pre-filled roles
 **And** an option to start with a blank organization (no template) is available
-**And** after template selection, the user lands on the Organization page with the populated tree
+**And** after template selection and workspace configuration, the user lands on the Organization page with the populated tree
+
+### Story 2.7: Implement Organization Deletion with Safety Confirmation
+
+As a user,
+I want to delete an organization I no longer need, with a safety confirmation requiring me to type the organization name,
+So that I am protected from accidental deletion of important data.
+
+**Acceptance Criteria:**
+
+**Given** an existing organization
+**When** the user initiates a delete action from the organization settings or context menu
+**Then** a confirmation dialog appears requiring the user to type the exact organization name
+**And** the delete button is disabled until the typed name matches exactly (case-sensitive)
+**And** upon confirmation, the organization and ALL associated data are deleted: roles, tasks, discussion groups, discussion messages, runs, cost entries, pending wakes, narratives
+**And** the deletion is performed within a single database transaction for atomicity
+**And** after deletion, the user is redirected to the organization list or creation page
+**And** a success notification confirms the deletion
+**And** the IPC channel `capibara:org:delete` is defined in `shared/contracts.ts` with Zod-validated payload
+**And** the Zod schema validates: `{ orgId: string, confirmName: string }`
+**And** the IPC handler verifies `confirmName` matches the actual organization name before proceeding
 
 ---
 
@@ -708,6 +734,8 @@ So that agents can complete tasks, create subtasks, post to discussions, and esc
 **And** MCP tools route to application services via the DI container
 **And** temp config files are cleaned up after Run ends
 **And** MCP communication uses stdio transport only (no network ports)
+**And** McpConfigGenerator resolves `workspace_path` from the Run's associated organization via orgId
+**And** the MCP config specifies the organization's `workspace_path` as the working directory for CLI execution
 
 ### Story 6.4: Implement UtilityProcess Executor
 
@@ -721,6 +749,7 @@ So that the UI stays responsive during AI execution.
 **When** a Run transitions to `running` status
 **Then** `UtilityProcessExecutor` spawns an Electron UtilityProcess
 **And** the UtilityProcess launches Claude Code CLI with the MCP config and constructed prompt
+**And** the CLI process working directory (`cwd`) is set to the organization's `workspace_path`
 **And** stdout/stderr streams are processed via StringDecoder with chunked splitting
 **And** GBK encoding fallback is included for CJK environments
 **And** output is streamed back to Main process via `parentPort` messaging

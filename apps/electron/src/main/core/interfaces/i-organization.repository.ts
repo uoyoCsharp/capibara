@@ -5,6 +5,7 @@ export interface CreateOrganizationInput {
   description: string;
   budgetLimit: number;
   orgTemplateId: string | null;
+  workspacePath: string;
 }
 
 export interface UpdateOrganizationInput {
@@ -13,6 +14,7 @@ export interface UpdateOrganizationInput {
   description?: string;
   status?: Organization['status'];
   budgetLimit?: number;
+  workspacePath?: string;
 }
 
 export interface IOrganizationRepository {

@@ -21,6 +21,7 @@ export function registerSnapshotHandlers(
             status: o.status,
             budgetLimit: o.budgetLimit,
             orgTemplateId: o.orgTemplateId,
+            workspacePath: o.workspacePath,
             createdAt: o.createdAt,
             updatedAt: o.updatedAt,
           })),

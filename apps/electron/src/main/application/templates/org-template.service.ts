@@ -122,6 +122,7 @@ export class OrgTemplateService {
     orgName: string,
     orgDescription: string,
     budgetLimit: number,
+    workspacePath: string,
   ): Promise<Organization> {
     const template = this.getTemplateById(templateId);
     if (!template) {
@@ -134,6 +135,7 @@ export class OrgTemplateService {
       description: orgDescription,
       budgetLimit,
       orgTemplateId: template.id,
+      workspacePath,
     });
 
     // Resolve skill command → id mapping

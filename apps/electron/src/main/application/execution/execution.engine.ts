@@ -1,4 +1,5 @@
 import { injectable, inject } from 'tsyringe';
+import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js';
 import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js';
@@ -14,6 +15,7 @@ import {
   CONFIG_TOKEN,
   LOGGER_TOKEN,
   EVENT_BUS_TOKEN,
+  ORGANIZATION_REPO_TOKEN,
   RUN_REPO_TOKEN,
   ROLE_REPO_TOKEN,
   TASK_REPO_TOKEN,
@@ -34,6 +36,7 @@ export class ExecutionEngine {
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
     @inject(EVENT_BUS_TOKEN) private readonly eventBus: IEventBus,
+    @inject(ORGANIZATION_REPO_TOKEN) private readonly orgRepo: IOrganizationRepository,
     @inject(RUN_REPO_TOKEN) private readonly runRepo: IRunRepository,
     @inject(ROLE_REPO_TOKEN) private readonly roleRepo: IRoleRepository,
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -142,8 +145,12 @@ export class ExecutionEngine {
         payload: { runId, roleId, orgId },
       });
 
+      // ─── Resolve Org Workspace Path ──────────────────────
+      const org = await this.orgRepo.findById(orgId);
+      const projectDir = org?.workspacePath || this.config.cli.projectDir;
+
       // ─── Invoke Executor (via UtilityProcess Worker) ───────
-      this.logger.info('Dispatching run to worker', { runId, executor: this.config.cli.defaultExecutor });
+      this.logger.info('Dispatching run to worker', { runId, executor: this.config.cli.defaultExecutor, projectDir });
 
       const result = await this.executor.execute({
         runId,
@@ -153,7 +160,7 @@ export class ExecutionEngine {
         trigger,
         prompt: systemPrompt,
         mcpConfigPath,
-        projectDir: this.config.cli.projectDir,
+        projectDir,
         executor: this.config.cli.defaultExecutor,
         cliConfig: {
           model: this.config.cli.model ?? undefined,

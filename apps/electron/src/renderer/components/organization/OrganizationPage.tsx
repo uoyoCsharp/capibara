@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, TreeStructure } from '@phosphor-icons/react';
+import { Plus, TreeStructure, Trash } from '@phosphor-icons/react';
 import type {
   OrganizationRecord,
   RoleRecord,
@@ -11,6 +11,7 @@ import { OrgTreeView } from './OrgTreeView';
 import { RoleDrawer } from './RoleDrawer';
 import { TemplateSelectorModal } from './TemplateSelectorModal';
 import { CreateOrgModal } from './CreateOrgModal';
+import { DeleteOrgModal } from './DeleteOrgModal';
 import { toast } from '../../store/toast.store';
 
 export function OrganizationPage() {
@@ -20,6 +21,7 @@ export function OrganizationPage() {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
+  const [showDeleteOrg, setShowDeleteOrg] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadOrgs = useCallback(async () => {
@@ -99,13 +101,14 @@ export function OrganizationPage() {
     } catch { toast.error('Failed to load template'); }
   };
 
-  const handleCreateBlankOrg = async (name: string, description: string) => {
+  const handleCreateBlankOrg = async (name: string, description: string, workspacePath: string) => {
     try {
       const result = await window.capibara.createOrganization({
         name,
         description,
         budgetLimit: 50.0,
         orgTemplateId: null,
+        workspacePath,
       });
       if (result.ok) {
         setShowCreateOrg(false);
@@ -118,6 +121,28 @@ export function OrganizationPage() {
     } catch (err) {
       console.error('[CreateOrg] IPC error:', err);
       toast.error('Failed to create organization');
+    }
+  };
+
+  const handleDeleteOrg = async () => {
+    if (!currentOrg) return;
+    try {
+      const result = await window.capibara.deleteOrganization({
+        orgId: currentOrg.id,
+        confirmName: currentOrg.name,
+      });
+      if (result.ok) {
+        setShowDeleteOrg(false);
+        setCurrentOrgId(null);
+        setRoles([]);
+        setSelectedRoleId(null);
+        toast.success('Organization deleted successfully');
+        await loadOrgs();
+      } else {
+        toast.error(result.error.message);
+      }
+    } catch {
+      toast.error('Failed to delete organization');
     }
   };
 
@@ -155,6 +180,15 @@ export function OrganizationPage() {
                   </option>
                 ))}
               </select>
+            )}
+            {currentOrg && (
+              <button
+                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                onClick={() => setShowDeleteOrg(true)}
+                title="Delete Organization"
+              >
+                <Trash size={16} />
+              </button>
             )}
             <button
               className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover transition-colors"
@@ -250,6 +284,15 @@ export function OrganizationPage() {
         <CreateOrgModal
           onClose={() => setShowCreateOrg(false)}
           onCreate={handleCreateBlankOrg}
+        />
+      )}
+
+      {/* Delete Organization Modal */}
+      {showDeleteOrg && currentOrg && (
+        <DeleteOrgModal
+          orgName={currentOrg.name}
+          onClose={() => setShowDeleteOrg(false)}
+          onConfirm={handleDeleteOrg}
         />
       )}
     </div>

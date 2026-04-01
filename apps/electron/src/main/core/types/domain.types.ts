@@ -62,6 +62,7 @@ export interface Organization {
   status: OrgStatus;
   budgetLimit: number;
   orgTemplateId: string | null;
+  workspacePath: string;
   createdAt: string;
   updatedAt: string;
 }

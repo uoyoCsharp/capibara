@@ -17,6 +17,7 @@ interface OrgRow {
   status: string;
   budget_limit: number;
   org_template_id: string | null;
+  workspace_path: string;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +30,7 @@ function rowToEntity(row: OrgRow): Organization {
     status: row.status as Organization['status'],
     budgetLimit: row.budget_limit,
     orgTemplateId: row.org_template_id,
+    workspacePath: row.workspace_path,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -61,9 +63,9 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     const now = new Date().toISOString();
 
     this.conn.getDb().prepare(`
-      INSERT INTO organizations (id, name, description, budget_limit, org_template_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.name, input.description, input.budgetLimit, input.orgTemplateId, now, now);
+      INSERT INTO organizations (id, name, description, budget_limit, org_template_id, workspace_path, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.name, input.description, input.budgetLimit, input.orgTemplateId, input.workspacePath, now, now);
 
     const org = await this.findById(id);
     return org!;
@@ -78,11 +80,12 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     const description = input.description ?? existing.description;
     const status = input.status ?? existing.status;
     const budgetLimit = input.budgetLimit ?? existing.budgetLimit;
+    const workspacePath = input.workspacePath ?? existing.workspacePath;
 
     this.conn.getDb().prepare(`
-      UPDATE organizations SET name = ?, description = ?, status = ?, budget_limit = ?, updated_at = ?
+      UPDATE organizations SET name = ?, description = ?, status = ?, budget_limit = ?, workspace_path = ?, updated_at = ?
       WHERE id = ?
-    `).run(name, description, status, budgetLimit, now, input.id);
+    `).run(name, description, status, budgetLimit, workspacePath, now, input.id);
 
     const org = await this.findById(input.id);
     return org!;

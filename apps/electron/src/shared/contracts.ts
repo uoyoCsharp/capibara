@@ -28,6 +28,9 @@ export const IPC_CHANNELS = {
   deleteSkill: 'capibara:skill:delete',
   searchSkills: 'capibara:skill:search',
 
+  // Dialogs
+  selectFolder: 'capibara:dialog:select-folder',
+
   // Templates
   getTemplates: 'capibara:template:get-all',
   loadTemplate: 'capibara:template:load',
@@ -97,6 +100,7 @@ export const createOrganizationSchema = z.object({
   description: z.string().max(500).default(''),
   budgetLimit: z.number().min(0).default(50.0),
   orgTemplateId: z.string().nullable().default(null),
+  workspacePath: z.string().min(1),
 });
 
 export const updateOrganizationSchema = z.object({
@@ -105,6 +109,12 @@ export const updateOrganizationSchema = z.object({
   description: z.string().max(500).optional(),
   status: z.enum(['active', 'paused', 'archived']).optional(),
   budgetLimit: z.number().min(0).optional(),
+  workspacePath: z.string().min(1).optional(),
+});
+
+export const deleteOrganizationSchema = z.object({
+  orgId: z.string().min(1),
+  confirmName: z.string().min(1),
 });
 
 export const createRoleSchema = z.object({
@@ -161,6 +171,7 @@ export const loadTemplateSchema = z.object({
   orgName: z.string().min(1).max(100),
   orgDescription: z.string().max(500).default(''),
   budgetLimit: z.number().min(0).default(50.0),
+  workspacePath: z.string().min(1),
 });
 
 export const createTaskSchema = z.object({
@@ -202,6 +213,7 @@ export const startRunSchema = z.object({
 
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;
+export type DeleteOrganizationInput = z.infer<typeof deleteOrganizationSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
 export type CreateSkillInput = z.infer<typeof createSkillSchema>;
@@ -218,12 +230,15 @@ export type StartRunInput = z.infer<typeof startRunSchema>;
 export interface CapibaraApi {
   loadSnapshot: () => Promise<DesktopResult<AppSnapshot>>;
 
+  // Dialogs
+  selectFolder: () => Promise<DesktopResult<string | null>>;
+
   // Organization
   getOrganizations: () => Promise<DesktopResult<OrganizationRecord[]>>;
   getOrganization: (id: string) => Promise<DesktopResult<OrganizationRecord | null>>;
   createOrganization: (input: CreateOrganizationInput) => Promise<DesktopResult<OrganizationRecord>>;
   updateOrganization: (input: UpdateOrganizationInput) => Promise<DesktopResult<OrganizationRecord>>;
-  deleteOrganization: (id: string) => Promise<DesktopResult<void>>;
+  deleteOrganization: (input: DeleteOrganizationInput) => Promise<DesktopResult<void>>;
 
   // Roles
   getRolesByOrgId: (orgId: string) => Promise<DesktopResult<RoleRecord[]>>;
@@ -309,6 +324,7 @@ export interface OrganizationRecord {
   status: OrgStatus;
   budgetLimit: number;
   orgTemplateId: string | null;
+  workspacePath: string;
   createdAt: string;
   updatedAt: string;
 }

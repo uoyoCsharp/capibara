@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, TreeStructure, Users } from '@phosphor-icons/react';
+import { X, TreeStructure, Users, FolderOpen } from '@phosphor-icons/react';
 import type { TemplateRecord, TemplateRoleDefinition } from '@shared/contracts';
 
 interface TemplateSelectorModalProps {
@@ -34,6 +34,14 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
   const [orgName, setOrgName] = useState('');
   const [orgDescription, setOrgDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [workspacePath, setWorkspacePath] = useState('');
+
+  const handleSelectFolder = async () => {
+    const result = await window.capibara.selectFolder();
+    if (result.ok && result.data) {
+      setWorkspacePath(result.data);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -54,7 +62,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
   const selectedTemplate = templates.find((t) => t.id === selectedId);
 
   const handleLoad = async () => {
-    if (!selectedId || !orgName.trim()) return;
+    if (!selectedId || !orgName.trim() || !workspacePath) return;
     setIsCreating(true);
     try {
       const result = await window.capibara.loadTemplate({
@@ -62,6 +70,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
         orgName: orgName.trim(),
         orgDescription: orgDescription.trim(),
         budgetLimit: 50.0,
+        workspacePath,
       });
       if (result.ok) {
         onLoaded();
@@ -154,6 +163,28 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
                   maxLength={500}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  Workspace Folder *
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 rounded-lg border border-border-default bg-surface-sunken px-3 py-2 text-sm text-text-primary placeholder-text-muted cursor-default"
+                    placeholder="Select a folder..."
+                    value={workspacePath}
+                    readOnly
+                  />
+                  <button
+                    type="button"
+                    className="rounded-lg border border-border-default px-3 py-2 text-sm font-medium text-text-secondary hover:bg-surface-sunken flex items-center gap-1.5"
+                    onClick={handleSelectFolder}
+                  >
+                    <FolderOpen size={16} />
+                    Browse
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -169,7 +200,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
           <button
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-text-inverse hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleLoad}
-            disabled={!selectedId || !orgName.trim() || isCreating}
+            disabled={!selectedId || !orgName.trim() || !workspacePath || isCreating}
           >
             {isCreating ? 'Creating...' : 'Create Organization'}
           </button>

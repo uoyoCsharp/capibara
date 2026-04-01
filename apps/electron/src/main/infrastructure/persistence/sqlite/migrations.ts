@@ -209,6 +209,15 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 12,
+    description: 'Add workspace_path column to organizations',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE organizations ADD COLUMN workspace_path TEXT NOT NULL DEFAULT '';
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

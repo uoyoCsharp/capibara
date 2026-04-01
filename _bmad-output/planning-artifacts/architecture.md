@@ -213,7 +213,7 @@ if (config.database.driver === 'sqlite') {
 
 | Entity | Table | Purpose | Key Fields |
 |--------|-------|---------|------------|
-| Organization | `organizations` | Project root | id, name, description, status, budget_limit, org_template_id |
+| Organization | `organizations` | Project root | id, name, description, status, budget_limit, org_template_id, workspace_path |
 | Role | `roles` | Org tree node | id, org_id, name, parent_id, persona, skill_ids (JSON), can_approve, can_delegate, requires_human_approval, status |
 | Skill | `skills` | Skill reference | id, name, command, description, category, source, org_template_id, custom_prompt_content (NULL for non-custom) |
 | TaskNode | `task_nodes` | Variable-depth task tree | id, org_id, parent_id, type, title, description, status, assignee_role_id, depth |
@@ -380,6 +380,8 @@ Run Created
   └── 5. Run ends → MCP bridge terminates → temp config cleaned up
 ```
 
+**Workspace:** McpConfigGenerator resolves `workspace_path` from the Run's associated organization (via orgId). The CLI execution working directory is set to the organization's `workspace_path`.
+
 **Security:** Every MCP tool call validates `runId` + JWT token. Only the active Run can invoke tools.
 
 ### 7.3 MCP Tools (MVP)
@@ -438,6 +440,7 @@ For review tasks, use capibara_discussion_post with the appropriate voteTag.
 All LLM/CLI execution runs in Electron's UtilityProcess:
 
 - Inherits from reference project's WorkerService pattern
+- CLI process working directory (`cwd`) is set to the organization's `workspace_path`
 - Communicates with Main Process via `parentPort` messaging
 - Stream processing: stdout/stderr via StringDecoder with chunked splitting
 - GBK encoding fallback for CJK environments
@@ -779,7 +782,7 @@ database:
 
 cli:
   defaultExecutor: claude-cli
-  projectDir: ./
+  # projectDir removed — workspace path is now per-organization, stored in organizations.workspace_path
 
 logging:
   level: info

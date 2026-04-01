@@ -71,7 +71,8 @@ Given the concurrency of tasks and the need for deep context, Capibara utilizes 
 
 ### 1. Organization & Skills Setup
 - **Scenario:** A user configures AI roles upon first use or when starting a new project.
-- **Interaction Flow:** Enter [Organization Panel] -> Load preset templates (e.g., BMAD Standard Dev Team) -> Interface visualizes the hierarchical structure map -> Click any node to slide out a drawer from the side to configure the Persona, bind knowledge bases, or link LLM skill sets (BMAD L1/L3) -> Check the `requiresHumanApproval` node for necessary human intervention.
+- **Interaction Flow:** Enter [Organization Panel] -> Load preset templates (e.g., BMAD Standard Dev Team) -> Select workspace folder via native OS folder picker -> Interface visualizes the hierarchical structure map -> Click any node to slide out a drawer from the side to configure the Persona, bind knowledge bases, or link LLM skill sets (BMAD L1/L3) -> Check the `requiresHumanApproval` node for necessary human intervention.
+- **Organization Deletion:** Organization context menu or settings includes a "Delete Organization" action. Clicking "Delete" opens a confirmation dialog requiring the user to type the exact organization name (case-sensitive). The delete button remains disabled until the name matches. After successful deletion, user is redirected to the organization list or creation page with a success notification.
 
 ### 2. Initiating an Epic & Observing Flow
 - **Scenario:** The user posits a top-level goal; the AI begins self-decomposition and generates a collaboration flow.

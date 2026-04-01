@@ -186,7 +186,7 @@ export async function bootstrap(): Promise<void> {
   container.register<McpIpcServer>(MCP_IPC_SERVER_TOKEN, { useValue: mcpIpcServer });
 
   const executionEngine = new ExecutionEngine(
-    config, logger, eventBus, runRepo, roleRepo, taskRepo, costRepo,
+    config, logger, eventBus, orgRepo, runRepo, roleRepo, taskRepo, costRepo,
     executor, promptBuilder, executionContext, mcpConfigGen, mcpIpcServer,
   );
 

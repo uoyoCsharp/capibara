@@ -9,12 +9,15 @@ const api: CapibaraApi = {
 
   loadSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.loadSnapshot),
 
+  // Dialogs
+  selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.selectFolder),
+
   // Organization
   getOrganizations: () => ipcRenderer.invoke(IPC_CHANNELS.getOrganizations),
   getOrganization: (id) => ipcRenderer.invoke(IPC_CHANNELS.getOrganization, id),
   createOrganization: (input) => ipcRenderer.invoke(IPC_CHANNELS.createOrganization, input),
   updateOrganization: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateOrganization, input),
-  deleteOrganization: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteOrganization, id),
+  deleteOrganization: (input) => ipcRenderer.invoke(IPC_CHANNELS.deleteOrganization, input),
 
   // Roles
   getRolesByOrgId: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getRolesByOrgId, orgId),

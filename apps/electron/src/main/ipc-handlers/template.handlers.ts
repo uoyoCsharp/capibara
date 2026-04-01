@@ -1,3 +1,4 @@
+import { existsSync, statSync, accessSync, constants } from 'node:fs';
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS, loadTemplateSchema } from '@shared/contracts.js';
 import type { DesktopResult, TemplateRecord } from '@shared/contracts.js';
@@ -10,6 +11,17 @@ function ok<T>(data: T): DesktopResult<T> {
 
 function fail<T>(code: string, message: string): DesktopResult<T> {
   return { ok: false, error: { code, message } };
+}
+
+function validateWorkspacePath(path: string): string | null {
+  if (!existsSync(path)) return 'Path does not exist';
+  if (!statSync(path).isDirectory()) return 'Path is not a directory';
+  try {
+    accessSync(path, constants.W_OK);
+  } catch {
+    return 'Path is not writable';
+  }
+  return null;
 }
 
 export function registerTemplateHandlers(
@@ -38,11 +50,16 @@ export function registerTemplateHandlers(
       if (!parsed.success) {
         return fail('VALIDATION_ERROR', parsed.error.message);
       }
+      const pathError = validateWorkspacePath(parsed.data.workspacePath);
+      if (pathError) {
+        return fail('INVALID_WORKSPACE_PATH', pathError);
+      }
       const org = await templateService.loadTemplate(
         parsed.data.templateId,
         parsed.data.orgName,
         parsed.data.orgDescription,
         parsed.data.budgetLimit,
+        parsed.data.workspacePath,
       );
       return ok(org);
     } catch (err) {

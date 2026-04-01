@@ -89,6 +89,8 @@ A single Agent can: execute tasks, decompose tasks, review others' work, vote in
 The system shall support dynamic organization tree modeling:
 
 - **Role Tree**: Unlimited nesting depth via `parentId` recursion
+- **Workspace Binding**: Each organization must specify a workspace directory path at creation time. All task artifacts, CLI executions, and file operations are scoped to this directory.
+- **Organization Deletion**: Users can delete an organization. Deletion requires manual confirmation by typing the exact organization name to prevent accidental data loss. Deletion cascades to all associated roles, tasks, discussions, runs, and cost entries.
 - **Role Three-Element Model**: Each role defined by:
   - `persona` — Role definition text (user-editable, becomes part of system prompt)
   - `knowledgeBaseRefs` — References to knowledge documents (user-configurable)
@@ -424,7 +426,7 @@ As a human user, I want to send messages and vote in any discussion group with e
 
 | Entity | Purpose | Key Fields |
 |--------|---------|------------|
-| `Organization` | Project root | id, name, description, status, budgetLimit, orgTemplateId |
+| `Organization` | Project root | id, name, description, status, budgetLimit, orgTemplateId, workspacePath |
 | `Role` | Org tree node | id, orgId, name, parentId, persona, knowledgeBaseRefs[], skillIds[], canApprove, canDelegate, requiresHumanApproval, status |
 | `Skill` | Skill definition | id, name, source (builtin/template/custom), templateId, promptContent, description |
 | `TaskNode` | Variable-depth task tree | id, orgId, parentId, type (epic/story/task/subtask/spike/bug/chore), title, description, status, assigneeRoleId, depth |
