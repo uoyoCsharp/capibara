@@ -1,5 +1,6 @@
 import { injectable, inject } from 'tsyringe';
 import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js';
+import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js';
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
@@ -7,6 +8,7 @@ import type { McpToolCallResult } from '@main/core/interfaces/i-mcp-tool-handler
 import type { VoteTag } from '@main/core/types/domain.types.js';
 import {
   TASK_REPO_TOKEN,
+  ROLE_REPO_TOKEN,
   DISCUSSION_REPO_TOKEN,
   EVENT_BUS_TOKEN,
   LOGGER_TOKEN,
@@ -21,6 +23,7 @@ import { McpToolRegistry } from './mcp-tool-registry.js';
 export class McpToolHandlers {
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
+    @inject(ROLE_REPO_TOKEN) private readonly roleRepo: IRoleRepository,
     @inject(DISCUSSION_REPO_TOKEN) private readonly discussionRepo: IDiscussionRepository,
     @inject(EVENT_BUS_TOKEN) private readonly eventBus: IEventBus,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
@@ -31,6 +34,7 @@ export class McpToolHandlers {
     registry.register('capibara_task_create_subtask', (args) => this.taskCreateSubtask(args));
     registry.register('capibara_discussion_post', (args) => this.discussionPost(args));
     registry.register('capibara_context_get_task', (args) => this.contextGetTask(args));
+    registry.register('capibara_context_get_org_tree', (args) => this.contextGetOrgTree(args));
     registry.register('capibara_context_get_discussion_summary', (args) => this.contextGetDiscussionSummary(args));
     registry.register('capibara_escalate', (args) => this.escalate(args));
   }
@@ -105,6 +109,24 @@ export class McpToolHandlers {
     const task = await this.taskRepo.findById(args.taskId as string);
     if (!task) return { success: false, error: 'Task not found' };
     return { success: true, data: task };
+  }
+
+  private async contextGetOrgTree(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    const orgId = args.orgId as string;
+    const roles = await this.roleRepo.findByOrgId(orgId);
+    if (!roles.length) return { success: false, error: 'No roles found for org' };
+
+    const tree = roles.map((r) => ({
+      id: r.id,
+      name: r.name,
+      parentId: r.parentId,
+      status: r.status,
+      canApprove: r.canApprove,
+      canDelegate: r.canDelegate,
+      requiresHumanApproval: r.requiresHumanApproval,
+    }));
+
+    return { success: true, data: { orgId, roles: tree } };
   }
 
   private async contextGetDiscussionSummary(args: Record<string, unknown>): Promise<McpToolCallResult> {

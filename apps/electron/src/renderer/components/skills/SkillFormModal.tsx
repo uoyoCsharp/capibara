@@ -36,39 +36,41 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
     setIsSaving(true);
     setError('');
 
-    if (isEditing) {
-      const result = await window.capibara.updateSkill({
-        id: skill.id,
-        name: name.trim(),
-        command: command.trim(),
-        description: description.trim(),
-        category,
-        customPromptContent: promptContent.trim() || null,
-      });
-      if (!result.ok) {
-        setError(result.error.message);
-        setIsSaving(false);
-        return;
+    try {
+      if (isEditing) {
+        const result = await window.capibara.updateSkill({
+          id: skill.id,
+          name: name.trim(),
+          command: command.trim(),
+          description: description.trim(),
+          category,
+          customPromptContent: promptContent.trim() || null,
+        });
+        if (!result.ok) {
+          setError(result.error.message);
+          return;
+        }
+      } else {
+        const result = await window.capibara.createSkill({
+          name: name.trim(),
+          command: command.trim(),
+          description: description.trim(),
+          category,
+          source: 'custom',
+          orgTemplateId: null,
+          customPromptContent: promptContent.trim() || null,
+        });
+        if (!result.ok) {
+          setError(result.error.message);
+          return;
+        }
       }
-    } else {
-      const result = await window.capibara.createSkill({
-        name: name.trim(),
-        command: command.trim(),
-        description: description.trim(),
-        category,
-        source: 'custom',
-        orgTemplateId: null,
-        customPromptContent: promptContent.trim() || null,
-      });
-      if (!result.ok) {
-        setError(result.error.message);
-        setIsSaving(false);
-        return;
-      }
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsSaving(false);
-    onSaved();
   };
 
   return (

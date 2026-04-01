@@ -36,14 +36,19 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    window.capibara.getTemplates().then((result) => {
-      if (result.ok) {
-        setTemplates(result.data);
-        if (result.data.length > 0) {
-          setSelectedId(result.data[0].id);
+    (async () => {
+      try {
+        const result = await window.capibara.getTemplates();
+        if (result.ok) {
+          setTemplates(result.data);
+          if (result.data.length > 0) {
+            setSelectedId(result.data[0].id);
+          }
         }
+      } catch {
+        // IPC may fail
       }
-    });
+    })();
   }, []);
 
   const selectedTemplate = templates.find((t) => t.id === selectedId);
@@ -51,15 +56,20 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
   const handleLoad = async () => {
     if (!selectedId || !orgName.trim()) return;
     setIsCreating(true);
-    const result = await window.capibara.loadTemplate({
-      templateId: selectedId,
-      orgName: orgName.trim(),
-      orgDescription: orgDescription.trim(),
-      budgetLimit: 50.0,
-    });
-    setIsCreating(false);
-    if (result.ok) {
-      onLoaded();
+    try {
+      const result = await window.capibara.loadTemplate({
+        templateId: selectedId,
+        orgName: orgName.trim(),
+        orgDescription: orgDescription.trim(),
+        budgetLimit: 50.0,
+      });
+      if (result.ok) {
+        onLoaded();
+      }
+    } catch {
+      // IPC may fail
+    } finally {
+      setIsCreating(false);
     }
   };
 

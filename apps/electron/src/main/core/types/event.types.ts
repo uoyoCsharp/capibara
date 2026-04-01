@@ -26,7 +26,10 @@ export type DomainEventType =
   | 'budget:exceeded'
   | 'wake:triggered'
   | 'wake:pending-enqueued'
-  | 'narrative:updated';
+  | 'narrative:updated'
+  | 'approval:required'
+  | 'approval:completed'
+  | 'escalation:top-level';
 
 export interface DomainEvent<T = unknown> {
   type: DomainEventType;

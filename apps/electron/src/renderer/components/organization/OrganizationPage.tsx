@@ -22,78 +22,95 @@ export function OrganizationPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadOrgs = useCallback(async () => {
-    const result = await window.capibara.getOrganizations();
-    if (result.ok) {
-      setOrganizations(result.data);
-      if (result.data.length > 0 && !currentOrgId) {
-        setCurrentOrgId(result.data[0].id);
+    try {
+      const result = await window.capibara.getOrganizations();
+      if (result.ok) {
+        setOrganizations(result.data);
+        if (result.data.length > 0) {
+          setCurrentOrgId((prev) => prev ?? result.data[0].id);
+        }
       }
+    } catch {
+      // IPC may fail
     }
-  }, [currentOrgId]);
+  }, []);
 
-  const loadRoles = useCallback(async () => {
-    if (!currentOrgId) {
+  const loadRoles = useCallback(async (orgId: string | null) => {
+    if (!orgId) {
       setRoles([]);
       return;
     }
-    const result = await window.capibara.getRolesByOrgId(currentOrgId);
-    if (result.ok) {
-      setRoles(result.data);
+    try {
+      const result = await window.capibara.getRolesByOrgId(orgId);
+      if (result.ok) {
+        setRoles(result.data);
+      }
+    } catch {
+      // IPC may fail
     }
-  }, [currentOrgId]);
+  }, []);
 
   useEffect(() => {
-    loadOrgs().then(() => setIsLoading(false));
+    loadOrgs().finally(() => setIsLoading(false));
   }, [loadOrgs]);
 
   useEffect(() => {
-    loadRoles();
-  }, [loadRoles]);
+    loadRoles(currentOrgId);
+  }, [currentOrgId, loadRoles]);
 
   const handleCreateRole = async (input: CreateRoleInput) => {
-    const result = await window.capibara.createRole(input);
-    if (result.ok) {
-      await loadRoles();
-    }
+    try {
+      const result = await window.capibara.createRole(input);
+      if (result.ok) {
+        await loadRoles(currentOrgId);
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleUpdateRole = async (input: UpdateRoleInput) => {
-    const result = await window.capibara.updateRole(input);
-    if (result.ok) {
-      await loadRoles();
-    }
+    try {
+      const result = await window.capibara.updateRole(input);
+      if (result.ok) {
+        await loadRoles(currentOrgId);
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleDeleteRole = async (id: string) => {
-    const result = await window.capibara.deleteRole(id);
-    if (result.ok) {
-      setSelectedRoleId(null);
-      await loadRoles();
-    }
+    try {
+      const result = await window.capibara.deleteRole(id);
+      if (result.ok) {
+        setSelectedRoleId(null);
+        await loadRoles(currentOrgId);
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleTemplateLoaded = async () => {
     setShowTemplateSelector(false);
-    await loadOrgs();
-    // Select the last created org
-    const result = await window.capibara.getOrganizations();
-    if (result.ok && result.data.length > 0) {
-      setCurrentOrgId(result.data[result.data.length - 1].id);
-    }
+    try {
+      await loadOrgs();
+      const result = await window.capibara.getOrganizations();
+      if (result.ok && result.data.length > 0) {
+        setCurrentOrgId(result.data[result.data.length - 1].id);
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleCreateBlankOrg = async (name: string, description: string) => {
-    const result = await window.capibara.createOrganization({
-      name,
-      description,
-      budgetLimit: 50.0,
-      orgTemplateId: null,
-    });
-    if (result.ok) {
-      setShowCreateOrg(false);
-      setCurrentOrgId(result.data.id);
-      await loadOrgs();
-    }
+    try {
+      const result = await window.capibara.createOrganization({
+        name,
+        description,
+        budgetLimit: 50.0,
+        orgTemplateId: null,
+      });
+      if (result.ok) {
+        setShowCreateOrg(false);
+        setCurrentOrgId(result.data.id);
+        await loadOrgs();
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const currentOrg = organizations.find((o) => o.id === currentOrgId);

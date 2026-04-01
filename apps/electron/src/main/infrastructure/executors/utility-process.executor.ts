@@ -1,134 +1,106 @@
-import { spawn, type ChildProcess } from 'node:child_process';
 import { injectable, inject } from 'tsyringe';
-import type { IExecutor, ExecutorInput, ExecutorOutput } from '@main/core/interfaces/i-executor.js';
+import type { IExecutor, ExecutorInput, ExecutorOutput, ExecutorLogCallback } from '@main/core/interfaces/i-executor.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import { LOGGER_TOKEN } from '@main/core/tokens.js';
-import { MAX_RUN_OUTPUT_BYTES } from '@main/core/constants/run.constants.js';
+import type { WorkerService } from './worker-service.js';
+import type { RunFinishedMessage } from './worker-protocol.js';
+import type { WakeTrigger } from '@main/core/types/domain.types.js';
 
 /**
- * Spawns Claude Code CLI (or other executor) as a child process.
- * Streams stdout/stderr and supports abort.
+ * Executor implementation backed by UtilityProcess WorkerService.
+ * Delegates CLI execution to an isolated V8 process, receives structured
+ * results with cost/usage/session data parsed from stream-json output.
  *
  * See Architecture §7.5 — UtilityProcess Executor.
  */
 @injectable()
 export class UtilityProcessExecutor implements IExecutor {
-  private activeRuns = new Map<string, ChildProcess>();
+  private workerService!: WorkerService;
+  private pendingRuns = new Map<string, {
+    resolve: (output: ExecutorOutput) => void;
+  }>();
+  private logCallbacks: ExecutorLogCallback[] = [];
 
   constructor(
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
   ) {}
 
-  async execute(input: ExecutorInput): Promise<ExecutorOutput> {
-    this.logger.info('UtilityProcessExecutor: spawning', {
-      runId: input.runId,
-      executor: input.executor,
-      projectDir: input.projectDir,
+  /**
+   * Inject WorkerService after construction (avoids circular DI).
+   */
+  setWorkerService(ws: WorkerService): void {
+    this.workerService = ws;
+
+    // Wire worker callbacks to route messages back to pending run promises
+    ws.setCallbacks({
+      onLog: (runId, stream, chunk) => {
+        for (const cb of this.logCallbacks) {
+          cb(runId, stream, chunk);
+        }
+      },
+      onStatusChange: (runId, status, message) => {
+        this.logger.debug('Run status change from worker', { runId, status, message });
+      },
+      onFinished: (event) => {
+        this.handleRunFinished(event);
+      },
     });
+  }
+
+  async execute(input: ExecutorInput): Promise<ExecutorOutput> {
+    if (!this.workerService) {
+      throw new Error('WorkerService not initialized');
+    }
 
     return new Promise<ExecutorOutput>((resolve) => {
-      const args = this.buildArgs(input);
-      const command = this.resolveCommand(input.executor);
+      this.pendingRuns.set(input.runId, { resolve });
 
-      const child = spawn(command, args, {
-        cwd: input.projectDir,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          CLAUDE_MCP_CONFIG: input.mcpConfigPath,
-        },
-        shell: process.platform === 'win32',
-      });
-
-      this.activeRuns.set(input.runId, child);
-
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-      let totalBytes = 0;
-
-      child.stdout?.on('data', (chunk: Buffer) => {
-        totalBytes += chunk.length;
-        if (totalBytes <= MAX_RUN_OUTPUT_BYTES) {
-          stdoutChunks.push(chunk);
-        }
-      });
-
-      child.stderr?.on('data', (chunk: Buffer) => {
-        totalBytes += chunk.length;
-        if (totalBytes <= MAX_RUN_OUTPUT_BYTES) {
-          stderrChunks.push(chunk);
-        }
-      });
-
-      // Send prompt via stdin
-      if (child.stdin) {
-        child.stdin.write(input.prompt);
-        child.stdin.end();
-      }
-
-      child.on('close', (code) => {
-        this.activeRuns.delete(input.runId);
-        resolve({
-          exitCode: code ?? 1,
-          stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
-          stderr: Buffer.concat(stderrChunks).toString('utf-8'),
-        });
-      });
-
-      child.on('error', (err) => {
-        this.activeRuns.delete(input.runId);
-        this.logger.error('Executor spawn error', { runId: input.runId, error: String(err) });
-        resolve({
-          exitCode: 1,
-          stdout: '',
-          stderr: `Failed to spawn executor: ${String(err)}`,
-        });
+      this.workerService.enqueueRun({
+        runId: input.runId,
+        roleId: input.roleId,
+        orgId: input.orgId,
+        taskNodeId: input.taskNodeId,
+        trigger: input.trigger as WakeTrigger,
+        prompt: input.prompt,
+        mcpConfigPath: input.mcpConfigPath,
+        projectDir: input.projectDir,
+        executor: input.executor,
+        cliConfig: input.cliConfig ?? {},
+        sessionId: input.sessionId,
       });
     });
   }
 
   abort(runId: string): void {
-    const child = this.activeRuns.get(runId);
-    if (child) {
-      child.kill('SIGTERM');
-      // Force kill after 5 seconds if still running
-      setTimeout(() => {
-        if (!child.killed) {
-          child.kill('SIGKILL');
-        }
-      }, 5000);
-      this.activeRuns.delete(runId);
-      this.logger.info('Run aborted', { runId });
+    if (this.workerService) {
+      this.workerService.cancelRun(runId);
     }
   }
 
-  private resolveCommand(executor: string): string {
-    switch (executor) {
-      case 'claude-cli':
-      case 'claude':
-        return 'claude';
-      case 'codex':
-        return 'codex';
-      default:
-        return executor;
-    }
+  onLog(callback: ExecutorLogCallback): void {
+    this.logCallbacks.push(callback);
   }
 
-  private buildArgs(input: ExecutorInput): string[] {
-    const executor = input.executor;
-
-    switch (executor) {
-      case 'claude-cli':
-      case 'claude':
-        return [
-          '--print',
-          '--dangerously-skip-permissions',
-          '--mcp-config', input.mcpConfigPath,
-          input.prompt,
-        ];
-      default:
-        // Generic: pass prompt as argument
-        return [input.prompt];
+  private handleRunFinished(event: RunFinishedMessage): void {
+    const pending = this.pendingRuns.get(event.runId);
+    if (!pending) {
+      this.logger.warn('Received run-finished for unknown run', { runId: event.runId });
+      return;
     }
+
+    this.pendingRuns.delete(event.runId);
+
+    pending.resolve({
+      exitCode: event.exitCode,
+      status: event.status as ExecutorOutput['status'],
+      summary: event.summary,
+      errorMessage: event.errorMessage,
+      model: event.model,
+      sessionId: event.sessionId,
+      costUsd: event.costUsd,
+      inputTokens: event.inputTokens,
+      outputTokens: event.outputTokens,
+      cachedInputTokens: event.cachedInputTokens,
+    });
   }
 }

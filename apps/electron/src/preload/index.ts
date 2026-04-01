@@ -39,6 +39,19 @@ const api: CapibaraApi = {
   updateTaskStatus: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateTaskStatus, input),
   deleteTask: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteTask, id),
 
+  // Narrative
+  getNarrative: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getNarrative, orgId),
+  generateNarrative: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.generateNarrative, orgId),
+  getApprovalSummary: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.getApprovalSummary, taskId),
+
+  // Cost
+  getCostSummary: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getCostSummary, orgId),
+  getCostEntries: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getCostEntries, orgId),
+
+  // Approval
+  applyApprovalPreset: (input) => ipcRenderer.invoke(IPC_CHANNELS.applyApprovalPreset, input),
+  getPendingApprovals: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getPendingApprovals, orgId),
+
   // Discussion
   getDiscussionGroupsByOrgId: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getDiscussionGroupsByOrgId, orgId),
   getDiscussionGroupByTaskNodeId: (taskNodeId) => ipcRenderer.invoke(IPC_CHANNELS.getDiscussionGroupByTaskNodeId, taskNodeId),
@@ -52,6 +65,9 @@ const api: CapibaraApi = {
   getRunsByTaskId: (taskNodeId) => ipcRenderer.invoke(IPC_CHANNELS.getRunsByTaskId, taskNodeId),
   startRun: (input) => ipcRenderer.invoke(IPC_CHANNELS.startRun, input),
   cancelRun: (id) => ipcRenderer.invoke(IPC_CHANNELS.cancelRun, id),
+
+  // Budget
+  resumeOrgRoles: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.resumeOrgRoles, orgId),
 
   // Subscription
   subscribe: (callback: (event: DesktopEvent) => void) => {

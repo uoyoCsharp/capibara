@@ -23,11 +23,16 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    window.capibara.getSkills().then((result) => {
-      if (result.ok) {
-        setAllSkills(result.data);
+    (async () => {
+      try {
+        const result = await window.capibara.getSkills();
+        if (result.ok) {
+          setAllSkills(result.data);
+        }
+      } catch {
+        // IPC may fail
       }
-    });
+    })();
   }, []);
 
   const selectedSkills = allSkills.filter((s) => selectedIds.includes(s.id));

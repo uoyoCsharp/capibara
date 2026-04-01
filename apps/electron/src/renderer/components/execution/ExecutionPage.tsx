@@ -40,65 +40,77 @@ export function ExecutionPage() {
   }>({ open: false, parentId: null, parentType: null });
 
   const loadOrgs = useCallback(async () => {
-    const result = await window.capibara.getOrganizations();
-    if (result.ok) {
-      setOrganizations(result.data);
-      if (result.data.length > 0 && !currentOrgId) {
-        setCurrentOrgId(result.data[0].id);
+    try {
+      const result = await window.capibara.getOrganizations();
+      if (result.ok) {
+        setOrganizations(result.data);
+        if (result.data.length > 0) {
+          setCurrentOrgId((prev) => prev ?? result.data[0].id);
+        }
       }
+    } catch {
+      // IPC may fail
     }
-  }, [currentOrgId]);
+  }, []);
 
-  const loadTasks = useCallback(async () => {
-    if (!currentOrgId) {
+  const loadOrgData = useCallback(async (orgId: string | null) => {
+    if (!orgId) {
       setTasks([]);
-      return;
-    }
-    const result = await window.capibara.getTasksByOrgId(currentOrgId);
-    if (result.ok) {
-      setTasks(result.data);
-    }
-  }, [currentOrgId]);
-
-  const loadRoles = useCallback(async () => {
-    if (!currentOrgId) {
       setRoles([]);
-      return;
-    }
-    const result = await window.capibara.getRolesByOrgId(currentOrgId);
-    if (result.ok) {
-      setRoles(result.data);
-    }
-  }, [currentOrgId]);
-
-  const loadRuns = useCallback(async () => {
-    if (!currentOrgId) {
       setRuns([]);
       return;
     }
-    const result = await window.capibara.getRunsByOrgId(currentOrgId);
-    if (result.ok) {
-      setRuns(result.data);
+    try {
+      const [taskRes, roleRes, runRes] = await Promise.all([
+        window.capibara.getTasksByOrgId(orgId),
+        window.capibara.getRolesByOrgId(orgId),
+        window.capibara.getRunsByOrgId(orgId),
+      ]);
+      if (taskRes.ok) setTasks(taskRes.data);
+      if (roleRes.ok) setRoles(roleRes.data);
+      if (runRes.ok) setRuns(runRes.data);
+    } catch {
+      // IPC may fail
     }
+  }, []);
+
+  const loadRuns = useCallback(async () => {
+    if (!currentOrgId) return;
+    try {
+      const result = await window.capibara.getRunsByOrgId(currentOrgId);
+      if (result.ok) setRuns(result.data);
+    } catch { /* IPC may fail */ }
+  }, [currentOrgId]);
+
+  const loadTasks = useCallback(async () => {
+    if (!currentOrgId) return;
+    try {
+      const result = await window.capibara.getTasksByOrgId(currentOrgId);
+      if (result.ok) setTasks(result.data);
+    } catch { /* IPC may fail */ }
   }, [currentOrgId]);
 
   useEffect(() => {
-    loadOrgs().then(() => setIsLoading(false));
+    loadOrgs().finally(() => setIsLoading(false));
   }, [loadOrgs]);
 
   useEffect(() => {
-    loadTasks();
-    loadRoles();
-    loadRuns();
-  }, [loadTasks, loadRoles, loadRuns]);
+    loadOrgData(currentOrgId);
+  }, [currentOrgId, loadOrgData]);
 
   // Auto-refresh runs every 5 seconds when there are active runs
   useEffect(() => {
     const hasActiveRuns = runs.some((r) => r.status === 'queued' || r.status === 'running');
     if (!hasActiveRuns || !currentOrgId) return;
-    const interval = setInterval(loadRuns, 5000);
+    const orgId = currentOrgId;
+    const interval = setInterval(async () => {
+      try {
+        const result = await window.capibara.getRunsByOrgId(orgId);
+        if (result.ok) setRuns(result.data);
+      } catch { /* IPC may fail */ }
+    }, 5000);
     return () => clearInterval(interval);
-  }, [runs, currentOrgId, loadRuns]);
+  }, [runs, currentOrgId]);
 
   const roleNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -117,26 +129,32 @@ export function ExecutionPage() {
   }, [tasks]);
 
   const handleCreateTask = async (input: CreateTaskInput) => {
-    const result = await window.capibara.createTask(input);
-    if (result.ok) {
-      setCreateModal({ open: false, parentId: null, parentType: null });
-      await loadTasks();
-    }
+    try {
+      const result = await window.capibara.createTask(input);
+      if (result.ok) {
+        setCreateModal({ open: false, parentId: null, parentType: null });
+        await loadTasks();
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleStatusChange = async (id: string, status: TaskStatus) => {
-    const result = await window.capibara.updateTaskStatus({ id, status });
-    if (result.ok) {
-      await loadTasks();
-    }
+    try {
+      const result = await window.capibara.updateTaskStatus({ id, status });
+      if (result.ok) {
+        await loadTasks();
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleDeleteTask = async (id: string) => {
-    const result = await window.capibara.deleteTask(id);
-    if (result.ok) {
-      if (selectedTaskId === id) setSelectedTaskId(null);
-      await loadTasks();
-    }
+    try {
+      const result = await window.capibara.deleteTask(id);
+      if (result.ok) {
+        if (selectedTaskId === id) setSelectedTaskId(null);
+        await loadTasks();
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleAddTask = (parentId: string | null) => {
@@ -150,23 +168,27 @@ export function ExecutionPage() {
 
   const handleStartRun = async (taskId: string, roleId: string) => {
     if (!currentOrgId) return;
-    const result = await window.capibara.startRun({
-      orgId: currentOrgId,
-      taskNodeId: taskId,
-      roleId,
-      trigger: 'task_assigned',
-    });
-    if (result.ok) {
-      await loadRuns();
-      setActiveTab('runs');
-    }
+    try {
+      const result = await window.capibara.startRun({
+        orgId: currentOrgId,
+        taskNodeId: taskId,
+        roleId,
+        trigger: 'task_assigned',
+      });
+      if (result.ok) {
+        await loadRuns();
+        setActiveTab('runs');
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleCancelRun = async (runId: string) => {
-    const result = await window.capibara.cancelRun(runId);
-    if (result.ok) {
-      await loadRuns();
-    }
+    try {
+      const result = await window.capibara.cancelRun(runId);
+      if (result.ok) {
+        await loadRuns();
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;

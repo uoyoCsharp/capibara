@@ -25,14 +25,19 @@ export const useAppStore = create<AppState>((set) => ({
 
   loadSnapshot: async () => {
     set({ isLoading: true });
-    const result = await window.capibara.loadSnapshot();
-    if (result.ok) {
-      set({
-        organizations: result.data.organizations,
-        currentOrgId: result.data.currentOrgId,
-        isLoading: false,
-      });
-    } else {
+    try {
+      const result = await window.capibara.loadSnapshot();
+      if (result.ok) {
+        set({
+          organizations: result.data.organizations,
+          currentOrgId: result.data.currentOrgId,
+          isLoading: false,
+        });
+      } else {
+        set({ isLoading: false });
+      }
+    } catch {
+      // window.capibara may not be available yet in dev
       set({ isLoading: false });
     }
   },

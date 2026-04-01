@@ -11,6 +11,7 @@ import type {
 import { DiscussionMessageList } from './DiscussionMessageList';
 import { VoteStatsBar } from './VoteStatsBar';
 import { HumanVotePanel } from './HumanVotePanel';
+import { ApprovalPanelCard } from './ApprovalPanelCard';
 
 interface DiscussionGroupPanelProps {
   group: DiscussionGroupRecord;
@@ -35,6 +36,9 @@ export function DiscussionGroupPanel({
 }: DiscussionGroupPanelProps) {
   const task = tasks.find((t) => t.id === group.taskNodeId);
   const isArchived = group.status === 'archived';
+  const assigneeRole = task?.assigneeRoleId ? roles.find((r) => r.id === task.assigneeRoleId) : null;
+  const needsHumanApproval = task?.status === 'awaiting_review' && assigneeRole?.requiresHumanApproval;
+  const childTasks = task ? tasks.filter((t) => t.parentId === task.id) : [];
 
   // Set up polling for real-time updates
   useEffect(() => {
@@ -81,6 +85,20 @@ export function DiscussionGroupPanel({
 
       {/* Messages */}
       <DiscussionMessageList messages={messages} roles={roles} />
+
+      {/* Approval panel card (Story 8.2) */}
+      {needsHumanApproval && task && voteStats && (
+        <ApprovalPanelCard
+          task={task}
+          childTasks={childTasks}
+          voteStats={voteStats}
+          roles={roles}
+          messages={messages}
+          onApprove={() => onPostMessage('Human approved this task.', 'APPROVE')}
+          onRevise={(feedback) => onPostMessage(feedback, 'REVISE')}
+          onDelegate={(roleId) => onPostMessage(`Delegated to role ${roleId}`, 'DELEGATE')}
+        />
+      )}
 
       {/* Summary card if available */}
       {group.summary && (

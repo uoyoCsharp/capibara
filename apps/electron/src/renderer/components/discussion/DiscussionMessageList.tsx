@@ -97,6 +97,31 @@ export function DiscussionMessageList({ messages, roles }: DiscussionMessageList
   );
 }
 
+function AuthorAvatar({ authorName, authorType }: { authorName: string; authorType: string }) {
+  return (
+    <div className="relative shrink-0">
+      <div
+        className={clsx(
+          'w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold',
+          getAuthorColor(authorType),
+        )}
+      >
+        {authorName.charAt(0).toUpperCase()}
+      </div>
+      {authorType === 'human' && (
+        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-white flex items-center justify-center text-[7px] font-bold text-amber-900">
+          H
+        </span>
+      )}
+      {authorType === 'ai' && (
+        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-indigo-300 border-2 border-white flex items-center justify-center text-[7px] font-bold text-indigo-900">
+          AI
+        </span>
+      )}
+    </div>
+  );
+}
+
 function MessageBubble({
   authorName,
   authorType,
@@ -110,14 +135,7 @@ function MessageBubble({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div
-        className={clsx(
-          'w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0',
-          getAuthorColor(authorType),
-        )}
-      >
-        {authorName.charAt(0).toUpperCase()}
-      </div>
+      <AuthorAvatar authorName={authorName} authorType={authorType} />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-0.5">
           <span className="text-sm font-medium text-gray-900">{authorName}</span>
@@ -149,14 +167,7 @@ function VoteCard({
 
   return (
     <div className="flex items-start gap-3">
-      <div
-        className={clsx(
-          'w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0',
-          getAuthorColor(authorType),
-        )}
-      >
-        {authorName.charAt(0).toUpperCase()}
-      </div>
+      <AuthorAvatar authorName={authorName} authorType={authorType} />
       <div className={clsx('flex-1 rounded-lg border p-3', style)}>
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">

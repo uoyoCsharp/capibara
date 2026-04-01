@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 interface TaskTreeViewProps {
   tasks: TaskRecord[];
   selectedTaskId: string | null;
+  pendingApprovalTaskIds?: Set<string>;
   onSelectTask: (id: string) => void;
   onAddTask: (parentId: string | null) => void;
   onDeleteTask: (id: string) => void;
@@ -70,10 +71,19 @@ const TYPE_BADGE_COLORS: Record<TaskType, string> = {
   chore: 'bg-gray-100 text-gray-600',
 };
 
+function hasDescendantApproval(node: TreeNode, ids?: Set<string>): boolean {
+  if (!ids) return false;
+  for (const child of node.children) {
+    if (ids.has(child.task.id) || hasDescendantApproval(child, ids)) return true;
+  }
+  return false;
+}
+
 function TaskNodeItem({
   node,
   depth,
   selectedTaskId,
+  pendingApprovalTaskIds,
   onSelectTask,
   onAddTask,
   onDeleteTask,
@@ -83,6 +93,7 @@ function TaskNodeItem({
   node: TreeNode;
   depth: number;
   selectedTaskId: string | null;
+  pendingApprovalTaskIds?: Set<string>;
   onSelectTask: (id: string) => void;
   onAddTask: (parentId: string) => void;
   onDeleteTask: (id: string) => void;
@@ -95,6 +106,8 @@ function TaskNodeItem({
   const assigneeName = node.task.assigneeRoleId
     ? roleNames.get(node.task.assigneeRoleId) ?? 'Unknown'
     : null;
+  const hasApprovalPending = pendingApprovalTaskIds?.has(node.task.id) ||
+    hasDescendantApproval(node, pendingApprovalTaskIds);
 
   return (
     <div>
@@ -151,6 +164,14 @@ function TaskNodeItem({
           {node.task.title}
         </span>
 
+        {/* Approval notification badge (red dot) */}
+        {hasApprovalPending && (
+          <span
+            className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 animate-pulse"
+            title="Approval required"
+          />
+        )}
+
         {/* Assignee */}
         {assigneeName && (
           <span className="text-xs text-gray-400 shrink-0 truncate max-w-30">
@@ -192,6 +213,7 @@ function TaskNodeItem({
               node={child}
               depth={depth + 1}
               selectedTaskId={selectedTaskId}
+              pendingApprovalTaskIds={pendingApprovalTaskIds}
               onSelectTask={onSelectTask}
               onAddTask={onAddTask}
               onDeleteTask={onDeleteTask}
@@ -208,6 +230,7 @@ function TaskNodeItem({
 export function TaskTreeView({
   tasks,
   selectedTaskId,
+  pendingApprovalTaskIds,
   onSelectTask,
   onAddTask,
   onDeleteTask,
@@ -242,6 +265,7 @@ export function TaskTreeView({
           node={node}
           depth={0}
           selectedTaskId={selectedTaskId}
+          pendingApprovalTaskIds={pendingApprovalTaskIds}
           onSelectTask={onSelectTask}
           onAddTask={onAddTask}
           onDeleteTask={onDeleteTask}

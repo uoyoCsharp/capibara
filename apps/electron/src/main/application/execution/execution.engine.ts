@@ -24,9 +24,12 @@ import {
 import { BudgetExceededError, ExecutionError } from '@main/core/errors/capibara.errors.js';
 import type { ExecutionContext } from '../context/execution.context.js';
 import type { McpConfigGenerator } from '../../infrastructure/mcp/mcp-config-generator.js';
+import type { McpIpcServer } from '../../infrastructure/mcp/mcp-ipc-server.js';
 
 @injectable()
 export class ExecutionEngine {
+  private jwtSecrets = new Map<string, string>();
+
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
@@ -39,7 +42,18 @@ export class ExecutionEngine {
     @inject(PROMPT_BUILDER_TOKEN) private readonly promptBuilder: IPromptBuilder,
     private readonly executionContext: ExecutionContext,
     private readonly mcpConfigGen: McpConfigGenerator,
-  ) {}
+    private readonly mcpIpcServer: McpIpcServer,
+  ) {
+    // Register log callback to stream output to run logs and renderer
+    this.executor.onLog((runId, stream, chunk) => {
+      void this.runRepo.appendOutputLog(runId, chunk);
+      this.eventBus.emit({
+        type: 'run:started', // reuse event for streaming (renderer listens)
+        timestamp: new Date().toISOString(),
+        payload: { runId, stream, chunk },
+      });
+    });
+  }
 
   async startRun(
     roleId: string,
@@ -107,7 +121,7 @@ export class ExecutionEngine {
   }
 
   private async executeRun(run: Run): Promise<void> {
-    const { id: runId, roleId, taskNodeId, orgId } = run;
+    const { id: runId, roleId, taskNodeId, orgId, trigger } = run;
 
     try {
       // ─── Build Context and Prompt ──────────────────────────
@@ -116,6 +130,7 @@ export class ExecutionEngine {
 
       // ─── Generate MCP Config ───────────────────────────────
       const token = this.generateRunToken(runId);
+      this.mcpIpcServer.registerToken(runId, token);
       const bridgePath = this.mcpConfigGen.getBridgePath();
       const mcpConfigPath = this.mcpConfigGen.generate(runId, bridgePath, token);
 
@@ -127,27 +142,37 @@ export class ExecutionEngine {
         payload: { runId, roleId, orgId },
       });
 
-      // ─── Invoke Executor ───────────────────────────────────
-      this.logger.info('Executing run', { runId, executor: this.config.cli.defaultExecutor });
+      // ─── Invoke Executor (via UtilityProcess Worker) ───────
+      this.logger.info('Dispatching run to worker', { runId, executor: this.config.cli.defaultExecutor });
 
       const result = await this.executor.execute({
         runId,
+        roleId,
+        orgId,
+        taskNodeId,
+        trigger,
         prompt: systemPrompt,
         mcpConfigPath,
         projectDir: this.config.cli.projectDir,
         executor: this.config.cli.defaultExecutor,
+        cliConfig: {
+          model: this.config.cli.model ?? undefined,
+          maxTurnsPerRun: this.config.cli.maxTurnsPerRun,
+          effort: this.config.cli.effort,
+          timeoutMs: this.config.cli.timeoutMs,
+          extraArgs: this.config.cli.extraArgs,
+        },
       });
 
-      // ─── Store Output ──────────────────────────────────────
-      const fullOutput = result.stdout + (result.stderr ? `\n[stderr]\n${result.stderr}` : '');
-      await this.runRepo.appendOutputLog(runId, fullOutput);
+      // ─── Process Result ────────────────────────────────────
+      const costUsd = result.costUsd ?? 0;
 
-      // ─── Determine Outcome ─────────────────────────────────
-      const costUsd = this.parseCostFromOutput(result.stdout);
-
-      if (result.exitCode === 0) {
+      if (result.status === 'succeeded') {
         await this.runRepo.finish(runId, 'succeeded', costUsd);
-        this.logger.info('Run succeeded', { runId, costUsd });
+        this.logger.info('Run succeeded', {
+          runId, costUsd, model: result.model,
+          inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+        });
 
         // Record cost entry
         if (costUsd > 0) {
@@ -155,7 +180,7 @@ export class ExecutionEngine {
             runId,
             roleId,
             orgId,
-            tokenCount: this.parseTokenCountFromOutput(result.stdout),
+            tokenCount: result.inputTokens + result.outputTokens,
             costUsd,
           });
         }
@@ -163,20 +188,51 @@ export class ExecutionEngine {
         this.eventBus.emit({
           type: 'run:succeeded',
           timestamp: new Date().toISOString(),
-          payload: { runId, roleId, orgId, costUsd, tokenCount: 0 },
+          payload: {
+            runId, roleId, orgId, taskNodeId, costUsd,
+            tokenCount: result.inputTokens + result.outputTokens,
+          },
+        });
+      } else if (result.status === 'cancelled') {
+        await this.runRepo.finish(runId, 'cancelled', costUsd);
+        this.logger.info('Run cancelled by worker', { runId });
+
+        this.eventBus.emit({
+          type: 'run:cancelled',
+          timestamp: new Date().toISOString(),
+          payload: { runId, roleId, orgId },
         });
       } else {
-        await this.runRepo.finish(runId, 'failed', costUsd);
-        this.logger.warn('Run failed', { runId, exitCode: result.exitCode });
+        // failed or interrupted
+        await this.runRepo.finish(runId, result.status, costUsd);
+        this.logger.warn('Run failed', {
+          runId, exitCode: result.exitCode, error: result.errorMessage,
+        });
+
+        // Still record cost even for failed runs
+        if (costUsd > 0) {
+          await this.costRepo.create({
+            runId,
+            roleId,
+            orgId,
+            tokenCount: result.inputTokens + result.outputTokens,
+            costUsd,
+          });
+        }
 
         this.eventBus.emit({
           type: 'run:failed',
           timestamp: new Date().toISOString(),
-          payload: { runId, roleId, orgId, exitCode: result.exitCode, error: result.stderr },
+          payload: {
+            runId, roleId, orgId, taskNodeId,
+            exitCode: result.exitCode, error: result.errorMessage,
+          },
         });
       }
 
       // ─── Cleanup ───────────────────────────────────────────
+      this.mcpIpcServer.revokeToken(runId);
+      this.jwtSecrets.delete(runId);
       this.mcpConfigGen.cleanup(runId);
     } catch (err) {
       this.logger.error('Run execution error', { runId, error: String(err) });
@@ -190,27 +246,30 @@ export class ExecutionEngine {
       this.eventBus.emit({
         type: 'run:failed',
         timestamp: new Date().toISOString(),
-        payload: { runId, roleId, orgId, error: String(err) },
+        payload: { runId, roleId, orgId, taskNodeId, error: String(err) },
       });
 
+      this.mcpIpcServer.revokeToken(runId);
+      this.jwtSecrets.delete(runId);
       this.mcpConfigGen.cleanup(runId);
     }
   }
 
   private generateRunToken(runId: string): string {
-    // Simple token for MCP bridge authentication. In production, use JWT.
-    const { createHash } = require('node:crypto') as typeof import('node:crypto');
-    return createHash('sha256').update(`capibara:${runId}:${Date.now()}`).digest('hex').slice(0, 32);
-  }
+    const { createHmac, randomBytes } = require('node:crypto') as typeof import('node:crypto');
+    const secret = randomBytes(32).toString('hex');
+    this.jwtSecrets.set(runId, secret);
 
-  private parseCostFromOutput(stdout: string): number {
-    // Attempt to extract cost from Claude CLI output (e.g., "Total cost: $0.0123")
-    const match = stdout.match(/(?:total\s*cost|cost)[:\s]*\$?([\d.]+)/i);
-    return match ? parseFloat(match[1]) || 0 : 0;
-  }
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
+      sub: runId,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    })).toString('base64url');
+    const signature = createHmac('sha256', secret)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
 
-  private parseTokenCountFromOutput(stdout: string): number {
-    const match = stdout.match(/(?:total\s*tokens?|tokens?)[:\s]*([\d,]+)/i);
-    return match ? parseInt(match[1].replace(/,/g, ''), 10) || 0 : 0;
+    return `${header}.${payload}.${signature}`;
   }
 }

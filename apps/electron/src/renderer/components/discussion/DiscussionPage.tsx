@@ -23,57 +23,61 @@ export function DiscussionPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadOrgs = useCallback(async () => {
-    const result = await window.capibara.getOrganizations();
-    if (result.ok) {
-      setOrganizations(result.data);
-      if (result.data.length > 0 && !currentOrgId) {
-        setCurrentOrgId(result.data[0].id);
+    try {
+      const result = await window.capibara.getOrganizations();
+      if (result.ok) {
+        setOrganizations(result.data);
+        if (result.data.length > 0) {
+          setCurrentOrgId((prev) => prev ?? result.data[0].id);
+        }
       }
+    } catch {
+      // IPC may fail
     }
-  }, [currentOrgId]);
+  }, []);
 
-  const loadGroups = useCallback(async () => {
-    if (!currentOrgId) {
+  const loadOrgData = useCallback(async (orgId: string | null) => {
+    if (!orgId) {
       setGroups([]);
+      setTasks([]);
+      setRoles([]);
       return;
     }
-    const result = await window.capibara.getDiscussionGroupsByOrgId(currentOrgId);
-    if (result.ok) {
-      setGroups(result.data);
+    try {
+      const [groupRes, taskRes, roleRes] = await Promise.all([
+        window.capibara.getDiscussionGroupsByOrgId(orgId),
+        window.capibara.getTasksByOrgId(orgId),
+        window.capibara.getRolesByOrgId(orgId),
+      ]);
+      if (groupRes.ok) setGroups(groupRes.data);
+      if (taskRes.ok) setTasks(taskRes.data);
+      if (roleRes.ok) setRoles(roleRes.data);
+    } catch {
+      // IPC may fail
     }
-  }, [currentOrgId]);
-
-  const loadTasks = useCallback(async () => {
-    if (!currentOrgId) { setTasks([]); return; }
-    const result = await window.capibara.getTasksByOrgId(currentOrgId);
-    if (result.ok) setTasks(result.data);
-  }, [currentOrgId]);
-
-  const loadRoles = useCallback(async () => {
-    if (!currentOrgId) { setRoles([]); return; }
-    const result = await window.capibara.getRolesByOrgId(currentOrgId);
-    if (result.ok) setRoles(result.data);
-  }, [currentOrgId]);
+  }, []);
 
   const loadMessages = useCallback(async (groupId: string) => {
-    const result = await window.capibara.getDiscussionMessages(groupId);
-    if (result.ok) setMessages(result.data);
+    try {
+      const result = await window.capibara.getDiscussionMessages(groupId);
+      if (result.ok) setMessages(result.data);
+    } catch { /* IPC may fail */ }
   }, []);
 
   const loadVoteStats = useCallback(async (groupId: string) => {
-    const result = await window.capibara.getDiscussionVoteStats(groupId);
-    if (result.ok) setVoteStats(result.data);
+    try {
+      const result = await window.capibara.getDiscussionVoteStats(groupId);
+      if (result.ok) setVoteStats(result.data);
+    } catch { /* IPC may fail */ }
   }, []);
 
   useEffect(() => {
-    loadOrgs().then(() => setIsLoading(false));
+    loadOrgs().finally(() => setIsLoading(false));
   }, [loadOrgs]);
 
   useEffect(() => {
-    loadGroups();
-    loadTasks();
-    loadRoles();
-  }, [loadGroups, loadTasks, loadRoles]);
+    loadOrgData(currentOrgId);
+  }, [currentOrgId, loadOrgData]);
 
   useEffect(() => {
     if (selectedGroupId) {
@@ -95,17 +99,19 @@ export function DiscussionPage() {
 
   const handlePostMessage = async (content: string, voteTag: VoteTag) => {
     if (!selectedGroupId) return;
-    const result = await window.capibara.postDiscussionMessage({
-      groupId: selectedGroupId,
-      authorRoleId: null,
-      authorType: 'human',
-      content,
-      voteTag,
-    });
-    if (result.ok) {
-      await loadMessages(selectedGroupId);
-      await loadVoteStats(selectedGroupId);
-    }
+    try {
+      const result = await window.capibara.postDiscussionMessage({
+        groupId: selectedGroupId,
+        authorRoleId: null,
+        authorType: 'human',
+        content,
+        voteTag,
+      });
+      if (result.ok) {
+        await loadMessages(selectedGroupId);
+        await loadVoteStats(selectedGroupId);
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleRefresh = useCallback(() => {
@@ -117,9 +123,10 @@ export function DiscussionPage() {
 
   // Subscribe to events
   useEffect(() => {
+    if (typeof window.capibara?.subscribe !== 'function') return;
     const unsub = window.capibara.subscribe((event) => {
       if (event.type === 'discussion:changed' && event.orgId === currentOrgId) {
-        loadGroups();
+        loadOrgData(currentOrgId);
       }
       if (event.type === 'discussion:message-added' && event.groupId === selectedGroupId) {
         loadMessages(event.groupId);
@@ -127,7 +134,7 @@ export function DiscussionPage() {
       }
     });
     return unsub;
-  }, [currentOrgId, selectedGroupId, loadGroups, loadMessages, loadVoteStats]);
+  }, [currentOrgId, selectedGroupId, loadOrgData, loadMessages, loadVoteStats]);
 
   if (isLoading) {
     return (

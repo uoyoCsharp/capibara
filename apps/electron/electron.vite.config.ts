@@ -17,6 +17,7 @@ export default defineConfig({
         input: {
           index: resolve('src/main/index.ts'),
           'capibara-mcp-bridge': resolve('src/main/infrastructure/mcp/capibara-mcp-bridge.ts'),
+          'capibara-worker': resolve('src/main/infrastructure/executors/worker.ts'),
         },
       },
     },

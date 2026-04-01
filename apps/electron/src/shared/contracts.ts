@@ -47,6 +47,22 @@ export const IPC_CHANNELS = {
   getDiscussionVoteStats: 'capibara:discussion:get-vote-stats',
   postDiscussionMessage: 'capibara:discussion:post-message',
 
+  // Narrative
+  getNarrative: 'capibara:narrative:get',
+  generateNarrative: 'capibara:narrative:generate',
+  getApprovalSummary: 'capibara:narrative:approval-summary',
+
+  // Cost
+  getCostSummary: 'capibara:cost:get-summary',
+  getCostEntries: 'capibara:cost:get-entries',
+
+  // Approval
+  applyApprovalPreset: 'capibara:approval:apply-preset',
+  getPendingApprovals: 'capibara:approval:get-pending',
+
+  // Budget
+  resumeOrgRoles: 'capibara:budget:resume-roles',
+
   // Runs
   getRunsByOrgId: 'capibara:run:get-by-org',
   getRun: 'capibara:run:get',
@@ -71,7 +87,9 @@ export type DesktopEvent =
   | { type: 'discussion:message-added'; groupId: string }
   | { type: 'run:changed'; orgId: string }
   | { type: 'run:output'; runId: string; chunk: string }
-  | { type: 'notification'; title: string; body: string };
+  | { type: 'notification'; title: string; body: string }
+  | { type: 'approval:required'; taskId: string; taskTitle: string; orgId: string; roleId: string; roleName: string; groupId: string }
+  | { type: 'budget:roles-paused'; orgId: string; totalCost: number; budgetLimit: number };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -167,6 +185,11 @@ export const postDiscussionMessageSchema = z.object({
   voteTag: z.enum(['APPROVE', 'REVISE', 'CONCERN', 'DELEGATE']).nullable().default(null),
 });
 
+export const applyApprovalPresetSchema = z.object({
+  orgId: z.string().min(1),
+  preset: z.enum(['all_auto', 'top_level_human', 'custom']),
+});
+
 export const startRunSchema = z.object({
   orgId: z.string().min(1),
   taskNodeId: z.string().min(1),
@@ -188,6 +211,7 @@ export type LoadTemplateInput = z.infer<typeof loadTemplateSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskStatusInput = z.infer<typeof updateTaskStatusSchema>;
 export type PostDiscussionMessageInput = z.infer<typeof postDiscussionMessageSchema>;
+export type ApplyApprovalPresetInput = z.infer<typeof applyApprovalPresetSchema>;
 export type StartRunInput = z.infer<typeof startRunSchema>;
 
 // ─── Capibara API (exposed via contextBridge) ───────────────────────
@@ -227,6 +251,22 @@ export interface CapibaraApi {
   createTask: (input: CreateTaskInput) => Promise<DesktopResult<TaskRecord>>;
   updateTaskStatus: (input: UpdateTaskStatusInput) => Promise<DesktopResult<void>>;
   deleteTask: (id: string) => Promise<DesktopResult<void>>;
+
+  // Narrative
+  getNarrative: (orgId: string) => Promise<DesktopResult<NarrativeRecord | null>>;
+  generateNarrative: (orgId: string) => Promise<DesktopResult<NarrativeRecord>>;
+  getApprovalSummary: (taskId: string) => Promise<DesktopResult<string>>;
+
+  // Cost
+  getCostSummary: (orgId: string) => Promise<DesktopResult<CostSummaryRecord>>;
+  getCostEntries: (orgId: string) => Promise<DesktopResult<CostEntryRecord[]>>;
+
+  // Approval
+  applyApprovalPreset: (input: ApplyApprovalPresetInput) => Promise<DesktopResult<void>>;
+  getPendingApprovals: (orgId: string) => Promise<DesktopResult<PendingApprovalRecord[]>>;
+
+  // Budget
+  resumeOrgRoles: (orgId: string) => Promise<DesktopResult<{ resumedCount: number }>>;
 
   // Discussion
   getDiscussionGroupsByOrgId: (orgId: string) => Promise<DesktopResult<DiscussionGroupRecord[]>>;
@@ -369,6 +409,42 @@ export interface RunRecord {
   finishedAt: string | null;
   costUsd: number;
   createdAt: string;
+}
+
+export interface NarrativeRecord {
+  id: string;
+  orgId: string;
+  templateData: Record<string, unknown>;
+  renderedText: string;
+  generatedAt: string;
+}
+
+export interface CostSummaryRecord {
+  orgId: string;
+  totalCost: number;
+  budgetLimit: number;
+  budgetPercent: number;
+  entries: CostEntryRecord[];
+}
+
+export interface CostEntryRecord {
+  id: string;
+  runId: string;
+  roleId: string;
+  orgId: string;
+  tokenCount: number;
+  costUsd: number;
+  createdAt: string;
+}
+
+export interface PendingApprovalRecord {
+  taskId: string;
+  taskTitle: string;
+  orgId: string;
+  roleId: string;
+  roleName: string;
+  groupId: string;
+  status: TaskStatus;
 }
 
 export interface TemplateRoleDefinition {

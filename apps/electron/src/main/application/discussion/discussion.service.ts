@@ -113,6 +113,18 @@ export class DiscussionService {
           taskId: task.id,
           roleId: role.id,
         });
+        this.eventBus.emit({
+          type: 'approval:required',
+          timestamp: new Date().toISOString(),
+          payload: {
+            taskId: task.id,
+            taskTitle: task.title,
+            orgId: task.orgId,
+            roleId: role.id,
+            roleName: role.name,
+            groupId: group.id,
+          },
+        });
         return; // Leave in awaiting_review for human decision
       }
     }

@@ -82,6 +82,17 @@ const TOOLS = [
     },
   },
   {
+    name: 'capibara_context_get_org_tree',
+    description: 'Get the organization tree with all roles and their statuses.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orgId: { type: 'string', description: 'Organization ID' },
+      },
+      required: ['orgId'],
+    },
+  },
+  {
     name: 'capibara_context_get_discussion_summary',
     description: 'Get discussion group summary with vote stats and recent messages.',
     inputSchema: {

@@ -22,6 +22,9 @@ import {
   DISCUSSION_SERVICE_TOKEN,
   EXECUTION_ENGINE_TOKEN,
   MCP_IPC_SERVER_TOKEN,
+  EVENT_DIGESTER_TOKEN,
+  ORG_ORCHESTRATOR_TOKEN,
+  WORKER_SERVICE_TOKEN,
 } from './core/tokens.js';
 
 import { SqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.js';
@@ -38,6 +41,7 @@ import { SqlitePendingWakeRepository } from './infrastructure/persistence/sqlite
 import { EmitteryEventBus } from './infrastructure/observability/emittery-event-bus.js';
 import { PinoLogger } from './infrastructure/observability/pino-logger.js';
 import { UtilityProcessExecutor } from './infrastructure/executors/utility-process.executor.js';
+import { WorkerService } from './infrastructure/executors/worker-service.js';
 import { PromptBuilder } from './application/skills/prompt-builder.js';
 import { SkillSeeder } from './application/skills/skill-seeder.js';
 import { OrgTemplateService } from './application/templates/org-template.service.js';
@@ -49,6 +53,10 @@ import { DiscussionService } from './application/discussion/discussion.service.j
 import { ExecutionContext } from './application/context/execution.context.js';
 import { OrgContext } from './application/context/org.context.js';
 import { ExecutionEngine } from './application/execution/execution.engine.js';
+import { OrgOrchestrator } from './application/orchestrator/org.orchestrator.js';
+import { EventDigester } from './application/progress/event.digester.js';
+import { NarrativeEngine } from './application/progress/narrative.engine.js';
+import { NotificationService } from './application/notifications/notification.service.js';
 import { McpConfigGenerator } from './infrastructure/mcp/mcp-config-generator.js';
 import { McpToolRegistry } from './infrastructure/mcp/mcp-tool-registry.js';
 import { McpToolHandlers } from './infrastructure/mcp/mcp-tool-handlers.js';
@@ -62,6 +70,8 @@ import { registerTemplateHandlers } from './ipc-handlers/template.handlers.js';
 import { registerTaskHandlers } from './ipc-handlers/task.handlers.js';
 import { registerDiscussionHandlers } from './ipc-handlers/discussion.handlers.js';
 import { registerRunHandlers } from './ipc-handlers/run.handlers.js';
+import { registerApprovalHandlers } from './ipc-handlers/approval.handlers.js';
+import { registerNarrativeHandlers } from './ipc-handlers/narrative.handlers.js';
 
 import type { IOrganizationRepository } from './core/interfaces/i-organization.repository.js';
 import type { IRoleRepository } from './core/interfaces/i-role.repository.js';
@@ -133,6 +143,15 @@ export async function bootstrap(): Promise<void> {
   const executor = new UtilityProcessExecutor(logger);
   container.register<IExecutor>(EXECUTOR_TOKEN, { useValue: executor });
 
+  // Worker service — resolve path to built worker script
+  // electron-vite builds worker.ts as 'capibara-worker.js' alongside index.js in out/main/
+  const { join, dirname } = require('node:path') as typeof import('node:path');
+  const workerPath = join(dirname(__dirname), 'main', 'capibara-worker.js');
+  const workerService = new WorkerService(workerPath, logger);
+  executor.setWorkerService(workerService);
+  workerService.start();
+  container.register<WorkerService>(WORKER_SERVICE_TOKEN, { useValue: workerService });
+
   const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger);
 
   const taskStateMachine = new TaskStateMachine(taskRepo, eventBus, logger);
@@ -153,7 +172,7 @@ export async function bootstrap(): Promise<void> {
   const mcpConfigGen = new McpConfigGenerator(logger);
 
   const mcpToolRegistry = new McpToolRegistry(logger);
-  const mcpToolHandlers = new McpToolHandlers(taskRepo, discussionRepo, eventBus, logger);
+  const mcpToolHandlers = new McpToolHandlers(taskRepo, roleRepo, discussionRepo, eventBus, logger);
   mcpToolHandlers.registerAll(mcpToolRegistry);
 
   const mcpIpcServer = new McpIpcServer(logger, mcpToolRegistry);
@@ -161,13 +180,63 @@ export async function bootstrap(): Promise<void> {
 
   const executionEngine = new ExecutionEngine(
     config, logger, eventBus, runRepo, roleRepo, taskRepo, costRepo,
-    executor, promptBuilder, executionContext, mcpConfigGen,
+    executor, promptBuilder, executionContext, mcpConfigGen, mcpIpcServer,
   );
 
   // Start MCP IPC server and configure the config generator with its port
   await mcpIpcServer.start().then((serverPort) => {
     mcpConfigGen.setPort(serverPort);
   });
+
+  // ─── Orchestrator (Epic 7) ─────────────────────────────────
+  const orchestrator = new OrgOrchestrator(
+    config, logger, eventBus, taskRepo, roleRepo, runRepo,
+    pendingWakeRepo, costRepo,
+  );
+  orchestrator.setExecutionEngine(executionEngine);
+  orchestrator.start();
+  container.register<OrgOrchestrator>(ORG_ORCHESTRATOR_TOKEN, { useValue: orchestrator });
+
+  // ─── Narrative Engine (Epic 9) ────────────────────────────────
+  const narrativeEngine = new NarrativeEngine(
+    narrativeRepo, orgRepo, taskRepo, runRepo, costRepo, discussionRepo, eventBus, logger,
+  );
+
+  // ─── Notification Service (Epic 8) ───────────────────────────
+  const notificationService = new NotificationService(eventBus, logger);
+  notificationService.start();
+
+  // ─── Event Digester (Epic 7) ──────────────────────────────
+  const eventDigester = new EventDigester(eventBus, logger);
+  eventDigester.start(
+    [
+      'task:status-changed', 'task:completed', 'run:succeeded', 'run:failed',
+      'discussion:vote-added', 'discussion:message-added',
+    ],
+    (digests) => {
+      // Emit aggregated digest per org scope for IPC batching to Renderer
+      for (const digest of digests) {
+        eventBus.emit({
+          type: 'narrative:updated',
+          timestamp: new Date().toISOString(),
+          payload: {
+            orgId: digest.orgId,
+            eventCount: digest.events.length,
+            summary: digest.summary,
+          },
+        });
+      }
+    },
+    300, // 300ms window for IPC batching
+  );
+  // Notification-level aggregation (30s window for user notifications)
+  eventDigester.onNotification((digests) => {
+    for (const digest of digests) {
+      logger.info('Notification digest', { orgId: digest.orgId, summary: digest.summary });
+    }
+  });
+
+  container.register<EventDigester>(EVENT_DIGESTER_TOKEN, { useValue: eventDigester });
 
   // ─── Seed Skills ─────────────────────────────────────────
   const skillSeeder = new SkillSeeder(skillRepo, logger);
@@ -182,11 +251,31 @@ export async function bootstrap(): Promise<void> {
   registerTaskHandlers(taskService, logger);
   registerDiscussionHandlers(discussionService, logger);
   registerRunHandlers(runRepo, executionEngine, logger);
+  registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger);
+  registerNarrativeHandlers(narrativeEngine, costRepo, orgRepo, logger);
 
   logger.info('Capibara bootstrap complete');
 }
 
 export function shutdown(): void {
+  try {
+    const orchestrator = container.resolve<OrgOrchestrator>(ORG_ORCHESTRATOR_TOKEN);
+    orchestrator.stop();
+  } catch {
+    // Orchestrator may not have been started
+  }
+  try {
+    const digester = container.resolve<EventDigester>(EVENT_DIGESTER_TOKEN);
+    digester.stop();
+  } catch {
+    // EventDigester may not have been started
+  }
+  try {
+    const ws = container.resolve<WorkerService>(WORKER_SERVICE_TOKEN);
+    ws.destroy();
+  } catch {
+    // WorkerService may not have been started
+  }
   try {
     const mcpServer = container.resolve<McpIpcServer>(MCP_IPC_SERVER_TOKEN);
     mcpServer.stop();

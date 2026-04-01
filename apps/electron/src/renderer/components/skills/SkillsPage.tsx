@@ -43,33 +43,41 @@ export function SkillsPage() {
   const [editingSkill, setEditingSkill] = useState<SkillRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadSkills = useCallback(async () => {
-    const result = await window.capibara.searchSkills({
-      query: search,
-      category: filterCategory || null,
-      source: filterSource || null,
-    });
-    if (result.ok) {
-      setSkills(result.data);
+  const loadSkills = useCallback(async (q: string, cat: SkillCategory | '', src: SkillSource | '') => {
+    try {
+      const result = await window.capibara.searchSkills({
+        query: q,
+        category: cat || null,
+        source: src || null,
+      });
+      if (result.ok) {
+        setSkills(result.data);
+      }
+    } catch {
+      // IPC may fail
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [search, filterCategory, filterSource]);
+  }, []);
 
+  // Initial load
   useEffect(() => {
-    loadSkills();
-  }, [loadSkills]);
+    loadSkills(search, filterCategory, filterSource);
+  }, [search, filterCategory, filterSource, loadSkills]);
 
   const handleDelete = async (id: string) => {
-    const result = await window.capibara.deleteSkill(id);
-    if (result.ok) {
-      await loadSkills();
-    }
+    try {
+      const result = await window.capibara.deleteSkill(id);
+      if (result.ok) {
+        await loadSkills(search, filterCategory, filterSource);
+      }
+    } catch { /* IPC may fail */ }
   };
 
   const handleSaved = async () => {
     setShowForm(false);
     setEditingSkill(null);
-    await loadSkills();
+    await loadSkills(search, filterCategory, filterSource);
   };
 
   return (

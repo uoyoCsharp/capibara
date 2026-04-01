@@ -85,9 +85,8 @@ export class McpIpcServer {
         arguments: Record<string, unknown>;
       };
 
-      // Validate token
-      const expectedToken = this.activeTokens.get(payload.runId);
-      if (!expectedToken || expectedToken !== payload.token) {
+      // Validate JWT token
+      if (!this.validateJwt(payload.runId, payload.token)) {
         res.writeHead(403, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid token' }));
         return;
@@ -106,6 +105,22 @@ export class McpIpcServer {
       this.logger.error('MCP IPC request error', { error: String(err) });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Internal error' }));
+    }
+  }
+
+  private validateJwt(runId: string, token: string): boolean {
+    const storedToken = this.activeTokens.get(runId);
+    if (!storedToken || storedToken !== token) return false;
+
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+      if (payload.sub !== runId) return false;
+      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return false;
+      return true;
+    } catch {
+      return false;
     }
   }
 

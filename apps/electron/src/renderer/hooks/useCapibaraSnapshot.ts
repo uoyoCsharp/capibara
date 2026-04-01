@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useAppStore } from '../store/app.slice';
 
 export function useCapibaraSnapshot() {
@@ -9,6 +9,9 @@ export function useCapibaraSnapshot() {
 
   useEffect(() => {
     void loadSnapshot();
+
+    // Subscribe to real-time events if the bridge is available
+    if (typeof window.capibara?.subscribe !== 'function') return;
 
     const unsubscribe = window.capibara.subscribe((event) => {
       if (event.type === 'snapshot:updated' || event.type === 'org:changed') {

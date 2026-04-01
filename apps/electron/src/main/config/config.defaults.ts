@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
     maxConsecutiveWakes: 5,
     budgetLimit: 50.0,
     maxDecompositionDepth: 4,
+    retryBackoffMs: 2000,
   },
   skills: {
     provider: 'bmad',
@@ -23,6 +24,11 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
   cli: {
     defaultExecutor: 'claude-cli',
     projectDir: './',
+    model: null,
+    maxTurnsPerRun: 0,
+    effort: 'medium',
+    timeoutMs: 0,
+    extraArgs: [],
   },
   logging: {
     level: 'info',
