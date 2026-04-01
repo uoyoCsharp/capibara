@@ -70,6 +70,13 @@ export class SqliteRunRepository implements IRunRepository {
     return row ? rowToEntity(row) : null;
   }
 
+  async findAnyActiveRun(): Promise<Run | null> {
+    const row = this.conn.getDb()
+      .prepare("SELECT * FROM runs WHERE status IN ('queued', 'running') LIMIT 1")
+      .get() as RunRow | undefined;
+    return row ? rowToEntity(row) : null;
+  }
+
   async create(input: CreateRunInput): Promise<Run> {
     const id = randomUUID();
     const now = new Date().toISOString();

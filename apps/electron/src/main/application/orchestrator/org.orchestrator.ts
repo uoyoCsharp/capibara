@@ -263,10 +263,10 @@ export class OrgOrchestrator {
       return false;
     }
 
-    // Gate 3: No active run (serial execution)
-    const activeRun = await this.runRepo.findActiveByRoleId(roleId);
+    // Gate 3: Global serial execution — only one run at a time
+    const activeRun = await this.runRepo.findAnyActiveRun();
     if (activeRun) {
-      this.logger.debug('Wake deferred: role busy, enqueuing pending wake', { roleId, trigger });
+      this.logger.debug('Wake deferred: another run active, enqueuing pending wake', { roleId, trigger, activeRunId: activeRun.id });
       await this.pendingWakeRepo.create({ roleId, orgId, trigger });
       this.eventBus.emit({
         type: 'wake:pending-enqueued',

@@ -81,10 +81,10 @@ export class ExecutionEngine {
       throw new BudgetExceededError(orgId, this.config.execution.budgetLimit, totalCost);
     }
 
-    // No active run for this role
-    const activeRun = await this.runRepo.findActiveByRoleId(roleId);
+    // Global serial execution — only one run at a time across all roles
+    const activeRun = await this.runRepo.findAnyActiveRun();
     if (activeRun) {
-      throw new ExecutionError('', `Role ${roleId} already has an active run: ${activeRun.id}`);
+      throw new ExecutionError('', `Another run is already active: ${activeRun.id}`);
     }
 
     // ─── Create Run Record ─────────────────────────────────────

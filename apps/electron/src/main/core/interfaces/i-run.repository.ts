@@ -12,6 +12,7 @@ export interface IRunRepository {
   findByOrgId(orgId: string): Promise<Run[]>;
   findByTaskId(taskNodeId: string): Promise<Run[]>;
   findActiveByRoleId(roleId: string): Promise<Run | null>;
+  findAnyActiveRun(): Promise<Run | null>;
   create(input: CreateRunInput): Promise<Run>;
   updateStatus(id: string, status: RunStatus): Promise<void>;
   appendOutputLog(id: string, chunk: string): Promise<void>;
