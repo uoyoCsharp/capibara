@@ -79,11 +79,13 @@ export function registerNarrativeHandlers(
       }
       const org = await orgRepo.findById(orgId);
       const totalCost = await costRepo.getTotalCostByOrgId(orgId);
+      const totalTokens = await costRepo.getTotalTokensByOrgId(orgId);
       const entries = await costRepo.findByOrgId(orgId);
       const budgetLimit = org?.budgetLimit ?? 50;
       return ok({
         orgId,
         totalCost,
+        totalTokens,
         budgetLimit,
         budgetPercent: budgetLimit > 0 ? Math.round((totalCost / budgetLimit) * 100) : 0,
         entries: entries.map((e) => ({

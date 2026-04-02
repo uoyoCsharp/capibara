@@ -109,9 +109,11 @@ export interface LocaleMessages {
     generatedAt: string;
     noReportYet: string;
     budgetUsage: string;
+    tokenUsage: string;
     budgetCritical: string;
     budgetApproaching: string;
     costByRole: string;
+    tokensByRole: string;
     runs: string;
     failedToGenerate: string;
     activeOrganizations: string;

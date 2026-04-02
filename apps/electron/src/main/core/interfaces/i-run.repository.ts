@@ -16,5 +16,5 @@ export interface IRunRepository {
   create(input: CreateRunInput): Promise<Run>;
   updateStatus(id: string, status: RunStatus): Promise<void>;
   setCost(id: string, costUsd: number): Promise<void>;
-  finish(id: string, status: RunStatus, costUsd: number): Promise<void>;
+  finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number): Promise<void>;
 }

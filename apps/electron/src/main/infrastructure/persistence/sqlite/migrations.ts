@@ -249,6 +249,13 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 14,
+    description: 'Add token_count column to runs table',
+    up: (db) => {
+      db.exec(`ALTER TABLE runs ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0;`);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

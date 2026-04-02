@@ -14,7 +14,6 @@ import {
   DISCUSSION_REPO_TOKEN,
   TASK_REPO_TOKEN,
   ROLE_REPO_TOKEN,
-  CONSENSUS_DETECTOR_TOKEN,
 } from '@main/core/tokens.js';
 import type { ConsensusDetector } from '../consensus/consensus.detector.js';
 import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
@@ -93,6 +92,7 @@ export class DiscussionService {
       orgId: string;
       taskNodeId: string;
       costUsd?: number;
+      tokenCount?: number;
       error?: string;
     };
 
@@ -109,7 +109,22 @@ export class DiscussionService {
 
       // Build summary message with task context
       const role = await this.roleRepo.findById(payload.roleId);
+      const roleName = role?.name ?? 'Unknown Role';
+      const task = await this.taskRepo.findById(payload.taskNodeId);
+      const taskTitle = task?.title ?? 'Unknown Task';
       const status = event.type === 'run:succeeded' ? 'succeeded' : 'failed';
+      const tokenLine = payload.tokenCount ? ` | Tokens: ${(payload.tokenCount / 1_000_000).toFixed(4)}M` : '';
+      const errorLine = payload.error ? `\nError: ${payload.error}` : '';
+
+      const content = `**[${taskTitle}]** Run ${status} by ${roleName}${tokenLine}${errorLine}`;
+
+      await this.discussionRepo.postMessage({
+        groupId: group.id,
+        authorRoleId: payload.roleId,
+        authorType: 'system',
+        content,
+        voteTag: null,
+      });
 
       this.logger.info('Run summary posted to discussion', {
         groupId: group.id,

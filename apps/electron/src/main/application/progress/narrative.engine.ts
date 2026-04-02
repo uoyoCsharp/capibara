@@ -24,6 +24,7 @@ export interface NarrativeTemplateData {
   orgStatus: string;
   budgetLimit: number;
   budgetUsed: number;
+  tokensUsed: number;
   budgetPercent: number;
   totalTasks: number;
   statusCounts: Record<string, number>;
@@ -73,6 +74,7 @@ export class NarrativeEngine {
     const tasks = await this.taskRepo.findByOrgId(orgId);
     const runs = await this.runRepo.findByOrgId(orgId);
     const budgetUsed = await this.costRepo.getTotalCostByOrgId(orgId);
+    const tokensUsed = await this.costRepo.getTotalTokensByOrgId(orgId);
     const discussions = await this.discussionRepo.findGroupsByOrgId(orgId);
 
     const statusCounts: Record<string, number> = {};
@@ -101,6 +103,7 @@ export class NarrativeEngine {
       orgStatus: org?.status ?? 'unknown',
       budgetLimit,
       budgetUsed,
+      tokensUsed,
       budgetPercent: budgetLimit > 0 ? Math.round((budgetUsed / budgetLimit) * 100) : 0,
       totalTasks: tasks.length,
       statusCounts,
@@ -124,7 +127,7 @@ export class NarrativeEngine {
     lines.push(`## ${data.orgName} — Project Status`);
     lines.push('');
     lines.push(`**Overall Health:** ${healthEmoji} ${data.orgStatus === 'active' ? 'Active' : data.orgStatus}`);
-    lines.push(`**Budget:** $${data.budgetUsed.toFixed(2)} / $${data.budgetLimit.toFixed(2)} (${data.budgetPercent}%)`);
+    lines.push(`**Tokens Used:** ${(data.tokensUsed / 1_000_000).toFixed(4)}M (${data.budgetPercent}%)`);
     lines.push('');
 
     // Task overview

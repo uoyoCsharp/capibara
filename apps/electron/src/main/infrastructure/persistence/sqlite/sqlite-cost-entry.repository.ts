@@ -54,6 +54,13 @@ export class SqliteCostEntryRepository implements ICostEntryRepository {
     return row.total;
   }
 
+  async getTotalTokensByOrgId(orgId: string): Promise<number> {
+    const row = this.conn.getDb()
+      .prepare('SELECT COALESCE(SUM(token_count), 0) as total FROM cost_entries WHERE org_id = ?')
+      .get(orgId) as { total: number };
+    return row.total;
+  }
+
   async create(input: CreateCostEntryInput): Promise<CostEntry> {
     const id = randomUUID();
     const now = new Date().toISOString();

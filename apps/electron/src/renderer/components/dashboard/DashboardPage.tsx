@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowClockwise, Lightning, CurrencyDollar, ListChecks, ChartLineUp } from '@phosphor-icons/react';
+import { ArrowClockwise, Lightning, Cpu, ListChecks, ChartLineUp } from '@phosphor-icons/react';
 import { cn } from '../../lib/utils';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
@@ -155,7 +155,8 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 
 function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
   const t = useT();
-  const { totalCost, budgetLimit, budgetPercent } = summary;
+  const { totalTokens, budgetPercent } = summary;
+  const totalTokensM = totalTokens / 1_000_000;
   const textColor =
     budgetPercent >= 95 ? 'text-destructive' :
       budgetPercent >= 80 ? 'text-yellow-600' :
@@ -165,11 +166,11 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
     <div className="border-t border-border pt-4 pb-4 mb-[var(--section-gap)]">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <CurrencyDollar size={18} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">{t.dashboard.budgetUsage}</span>
+          <Cpu size={18} className="text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">{t.dashboard.tokenUsage}</span>
         </div>
         <span className={cn('text-sm font-semibold', textColor)}>
-          ${totalCost.toFixed(2)} / ${budgetLimit.toFixed(2)} ({budgetPercent}%)
+          {totalTokensM.toFixed(4)}M tokens ({budgetPercent}%)
         </span>
       </div>
       <Progress
@@ -193,36 +194,36 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
 function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: RoleRecord[]; }) {
   const t = useT();
   // Group by role
-  const byRole = new Map<string, { name: string; total: number; count: number; }>();
+  const byRole = new Map<string, { name: string; totalTokens: number; count: number; }>();
   for (const e of entries) {
     const existing = byRole.get(e.roleId) ?? {
       name: roles.find((r) => r.id === e.roleId)?.name ?? t.common.unknown,
-      total: 0,
+      totalTokens: 0,
       count: 0,
     };
-    existing.total += e.costUsd;
+    existing.totalTokens += e.tokenCount;
     existing.count += 1;
     byRole.set(e.roleId, existing);
   }
 
-  const sorted = [...byRole.entries()].sort((a, b) => b[1].total - a[1].total);
+  const sorted = [...byRole.entries()].sort((a, b) => b[1].totalTokens - a[1].totalTokens);
 
   return (
     <div className="bg-muted rounded-[var(--card-radius)] p-[var(--card-padding)] mb-[var(--section-gap)]">
       <div className="flex items-center gap-2 mb-4">
         <ChartLineUp size={20} className="text-primary" />
-        <h2 className="text-lg font-medium text-foreground font-[family-name:var(--font-display)]">{t.dashboard.costByRole}</h2>
+        <h2 className="text-lg font-medium text-foreground font-[family-name:var(--font-display)]">{t.dashboard.tokensByRole}</h2>
       </div>
       <div className="space-y-3">
         {sorted.map(([roleId, data]) => {
-          const totalCost = entries.reduce((sum, e) => sum + e.costUsd, 0);
-          const pct = totalCost > 0 ? Math.round((data.total / totalCost) * 100) : 0;
+          const totalTokens = entries.reduce((sum, e) => sum + e.tokenCount, 0);
+          const pct = totalTokens > 0 ? Math.round((data.totalTokens / totalTokens) * 100) : 0;
           return (
             <div key={roleId}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm text-muted-foreground">{data.name}</span>
                 <span className="text-xs text-muted-foreground">
-                  ${data.total.toFixed(2)} ({data.count} {t.dashboard.runs})
+                  {(data.totalTokens / 1_000_000).toFixed(4)}M ({data.count} {t.dashboard.runs})
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">

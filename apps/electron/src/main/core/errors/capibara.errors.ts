@@ -32,7 +32,7 @@ export class TaskStateError extends CapibaraError {
 export class BudgetExceededError extends CapibaraError {
   constructor(orgId: string, limit: number, current: number) {
     super(
-      `Budget exceeded for org ${orgId}: ${current.toFixed(2)} / ${limit.toFixed(2)} USD`,
+      `Budget exceeded for org ${orgId}: $${current.toFixed(2)} / $${limit.toFixed(2)}`,
       'BUDGET_EXCEEDED',
     );
     this.name = 'BudgetExceededError';

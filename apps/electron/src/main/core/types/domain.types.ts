@@ -128,6 +128,7 @@ export interface Run {
   startedAt: string | null;
   finishedAt: string | null;
   costUsd: number;
+  tokenCount: number;
   createdAt: string;
 }
 

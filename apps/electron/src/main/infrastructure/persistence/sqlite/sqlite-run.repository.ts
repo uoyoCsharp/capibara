@@ -16,11 +16,12 @@ interface RunRow {
   started_at: string | null;
   finished_at: string | null;
   cost_usd: number;
+  token_count: number;
   created_at: string;
 }
 
 /** Columns to SELECT (excludes dropped output_log) */
-const RUN_COLUMNS = 'id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, created_at';
+const RUN_COLUMNS = 'id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, token_count, created_at';
 
 function rowToEntity(row: RunRow): Run {
   return {
@@ -33,6 +34,7 @@ function rowToEntity(row: RunRow): Run {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     costUsd: row.cost_usd,
+    tokenCount: row.token_count,
     createdAt: row.created_at,
   };
 }
@@ -107,11 +109,11 @@ export class SqliteRunRepository implements IRunRepository {
       .run(costUsd, id);
   }
 
-  async finish(id: string, status: RunStatus, costUsd: number): Promise<void> {
+  async finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number): Promise<void> {
     const now = new Date().toISOString();
     const changes = this.conn.getDb()
-      .prepare('UPDATE runs SET status = ?, cost_usd = ?, finished_at = ? WHERE id = ?')
-      .run(status, costUsd, now, id);
+      .prepare('UPDATE runs SET status = ?, cost_usd = ?, token_count = ?, finished_at = ? WHERE id = ?')
+      .run(status, costUsd, tokenCount ?? 0, now, id);
     if (changes.changes === 0) throw new NotFoundError('Run', id);
   }
 }

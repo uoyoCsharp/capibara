@@ -78,7 +78,7 @@ export class NotificationService {
 
     this.sendNotification({
       title: 'Budget Limit Reached',
-      body: `Budget exceeded ($${totalCost.toFixed(2)} / $${limit.toFixed(2)}). All roles paused.`,
+      body: `Budget exceeded. All roles paused.`,
       urgency: 'critical',
       navigateTo: { orgId },
     });

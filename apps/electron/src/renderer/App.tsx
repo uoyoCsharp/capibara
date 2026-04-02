@@ -34,7 +34,7 @@ function AppContent() {
       if (event.type === 'run:completed') {
         switch (event.status) {
           case 'succeeded':
-            toast.success(`${t.runs.completed} — $${event.costUsd.toFixed(4)}`);
+            toast.success(`${t.runs.completed} — ${(event.tokenCount / 1_000_000).toFixed(4)}M tokens`);
             break;
           case 'failed':
             toast.error(t.runs.failed);

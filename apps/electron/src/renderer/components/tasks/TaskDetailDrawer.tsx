@@ -284,8 +284,8 @@ export function TaskDetailDrawer({
                     {elapsed && (
                       <span className="font-mono text-blue-600">{elapsed}</span>
                     )}
-                    {latestRun.costUsd > 0 && (
-                      <span className="text-green-600">${latestRun.costUsd.toFixed(4)}</span>
+                    {latestRun.tokenCount > 0 && (
+                      <span className="text-green-600">{(latestRun.tokenCount / 1_000_000).toFixed(4)}M</span>
                     )}
                     <span>{new Date(latestRun.createdAt).toLocaleString()}</span>
                   </div>

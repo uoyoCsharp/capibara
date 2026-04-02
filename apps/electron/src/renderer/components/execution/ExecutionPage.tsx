@@ -78,8 +78,8 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
           <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
             <span>{roleName}</span>
             <span>{new Date(run.createdAt).toLocaleString()}</span>
-            {run.costUsd > 0 && (
-              <span className="text-green-600 font-medium">${run.costUsd.toFixed(4)}</span>
+            {run.tokenCount > 0 && (
+              <span className="text-green-600 font-medium">{(run.tokenCount / 1_000_000).toFixed(4)}M</span>
             )}
             {(run.status === 'queued' || run.status === 'running') && (
               <Button
@@ -120,7 +120,7 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
               </div>
               <div>
                 <span className="text-muted-foreground">{t.tasksExecution.cost}:</span>{' '}
-                <span className="text-foreground">${run.costUsd.toFixed(4)}</span>
+                <span className="text-foreground">{(run.tokenCount / 1_000_000).toFixed(4)}M tokens</span>
               </div>
             </div>
             <div>

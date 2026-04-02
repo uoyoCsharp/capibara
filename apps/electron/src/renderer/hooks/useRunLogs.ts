@@ -32,10 +32,13 @@ function parseStreamJsonLine(line: string): RunLogEntry | null {
 
   if (type === 'result') {
     const result = typeof obj.result === 'string' ? obj.result : '';
-    const cost = typeof obj.total_cost_usd === 'number' ? `$${obj.total_cost_usd.toFixed(4)}` : '';
+    const inputTokens = typeof obj.total_input_tokens === 'number' ? obj.total_input_tokens as number : 0;
+    const outputTokens = typeof obj.total_output_tokens === 'number' ? obj.total_output_tokens as number : 0;
+    const totalTokens = inputTokens + outputTokens;
+    const tokens = totalTokens > 0 ? `${(totalTokens / 1_000_000).toFixed(4)}M tokens` : '';
     const isError = obj.is_error === true;
     const prefix = isError ? '[Error] ' : '[Summary] ';
-    return { ts: null, kind: 'result', text: `${prefix}${result}${cost ? ` (cost: ${cost})` : ''}` };
+    return { ts: null, kind: 'result', text: `${prefix}${result}${tokens ? ` (${tokens})` : ''}` };
   }
 
   return null;

@@ -198,8 +198,10 @@ export class ExecutionEngine {
       // ─── Process Result ────────────────────────────────────
       const costUsd = result.costUsd ?? 0;
 
+      const tokenCount = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
+
       if (result.status === 'succeeded') {
-        await this.runRepo.finish(runId, 'succeeded', costUsd);
+        await this.runRepo.finish(runId, 'succeeded', costUsd, tokenCount);
         this.logger.info('Run succeeded', {
           runId, costUsd, model: result.model,
           inputTokens: result.inputTokens, outputTokens: result.outputTokens,
@@ -220,12 +222,11 @@ export class ExecutionEngine {
           type: 'run:succeeded',
           timestamp: new Date().toISOString(),
           payload: {
-            runId, roleId, orgId, taskNodeId, costUsd,
-            tokenCount: result.inputTokens + result.outputTokens,
+            runId, roleId, orgId, taskNodeId, costUsd, tokenCount,
           },
         });
       } else if (result.status === 'cancelled') {
-        await this.runRepo.finish(runId, 'cancelled', costUsd);
+        await this.runRepo.finish(runId, 'cancelled', costUsd, tokenCount);
         this.logger.info('Run cancelled by worker', { runId });
 
         this.eventBus.emit({
@@ -235,7 +236,7 @@ export class ExecutionEngine {
         });
       } else {
         // failed or interrupted
-        await this.runRepo.finish(runId, result.status, costUsd);
+        await this.runRepo.finish(runId, result.status, costUsd, tokenCount);
         this.logger.warn('Run failed', {
           runId, exitCode: result.exitCode, error: result.errorMessage,
         });
