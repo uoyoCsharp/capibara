@@ -32,6 +32,7 @@ export const configSchema = z.object({
   }).default({}),
   logging: z.object({
     level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+    logDir: z.string().default(''),
   }).default({}),
 });
 

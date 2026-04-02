@@ -125,7 +125,6 @@ export interface Run {
   roleId: string;
   status: RunStatus;
   trigger: WakeTrigger;
-  outputLog: string;
   startedAt: string | null;
   finishedAt: string | null;
   costUsd: number;

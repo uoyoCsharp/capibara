@@ -218,6 +218,37 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 13,
+    description: 'Drop output_log column from runs (logs moved to filesystem)',
+    up: (db) => {
+      // SQLite >= 3.35.0 supports DROP COLUMN.
+      // For older versions, fall back to recreate-table strategy.
+      try {
+        db.exec(`ALTER TABLE runs DROP COLUMN output_log;`);
+      } catch {
+        // Fallback: recreate table without output_log
+        db.exec(`
+          CREATE TABLE runs_new (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            task_node_id TEXT NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
+            role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
+            trigger TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            cost_usd REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          INSERT INTO runs_new (id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, created_at)
+            SELECT id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, created_at FROM runs;
+          DROP TABLE runs;
+          ALTER TABLE runs_new RENAME TO runs;
+        `);
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

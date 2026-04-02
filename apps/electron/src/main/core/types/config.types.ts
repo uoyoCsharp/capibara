@@ -35,5 +35,6 @@ export interface CapibaraConfig {
   };
   logging: {
     level: string;
+    logDir: string;
   };
 }

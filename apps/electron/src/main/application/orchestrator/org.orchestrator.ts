@@ -20,6 +20,7 @@ import {
   COST_ENTRY_REPO_TOKEN,
 } from '@main/core/tokens.js';
 import type { ExecutionEngine } from '../execution/execution.engine.js';
+import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
 
 interface WakeTarget {
   roleId: string;
@@ -40,6 +41,7 @@ export class OrgOrchestrator {
   private retryCounts = new Map<string, number>(); // key: taskNodeId
   private retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private executionEngine!: ExecutionEngine;
+  private taskStateMachine!: TaskStateMachine;
 
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
@@ -55,6 +57,11 @@ export class OrgOrchestrator {
   /** Inject ExecutionEngine after construction to break circular dependency. */
   setExecutionEngine(engine: ExecutionEngine): void {
     this.executionEngine = engine;
+  }
+
+  /** Inject TaskStateMachine after construction. */
+  setTaskStateMachine(sm: TaskStateMachine): void {
+    this.taskStateMachine = sm;
   }
 
   start(): void {
@@ -93,61 +100,114 @@ export class OrgOrchestrator {
     const payload = event.payload as Record<string, unknown>;
 
     switch (event.type) {
-      // task_assigned → assignee role
+      // task_assigned → assignee role (only if first pending sibling AND parent is approved)
       case 'task:created': {
         const task = await this.taskRepo.findById(payload.taskId as string);
-        if (task?.assigneeRoleId) {
-          return [{
-            roleId: task.assigneeRoleId,
-            orgId: task.orgId,
-            taskNodeId: task.id,
-            trigger: 'task_assigned',
-          }];
+        if (!task?.assigneeRoleId) return [];
+
+        // Parent approval gate: if the parent task exists and is not yet approved,
+        // do not wake the child. Children wait until parent's decomposition is approved.
+        if (task.parentId) {
+          const parentTask = await this.taskRepo.findById(task.parentId);
+          if (parentTask) {
+            const parentApproved = parentTask.status === 'approved' || parentTask.status === 'done';
+            if (!parentApproved) {
+              this.logger.debug('Wake skipped: parent task not yet approved', {
+                taskId: task.id,
+                parentId: task.parentId,
+                parentStatus: parentTask.status,
+              });
+              return [];
+            }
+          }
+
+          // Sequential sibling gate: only wake if it's the first pending sibling
+          const siblings = await this.taskRepo.findByParentId(task.parentId);
+          const firstPending = siblings.find(
+            (s) => s.status === 'pending' || s.status === 'in_progress' || s.status === 'revision',
+          );
+          if (firstPending && firstPending.id !== task.id) {
+            this.logger.debug('Wake skipped: not the first pending sibling', {
+              taskId: task.id,
+              firstPendingId: firstPending.id,
+            });
+            return [];
+          }
         }
+
+        return [{
+          roleId: task.assigneeRoleId,
+          orgId: task.orgId,
+          taskNodeId: task.id,
+          trigger: 'task_assigned',
+        }];
+      }
+
+      // task:completed is no longer emitted by checkAutoPropagate.
+      // Parent status advancement is handled directly by TaskService.checkAutoPropagate.
+      case 'task:completed': {
         return [];
       }
 
-      // task_completed → parent role (reviewer)
-      case 'task:completed': {
-        const task = await this.taskRepo.findById(payload.taskId as string);
-        if (!task?.parentId) return [];
-
-        const parentTask = await this.taskRepo.findById(task.parentId);
-        if (!parentTask?.assigneeRoleId) return [];
-
-        return [{
-          roleId: parentTask.assigneeRoleId,
-          orgId: task.orgId,
-          taskNodeId: parentTask.id,
-          trigger: 'task_completed',
-        }];
-      }
-
-      // review_approve → parent task assignee (if all siblings done)
+      // Sequential execution & parent approval propagation:
+      // 1. When a sibling reaches terminal status → wake next pending sibling
+      // 2. When a parent task is approved → wake its first pending child (decomposition gate)
       case 'task:status-changed': {
         const { taskId, newStatus } = payload as { taskId: string; newStatus: string };
-        if (newStatus !== 'approved' && newStatus !== 'done') return [];
+        const terminalStatuses = ['approved', 'done', 'cancelled'];
+        if (!terminalStatuses.includes(newStatus)) return [];
 
         const task = await this.taskRepo.findById(taskId);
-        if (!task?.parentId) return [];
+        if (!task) return [];
 
-        // Check all siblings
+        const targets: WakeTarget[] = [];
+
+        // Check 1: When a task is approved, wake its first pending child.
+        // This handles the decomposition gate: children wait until parent is approved.
+        if (newStatus === 'approved') {
+          const children = await this.taskRepo.findByParentId(taskId);
+          const firstPendingChild = children.find((c) => c.status === 'pending');
+          if (firstPendingChild?.assigneeRoleId) {
+            this.logger.info('Parent approved, waking first pending child', {
+              parentTaskId: taskId,
+              childTaskId: firstPendingChild.id,
+            });
+            targets.push({
+              roleId: firstPendingChild.assigneeRoleId,
+              orgId: task.orgId,
+              taskNodeId: firstPendingChild.id,
+              trigger: 'task_assigned',
+            });
+          }
+        }
+
+        // Check 2: Sequential sibling execution
+        if (!task.parentId) return targets;
+
         const siblings = await this.taskRepo.findByParentId(task.parentId);
-        const allDone = siblings.every(
-          (s) => s.status === 'approved' || s.status === 'done' || s.status === 'cancelled',
-        );
+        const allDone = siblings.every((s) => terminalStatuses.includes(s.status));
 
-        if (!allDone) return [];
+        if (allDone) {
+          // All siblings complete → checkAutoPropagate handles parent advancement
+          return targets;
+        }
 
-        const parentTask = await this.taskRepo.findById(task.parentId);
-        if (!parentTask?.assigneeRoleId) return [];
+        // Not all done → wake the next pending sibling (sequential gate)
+        const nextPending = siblings.find((s) => s.status === 'pending');
+        if (nextPending?.assigneeRoleId) {
+          this.logger.info('Waking next sequential sibling', {
+            completedTaskId: taskId,
+            nextTaskId: nextPending.id,
+          });
+          targets.push({
+            roleId: nextPending.assigneeRoleId,
+            orgId: task.orgId,
+            taskNodeId: nextPending.id,
+            trigger: 'task_assigned',
+          });
+        }
 
-        return [{
-          roleId: parentTask.assigneeRoleId,
-          orgId: task.orgId,
-          taskNodeId: parentTask.id,
-          trigger: 'review_approve',
-        }];
+        return targets;
       }
 
       // Run succeeded → reset counters, consume pending wakes
@@ -388,6 +448,14 @@ export class OrgOrchestrator {
   private async escalateToParent(roleId: string, orgId: string, taskNodeId: string): Promise<void> {
     const role = await this.roleRepo.findById(roleId);
     if (!role) return;
+
+    // Mark the failed task as blocked so the escalation is visible
+    try {
+      await this.taskStateMachine.transition(taskNodeId, 'blocked');
+      this.logger.info('Task marked as blocked due to escalation', { taskNodeId });
+    } catch {
+      // Task may already be in a state that doesn't allow blocked transition
+    }
 
     if (role.parentId) {
       const parentRole = await this.roleRepo.findById(role.parentId);

@@ -8,8 +8,8 @@ import type {
   DiscussionMessageRecord,
 } from '@shared/contracts';
 import { cn } from '../../lib/utils';
-import { useRunLogs } from '../../hooks/useRunLogs';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
+import { RunLogViewer } from '../shared/RunLogViewer';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
@@ -77,9 +77,7 @@ export function TaskDetailDrawer({
   const [contextTab, setContextTab] = useState<string>('output');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const activeRunId = latestRun && (latestRun.status === 'running' || latestRun.status === 'queued')
-    ? latestRun.id : null;
-  const { log: streamingLog, scrollRef } = useRunLogs(activeRunId);
+  const isRunActive = latestRun != null && (latestRun.status === 'running' || latestRun.status === 'queued');
   const elapsed = useElapsedTimer(
     latestRun?.status === 'running' ? latestRun.startedAt : null
   );
@@ -135,7 +133,9 @@ export function TaskDetailDrawer({
   }, [task.id]);
 
   const roleNameMap = new Map(roles.map((r) => [r.id, r.name]));
-  const needsReview = task.status === 'awaiting_review';
+  // Only show review banner when the assignee role requires human approval
+  const needsReview = task.status === 'awaiting_review' &&
+    assignee != null && assignee.requiresHumanApproval === true;
 
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -289,21 +289,11 @@ export function TaskDetailDrawer({
                     )}
                     <span>{new Date(latestRun.createdAt).toLocaleString()}</span>
                   </div>
-                  {activeRunId ? (
-                    <pre
-                      ref={scrollRef}
-                      className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed"
-                    >
-                      {streamingLog || t.tasksExecution.waitingForOutput}
-                    </pre>
-                  ) : latestRun.outputLog ? (
-                    <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
-                      {latestRun.outputLog.slice(0, 8000)}
-                      {latestRun.outputLog.length > 8000 && `\n${t.common.truncated}`}
-                    </pre>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">{t.tasksExecution.noOutputLog}</p>
-                  )}
+                  <RunLogViewer
+                    runId={latestRun.id}
+                    isActive={isRunActive}
+                    maxHeight="max-h-64"
+                  />
                 </TabsContent>
               )}
 

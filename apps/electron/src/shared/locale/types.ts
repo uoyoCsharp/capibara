@@ -221,8 +221,14 @@ export interface LocaleMessages {
     finished: string;
     cost: string;
     outputLog: string;
+    parsedView: string;
+    rawView: string;
     waitingForOutput: string;
     noOutputLog: string;
+    loadingLog: string;
+    loadMore: string;
+    openLogFolder: string;
+    rawTruncated: string;
     failedToLoadTasks: string;
     failedToRefreshRuns: string;
     failedToRefreshTasks: string;

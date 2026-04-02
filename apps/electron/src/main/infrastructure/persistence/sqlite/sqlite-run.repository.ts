@@ -13,12 +13,14 @@ interface RunRow {
   role_id: string;
   status: string;
   trigger: string;
-  output_log: string;
   started_at: string | null;
   finished_at: string | null;
   cost_usd: number;
   created_at: string;
 }
+
+/** Columns to SELECT (excludes dropped output_log) */
+const RUN_COLUMNS = 'id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, created_at';
 
 function rowToEntity(row: RunRow): Run {
   return {
@@ -28,7 +30,6 @@ function rowToEntity(row: RunRow): Run {
     roleId: row.role_id,
     status: row.status as RunStatus,
     trigger: row.trigger as Run['trigger'],
-    outputLog: row.output_log,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     costUsd: row.cost_usd,
@@ -44,35 +45,35 @@ export class SqliteRunRepository implements IRunRepository {
 
   async findById(id: string): Promise<Run | null> {
     const row = this.conn.getDb()
-      .prepare('SELECT * FROM runs WHERE id = ?')
+      .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE id = ?`)
       .get(id) as RunRow | undefined;
     return row ? rowToEntity(row) : null;
   }
 
   async findByOrgId(orgId: string): Promise<Run[]> {
     const rows = this.conn.getDb()
-      .prepare('SELECT * FROM runs WHERE org_id = ? ORDER BY created_at DESC')
+      .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE org_id = ? ORDER BY created_at DESC`)
       .all(orgId) as RunRow[];
     return rows.map(rowToEntity);
   }
 
   async findByTaskId(taskNodeId: string): Promise<Run[]> {
     const rows = this.conn.getDb()
-      .prepare('SELECT * FROM runs WHERE task_node_id = ? ORDER BY created_at DESC')
+      .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE task_node_id = ? ORDER BY created_at DESC`)
       .all(taskNodeId) as RunRow[];
     return rows.map(rowToEntity);
   }
 
   async findActiveByRoleId(roleId: string): Promise<Run | null> {
     const row = this.conn.getDb()
-      .prepare("SELECT * FROM runs WHERE role_id = ? AND status IN ('queued', 'running') LIMIT 1")
+      .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE role_id = ? AND status IN ('queued', 'running') LIMIT 1`)
       .get(roleId) as RunRow | undefined;
     return row ? rowToEntity(row) : null;
   }
 
   async findAnyActiveRun(): Promise<Run | null> {
     const row = this.conn.getDb()
-      .prepare("SELECT * FROM runs WHERE status IN ('queued', 'running') LIMIT 1")
+      .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE status IN ('queued', 'running') LIMIT 1`)
       .get() as RunRow | undefined;
     return row ? rowToEntity(row) : null;
   }
@@ -82,8 +83,8 @@ export class SqliteRunRepository implements IRunRepository {
     const now = new Date().toISOString();
 
     this.conn.getDb().prepare(`
-      INSERT INTO runs (id, org_id, task_node_id, role_id, status, trigger, output_log, cost_usd, created_at)
-      VALUES (?, ?, ?, ?, 'queued', ?, '', 0, ?)
+      INSERT INTO runs (id, org_id, task_node_id, role_id, status, trigger, cost_usd, created_at)
+      VALUES (?, ?, ?, ?, 'queued', ?, 0, ?)
     `).run(id, input.orgId, input.taskNodeId, input.roleId, input.trigger, now);
 
     return (await this.findById(id))!;
@@ -98,12 +99,6 @@ export class SqliteRunRepository implements IRunRepository {
       .prepare('UPDATE runs SET status = ?, started_at = COALESCE(started_at, ?) WHERE id = ?')
       .run(status, status === 'running' ? new Date().toISOString() : null, id);
     if (changes.changes === 0) throw new NotFoundError('Run', id);
-  }
-
-  async appendOutputLog(id: string, chunk: string): Promise<void> {
-    this.conn.getDb()
-      .prepare('UPDATE runs SET output_log = output_log || ? WHERE id = ?')
-      .run(chunk, id);
   }
 
   async setCost(id: string, costUsd: number): Promise<void> {

@@ -32,5 +32,6 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
   },
   logging: {
     level: 'info',
+    logDir: '',  // resolved at runtime: {userData}/capibara/logs
   },
 };

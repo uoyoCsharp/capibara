@@ -61,7 +61,8 @@ export class ExecutionContext {
   }
 
   private async buildDiscussionSummary(task: TaskNode): Promise<DiscussionSummary | null> {
-    const group = await this.discussionRepo.findGroupByTaskNodeId(task.id);
+    // Walk up the task tree to find the nearest discussion group (story or epic)
+    const group = await this.findNearestDiscussionGroup(task);
     if (!group) return null;
 
     const recentMessages = await this.discussionRepo.findRecentMessages(group.id, 3);
@@ -87,5 +88,20 @@ export class ExecutionContext {
       voteStats,
       latestReviseFeedback: latestReviseMsg?.content ?? null,
     };
+  }
+
+  /** Walk up the task tree to find the nearest discussion group (story or epic). */
+  private async findNearestDiscussionGroup(task: TaskNode): Promise<{ id: string } | null> {
+    let currentId: string | null = (task.type === 'story' || task.type === 'epic') ? task.id : task.parentId;
+    while (currentId) {
+      const t = await this.taskRepo.findById(currentId);
+      if (!t) return null;
+      if (t.type === 'story' || t.type === 'epic') {
+        const group = await this.discussionRepo.findGroupByTaskNodeId(t.id);
+        if (group) return group;
+      }
+      currentId = t.parentId;
+    }
+    return null;
   }
 }

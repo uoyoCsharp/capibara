@@ -1,9 +1,11 @@
-import { ipcMain } from 'electron';
-import { IPC_CHANNELS, startRunSchema } from '@shared/contracts.js';
+import { ipcMain, shell } from 'electron';
+import { IPC_CHANNELS, startRunSchema, getRunLogSchema } from '@shared/contracts.js';
 import type { DesktopResult } from '@shared/contracts.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
+import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
 import type { ExecutionEngine } from '../application/execution/execution.engine.js';
+import type { FileLogService } from '../infrastructure/logging/file-log.service.js';
 
 function ok<T>(data: T): DesktopResult<T> {
   return { ok: true, data };
@@ -15,7 +17,9 @@ function fail<T>(code: string, message: string): DesktopResult<T> {
 
 export function registerRunHandlers(
   runRepo: IRunRepository,
+  orgRepo: IOrganizationRepository,
   executionEngine: ExecutionEngine,
+  fileLogService: FileLogService,
   logger: ILogger,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getRunsByOrgId, async (_event, orgId: unknown) => {
@@ -54,6 +58,52 @@ export function registerRunHandlers(
     } catch (err) {
       logger.error('Failed to get runs by task', { error: String(err) });
       return fail('INTERNAL', 'Failed to get runs by task');
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getRunLog, async (_event, input: unknown) => {
+    try {
+      const parsed = getRunLogSchema.safeParse(input);
+      if (!parsed.success) {
+        return fail('VALIDATION_ERROR', parsed.error.message);
+      }
+      const { runId, mode, offset, limit } = parsed.data;
+      const run = await runRepo.findById(runId);
+      if (!run) return fail('NOT_FOUND', 'Run not found');
+
+      const org = await orgRepo.findById(run.orgId);
+      const orgName = org?.name ?? run.orgId;
+
+      if (mode === 'parsed') {
+        const entries = await fileLogService.readParsed(orgName, run.taskNodeId, runId, { offset, limit });
+        return ok({ entries, rawLines: [] });
+      } else {
+        const rawLines = await fileLogService.readRaw(orgName, run.taskNodeId, runId, { offset, limit });
+        return ok({ entries: [], rawLines });
+      }
+    } catch (err) {
+      logger.error('Failed to get run log', { error: String(err) });
+      return fail('INTERNAL', 'Failed to get run log');
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.openRunLogFolder, async (_event, runId: unknown) => {
+    try {
+      if (typeof runId !== 'string' || !runId) {
+        return fail('VALIDATION_ERROR', 'runId must be a non-empty string');
+      }
+      const run = await runRepo.findById(runId);
+      if (!run) return fail('NOT_FOUND', 'Run not found');
+
+      const org = await orgRepo.findById(run.orgId);
+      const orgName = org?.name ?? run.orgId;
+      const logDir = fileLogService.getLogDir(orgName, run.taskNodeId);
+
+      await shell.openPath(logDir);
+      return ok(undefined as void);
+    } catch (err) {
+      logger.error('Failed to open log folder', { error: String(err) });
+      return fail('INTERNAL', 'Failed to open log folder');
     }
   });
 

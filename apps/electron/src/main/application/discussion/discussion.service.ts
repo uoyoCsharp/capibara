@@ -40,7 +40,7 @@ export class DiscussionService {
     @inject(ROLE_REPO_TOKEN) private readonly roleRepo: IRoleRepository,
     private readonly consensusDetector: ConsensusDetector,
     private readonly taskStateMachine: TaskStateMachine,
-  ) {}
+  ) { }
 
   /** Subscribe to domain events for auto-creation, consensus evaluation, and run summaries. */
   start(): void {
@@ -51,7 +51,7 @@ export class DiscussionService {
     this.logger.info('DiscussionService started — listening for task:created, discussion:vote-added, run:succeeded, run:failed');
   }
 
-  // ─── Story 5.2: Auto-creation ──────────────────────────
+  // ─── Story 5.2: Auto-creation (for Epic and Story tasks) ─────────
   private async onTaskCreated(event: DomainEvent): Promise<void> {
     const { taskId, orgId, type } = event.payload as {
       taskId: string;
@@ -60,22 +60,32 @@ export class DiscussionService {
       parentId: string | null;
     };
 
-    if (type !== 'epic') return;
+    // Create discussion groups for decomposition-level tasks (epic and story)
+    if (type !== 'epic' && type !== 'story') return;
 
-    const existing = await this.discussionRepo.findGroupByTaskNodeId(taskId);
-    if (existing) return;
+    try {
+      const existing = await this.discussionRepo.findGroupByTaskNodeId(taskId);
+      if (existing) return;
 
-    const group = await this.discussionRepo.createGroup({ taskNodeId: taskId, orgId });
-    this.logger.info('Discussion group auto-created for epic', { groupId: group.id, taskId });
+      const group = await this.discussionRepo.createGroup({ taskNodeId: taskId, orgId });
+      this.logger.info('Discussion group auto-created', { groupId: group.id, taskId, type });
 
-    this.eventBus.emit({
-      type: 'discussion:group-created',
-      timestamp: new Date().toISOString(),
-      payload: { groupId: group.id, taskNodeId: taskId, orgId },
-    });
+      this.eventBus.emit({
+        type: 'discussion:group-created',
+        timestamp: new Date().toISOString(),
+        payload: { groupId: group.id, taskNodeId: taskId, orgId },
+      });
+    } catch (err) {
+      this.logger.error('Failed to auto-create discussion group', {
+        taskId,
+        orgId,
+        type,
+        error: String(err),
+      });
+    }
   }
 
-  // ─── Run completion → post summary to discussion ────────
+  // ─── Run completion → post summary to nearest discussion group ────────
   private async onRunCompleted(event: DomainEvent): Promise<void> {
     const payload = event.payload as {
       runId: string;
@@ -86,49 +96,60 @@ export class DiscussionService {
       error?: string;
     };
 
-    // Find or create discussion group for this task
-    let group = await this.discussionRepo.findGroupByTaskNodeId(payload.taskNodeId);
-    if (!group) {
-      // Auto-create discussion group for this task if it doesn't exist
-      group = await this.discussionRepo.createGroup({
-        taskNodeId: payload.taskNodeId,
-        orgId: payload.orgId,
+    try {
+      // Find the nearest discussion group by walking up the task tree (story or epic)
+      const group = await this.findNearestDiscussionGroup(payload.taskNodeId);
+      if (!group) {
+        this.logger.debug('No discussion group found for run', {
+          runId: payload.runId,
+          taskNodeId: payload.taskNodeId,
+        });
+        return;
+      }
+
+      // Build summary message with task context
+      const role = await this.roleRepo.findById(payload.roleId);
+      const status = event.type === 'run:succeeded' ? 'succeeded' : 'failed';
+
+      this.logger.info('Run summary posted to discussion', {
+        groupId: group.id,
+        runId: payload.runId,
+        status,
       });
+
       this.eventBus.emit({
-        type: 'discussion:group-created',
+        type: 'discussion:message-added',
         timestamp: new Date().toISOString(),
-        payload: { groupId: group.id, taskNodeId: payload.taskNodeId, orgId: payload.orgId },
+        payload: { groupId: group.id, messageId: payload.runId },
+      });
+    } catch (err) {
+      this.logger.error('Failed to post run summary to discussion', {
+        runId: payload.runId,
+        taskNodeId: payload.taskNodeId,
+        error: String(err),
       });
     }
+  }
 
-    // Build summary message
-    const role = await this.roleRepo.findById(payload.roleId);
-    const roleName = role?.name ?? 'Unknown Role';
-    const status = event.type === 'run:succeeded' ? 'succeeded' : 'failed';
-    const costLine = payload.costUsd ? ` | Cost: $${payload.costUsd.toFixed(4)}` : '';
-    const errorLine = payload.error ? `\nError: ${payload.error}` : '';
+  /**
+   * Walk up the task tree to find the nearest discussion group.
+   * Discussion groups exist on epic and story tasks.
+   * If the task itself is an epic or story, use its group directly.
+   * Otherwise, walk up to find the nearest ancestor with a discussion group.
+   */
+  private async findNearestDiscussionGroup(taskNodeId: string): Promise<DiscussionGroup | null> {
+    let currentId: string | null = taskNodeId;
+    while (currentId) {
+      const task = await this.taskRepo.findById(currentId);
+      if (!task) return null;
 
-    const content = `**Run ${status}** by ${roleName}${costLine}${errorLine}`;
-
-    await this.discussionRepo.postMessage({
-      groupId: group.id,
-      authorRoleId: payload.roleId,
-      authorType: 'system',
-      content,
-      voteTag: null,
-    });
-
-    this.logger.info('Run summary posted to discussion', {
-      groupId: group.id,
-      runId: payload.runId,
-      status,
-    });
-
-    this.eventBus.emit({
-      type: 'discussion:message-added',
-      timestamp: new Date().toISOString(),
-      payload: { groupId: group.id, messageId: payload.runId },
-    });
+      if (task.type === 'story' || task.type === 'epic') {
+        const group = await this.discussionRepo.findGroupByTaskNodeId(task.id);
+        if (group) return group;
+      }
+      currentId = task.parentId;
+    }
+    return null;
   }
 
   // ─── Story 5.3 & 5.4: Consensus wiring ────────────────
@@ -140,70 +161,126 @@ export class DiscussionService {
       authorRoleId: string | null;
     };
 
-    const group = await this.discussionRepo.findGroupById(groupId);
-    if (!group) return;
+    try {
+      const group = await this.discussionRepo.findGroupById(groupId);
+      if (!group) return;
 
-    // Check if this vote came from a human (authorRoleId is null for human votes)
-    const isHumanVote = authorRoleId === null;
+      // Check if this vote came from a human (authorRoleId is null for human votes)
+      const isHumanVote = authorRoleId === null;
 
-    // If a human directly votes APPROVE and requiresHumanApproval is set,
-    // treat it as final approval — skip consensus evaluation
-    if (isHumanVote && voteTag === 'APPROVE') {
-      const task = await this.taskRepo.findById(group.taskNodeId);
-      if (task && task.assigneeRoleId) {
-        const role = await this.roleRepo.findById(task.assigneeRoleId);
-        if (role?.requiresHumanApproval) {
-          await this.taskStateMachine.transition(task.id, 'approved');
-          this.reviseCounts.delete(task.id);
-          this.logger.info('Task approved by human', { taskId: task.id });
-          return;
+      // If a human directly votes APPROVE and requiresHumanApproval is set,
+      // handle based on task state:
+      // - awaiting_review: final approval (task_complete was called)
+      // - in_progress: decomposition proposal approved → wake agent for Phase 2
+      if (isHumanVote && voteTag === 'APPROVE') {
+        const task = await this.taskRepo.findById(group.taskNodeId);
+        if (task && task.assigneeRoleId) {
+          const role = await this.roleRepo.findById(task.assigneeRoleId);
+          if (role?.requiresHumanApproval) {
+            if (task.status === 'in_progress') {
+              // Phase 1 approval: decomposition plan approved, wake agent for Phase 2
+              this.logger.info('Decomposition plan approved by human, waking agent for Phase 2', {
+                taskId: task.id,
+                roleId: role.id,
+              });
+              this.eventBus.emit({
+                type: 'wake:triggered',
+                timestamp: new Date().toISOString(),
+                payload: {
+                  roleId: task.assigneeRoleId,
+                  orgId: group.orgId,
+                  trigger: 'review_approve' as const,
+                },
+              });
+              return;
+            }
+            if (task.status === 'awaiting_review') {
+              // Final approval: task_complete was called, approve the task
+              await this.taskStateMachine.transition(task.id, 'approved');
+              this.reviseCounts.delete(task.id);
+              this.logger.info('Task approved by human', { taskId: task.id });
+              return;
+            }
+          }
         }
       }
-    }
 
-    // If a human directly votes REVISE, trigger revision immediately
-    if (isHumanVote && voteTag === 'REVISE') {
-      const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
-      const feedback = latestMsg[0]?.content ?? '';
-      await this.handleRevision(group, feedback);
-      return;
-    }
-
-    // If a human directly votes DELEGATE, trigger delegation immediately
-    if (isHumanVote && voteTag === 'DELEGATE') {
-      const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
-      const targetRoleId = latestMsg[0]?.content?.match(/role\s+(\S+)/)?.[1] ?? '';
-      if (targetRoleId) {
-        await this.handleDelegated(group, targetRoleId);
+      // If a human directly votes REVISE, trigger revision immediately
+      if (isHumanVote && voteTag === 'REVISE') {
+        const task = await this.taskRepo.findById(group.taskNodeId);
+        if (task && task.status === 'in_progress' && task.assigneeRoleId) {
+          // Phase 1 revision: decomposition plan rejected, wake agent to re-propose
+          this.logger.info('Decomposition plan revised by human, waking agent to re-propose', {
+            taskId: task.id,
+          });
+          this.eventBus.emit({
+            type: 'wake:triggered',
+            timestamp: new Date().toISOString(),
+            payload: {
+              roleId: task.assigneeRoleId,
+              orgId: group.orgId,
+              trigger: 'review_revise' as const,
+            },
+          });
+          return;
+        }
+        const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
+        const feedback = latestMsg[0]?.content ?? '';
+        await this.handleRevision(group, feedback);
+        return;
       }
-      return;
-    }
 
-    // For AI votes, use consensus detection as before
-    const result = await this.consensusDetector.evaluate(groupId);
-    this.logger.debug('Consensus evaluation result', { groupId, result });
+      // If a human directly votes DELEGATE, trigger delegation immediately
+      if (isHumanVote && voteTag === 'DELEGATE') {
+        const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
+        const targetRoleId = latestMsg[0]?.content?.match(/role\s+(\S+)/)?.[1] ?? '';
+        if (targetRoleId) {
+          await this.handleDelegated(group, targetRoleId);
+        }
+        return;
+      }
 
-    switch (result.outcome) {
-      case 'approved':
-        await this.handleApproved(group);
-        break;
-      case 'revision':
-        await this.handleRevision(group, result.feedback);
-        break;
-      case 'delegated':
-        await this.handleDelegated(group, result.targetRoleId);
-        break;
-      case 'disputed':
-        await this.handleDisputed(group);
-        break;
-      case 'pending':
-        break;
+      // For AI votes, use consensus detection as before
+      const result = await this.consensusDetector.evaluate(groupId);
+      this.logger.debug('Consensus evaluation result', { groupId, result });
+
+      switch (result.outcome) {
+        case 'approved':
+          await this.handleApproved(group);
+          break;
+        case 'revision':
+          await this.handleRevision(group, result.feedback);
+          break;
+        case 'delegated':
+          await this.handleDelegated(group, result.targetRoleId);
+          break;
+        case 'disputed':
+          await this.handleDisputed(group);
+          break;
+        case 'pending':
+          break;
+      }
+    } catch (err) {
+      this.logger.error('Failed to process vote', {
+        groupId,
+        voteTag,
+        error: String(err),
+      });
     }
   }
 
   private async handleApproved(group: DiscussionGroup): Promise<void> {
     const task = await this.taskRepo.findById(group.taskNodeId);
     if (!task) return;
+
+    // Skip if the task is already approved or in a terminal state
+    if (task.status === 'approved' || task.status === 'done' || task.status === 'cancelled') {
+      this.logger.debug('handleApproved skipped: task already in terminal state', {
+        taskId: task.id,
+        status: task.status,
+      });
+      return;
+    }
 
     // Check if the reviewer role requires human approval
     if (task.assigneeRoleId) {

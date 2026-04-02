@@ -60,6 +60,7 @@ import { EventDigester } from './application/progress/event.digester.js';
 import { NarrativeEngine } from './application/progress/narrative.engine.js';
 import { NotificationService } from './application/notifications/notification.service.js';
 import { EventBroadcaster } from './application/notifications/event-broadcaster.js';
+import { FileLogService } from './infrastructure/logging/file-log.service.js';
 import { McpConfigGenerator } from './infrastructure/mcp/mcp-config-generator.js';
 import { McpToolRegistry } from './infrastructure/mcp/mcp-tool-registry.js';
 import { McpToolHandlers } from './infrastructure/mcp/mcp-tool-handlers.js';
@@ -180,6 +181,9 @@ export async function bootstrap(): Promise<void> {
     logger.error('Discussion service failed to start', { error: String(err) });
   }
 
+  // ─── File Log Service ───────────────────────────────────
+  const fileLogService = new FileLogService(config.logging.logDir);
+
   // ─── Execution Engine & MCP ──────────────────────────────
   const orgContext = new OrgContext(orgRepo, roleRepo, taskRepo, logger);
   const executionContext = new ExecutionContext(taskRepo, roleRepo, skillRepo, discussionRepo, orgContext);
@@ -187,7 +191,7 @@ export async function bootstrap(): Promise<void> {
   const mcpConfigGen = new McpConfigGenerator(logger);
 
   const mcpToolRegistry = new McpToolRegistry(logger);
-  const mcpToolHandlers = new McpToolHandlers(taskRepo, roleRepo, discussionRepo, eventBus, logger);
+  const mcpToolHandlers = new McpToolHandlers(taskRepo, roleRepo, discussionRepo, eventBus, logger, taskService);
   mcpToolHandlers.registerAll(mcpToolRegistry);
 
   const mcpIpcServer = new McpIpcServer(logger, mcpToolRegistry);
@@ -196,6 +200,7 @@ export async function bootstrap(): Promise<void> {
   const executionEngine = new ExecutionEngine(
     config, logger, eventBus, orgRepo, runRepo, roleRepo, taskRepo, costRepo,
     executor, promptBuilder, executionContext, mcpConfigGen, mcpIpcServer,
+    fileLogService, taskStateMachine,
   );
 
   // Start MCP IPC server and configure the config generator with its port
@@ -212,6 +217,7 @@ export async function bootstrap(): Promise<void> {
     pendingWakeRepo, costRepo,
   );
   orchestrator.setExecutionEngine(executionEngine);
+  orchestrator.setTaskStateMachine(taskStateMachine);
   try { orchestrator.start(); } catch (err) {
     logger.error('Orchestrator failed to start', { error: String(err) });
   }
@@ -280,7 +286,7 @@ export async function bootstrap(): Promise<void> {
   registerTemplateHandlers(templateService, logger);
   registerTaskHandlers(taskService, logger);
   registerDiscussionHandlers(discussionService, logger);
-  registerRunHandlers(runRepo, executionEngine, logger);
+  registerRunHandlers(runRepo, orgRepo, executionEngine, fileLogService, logger);
   registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger);
   registerNarrativeHandlers(narrativeEngine, costRepo, orgRepo, logger);
   registerSettingsHandlers(settingsRepo, logger);

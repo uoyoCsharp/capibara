@@ -6,6 +6,7 @@ import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { McpToolCallResult } from '@main/core/interfaces/i-mcp-tool-handler.js';
 import type { VoteTag } from '@main/core/types/domain.types.js';
+import type { TaskService } from '@main/application/tasks/task.service.js';
 import {
   TASK_REPO_TOKEN,
   ROLE_REPO_TOKEN,
@@ -27,11 +28,12 @@ export class McpToolHandlers {
     @inject(DISCUSSION_REPO_TOKEN) private readonly discussionRepo: IDiscussionRepository,
     @inject(EVENT_BUS_TOKEN) private readonly eventBus: IEventBus,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
+    private readonly taskService: TaskService,
   ) {}
 
   registerAll(registry: McpToolRegistry): void {
     registry.register('capibara_task_complete', (args) => this.taskComplete(args));
-    registry.register('capibara_task_create_subtask', (args) => this.taskCreateSubtask(args));
+    registry.register('capibara_task_create_child', (args) => this.taskCreateChild(args));
     registry.register('capibara_discussion_post', (args) => this.discussionPost(args));
     registry.register('capibara_context_get_task', (args) => this.contextGetTask(args));
     registry.register('capibara_context_get_org_tree', (args) => this.contextGetOrgTree(args));
@@ -48,41 +50,52 @@ export class McpToolHandlers {
       await this.taskRepo.setArtifactPaths(taskId, artifactPaths);
     }
 
-    await this.taskRepo.updateStatus(taskId, 'awaiting_review');
+    // Check current task status — it may have already been approved
+    // via consensus voting before the CLI called task_complete.
+    const currentTask = await this.taskRepo.findById(taskId);
+    if (!currentTask) {
+      return { success: false, error: `Task ${taskId} not found` };
+    }
+
+    if (currentTask.status === 'approved' || currentTask.status === 'done') {
+      this.logger.info('task_complete called but task already in terminal state, skipping transition', {
+        taskId,
+        currentStatus: currentTask.status,
+      });
+      return { success: true, data: { taskId, status: currentTask.status } };
+    }
+
+    // Use TaskService to transition through the state machine.
+    // This emits task:status-changed events and triggers auto-approval
+    // for roles that don't require human approval.
+    await this.taskService.updateStatus(taskId, 'awaiting_review');
 
     const task = await this.taskRepo.findById(taskId);
-    this.eventBus.emit({
-      type: 'task:completed',
-      timestamp: new Date().toISOString(),
-      payload: { taskId, orgId: task?.orgId, summary },
-    });
-
-    return { success: true, data: { taskId, status: 'awaiting_review' } };
+    return { success: true, data: { taskId, status: task?.status ?? 'awaiting_review' } };
   }
 
-  private async taskCreateSubtask(args: Record<string, unknown>): Promise<McpToolCallResult> {
+  private async taskCreateChild(args: Record<string, unknown>): Promise<McpToolCallResult> {
     const parentTask = await this.taskRepo.findById(args.parentTaskId as string);
     if (!parentTask) {
       return { success: false, error: 'Parent task not found' };
     }
 
-    const subtask = await this.taskRepo.create({
-      orgId: parentTask.orgId,
-      parentId: parentTask.id,
-      type: (args.type as string) as 'task' | 'subtask',
-      title: args.title as string,
-      description: args.description as string,
-      assigneeRoleId: (args.assigneeRoleId as string) ?? null,
-      depth: parentTask.depth + 1,
-    });
+    const childType = (args.type as string) ?? 'task';
 
-    this.eventBus.emit({
-      type: 'task:created',
-      timestamp: new Date().toISOString(),
-      payload: { taskId: subtask.id, orgId: subtask.orgId },
-    });
-
-    return { success: true, data: { taskId: subtask.id } };
+    try {
+      // Use TaskService for type hierarchy validation and proper event emission
+      const child = await this.taskService.create({
+        orgId: parentTask.orgId,
+        parentId: parentTask.id,
+        type: childType as any,
+        title: args.title as string,
+        description: (args.description as string) ?? '',
+        assigneeRoleId: (args.assigneeRoleId as string) ?? null,
+      });
+      return { success: true, data: { taskId: child.id } };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
   }
 
   private async discussionPost(args: Record<string, unknown>): Promise<McpToolCallResult> {

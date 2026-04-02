@@ -52,7 +52,7 @@ export class PromptBuilder implements IPromptBuilder {
     // System Tools
     lines.push('## System Tools (available as MCP tools)');
     lines.push(`- capibara_task_complete: Mark your task as completed. Use taskId="${context.task.id}"`);
-    lines.push(`- capibara_task_create_subtask: Create subtasks. Use parentTaskId="${context.task.id}"`);
+    lines.push(`- capibara_task_create_child: Create child tasks. Use parentTaskId="${context.task.id}". Type hierarchy: epic→story|spike, story→task|bug|chore|spike, task→subtask`);
     if (context.discussionSummary) {
       lines.push(`- capibara_discussion_post: Post to discussion group / vote. Use discussionGroupId="${context.discussionSummary.groupId}", authorRoleId="${context.role.id}"`);
     } else {
@@ -85,13 +85,72 @@ export class PromptBuilder implements IPromptBuilder {
       lines.push('');
     }
 
-    // Instructions
+    // Instructions (type-specific)
     lines.push('## Instructions');
     lines.push(`IMPORTANT: When calling MCP tools, always use the exact IDs provided above. Your task ID is "${context.task.id}".`);
-    lines.push('1. Complete your assigned task.');
-    lines.push(`2. When done, call capibara_task_complete with taskId="${context.task.id}" and a summary of your work.`);
-    lines.push('3. If you need to decompose work, use capibara_task_create_subtask.');
-    lines.push('4. For review tasks, use capibara_discussion_post with the appropriate voteTag (APPROVE, REVISE, CONCERN, or DELEGATE).');
+
+    const taskType = context.task.type;
+    const requiresHumanApproval = context.role.requiresHumanApproval === true;
+
+    // For decomposition tasks (epic/story), check if human approval has already been granted
+    // by looking for an APPROVE vote in the discussion context.
+    const hasHumanApproval = context.discussionSummary?.voteStats
+      ? context.discussionSummary.voteStats.APPROVE > 0
+      : false;
+
+    if (taskType === 'epic' && requiresHumanApproval && !hasHumanApproval) {
+      // Phase 1: Propose decomposition plan (do NOT create children yet)
+      lines.push('### Your role: Propose a decomposition plan for this Epic');
+      lines.push('Your work requires human approval BEFORE creating child tasks.');
+      lines.push('1. Analyze the epic requirements thoroughly.');
+      lines.push('2. Design a decomposition plan: list the stories you would create, their titles, descriptions, and which subordinate role should handle each.');
+      lines.push(`3. Post your proposed plan to the discussion group using capibara_discussion_post with discussionGroupId="${context.discussionSummary?.groupId ?? ''}" and authorRoleId="${context.role.id}".`);
+      lines.push('4. **Do NOT create child tasks yet.** Do NOT call capibara_task_create_child.');
+      lines.push('5. **Do NOT call capibara_task_complete.** Your run will end naturally after posting the plan.');
+      lines.push('6. A human reviewer will approve or revise your plan. You will be re-awakened after approval.');
+    } else if (taskType === 'epic') {
+      // Phase 2 (after approval) or no human approval needed: Create children
+      lines.push('### Your role: Decompose this Epic into Stories');
+      if (hasHumanApproval) {
+        lines.push('Your decomposition plan has been approved. Now create the child tasks.');
+      }
+      lines.push('1. Analyze the epic requirements and break them down into user stories.');
+      lines.push(`2. Create each story using capibara_task_create_child with parentTaskId="${context.task.id}" and type="story".`);
+      lines.push('3. Assign each story to the most appropriate subordinate role using their role ID.');
+      lines.push('4. Stories will be executed sequentially in the order you create them.');
+      lines.push(`5. After creating all stories, call capibara_task_complete with taskId="${context.task.id}" and a summary of the decomposition plan.`);
+    } else if (taskType === 'story' && requiresHumanApproval && !hasHumanApproval) {
+      // Phase 1: Propose decomposition plan (do NOT create children yet)
+      lines.push('### Your role: Propose a decomposition plan for this Story');
+      lines.push('Your work requires human approval BEFORE creating child tasks.');
+      lines.push('1. Analyze the story requirements thoroughly.');
+      lines.push('2. Design a decomposition plan: list the tasks you would create, their titles, descriptions, and which role should handle each.');
+      lines.push(`3. Post your proposed plan to the discussion group using capibara_discussion_post with discussionGroupId="${context.discussionSummary?.groupId ?? ''}" and authorRoleId="${context.role.id}".`);
+      lines.push('4. **Do NOT create child tasks yet.** Do NOT call capibara_task_create_child.');
+      lines.push('5. **Do NOT call capibara_task_complete.** Your run will end naturally after posting the plan.');
+      lines.push('6. A human reviewer will approve or revise your plan. You will be re-awakened after approval.');
+    } else if (taskType === 'story') {
+      // Phase 2 (after approval) or no human approval needed: Create children
+      lines.push('### Your role: Decompose this Story into Tasks');
+      if (hasHumanApproval) {
+        lines.push('Your decomposition plan has been approved. Now create the child tasks.');
+      }
+      lines.push('1. Analyze the story requirements and break them down into concrete implementation tasks.');
+      lines.push(`2. Create each task using capibara_task_create_child with parentTaskId="${context.task.id}" and type="task" (or "bug", "chore", "spike" as appropriate).`);
+      lines.push('3. Assign each task to the most appropriate role (yourself or a subordinate) using their role ID.');
+      lines.push('4. Tasks will be executed sequentially in the order you create them.');
+      lines.push(`5. After creating all tasks, call capibara_task_complete with taskId="${context.task.id}" and a summary of the decomposition plan.`);
+    } else {
+      lines.push('### Your role: Execute this task directly');
+      lines.push('1. Complete the assigned task by doing the actual implementation work.');
+      lines.push(`2. When done, call capibara_task_complete with taskId="${context.task.id}" and a detailed summary of your work.`);
+      lines.push('3. If the task is too large, you may create subtasks using capibara_task_create_child with type="subtask".');
+    }
+
+    if (context.discussionSummary) {
+      lines.push('');
+      lines.push('For review/collaboration, use capibara_discussion_post with the appropriate voteTag (APPROVE, REVISE, CONCERN, or DELEGATE).');
+    }
 
     return lines.join('\n');
   }

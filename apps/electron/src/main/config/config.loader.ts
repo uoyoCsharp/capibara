@@ -77,6 +77,13 @@ export function loadConfig(projectDir?: string): CapibaraConfig {
     });
   }
 
+  // Resolve default log directory if empty
+  if (!merged.logging || !(merged.logging as Record<string, unknown>).logDir) {
+    merged = deepMerge(merged, {
+      logging: { logDir: join(capibaraDir, 'logs') },
+    });
+  }
+
   // Validate
   const validated = configSchema.parse(merged);
   return validated as CapibaraConfig;

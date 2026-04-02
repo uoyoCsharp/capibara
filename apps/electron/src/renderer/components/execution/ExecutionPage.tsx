@@ -16,6 +16,7 @@ import { cn } from '../../lib/utils';
 import { TaskTreeView } from '../tasks/TaskTreeView';
 import { TaskCreateModal } from '../tasks/TaskCreateModal';
 import { TaskDetailDrawer } from '../tasks/TaskDetailDrawer';
+import { RunLogViewer } from '../shared/RunLogViewer';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -122,15 +123,14 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
                 <span className="text-foreground">${run.costUsd.toFixed(4)}</span>
               </div>
             </div>
-            {run.outputLog && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">{t.tasksExecution.outputLog}</p>
-                <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
-                  {run.outputLog.slice(0, 5000)}
-                  {run.outputLog.length > 5000 && `\n${t.common.truncated}`}
-                </pre>
-              </div>
-            )}
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">{t.tasksExecution.outputLog}</p>
+              <RunLogViewer
+                runId={run.id}
+                isActive={run.status === 'running' || run.status === 'queued'}
+                maxHeight="max-h-64"
+              />
+            </div>
           </div>
         )}
       </CardContent>

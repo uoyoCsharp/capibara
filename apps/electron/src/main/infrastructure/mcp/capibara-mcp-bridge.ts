@@ -42,15 +42,15 @@ const TOOLS = [
     },
   },
   {
-    name: 'capibara_task_create_subtask',
-    description: 'Create a subtask under the current task for delegation.',
+    name: 'capibara_task_create_child',
+    description: 'Create a child task under a parent task. Type hierarchy: epic→story|spike, story→task|bug|chore|spike, task→subtask.',
     inputSchema: {
       type: 'object',
       properties: {
         parentTaskId: { type: 'string', description: 'Parent task ID' },
-        title: { type: 'string', description: 'Subtask title' },
-        description: { type: 'string', description: 'Subtask description' },
-        type: { type: 'string', enum: ['task', 'subtask'], description: 'Task type' },
+        title: { type: 'string', description: 'Child task title' },
+        description: { type: 'string', description: 'Child task description' },
+        type: { type: 'string', enum: ['story', 'task', 'subtask', 'spike', 'bug', 'chore'], description: 'Task type (must be valid for the parent type)' },
         assigneeRoleId: { type: 'string', description: 'Role ID to assign to (optional)' },
       },
       required: ['parentTaskId', 'title', 'description'],

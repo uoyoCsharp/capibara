@@ -24,7 +24,21 @@ interface TaskCreateModalProps {
   onSubmit: (input: CreateTaskInput) => void;
 }
 
-const TASK_TYPES: TaskType[] = ['epic', 'story', 'task', 'subtask', 'spike', 'bug', 'chore'];
+/** Allowed child types per parent type (mirrors server-side ALLOWED_CHILDREN) */
+const ALLOWED_CHILDREN: Record<TaskType | 'root', TaskType[]> = {
+  root: ['epic'],
+  epic: ['story', 'spike'],
+  story: ['task', 'bug', 'chore', 'spike'],
+  task: ['subtask'],
+  subtask: [],
+  spike: [],
+  bug: [],
+  chore: [],
+};
+
+function getAllowedTypes(parentType: TaskType | null): TaskType[] {
+  return ALLOWED_CHILDREN[parentType ?? 'root'];
+}
 
 export function TaskCreateModal({
   orgId,
@@ -35,7 +49,8 @@ export function TaskCreateModal({
   onSubmit,
 }: TaskCreateModalProps) {
   const t = useT();
-  const defaultType: TaskType = parentId ? 'task' : 'epic';
+  const allowedTypes = getAllowedTypes(parentType);
+  const defaultType: TaskType = allowedTypes[0] ?? 'epic';
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<TaskType>(defaultType);
@@ -96,7 +111,7 @@ export function TaskCreateModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TASK_TYPES.map((taskType) => (
+                {allowedTypes.map((taskType) => (
                   <SelectItem key={taskType} value={taskType}>
                     {t.taskTypes[taskType] ?? taskType} — {t.taskTypeDesc[taskType]}
                   </SelectItem>

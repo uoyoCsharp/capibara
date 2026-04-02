@@ -11,6 +11,7 @@ import type { IPromptBuilder } from '@main/core/interfaces/i-prompt-builder.js';
 import type { CapibaraConfig } from '@main/core/types/config.types.js';
 import type { Run, WakeTrigger } from '@main/core/types/domain.types.js';
 import { TERMINAL_RUN_STATUSES } from '@main/core/constants/run.constants.js';
+import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
 import {
   CONFIG_TOKEN,
   LOGGER_TOKEN,
@@ -27,10 +28,14 @@ import { BudgetExceededError, ExecutionError } from '@main/core/errors/capibara.
 import type { ExecutionContext } from '../context/execution.context.js';
 import type { McpConfigGenerator } from '../../infrastructure/mcp/mcp-config-generator.js';
 import type { McpIpcServer } from '../../infrastructure/mcp/mcp-ipc-server.js';
+import type { FileLogService } from '../../infrastructure/logging/file-log.service.js';
 
 @injectable()
 export class ExecutionEngine {
   private jwtSecrets = new Map<string, string>();
+
+  /** Maps runId → { orgName, taskId } for log file path resolution */
+  private runLogCtx = new Map<string, { orgName: string; taskId: string }>();
 
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
@@ -46,10 +51,15 @@ export class ExecutionEngine {
     private readonly executionContext: ExecutionContext,
     private readonly mcpConfigGen: McpConfigGenerator,
     private readonly mcpIpcServer: McpIpcServer,
+    private readonly fileLogService: FileLogService,
+    private readonly taskStateMachine: TaskStateMachine,
   ) {
-    // Register log callback to stream output to run logs and renderer
+    // Register log callback to stream output to file and renderer
     this.executor.onLog((runId, stream, chunk) => {
-      void this.runRepo.appendOutputLog(runId, chunk);
+      const ctx = this.runLogCtx.get(runId);
+      if (ctx) {
+        this.fileLogService.append(ctx.orgName, ctx.taskId, runId, chunk);
+      }
       this.eventBus.emit({
         type: 'run:log',
         timestamp: new Date().toISOString(),
@@ -127,6 +137,21 @@ export class ExecutionEngine {
     const { id: runId, roleId, taskNodeId, orgId, trigger } = run;
 
     try {
+      // ─── Transition task to in_progress ─────────────────────
+      const task = await this.taskRepo.findById(taskNodeId);
+      if (task && (task.status === 'pending' || task.status === 'revision')) {
+        try {
+          await this.taskStateMachine.transition(taskNodeId, 'in_progress');
+        } catch {
+          // Task may already be in_progress from a previous attempt
+        }
+      }
+
+      // ─── Resolve org name for log path ────────────────────
+      const org = await this.orgRepo.findById(orgId);
+      const orgName = org?.name ?? orgId;
+      this.runLogCtx.set(runId, { orgName, taskId: taskNodeId });
+
       // ─── Build Context and Prompt ──────────────────────────
       const ctx = await this.executionContext.buildPromptContext(roleId, taskNodeId);
       const systemPrompt = this.promptBuilder.build(ctx);
@@ -146,7 +171,6 @@ export class ExecutionEngine {
       });
 
       // ─── Resolve Org Workspace Path ──────────────────────
-      const org = await this.orgRepo.findById(orgId);
       const projectDir = org?.workspacePath || this.config.cli.projectDir;
 
       // ─── Invoke Executor (via UtilityProcess Worker) ───────
@@ -238,6 +262,8 @@ export class ExecutionEngine {
       }
 
       // ─── Cleanup ───────────────────────────────────────────
+      await this.fileLogService.flush(runId);
+      this.runLogCtx.delete(runId);
       this.mcpIpcServer.revokeToken(runId);
       this.jwtSecrets.delete(runId);
       this.mcpConfigGen.cleanup(runId);
@@ -256,6 +282,8 @@ export class ExecutionEngine {
         payload: { runId, roleId, orgId, taskNodeId, error: String(err) },
       });
 
+      await this.fileLogService.flush(runId).catch(() => {});
+      this.runLogCtx.delete(runId);
       this.mcpIpcServer.revokeToken(runId);
       this.jwtSecrets.delete(runId);
       this.mcpConfigGen.cleanup(runId);

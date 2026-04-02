@@ -3,10 +3,6 @@ import { IPC_CHANNELS } from '@shared/contracts';
 import type { CapibaraApi, DesktopEvent } from '@shared/contracts';
 
 const api: CapibaraApi = {
-  // Auth
-  login: (input) => ipcRenderer.invoke(IPC_CHANNELS.login, input),
-  logout: () => ipcRenderer.invoke(IPC_CHANNELS.logout),
-
   loadSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.loadSnapshot),
 
   // Dialogs
@@ -70,6 +66,8 @@ const api: CapibaraApi = {
   getRunsByOrgId: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getRunsByOrgId, orgId),
   getRun: (id) => ipcRenderer.invoke(IPC_CHANNELS.getRun, id),
   getRunsByTaskId: (taskNodeId) => ipcRenderer.invoke(IPC_CHANNELS.getRunsByTaskId, taskNodeId),
+  getRunLog: (input) => ipcRenderer.invoke(IPC_CHANNELS.getRunLog, input),
+  openRunLogFolder: (runId) => ipcRenderer.invoke(IPC_CHANNELS.openRunLogFolder, runId),
   startRun: (input) => ipcRenderer.invoke(IPC_CHANNELS.startRun, input),
   cancelRun: (id) => ipcRenderer.invoke(IPC_CHANNELS.cancelRun, id),
 

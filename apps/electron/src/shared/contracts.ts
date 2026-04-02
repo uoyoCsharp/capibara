@@ -70,6 +70,8 @@ export const IPC_CHANNELS = {
   getRunsByOrgId: 'capibara:run:get-by-org',
   getRun: 'capibara:run:get',
   getRunsByTaskId: 'capibara:run:get-by-task',
+  getRunLog: 'capibara:run:get-log',
+  openRunLogFolder: 'capibara:run:open-log-folder',
   startRun: 'capibara:run:start',
   cancelRun: 'capibara:run:cancel',
 
@@ -209,6 +211,13 @@ export const applyApprovalPresetSchema = z.object({
   preset: z.enum(['all_auto', 'top_level_human', 'custom']),
 });
 
+export const getRunLogSchema = z.object({
+  runId: z.string().min(1),
+  mode: z.enum(['parsed', 'raw']),
+  offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(2000).default(500),
+});
+
 export const startRunSchema = z.object({
   orgId: z.string().min(1),
   taskNodeId: z.string().min(1),
@@ -309,6 +318,8 @@ export interface CapibaraApi {
   getRunsByOrgId: (orgId: string) => Promise<DesktopResult<RunRecord[]>>;
   getRun: (id: string) => Promise<DesktopResult<RunRecord | null>>;
   getRunsByTaskId: (taskNodeId: string) => Promise<DesktopResult<RunRecord[]>>;
+  getRunLog: (input: GetRunLogInput) => Promise<DesktopResult<RunLogResult>>;
+  openRunLogFolder: (runId: string) => Promise<DesktopResult<void>>;
   startRun: (input: StartRunInput) => Promise<DesktopResult<RunRecord>>;
   cancelRun: (id: string) => Promise<DesktopResult<void>>;
 
@@ -440,11 +451,28 @@ export interface RunRecord {
   roleId: string;
   status: RunStatus;
   trigger: WakeTrigger;
-  outputLog: string;
   startedAt: string | null;
   finishedAt: string | null;
   costUsd: number;
   createdAt: string;
+}
+
+export interface RunLogEntry {
+  ts: string | null;
+  kind: string;
+  text: string;
+}
+
+export interface GetRunLogInput {
+  runId: string;
+  mode: 'parsed' | 'raw';
+  offset?: number;
+  limit?: number;
+}
+
+export interface RunLogResult {
+  entries: RunLogEntry[];
+  rawLines: string[];
 }
 
 export interface NarrativeRecord {
