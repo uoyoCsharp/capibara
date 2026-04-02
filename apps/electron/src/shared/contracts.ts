@@ -72,6 +72,11 @@ export const IPC_CHANNELS = {
   getRunsByTaskId: 'capibara:run:get-by-task',
   startRun: 'capibara:run:start',
   cancelRun: 'capibara:run:cancel',
+
+  // Settings
+  getSetting: 'capibara:settings:get',
+  updateSetting: 'capibara:settings:update',
+  getLocale: 'capibara:settings:get-locale',
 } as const;
 
 // ─── IPC Response Wrapper ───────────────────────────────────────────
@@ -94,7 +99,8 @@ export type DesktopEvent =
   | { type: 'run:completed'; runId: string; orgId: string; taskNodeId: string; roleId: string; status: 'succeeded' | 'failed' | 'cancelled'; costUsd: number }
   | { type: 'notification'; title: string; body: string }
   | { type: 'approval:required'; taskId: string; taskTitle: string; orgId: string; roleId: string; roleName: string; groupId: string }
-  | { type: 'budget:roles-paused'; orgId: string; totalCost: number; budgetLimit: number };
+  | { type: 'budget:roles-paused'; orgId: string; totalCost: number; budgetLimit: number }
+  | { type: 'settings:locale-changed'; locale: string };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -213,6 +219,13 @@ export const startRunSchema = z.object({
   ]).default('task_assigned'),
 });
 
+export const updateSettingSchema = z.object({
+  key: z.string().min(1),
+  value: z.string(),
+});
+
+export type UpdateSettingInput = z.infer<typeof updateSettingSchema>;
+
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;
 export type DeleteOrganizationInput = z.infer<typeof deleteOrganizationSchema>;
@@ -298,6 +311,11 @@ export interface CapibaraApi {
   getRunsByTaskId: (taskNodeId: string) => Promise<DesktopResult<RunRecord[]>>;
   startRun: (input: StartRunInput) => Promise<DesktopResult<RunRecord>>;
   cancelRun: (id: string) => Promise<DesktopResult<void>>;
+
+  // Settings
+  getSetting: (key: string) => Promise<DesktopResult<string | null>>;
+  updateSetting: (input: UpdateSettingInput) => Promise<DesktopResult<void>>;
+  getLocale: () => Promise<DesktopResult<string>>;
 
   // Events subscription
   subscribe: (callback: (event: DesktopEvent) => void) => () => void;

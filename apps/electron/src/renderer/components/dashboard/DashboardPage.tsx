@@ -5,6 +5,7 @@ import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Progress } from '../ui/progress';
+import { useT } from '../../hooks/useLocale';
 import type { NarrativeRecord, CostSummaryRecord, CostEntryRecord, RoleRecord } from '@shared/contracts';
 
 declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi; };
@@ -19,6 +20,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const t = useT();
 
   const fetchData = useCallback(async () => {
     if (!orgId) return;
@@ -33,7 +35,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       if (costRes.ok) setCostSummary(costRes.data);
       if (rolesRes.ok) setRoles(rolesRes.data);
     } catch {
-      toast.error('Failed to load dashboard data');
+      toast.error(t.errors.failedToLoad);
     } finally {
       setLoading(false);
     }
@@ -69,7 +71,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       const costRes = await window.capibara.getCostSummary(orgId);
       if (costRes.ok) setCostSummary(costRes.data);
     } catch {
-      toast.error('Failed to generate report');
+      toast.error(t.dashboard.failedToGenerate);
     } finally {
       setGenerating(false);
     }
@@ -78,9 +80,9 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   if (!orgId) {
     return (
       <div className="p-(--page-padding)">
-        <h1 className="text-3xl font-semibold text-foreground font-display mb-2">Dashboard</h1>
+        <h1 className="text-3xl font-semibold text-foreground font-display mb-2">{t.dashboard.title}</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Select or create an organization from the sidebar to see your project dashboard, budget tracking, and AI agent activity.
+          {t.dashboard.noOrgMessage}
         </p>
       </div>
     );
@@ -91,8 +93,8 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-1">Track progress, budget, and AI agent activity.</p>
+          <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">{t.dashboard.title}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t.dashboard.subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -102,14 +104,14 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
             disabled={loading}
           >
             <ArrowClockwise size={14} className={loading ? 'animate-spin' : ''} />
-            Refresh
+            {t.common.refresh}
           </Button>
           <Button
             onClick={handleGenerate}
             disabled={generating}
           >
             <Lightning size={14} />
-            {generating ? 'Generating...' : 'Generate Report'}
+            {generating ? t.dashboard.generating : t.dashboard.generateReport}
           </Button>
         </div>
       </div>
@@ -122,10 +124,10 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <ListChecks size={20} className="text-primary" />
-            <CardTitle className="text-lg font-medium font-[family-name:var(--font-display)]">Project Progress</CardTitle>
+            <CardTitle className="text-lg font-medium font-[family-name:var(--font-display)]">{t.dashboard.projectProgress}</CardTitle>
             {narrative && (
               <span className="ml-auto text-xs text-muted-foreground">
-                Generated: {new Date(narrative.generatedAt).toLocaleString()}
+                {t.dashboard.generatedAt}: {new Date(narrative.generatedAt).toLocaleString()}
               </span>
             )}
           </div>
@@ -137,7 +139,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground leading-relaxed">
-              No report generated yet. Click Generate Report to create an AI-powered summary of your project's progress, task status, and team activity.
+              {t.dashboard.noReportYet}
             </p>
           )}
         </CardContent>
@@ -152,6 +154,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 }
 
 function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
+  const t = useT();
   const { totalCost, budgetLimit, budgetPercent } = summary;
   const textColor =
     budgetPercent >= 95 ? 'text-destructive' :
@@ -163,7 +166,7 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <CurrencyDollar size={18} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">Budget Usage</span>
+          <span className="text-sm font-medium text-muted-foreground">{t.dashboard.budgetUsage}</span>
         </div>
         <span className={cn('text-sm font-semibold', textColor)}>
           ${totalCost.toFixed(2)} / ${budgetLimit.toFixed(2)} ({budgetPercent}%)
@@ -180,7 +183,7 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
       />
       {budgetPercent >= 80 && (
         <p className={cn('text-xs mt-1.5', textColor)}>
-          {budgetPercent >= 95 ? 'Budget critical — execution paused' : 'Approaching budget limit'}
+          {budgetPercent >= 95 ? t.dashboard.budgetCritical : t.dashboard.budgetApproaching}
         </p>
       )}
     </div>
@@ -188,11 +191,12 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
 }
 
 function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: RoleRecord[]; }) {
+  const t = useT();
   // Group by role
   const byRole = new Map<string, { name: string; total: number; count: number; }>();
   for (const e of entries) {
     const existing = byRole.get(e.roleId) ?? {
-      name: roles.find((r) => r.id === e.roleId)?.name ?? 'Unknown',
+      name: roles.find((r) => r.id === e.roleId)?.name ?? t.common.unknown,
       total: 0,
       count: 0,
     };
@@ -207,7 +211,7 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
     <div className="bg-muted rounded-[var(--card-radius)] p-[var(--card-padding)] mb-[var(--section-gap)]">
       <div className="flex items-center gap-2 mb-4">
         <ChartLineUp size={20} className="text-primary" />
-        <h2 className="text-lg font-medium text-foreground font-[family-name:var(--font-display)]">Cost by Role</h2>
+        <h2 className="text-lg font-medium text-foreground font-[family-name:var(--font-display)]">{t.dashboard.costByRole}</h2>
       </div>
       <div className="space-y-3">
         {sorted.map(([roleId, data]) => {
@@ -218,7 +222,7 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm text-muted-foreground">{data.name}</span>
                 <span className="text-xs text-muted-foreground">
-                  ${data.total.toFixed(2)} ({data.count} runs)
+                  ${data.total.toFixed(2)} ({data.count} {t.dashboard.runs})
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">

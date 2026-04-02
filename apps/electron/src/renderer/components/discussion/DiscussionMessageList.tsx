@@ -2,6 +2,8 @@ import { useRef, useEffect } from 'react';
 import { cn } from '../../lib/utils';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import type { DiscussionMessageRecord, RoleRecord, VoteTag } from '@shared/contracts';
+import type { LocaleMessages } from '@shared/locale/types.js';
+import { useT } from '../../hooks/useLocale';
 
 interface DiscussionMessageListProps {
   messages: DiscussionMessageRecord[];
@@ -15,27 +17,20 @@ const VOTE_TAG_STYLES: Record<string, string> = {
   DELEGATE: 'bg-blue-500/10 border-blue-500/30 text-blue-600',
 };
 
-const VOTE_TAG_LABELS: Record<string, string> = {
-  APPROVE: 'APPROVE',
-  REVISE: 'REVISE',
-  CONCERN: 'CONCERN',
-  DELEGATE: 'DELEGATE',
-};
-
-function getAuthorName(msg: DiscussionMessageRecord, roles: RoleRecord[]): string {
-  if (msg.authorType === 'system') return 'System';
+function getAuthorName(msg: DiscussionMessageRecord, roles: RoleRecord[], t: LocaleMessages): string {
+  if (msg.authorType === 'system') return t.discussions.system;
   if (msg.authorType === 'human') {
     if (msg.authorRoleId) {
       const role = roles.find((r) => r.id === msg.authorRoleId);
-      return role ? `${role.name} (Human)` : 'Human';
+      return role ? `${role.name} (${t.discussions.human})` : t.discussions.human;
     }
-    return 'Human';
+    return t.discussions.human;
   }
   if (msg.authorRoleId) {
     const role = roles.find((r) => r.id === msg.authorRoleId);
-    return role?.name ?? 'Unknown Role';
+    return role?.name ?? t.common.unknown;
   }
-  return 'Unknown';
+  return t.common.unknown;
 }
 
 function getAuthorColor(authorType: string): string {
@@ -52,6 +47,7 @@ function getAuthorColor(authorType: string): string {
 }
 
 export function DiscussionMessageList({ messages, roles }: DiscussionMessageListProps) {
+  const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,7 +57,7 @@ export function DiscussionMessageList({ messages, roles }: DiscussionMessageList
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">No messages yet in this discussion.</p>
+        <p className="text-sm text-muted-foreground">{t.discussions.noMessagesYet}</p>
       </div>
     );
   }
@@ -69,7 +65,7 @@ export function DiscussionMessageList({ messages, roles }: DiscussionMessageList
   return (
     <div className="flex-1 overflow-auto px-5 py-5 space-y-4">
       {messages.map((msg) => {
-        const authorName = getAuthorName(msg, roles);
+        const authorName = getAuthorName(msg, roles, t);
         const isVote = msg.voteTag !== null;
 
         return (
@@ -160,8 +156,9 @@ function VoteCard({
   content: string;
   createdAt: string;
 }) {
+  const t = useT();
   const style = VOTE_TAG_STYLES[voteTag] ?? 'bg-muted border-border text-muted-foreground';
-  const label = VOTE_TAG_LABELS[voteTag] ?? voteTag;
+  const label = t.vote[voteTag as keyof typeof t.vote] ?? voteTag;
 
   return (
     <div className="flex items-start gap-3">

@@ -76,6 +76,11 @@ const api: CapibaraApi = {
   // Budget
   resumeOrgRoles: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.resumeOrgRoles, orgId),
 
+  // Settings
+  getSetting: (key) => ipcRenderer.invoke(IPC_CHANNELS.getSetting, key),
+  updateSetting: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateSetting, input),
+  getLocale: () => ipcRenderer.invoke(IPC_CHANNELS.getLocale),
+
   // Subscription
   subscribe: (callback: (event: DesktopEvent) => void) => {
     const listener = (

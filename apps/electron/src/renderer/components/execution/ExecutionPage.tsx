@@ -11,6 +11,7 @@ import type {
   RunStatus,
 } from '@shared/contracts';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
+import { useT } from '../../hooks/useLocale';
 import { cn } from '../../lib/utils';
 import { TaskTreeView } from '../tasks/TaskTreeView';
 import { TaskCreateModal } from '../tasks/TaskCreateModal';
@@ -41,6 +42,7 @@ interface RunCardProps {
 }
 
 function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: RunCardProps) {
+  const t = useT();
   const elapsed = useElapsedTimer(run.status === 'running' ? run.startedAt : null);
 
   return (
@@ -89,7 +91,7 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
               >
                 <Stop size={12} />
-                Cancel
+                {t.tasksExecution.cancelRun}
               </Button>
             )}
           </div>
@@ -100,32 +102,32 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
           <div className="mt-4 pt-4 border-t border-border">
             <div className="grid grid-cols-2 gap-4 text-xs mb-4">
               <div>
-                <span className="text-muted-foreground">Trigger:</span>{' '}
+                <span className="text-muted-foreground">{t.tasksExecution.trigger}:</span>{' '}
                 <span className="text-foreground">{run.trigger}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Started:</span>{' '}
+                <span className="text-muted-foreground">{t.tasksExecution.started}:</span>{' '}
                 <span className="text-foreground">
                   {run.startedAt ? new Date(run.startedAt).toLocaleString() : '-'}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground">Finished:</span>{' '}
+                <span className="text-muted-foreground">{t.tasksExecution.finished}:</span>{' '}
                 <span className="text-foreground">
                   {run.finishedAt ? new Date(run.finishedAt).toLocaleString() : '-'}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground">Cost:</span>{' '}
+                <span className="text-muted-foreground">{t.tasksExecution.cost}:</span>{' '}
                 <span className="text-foreground">${run.costUsd.toFixed(4)}</span>
               </div>
             </div>
             {run.outputLog && (
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Output Log</p>
+                <p className="text-xs text-muted-foreground mb-1">{t.tasksExecution.outputLog}</p>
                 <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
                   {run.outputLog.slice(0, 5000)}
-                  {run.outputLog.length > 5000 && '\n... (truncated)'}
+                  {run.outputLog.length > 5000 && `\n${t.common.truncated}`}
                 </pre>
               </div>
             )}
@@ -137,6 +139,7 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
 }
 
 export function ExecutionPage() {
+  const t = useT();
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
@@ -162,7 +165,7 @@ export function ExecutionPage() {
         }
       }
     } catch {
-      toast.error('Failed to load organizations');
+      toast.error(t.errors.failedToLoad);
     }
   }, []);
 
@@ -183,7 +186,7 @@ export function ExecutionPage() {
       if (roleRes.ok) setRoles(roleRes.data);
       if (runRes.ok) setRuns(runRes.data);
     } catch {
-      toast.error('Failed to load tasks and roles');
+      toast.error(t.tasksExecution.failedToLoadTasks);
     }
   }, []);
 
@@ -192,7 +195,7 @@ export function ExecutionPage() {
     try {
       const result = await window.capibara.getRunsByOrgId(currentOrgId);
       if (result.ok) setRuns(result.data);
-    } catch { toast.error('Failed to refresh runs'); }
+    } catch { toast.error(t.tasksExecution.failedToRefreshRuns); }
   }, [currentOrgId]);
 
   const loadTasks = useCallback(async () => {
@@ -200,7 +203,7 @@ export function ExecutionPage() {
     try {
       const result = await window.capibara.getTasksByOrgId(currentOrgId);
       if (result.ok) setTasks(result.data);
-    } catch { toast.error('Failed to refresh tasks'); }
+    } catch { toast.error(t.tasksExecution.failedToRefreshTasks); }
   }, [currentOrgId]);
 
   useEffect(() => {
@@ -249,7 +252,7 @@ export function ExecutionPage() {
         setCreateModal({ open: false, parentId: null, parentType: null });
         await loadTasks();
       }
-    } catch { toast.error('Failed to create task'); }
+    } catch { toast.error(t.tasksExecution.failedToCreateTask); }
   };
 
   const handleStatusChange = async (id: string, status: TaskStatus) => {
@@ -258,7 +261,7 @@ export function ExecutionPage() {
       if (result.ok) {
         await loadTasks();
       }
-    } catch { toast.error('Failed to update task status'); }
+    } catch { toast.error(t.tasksExecution.failedToUpdateStatus); }
   };
 
   const handleDeleteTask = async (id: string) => {
@@ -268,7 +271,7 @@ export function ExecutionPage() {
         if (selectedTaskId === id) setSelectedTaskId(null);
         await loadTasks();
       }
-    } catch { toast.error('Failed to delete task'); }
+    } catch { toast.error(t.tasksExecution.failedToDeleteTask); }
   };
 
   const handleAddTask = (parentId: string | null) => {
@@ -295,7 +298,7 @@ export function ExecutionPage() {
       } else {
         console.warn('[StartRun]', result.error?.message);
       }
-    } catch { toast.error('Failed to start run'); }
+    } catch { toast.error(t.tasksExecution.failedToStartRun); }
   };
 
   const handleCancelRun = async (runId: string) => {
@@ -304,7 +307,7 @@ export function ExecutionPage() {
       if (result.ok) {
         await loadRuns();
       }
-    } catch { toast.error('Failed to cancel run'); }
+    } catch { toast.error(t.tasksExecution.failedToCancelRun); }
   };
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
@@ -330,7 +333,7 @@ export function ExecutionPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t.common.loading}</p>
       </div>
     );
   }
@@ -338,9 +341,9 @@ export function ExecutionPage() {
   if (organizations.length === 0) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">Tasks & Execution</h1>
+        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">{t.tasksExecution.title}</h1>
         <p className="text-muted-foreground mb-8">
-          Create an organization first to start managing tasks. Organizations let you define AI agent teams and assign work.
+          {t.tasksExecution.noOrgMessage}
         </p>
       </div>
     );
@@ -352,9 +355,9 @@ export function ExecutionPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">Tasks & Execution</h1>
+            <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">{t.tasksExecution.title}</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              View and manage your task tree. Create epics, stories, and track execution progress.
+              {t.tasksExecution.subtitle}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -381,7 +384,7 @@ export function ExecutionPage() {
 
             <Button onClick={() => handleAddTask(null)}>
               <Plus size={16} />
-              New Task
+              {t.tasksExecution.newTask}
             </Button>
           </div>
         </div>
@@ -390,13 +393,13 @@ export function ExecutionPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-[var(--section-gap)]">
           <TabsList>
             <TabsTrigger value="tasks">
-              Tasks ({tasks.length})
+              {t.tasksExecution.tasksTab} ({tasks.length})
             </TabsTrigger>
             <TabsTrigger value="runs" className="gap-1.5">
-              Runs ({runs.length})
+              {t.tasksExecution.runsTab} ({runs.length})
               {(runCounts['running'] ?? 0) > 0 && (
                 <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 text-xs">
-                  {runCounts['running']} active
+                  {runCounts['running']} {t.tasksExecution.activeCount}
                 </Badge>
               )}
             </TabsTrigger>
@@ -406,29 +409,29 @@ export function ExecutionPage() {
             {/* Status summary bar */}
             {tasks.length > 0 && (
               <div className="flex items-center gap-5 mb-[var(--section-gap)] text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{tasks.length} tasks</span>
+                <span className="font-medium text-foreground">{tasks.length} {t.tasksExecution.tasksCount}</span>
                 {statusCounts['done'] && (
                   <span className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-green-500" />
-                    {statusCounts['done']} done
+                    {statusCounts['done']} {t.tasksExecution.doneCount}
                   </span>
                 )}
                 {statusCounts['in_progress'] && (
                   <span className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-yellow-500" />
-                    {statusCounts['in_progress']} in progress
+                    {statusCounts['in_progress']} {t.tasksExecution.inProgressCount}
                   </span>
                 )}
                 {statusCounts['blocked'] && (
                   <span className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-destructive" />
-                    {statusCounts['blocked']} blocked
+                    {statusCounts['blocked']} {t.tasksExecution.blockedCount}
                   </span>
                 )}
                 {statusCounts['pending'] && (
                   <span className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-muted-foreground" />
-                    {statusCounts['pending']} pending
+                    {statusCounts['pending']} {t.tasksExecution.pendingCount}
                   </span>
                 )}
               </div>
@@ -457,7 +460,7 @@ export function ExecutionPage() {
                   <CardContent className="p-8 text-center">
                     <Lightning size={32} className="mx-auto text-muted-foreground/50 mb-3" />
                     <p className="text-sm text-muted-foreground">
-                      No runs yet. Select a task, assign it to a role, and click Execute to start an AI agent run.
+                      {t.tasksExecution.noRunsMessage}
                     </p>
                   </CardContent>
                 </Card>
@@ -469,7 +472,7 @@ export function ExecutionPage() {
                     onClick={loadRuns}
                   >
                     <ArrowClockwise size={14} />
-                    Refresh
+                    {t.common.refresh}
                   </Button>
                 </div>
               )}
@@ -480,7 +483,7 @@ export function ExecutionPage() {
                   run={run}
                   isSelected={selectedRunId === run.id}
                   taskTitle={taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
-                  roleName={roleNames.get(run.roleId) ?? 'Unknown'}
+                  roleName={roleNames.get(run.roleId) ?? t.common.unknown}
                   onSelect={() => setSelectedRunId(run.id === selectedRunId ? null : run.id)}
                   onCancel={(runId) => void handleCancelRun(runId)}
                 />

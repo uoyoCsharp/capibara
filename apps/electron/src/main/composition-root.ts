@@ -25,6 +25,7 @@ import {
   EVENT_DIGESTER_TOKEN,
   ORG_ORCHESTRATOR_TOKEN,
   WORKER_SERVICE_TOKEN,
+  SETTINGS_REPO_TOKEN,
 } from './core/tokens.js';
 
 import { SqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.js';
@@ -38,6 +39,7 @@ import { SqliteSkillRepository } from './infrastructure/persistence/sqlite/sqlit
 import { SqliteCostEntryRepository } from './infrastructure/persistence/sqlite/sqlite-cost-entry.repository.js';
 import { SqliteNarrativeRepository } from './infrastructure/persistence/sqlite/sqlite-narrative.repository.js';
 import { SqlitePendingWakeRepository } from './infrastructure/persistence/sqlite/sqlite-pending-wake.repository.js';
+import { SqliteSettingsRepository } from './infrastructure/persistence/sqlite/sqlite-settings.repository.js';
 import { EmitteryEventBus } from './infrastructure/observability/emittery-event-bus.js';
 import { PinoLogger } from './infrastructure/observability/pino-logger.js';
 import { UtilityProcessExecutor } from './infrastructure/executors/utility-process.executor.js';
@@ -73,6 +75,8 @@ import { registerDiscussionHandlers } from './ipc-handlers/discussion.handlers.j
 import { registerRunHandlers } from './ipc-handlers/run.handlers.js';
 import { registerApprovalHandlers } from './ipc-handlers/approval.handlers.js';
 import { registerNarrativeHandlers } from './ipc-handlers/narrative.handlers.js';
+import { registerSettingsHandlers } from './ipc-handlers/settings.handlers.js';
+import { detectLocaleFromOS } from '@shared/locale/index.js';
 
 import type { IOrganizationRepository } from './core/interfaces/i-organization.repository.js';
 import type { IRoleRepository } from './core/interfaces/i-role.repository.js';
@@ -83,6 +87,7 @@ import type { ISkillRepository } from './core/interfaces/i-skill.repository.js';
 import type { ICostEntryRepository } from './core/interfaces/i-cost-entry.repository.js';
 import type { INarrativeRepository } from './core/interfaces/i-narrative.repository.js';
 import type { IPendingWakeRepository } from './core/interfaces/i-pending-wake.repository.js';
+import type { ISettingsRepository } from './core/interfaces/i-settings.repository.js';
 import type { IEventBus } from './core/interfaces/i-event-bus.js';
 import type { ILogger } from './core/interfaces/i-logger.js';
 import type { IPromptBuilder } from './core/interfaces/i-prompt-builder.js';
@@ -136,6 +141,9 @@ export async function bootstrap(): Promise<void> {
 
   const pendingWakeRepo = new SqlitePendingWakeRepository(sqliteConn);
   container.register<IPendingWakeRepository>(PENDING_WAKE_REPO_TOKEN, { useValue: pendingWakeRepo });
+
+  const settingsRepo = new SqliteSettingsRepository(sqliteConn);
+  container.register<ISettingsRepository>(SETTINGS_REPO_TOKEN, { useValue: settingsRepo });
 
   // ─── Application Services ────────────────────────────────
   const promptBuilder = new PromptBuilder();
@@ -275,6 +283,21 @@ export async function bootstrap(): Promise<void> {
   registerRunHandlers(runRepo, executionEngine, logger);
   registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger);
   registerNarrativeHandlers(narrativeEngine, costRepo, orgRepo, logger);
+  registerSettingsHandlers(settingsRepo, logger);
+
+  // ─── OS Locale Detection (first launch) ─────────────────
+  try {
+    const existingLocale = await settingsRepo.get('locale');
+    if (!existingLocale) {
+      const { app } = require('electron') as typeof import('electron');
+      const osLocale = app.getLocale();
+      const detectedLocale = detectLocaleFromOS(osLocale);
+      await settingsRepo.set('locale', detectedLocale);
+      logger.info('Auto-detected locale from OS', { osLocale, detectedLocale });
+    }
+  } catch (err) {
+    logger.error('Failed to detect OS locale', { error: String(err) });
+  }
 
   logger.info('Capibara bootstrap complete');
 }

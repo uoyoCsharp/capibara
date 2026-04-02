@@ -30,7 +30,8 @@ export type DomainEventType =
   | 'narrative:updated'
   | 'approval:required'
   | 'approval:completed'
-  | 'escalation:top-level';
+  | 'escalation:top-level'
+  | 'settings:locale-changed';
 
 export interface DomainEvent<T = unknown> {
   type: DomainEventType;

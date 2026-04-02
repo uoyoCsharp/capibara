@@ -14,8 +14,10 @@ import { DiscussionGroupPanel } from './DiscussionGroupPanel';
 import { toast } from '../../store/toast.store';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { useT } from '../../hooks/useLocale';
 
 export function DiscussionPage() {
+  const t = useT();
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [groups, setGroups] = useState<DiscussionGroupRecord[]>([]);
@@ -36,7 +38,7 @@ export function DiscussionPage() {
         }
       }
     } catch {
-      toast.error('Failed to load organizations');
+      toast.error(t.discussions.failedToLoadOrgs);
     }
   }, []);
 
@@ -57,7 +59,7 @@ export function DiscussionPage() {
       if (taskRes.ok) setTasks(taskRes.data);
       if (roleRes.ok) setRoles(roleRes.data);
     } catch {
-      toast.error('Failed to load discussion data');
+      toast.error(t.discussions.failedToLoadData);
     }
   }, []);
 
@@ -65,7 +67,7 @@ export function DiscussionPage() {
     try {
       const result = await window.capibara.getDiscussionMessages(groupId);
       if (result.ok) setMessages(result.data);
-    } catch { toast.error('Failed to load messages'); }
+    } catch { toast.error(t.discussions.failedToLoadMessages); }
   }, []);
 
   const loadVoteStats = useCallback(async (groupId: string) => {
@@ -115,7 +117,7 @@ export function DiscussionPage() {
         await loadMessages(selectedGroupId);
         await loadVoteStats(selectedGroupId);
       }
-    } catch { toast.error('Failed to post message'); }
+    } catch { toast.error(t.discussions.failedToPostMessage); }
   };
 
   const handleRefresh = useCallback(() => {
@@ -143,7 +145,7 @@ export function DiscussionPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t.common.loading}</p>
       </div>
     );
   }
@@ -151,9 +153,9 @@ export function DiscussionPage() {
   if (organizations.length === 0) {
     return (
       <div className="p-[var(--page-padding)]">
-        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">Discussions</h1>
+        <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)] mb-2">{t.discussions.title}</h1>
         <p className="text-muted-foreground mb-8">
-          Create an organization first to start discussions. Discussions are automatically created for epic-level tasks, where AI agents debate and vote on decisions.
+          {t.discussions.noOrgMessage}
         </p>
       </div>
     );
@@ -165,7 +167,7 @@ export function DiscussionPage() {
       <div className="w-80 shrink-0 border-r border-border bg-card flex flex-col">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border">
-          <h1 className="text-lg font-semibold text-foreground font-[family-name:var(--font-display)] mb-3">Discussions</h1>
+          <h1 className="text-lg font-semibold text-foreground font-[family-name:var(--font-display)] mb-3">{t.discussions.title}</h1>
           <Select
             value={currentOrgId ?? ''}
             onValueChange={(value) => {
@@ -192,7 +194,7 @@ export function DiscussionPage() {
             <div className="px-5 py-8 text-center">
               <ChatCircleDots size={32} className="mx-auto text-muted-foreground/50 mb-2" />
               <p className="text-sm text-muted-foreground">
-                No discussions yet. Discussions appear automatically when you create epic-level tasks in the Execution tab.
+                {t.discussions.noDiscussionsMessage}
               </p>
             </div>
           ) : (
@@ -212,7 +214,7 @@ export function DiscussionPage() {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-foreground truncate">
-                      {task?.title ?? 'Unknown Epic'}
+                      {task?.title ?? t.discussions.unknownEpic}
                     </span>
                     {group.status === 'archived' && (
                       <Badge variant="secondary" className="ml-2 text-xs">Archived</Badge>
@@ -246,7 +248,7 @@ export function DiscussionPage() {
             <div className="text-center">
               <ChatCircleDots size={48} className="mx-auto text-muted-foreground/50 mb-3" />
               <p className="text-sm text-muted-foreground">
-                Select a discussion to view the conversation, see how AI agents voted, and add your own input.
+                {t.discussions.selectDiscussionMessage}
               </p>
             </div>
           </div>

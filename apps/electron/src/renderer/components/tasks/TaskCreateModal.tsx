@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from '../ui/dialog';
+import { useT } from '../../hooks/useLocale';
 
 interface TaskCreateModalProps {
   orgId: string;
@@ -25,16 +26,6 @@ interface TaskCreateModalProps {
 
 const TASK_TYPES: TaskType[] = ['epic', 'story', 'task', 'subtask', 'spike', 'bug', 'chore'];
 
-const TYPE_DESCRIPTIONS: Record<TaskType, string> = {
-  epic: 'Large feature or initiative',
-  story: 'User-facing requirement',
-  task: 'Technical implementation work',
-  subtask: 'Small piece of a larger task',
-  spike: 'Research or investigation',
-  bug: 'Defect fix',
-  chore: 'Maintenance or housekeeping',
-};
-
 export function TaskCreateModal({
   orgId,
   parentId,
@@ -43,6 +34,7 @@ export function TaskCreateModal({
   onClose,
   onSubmit,
 }: TaskCreateModalProps) {
+  const t = useT();
   const defaultType: TaskType = parentId ? 'task' : 'epic';
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -53,7 +45,7 @@ export function TaskCreateModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setError('Title is required');
+      setError(t.taskCreate.titleRequired);
       return;
     }
     onSubmit({
@@ -71,7 +63,7 @@ export function TaskCreateModal({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {parentId ? 'Create Child Task' : 'Create New Task'}
+            {parentId ? t.taskCreate.createChild : t.taskCreate.createNew}
           </DialogTitle>
         </DialogHeader>
 
@@ -79,10 +71,10 @@ export function TaskCreateModal({
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Title */}
           <div className="space-y-2">
-            <Label>Title</Label>
+            <Label>{t.taskCreate.titleLabel}</Label>
             <Input
               type="text"
-              placeholder="Enter task title..."
+              placeholder={t.taskCreate.titlePlaceholder}
               value={title}
               onChange={(e) => {
                 setTitle(e.target.value);
@@ -95,7 +87,7 @@ export function TaskCreateModal({
 
           {/* Type */}
           <div className="space-y-2">
-            <Label>Type</Label>
+            <Label>{t.taskCreate.typeLabel}</Label>
             <Select
               value={type}
               onValueChange={(value) => setType(value as TaskType)}
@@ -104,9 +96,9 @@ export function TaskCreateModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TASK_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)} — {TYPE_DESCRIPTIONS[t]}
+                {TASK_TYPES.map((taskType) => (
+                  <SelectItem key={taskType} value={taskType}>
+                    {t.taskTypes[taskType] ?? taskType} — {t.taskTypeDesc[taskType]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -115,10 +107,10 @@ export function TaskCreateModal({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label>Description</Label>
+            <Label>{t.taskCreate.descriptionLabel}</Label>
             <Textarea
               rows={4}
-              placeholder="Describe the task..."
+              placeholder={t.taskCreate.descriptionPlaceholder}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="resize-none"
@@ -127,16 +119,16 @@ export function TaskCreateModal({
 
           {/* Assignee Role */}
           <div className="space-y-2">
-            <Label>Assignee Role</Label>
+            <Label>{t.taskCreate.assigneeLabel}</Label>
             <Select
               value={assigneeRoleId ?? '_unassigned'}
               onValueChange={(value) => setAssigneeRoleId(value === '_unassigned' ? null : value)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Unassigned" />
+                <SelectValue placeholder={t.common.unassigned} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_unassigned">Unassigned</SelectItem>
+                <SelectItem value="_unassigned">{t.common.unassigned}</SelectItem>
                 {roles.map((role) => (
                   <SelectItem key={role.id} value={role.id}>
                     {role.name}
@@ -149,10 +141,10 @@ export function TaskCreateModal({
           {/* Actions */}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button type="submit">
-              Create Task
+              {t.taskCreate.createTask}
             </Button>
           </DialogFooter>
         </form>

@@ -11,6 +11,7 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { useT } from '../../hooks/useLocale';
 
 interface CreateOrgModalProps {
   onClose: () => void;
@@ -18,6 +19,7 @@ interface CreateOrgModalProps {
 }
 
 export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
+  const t = useT();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [workspacePath, setWorkspacePath] = useState('');
@@ -33,20 +35,20 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Organization</DialogTitle>
+          <DialogTitle>{t.createOrg.title}</DialogTitle>
           <DialogDescription className="sr-only">
-            Create a new blank organization
+            {t.createOrg.subtitle}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           <div>
             <Label htmlFor="org-name" className="mb-1">
-              Name *
+              {t.createOrg.nameLabel} *
             </Label>
             <Input
               id="org-name"
-              placeholder="My Organization"
+              placeholder={t.createOrg.namePlaceholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={100}
@@ -54,11 +56,11 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
           </div>
           <div>
             <Label htmlFor="org-desc" className="mb-1">
-              Description
+              {t.createOrg.descriptionLabel}
             </Label>
             <Input
               id="org-desc"
-              placeholder="Optional description"
+              placeholder={t.createOrg.descriptionPlaceholder}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={500}
@@ -66,13 +68,13 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
           </div>
           <div>
             <Label htmlFor="org-workspace" className="mb-1">
-              Workspace Folder *
+              {t.createOrg.workspaceLabel} *
             </Label>
             <div className="flex items-center gap-2">
               <Input
                 id="org-workspace"
                 className="flex-1 bg-muted cursor-default"
-                placeholder="Select a folder..."
+                placeholder={t.createOrg.workspacePlaceholder}
                 value={workspacePath}
                 readOnly
               />
@@ -82,7 +84,7 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
                 onClick={handleSelectFolder}
               >
                 <FolderOpen size={16} />
-                Browse
+                {t.common.browse}
               </Button>
             </div>
           </div>
@@ -90,13 +92,13 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t.common.cancel}
           </Button>
           <Button
             onClick={() => onCreate(name.trim(), description.trim(), workspacePath)}
             disabled={!name.trim() || !workspacePath}
           >
-            Create
+            {t.common.create}
           </Button>
         </DialogFooter>
       </DialogContent>

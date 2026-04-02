@@ -22,8 +22,10 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Card } from '../ui/card';
+import { useT } from '../../hooks/useLocale';
 
 export function OrganizationPage() {
+  const t = useT();
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
@@ -43,7 +45,7 @@ export function OrganizationPage() {
         }
       }
     } catch {
-      toast.error('Failed to load organizations');
+      toast.error(t.errors.failedToLoad);
     }
   }, []);
 
@@ -58,7 +60,7 @@ export function OrganizationPage() {
         setRoles(result.data);
       }
     } catch {
-      toast.error('Failed to load roles');
+      toast.error(t.organization.failedToLoadRoles);
     }
   }, []);
 
@@ -76,7 +78,7 @@ export function OrganizationPage() {
       if (result.ok) {
         await loadRoles(currentOrgId);
       }
-    } catch { toast.error('Failed to create role'); }
+    } catch { toast.error(t.organization.failedToCreateRole); }
   };
 
   const handleUpdateRole = async (input: UpdateRoleInput) => {
@@ -85,7 +87,7 @@ export function OrganizationPage() {
       if (result.ok) {
         await loadRoles(currentOrgId);
       }
-    } catch { toast.error('Failed to update role'); }
+    } catch { toast.error(t.organization.failedToUpdateRole); }
   };
 
   const handleDeleteRole = async (id: string) => {
@@ -95,19 +97,19 @@ export function OrganizationPage() {
         setSelectedRoleId(null);
         await loadRoles(currentOrgId);
       }
-    } catch { toast.error('Failed to delete role'); }
+    } catch { toast.error(t.organization.failedToDeleteRole); }
   };
 
   const handleTemplateLoaded = async () => {
     setShowTemplateSelector(false);
-    toast.success('Template loaded successfully');
+    toast.success(t.organization.templateLoadedSuccessfully);
     try {
       await loadOrgs();
       const result = await window.capibara.getOrganizations();
       if (result.ok && result.data.length > 0) {
         setCurrentOrgId(result.data[result.data.length - 1].id);
       }
-    } catch { toast.error('Failed to load template'); }
+    } catch { toast.error(t.organization.failedToLoadTemplate); }
   };
 
   const handleCreateBlankOrg = async (name: string, description: string, workspacePath: string) => {
@@ -121,7 +123,7 @@ export function OrganizationPage() {
       });
       if (result.ok) {
         setShowCreateOrg(false);
-        toast.success('Organization created successfully');
+        toast.success(t.organization.createdSuccessfully);
         setCurrentOrgId(result.data.id);
         await loadOrgs();
       } else {
@@ -129,7 +131,7 @@ export function OrganizationPage() {
       }
     } catch (err) {
       console.error('[CreateOrg] IPC error:', err);
-      toast.error('Failed to create organization');
+      toast.error(t.organization.failedToCreateOrg);
     }
   };
 
@@ -145,13 +147,13 @@ export function OrganizationPage() {
         setCurrentOrgId(null);
         setRoles([]);
         setSelectedRoleId(null);
-        toast.success('Organization deleted successfully');
+        toast.success(t.organization.deletedSuccessfully);
         await loadOrgs();
       } else {
         toast.error(result.error.message);
       }
     } catch {
-      toast.error('Failed to delete organization');
+      toast.error(t.errors.failedToDelete);
     }
   };
 
@@ -161,7 +163,7 @@ export function OrganizationPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <p className="text-sm text-muted-foreground">{t.common.loading}</p>
       </div>
     );
   }
@@ -171,9 +173,9 @@ export function OrganizationPage() {
       <div className="flex-1 p-[var(--page-padding)] overflow-auto">
         <div className="flex items-center justify-between mb-[var(--section-gap)]">
           <div>
-            <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">Organization</h1>
+            <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">{t.organization.title}</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Manage your AI organization tree. Create roles, configure personas, and assign skills.
+              {t.organization.subtitle}
             </p>
           </div>
           <div className="flex gap-2">
@@ -200,21 +202,21 @@ export function OrganizationPage() {
                 size="icon"
                 className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => setShowDeleteOrg(true)}
-                title="Delete Organization"
+                title={t.organization.deleteOrganization}
               >
                 <Trash size={16} />
               </Button>
             )}
             <Button onClick={() => setShowTemplateSelector(true)}>
               <TreeStructure size={16} />
-              From Template
+              {t.organization.fromTemplate}
             </Button>
             <Button
               variant="outline"
               onClick={() => setShowCreateOrg(true)}
             >
               <Plus size={16} />
-              Blank Org
+              {t.organization.blankOrg}
             </Button>
           </div>
         </div>
@@ -241,7 +243,7 @@ export function OrganizationPage() {
         ) : currentOrg ? (
           <Card className="border-dashed p-12 text-center">
             <TreeStructure size={48} className="mx-auto text-muted-foreground/50 mb-4" />
-            <p className="text-sm text-muted-foreground mb-4">This organization has no roles yet. Roles define your AI agents — each with a persona, skills, and permissions. Add a root role to get started.</p>
+            <p className="text-sm text-muted-foreground mb-4">{t.organization.noRolesMessage}</p>
             <Button
               onClick={() =>
                 handleCreateRole({
@@ -258,14 +260,14 @@ export function OrganizationPage() {
               }
             >
               <Plus size={16} />
-              Add Root Role
+              {t.organization.addRootRole}
             </Button>
           </Card>
         ) : (
           <Card className="border-dashed p-12 text-center">
             <TreeStructure size={48} className="mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-sm text-muted-foreground mb-4">
-              Welcome to Capibara! Start by creating an organization — it's your AI agent team. You can load a pre-built template or create a blank org and add roles manually.
+              {t.organization.welcomeMessage}
             </p>
           </Card>
         )}

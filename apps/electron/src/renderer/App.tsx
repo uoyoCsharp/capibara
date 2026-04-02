@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { SectionId, DesktopEvent } from '@shared/contracts';
 import { useCapibaraSnapshot } from './hooks/useCapibaraSnapshot';
+import { LocaleProvider, useT } from './hooks/useLocale';
 import { Sidebar } from './components/layout/Sidebar';
 import { DashboardPage } from './components/dashboard/DashboardPage';
 import { OrganizationPage } from './components/organization/OrganizationPage';
@@ -11,10 +12,19 @@ import { ToastContainer } from './components/shared/ToastContainer';
 import { toast } from './store/toast.store';
 
 export function App() {
+  return (
+    <LocaleProvider>
+      <AppContent />
+    </LocaleProvider>
+  );
+}
+
+function AppContent() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { currentOrgId, isLoading } = useCapibaraSnapshot();
+  const t = useT();
 
   // Run completion toast notifications
   useEffect(() => {
@@ -24,27 +34,27 @@ export function App() {
       if (event.type === 'run:completed') {
         switch (event.status) {
           case 'succeeded':
-            toast.success(`Run completed — $${event.costUsd.toFixed(4)}`);
+            toast.success(`${t.runs.completed} — $${event.costUsd.toFixed(4)}`);
             break;
           case 'failed':
-            toast.error('Run failed — click Execution to see details');
+            toast.error(t.runs.failed);
             break;
           case 'cancelled':
-            toast.info('Run cancelled');
+            toast.info(t.runs.cancelled);
             break;
         }
       }
     });
 
     return unsub;
-  }, []);
+  }, [t]);
 
   if (isLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background">
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
-          <p className="text-sm text-muted-foreground">Loading Capibara...</p>
+          <p className="text-sm text-muted-foreground">{t.common.loading}</p>
         </div>
       </div>
     );

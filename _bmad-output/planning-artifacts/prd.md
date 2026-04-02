@@ -265,6 +265,20 @@ The system shall support a three-layer skill provider interface:
 - **Activity Timeline**: Recent events and state changes
 - **Dashboard**: Narrative status + metrics + active work + alerts
 
+### FR-14: Internationalization (i18n)
+
+**Priority: MVP**
+
+The system shall support multilingual user interface:
+
+- **MVP Languages**: Chinese (zh-CN) and English (en-US)
+- **Auto-Detection**: On first launch, detect the operating system's locale and set the default language accordingly (fallback to en-US)
+- **User Preference**: Users can switch language at any time via the application settings
+- **Preference Persistence**: Selected language is stored in the Settings table and restored on subsequent launches
+- **Scope**: All static UI strings (navigation labels, button text, status labels, error messages, placeholder text) are translated
+- **Narrative Engine Integration**: The Narrative Engine's LLM polish layer receives the user's language preference and generates narratives in the selected language
+- **Desktop Notifications**: Notification text follows the user's language preference
+
 ---
 
 ## 4. Non-Functional Requirements
@@ -436,7 +450,7 @@ As a human user, I want to send messages and vote in any discussion group with e
 | `CostEntry` | Token cost tracking | id, runId, roleId, orgId, tokenCount, costUsd |
 | `Narrative` | Generated status snapshot | id, orgId, templateData (JSON), renderedText, generatedAt |
 | `PendingWake` | Wake event queue | id, roleId, orgId, trigger, createdAt |
-| `Settings` | Application settings | key, value |
+| `Settings` | Application settings | key, value (e.g., locale: 'zh-CN' \| 'en-US') |
 
 ---
 
@@ -467,7 +481,7 @@ As a human user, I want to send messages and vote in any discussion group with e
 
 ### MVP (V1)
 
-All FR-01 through FR-13 as defined above.
+All FR-01 through FR-14 as defined above.
 
 ### V2 Enhancements
 

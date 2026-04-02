@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { useT } from '../../hooks/useLocale';
 
 interface TaskTreeViewProps {
   tasks: TaskRecord[];
@@ -53,17 +54,6 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   cancelled: 'bg-muted-foreground',
 };
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: 'Pending',
-  in_progress: 'In Progress',
-  awaiting_review: 'Awaiting Review',
-  revision: 'Revision',
-  approved: 'Approved',
-  done: 'Done',
-  blocked: 'Blocked',
-  cancelled: 'Cancelled',
-};
-
 const TYPE_BADGE_COLORS: Record<TaskType, string> = {
   epic: 'bg-purple-100 text-purple-700',
   story: 'bg-blue-100 text-blue-700',
@@ -103,6 +93,7 @@ function TaskNodeItem({
   onStatusChange: (id: string, status: TaskStatus) => void;
   roleNames: Map<string, string>;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children.length > 0;
   const isSelected = selectedTaskId === node.task.id;
@@ -143,7 +134,7 @@ function TaskNodeItem({
             'w-2.5 h-2.5 rounded-full shrink-0',
             STATUS_COLORS[node.task.status],
           )}
-          title={STATUS_LABELS[node.task.status]}
+          title={t.task[node.task.status]}
         />
 
         {/* Type badge */}
@@ -172,7 +163,7 @@ function TaskNodeItem({
         {hasApprovalPending && (
           <span
             className="w-2.5 h-2.5 rounded-full bg-destructive shrink-0 animate-pulse"
-            title="Approval required"
+            title={t.taskDetail.approvalRequired}
           />
         )}
 
@@ -245,6 +236,7 @@ export function TaskTreeView({
   onStatusChange,
   roleNames,
 }: TaskTreeViewProps) {
+  const t = useT();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const tree = buildTree(tasks);
 
@@ -253,11 +245,11 @@ export function TaskTreeView({
       <div className="rounded-[var(--card-radius)] border border-dashed border-border bg-card p-12 text-center">
         <ListBullets size={40} className="mx-auto text-muted-foreground/50 mb-3" />
         <p className="text-sm text-muted-foreground mb-4">
-          Your task board is empty. Create an epic to organize your project — epics contain stories, which break down into individual tasks for AI agents.
+          {t.taskTree.emptyMessage}
         </p>
         <Button onClick={() => onAddTask(null)}>
           <Plus size={16} />
-          Create Epic
+          {t.taskTree.createEpic}
         </Button>
       </div>
     );
@@ -281,8 +273,8 @@ export function TaskTreeView({
       ))}
       {confirmDelete && (
         <ConfirmDialog
-          title="Delete Task?"
-          message="This will permanently delete this task and may affect child tasks. This action cannot be undone."
+          title={t.taskTree.deleteConfirm}
+          message={t.taskTree.deleteMessage}
           confirmLabel="Delete"
           onConfirm={() => {
             onDeleteTask(confirmDelete);

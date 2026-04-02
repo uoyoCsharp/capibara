@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import { cn } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { useT } from '../../hooks/useLocale';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -41,10 +42,11 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
   const [filter, setFilter] = useState<string>('all');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
+  const t = useT();
 
   const roleName = useCallback(
-    (id: string) => roles.find((r) => r.id === id)?.name ?? 'Unknown',
-    [roles],
+    (id: string) => roles.find((r) => r.id === id)?.name ?? t.common.unknown,
+    [roles, t.common.unknown],
   );
 
   const taskTitle = useCallback(
@@ -71,7 +73,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             id: `run-ok-${run.id}`,
             timestamp: run.finishedAt ?? run.createdAt,
             type: 'run_succeeded',
-            title: `Run succeeded`,
+            title: t.activity.runSucceeded,
             description: `${roleName(run.roleId)} completed work on "${taskTitle(run.taskNodeId)}"`,
             roleId: run.roleId,
             taskId: run.taskNodeId,
@@ -81,7 +83,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             id: `run-fail-${run.id}`,
             timestamp: run.finishedAt ?? run.createdAt,
             type: 'run_failed',
-            title: `Run failed`,
+            title: t.activity.runFailed,
             description: `${roleName(run.roleId)} failed on "${taskTitle(run.taskNodeId)}"`,
             roleId: run.roleId,
             taskId: run.taskNodeId,
@@ -96,7 +98,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             id: `task-done-${task.id}`,
             timestamp: task.updatedAt,
             type: 'task_completed',
-            title: `Task ${task.status}`,
+            title: `${t.activity.taskStatus} ${t.task[task.status as keyof typeof t.task] ?? task.status}`,
             description: `"${task.title}" was marked as ${task.status}`,
             taskId: task.id,
           });
@@ -105,7 +107,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             id: `task-blocked-${task.id}`,
             timestamp: task.updatedAt,
             type: 'escalation',
-            title: 'Task blocked',
+            title: t.activity.taskBlocked,
             description: `"${task.title}" is blocked`,
             taskId: task.id,
           });
@@ -136,7 +138,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock size={20} className="text-primary" />
-            <CardTitle className="text-lg font-medium">Activity Timeline</CardTitle>
+            <CardTitle className="text-lg font-medium">{t.activity.title}</CardTitle>
             <Badge variant="secondary" className="text-xs">
               {filtered.length} events
             </Badge>
@@ -151,11 +153,11 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All events</SelectItem>
-                <SelectItem value="run_succeeded">Runs succeeded</SelectItem>
-                <SelectItem value="run_failed">Runs failed</SelectItem>
-                <SelectItem value="task_completed">Tasks completed</SelectItem>
-                <SelectItem value="escalation">Escalations</SelectItem>
+                <SelectItem value="all">{t.activity.allEvents}</SelectItem>
+                <SelectItem value="run_succeeded">{t.activity.runsSucceeded}</SelectItem>
+                <SelectItem value="run_failed">{t.activity.runsFailed}</SelectItem>
+                <SelectItem value="task_completed">{t.activity.tasksCompleted}</SelectItem>
+                <SelectItem value="escalation">{t.activity.escalations}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -163,9 +165,9 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
       </CardHeader>
       <CardContent>
         {loading && events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Loading activity...</p>
+          <p className="text-sm text-muted-foreground">{t.activity.loadingActivity}</p>
         ) : visible.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No activity yet for this organization.</p>
+          <p className="text-sm text-muted-foreground">{t.activity.noActivity}</p>
         ) : (
           <div className="space-y-0">
             {visible.map((event, idx) => (
@@ -185,7 +187,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
             className="mt-3 px-0"
           >
-            Show more ({filtered.length - visibleCount} remaining)
+            {t.activity.showMore} ({filtered.length - visibleCount} remaining)
           </Button>
         )}
       </CardContent>

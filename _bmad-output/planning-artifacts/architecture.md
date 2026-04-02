@@ -586,6 +586,9 @@ Examples:
 - `capibara:narrative:updated`
 - `capibara:org:snapshot`
 - `capibara:discussion:vote-added`
+- `capibara:settings:get`
+- `capibara:settings:update`
+- `capibara:settings:locale-changed`
 
 Defined in `shared/contracts.ts` as string enums with Zod payload schemas.
 
@@ -682,7 +685,11 @@ capibara/
 │   │
 │   └── shared/                         # Cross-process shared (Main + Renderer)
 │       ├── contracts.ts                # IPC channel enums + Zod payload schemas
-│       └── locale.ts                   # Shared locale strings
+│       └── locale/                     # i18n module
+│           ├── types.ts               # SupportedLocale, LocaleMessages interface
+│           ├── en-US.ts               # English translations
+│           ├── zh-CN.ts               # Chinese translations
+│           └── index.ts              # Locale registry + getMessages()
 │
 ├── packages/                           # Monorepo adapter packages
 │   ├── adapter-claude-local/
@@ -814,3 +821,62 @@ logging:
 | ADR-04 | MCP Server (stdio) for Agent ↔ Capibara system operations | Native Claude Code integration, typed schemas, real-time tool calls |
 | ADR-05 | Skill model stores command + description, not content | BMAD manages its own prompts; Capibara only needs references |
 | ADR-06 | Framework extensibility via Skill Registration model | Zero business code change when adding new prompt frameworks |
+
+---
+
+## 16. Internationalization (i18n)
+
+### 16.1 Strategy
+
+MVP uses a lightweight React Context-based i18n approach. No external i18n library required.
+
+### 16.2 Locale Module Structure
+
+`shared/locale/` replaces the single `shared/locale.ts` file:
+
+| File | Purpose |
+|------|---------|
+| `shared/locale/types.ts` | `SupportedLocale` type, `LocaleMessages` interface |
+| `shared/locale/en-US.ts` | English translation strings |
+| `shared/locale/zh-CN.ts` | Chinese translation strings |
+| `shared/locale/index.ts` | Locale registry, `getMessages(locale)` lookup |
+
+### 16.3 Architecture Layers
+
+| Layer | i18n Responsibility |
+|-------|-------------------|
+| **shared/** | Locale type definitions, translation message objects |
+| **Main Process** | Reads `locale` from Settings table, provides via IPC `capibara:settings:get` |
+| **Preload** | Bridges locale IPC methods |
+| **Renderer** | `LocaleProvider` React Context, `useLocale()` hook, `useT()` translation hook |
+
+### 16.4 OS Language Detection
+
+On first launch (no `locale` key in Settings):
+1. Main Process reads `app.getLocale()` (Electron API)
+2. Maps to supported locale: `zh` prefix → `zh-CN`, else → `en-US`
+3. Stores result in Settings table
+
+### 16.5 Language Switching Flow
+
+```
+User clicks language selector (Renderer)
+  → IPC call: capibara:settings:update { key: 'locale', value: 'zh-CN' }
+  → Main Process updates Settings table
+  → Main Process emits 'settings:locale-changed' on EventBus
+  → IPC push: capibara:settings:locale-changed { locale: 'zh-CN' }
+  → Renderer LocaleProvider updates context
+  → All components re-render with new locale
+```
+
+### 16.6 Narrative Engine Integration
+
+The Narrative Engine's Layer 3 (LLM Polish) receives the user's locale preference as a parameter. The LLM polish prompt includes an instruction like: "Generate the narrative in {locale_language}."
+
+### 16.7 IPC Channels
+
+| Channel | Direction | Payload |
+|---------|-----------|---------|
+| `capibara:settings:get` | Renderer → Main | `{ key: string }` |
+| `capibara:settings:update` | Renderer → Main | `{ key: string, value: string }` |
+| `capibara:settings:locale-changed` | Main → Renderer | `{ locale: SupportedLocale }` |

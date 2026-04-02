@@ -11,6 +11,7 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { useT } from '../../hooks/useLocale';
 
 interface DeleteOrgModalProps {
   orgName: string;
@@ -19,6 +20,7 @@ interface DeleteOrgModalProps {
 }
 
 export function DeleteOrgModal({ orgName, onClose, onConfirm }: DeleteOrgModalProps) {
+  const t = useT();
   const [confirmName, setConfirmName] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -34,9 +36,9 @@ export function DeleteOrgModal({ orgName, onClose, onConfirm }: DeleteOrgModalPr
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-destructive">Delete Organization</DialogTitle>
+          <DialogTitle className="text-destructive">{t.deleteOrg.title}</DialogTitle>
           <DialogDescription className="sr-only">
-            Confirm deletion of organization {orgName}
+            {t.deleteOrg.subtitle}
           </DialogDescription>
         </DialogHeader>
 
@@ -44,14 +46,17 @@ export function DeleteOrgModal({ orgName, onClose, onConfirm }: DeleteOrgModalPr
           <div className="flex items-start gap-3 rounded-lg bg-destructive/10 border border-destructive/20 p-3">
             <Warning size={20} className="text-destructive mt-0.5 shrink-0" />
             <p className="text-sm text-muted-foreground">
-              This action <strong className="text-foreground">cannot be undone</strong>. This will permanently delete the organization
-              <strong className="text-foreground"> {orgName}</strong> and all associated data including roles, tasks, discussions, runs, and cost entries.
+              {t.deleteOrg.warning.split('{orgName}')[0]}
+              <strong className="text-foreground">{orgName}</strong>
+              {t.deleteOrg.warning.split('{orgName}')[1]}
             </p>
           </div>
 
           <div>
             <Label htmlFor="confirm-name" className="mb-1">
-              Type <strong className="text-foreground">{orgName}</strong> to confirm
+              {t.deleteOrg.typeToConfirm.split('{orgName}')[0]}
+              <strong className="text-foreground">{orgName}</strong>
+              {t.deleteOrg.typeToConfirm.split('{orgName}')[1]}
             </Label>
             <Input
               id="confirm-name"
@@ -65,14 +70,14 @@ export function DeleteOrgModal({ orgName, onClose, onConfirm }: DeleteOrgModalPr
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t.common.cancel}
           </Button>
           <Button
             variant="destructive"
             onClick={handleDelete}
             disabled={!nameMatches || isDeleting}
           >
-            {isDeleting ? 'Deleting...' : 'Delete Organization'}
+            {isDeleting ? t.deleteOrg.deleting : t.organization.deleteOrganization}
           </Button>
         </DialogFooter>
       </DialogContent>

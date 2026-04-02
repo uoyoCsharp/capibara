@@ -4,6 +4,7 @@ import type { RoleRecord } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
+import { useT } from '../../hooks/useLocale';
 
 interface OrgTreeViewProps {
   roles: RoleRecord[];
@@ -56,6 +57,7 @@ function RoleNode({
   onSelectRole: (id: string) => void;
   onAddRole: (parentId: string) => void;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
   const isSelected = selectedRoleId === node.role.id;
@@ -123,7 +125,7 @@ function RoleNode({
         {/* Quick add child */}
         <button
           className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
-          title="Add child role"
+          title={t.organization.addChildRole}
           onClick={(e) => {
             e.stopPropagation();
             onAddRole(node.role.id);
@@ -158,13 +160,14 @@ export function OrgTreeView({
   onSelectRole,
   onAddRole,
 }: OrgTreeViewProps) {
+  const t = useT();
   const tree = buildTree(roles);
 
   return (
     <Card className="py-3">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border mb-3">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Role Hierarchy
+          {t.organization.roleHierarchy}
         </span>
         <Button
           variant="link"
@@ -173,7 +176,7 @@ export function OrgTreeView({
           onClick={() => onAddRole(null)}
         >
           <Plus size={12} />
-          Add Root
+          {t.organization.addRoot}
         </Button>
       </div>
       <div className="space-y-1 px-1">

@@ -88,12 +88,13 @@ This document provides the complete epic and story breakdown for Capibara, decom
 - FR-11 (Pluggable Skill System): Epic 3
 - FR-12 (Resilience): Epic 10
 - FR-13 (Observability): Epic 9
+- FR-14 (Internationalization): Epic 1
 
 ## Epic List
 
 ### Epic 1: Electron Application Shell & Core Infrastructure
 Users can launch the Capibara desktop application and see a functional application shell with global navigation, establishing the Electron three-layer process model, DI container, SQLite database, event bus, and IPC foundation that all subsequent epics build upon.
-**FRs covered:** Foundation for all FRs; NFR-02 (Security — process isolation, IPC validation), NFR-05 (Data Integrity — SQLite WAL); UX-DR01 (Navigation Shell), UX-DR09 (Design System Foundation)
+**FRs covered:** Foundation for all FRs; FR-14 (Internationalization); NFR-02 (Security — process isolation, IPC validation), NFR-05 (Data Integrity — SQLite WAL); UX-DR01 (Navigation Shell), UX-DR09 (Design System Foundation)
 
 ### Epic 2: Organization Modeling & Role Management
 Users can create, visualize, and configure AI organization trees with roles defined by the three-element model (persona, knowledge base, skills), load preset templates, and customize organizational structures through an interactive tree UI.
@@ -250,6 +251,35 @@ So that I can customize behavior without modifying code.
 **And** key config fields include: `organization.template`, `execution.maxReviseAttempts` (3), `execution.maxRetryOnFailure` (3), `execution.maxConsecutiveWakes` (5), `execution.budgetLimit` (50.0), `database.driver` (sqlite), `cli.defaultExecutor`, `logging.level` (info)
 **And** invalid configuration fails fast with descriptive Zod validation errors
 **And** Pino logger is initialized from config and registered in DI
+
+### Story 1.7: Implement Internationalization (i18n) Infrastructure
+
+As a user,
+I want the application to display in my preferred language (Chinese or English),
+So that I can use the system comfortably in my native language.
+
+**Acceptance Criteria:**
+
+**Given** the application shell and config system from Stories 1.5-1.6
+**When** the i18n infrastructure is created
+**Then** `shared/locale/` module exists with `types.ts`, `en-US.ts`, `zh-CN.ts`, and `index.ts`
+**And** `SupportedLocale` type is defined as `'en-US' | 'zh-CN'`
+**And** `LocaleMessages` interface defines typed keys for all UI strings
+**And** both `en-US.ts` and `zh-CN.ts` implement the full `LocaleMessages` interface
+**And** existing hardcoded strings in `shared/locale.ts` are migrated to the new structure
+**And** `ISettingsRepository` interface is defined in `core/interfaces/` with `get(key)`, `set(key, value)`, `getAll()` methods
+**And** `SqliteSettingsRepository` implements the interface using the existing `settings` table
+**And** the repository is registered in composition-root.ts via `SETTINGS_REPO_TOKEN`
+**And** on first launch, Main Process detects OS locale via `app.getLocale()` and stores in Settings as `locale` key
+**And** locale detection maps `zh*` prefixes to `zh-CN`, all others to `en-US`
+**And** IPC channels `capibara:settings:get` and `capibara:settings:update` are defined in `shared/contracts.ts` with Zod schemas
+**And** IPC channel `capibara:settings:locale-changed` pushes locale changes to Renderer
+**And** Renderer provides `LocaleProvider` React Context wrapping `App.tsx`
+**And** `useLocale()` hook returns current `SupportedLocale`
+**And** `useT()` hook returns the `LocaleMessages` object for the current locale
+**And** a language selector is available in the navigation sidebar (bottom area or settings dropdown)
+**And** switching language immediately updates all UI strings without page reload
+**And** language preference persists across application restarts
 
 ---
 
@@ -923,7 +953,7 @@ So that I don't miss time-sensitive intervention points.
 
 **Given** the human approval mechanism from Stories 8.1-8.2
 **When** a task reaches a role with `requiresHumanApproval=true`
-**Then** an Electron native desktop notification is shown with: task title, role requiring approval, a brief summary line
+**Then** an Electron native desktop notification is shown with: task title, role requiring approval, a brief summary line — all text localized per the user's language preference
 **And** clicking the notification brings the Capibara window to focus and navigates to the relevant discussion group's approval panel
 **And** the corresponding epic in the Tasks & Epics page shows a notification badge (red dot)
 **And** notifications also fire for: escalation reaching top-level role, budget threshold warnings
@@ -977,7 +1007,7 @@ So that project status is presented as a story rather than dry data tables.
 **When** a narrative is generated
 **Then** Layer 1 (Data Query): deterministic DB queries extract task states, discussion summaries, role activities, budget usage, blocked items
 **And** Layer 2 (Template): Markdown templates with placeholders are populated with structured data (e.g., `{completed_count}` tasks done, `{budget_used}/{budget_limit}` spent)
-**And** Layer 3 (LLM Polish): a single LLM call converts the structured template into natural language narrative prose
+**And** Layer 3 (LLM Polish): a single LLM call converts the structured template into natural language narrative prose in the user's preferred language (read from Settings `locale` key)
 **And** `narratives` table stores: id, org_id, template_data (JSON raw data), rendered_text (final narrative), generated_at
 **And** facts come from DB queries (no hallucination risk); LLM only responsible for natural language styling
 **And** narrative generation is idempotent given the same input data

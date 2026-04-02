@@ -70,7 +70,7 @@ Given the concurrency of tasks and the need for deep context, Capibara utilizes 
 ## Key User Journeys
 
 ### 1. Organization & Skills Setup
-- **Scenario:** A user configures AI roles upon first use or when starting a new project.
+- **Scenario:** A user launches the application for the first time. The system automatically detects the OS language and displays the interface in the appropriate language (Chinese or English). The user then configures AI roles or starts a new project.
 - **Interaction Flow:** Enter [Organization Panel] -> Load preset templates (e.g., BMAD Standard Dev Team) -> Select workspace folder via native OS folder picker -> Interface visualizes the hierarchical structure map -> Click any node to slide out a drawer from the side to configure the Persona, bind knowledge bases, or link LLM skill sets (BMAD L1/L3) -> Check the `requiresHumanApproval` node for necessary human intervention.
 - **Organization Deletion:** Organization context menu or settings includes a "Delete Organization" action. Clicking "Delete" opens a confirmation dialog requiring the user to type the exact organization name (case-sensitive). The delete button remains disabled until the name matches. After successful deletion, user is redirected to the organization list or creation page with a success notification.
 
@@ -98,6 +98,9 @@ Referencing modern management system designs like AgentCompany, all information 
 ### Pattern 2: Chat-as-Action Cards
 In traditional chat applications, text is everything. In Capibara, behaviors carrying specific structured voting semantics (APPROVE / REVISE / DELEGATE, etc.) and complex outputs are displayed using forms akin to "Rich Bots/Embeds" cards. Users can complete click interactions directly within the group message cards, thereby driving the backend event state machine to progress.
 
-### Pattern 3: Contextual Drawers for Deep Dives
+### Pattern 3: Language Selector
+A compact language selector is placed in the bottom area of the left navigation sidebar, near application-level settings. It displays the current language as a short label (e.g., "EN" / "中文"). Clicking it opens a dropdown with the two supported languages. Switching language immediately updates all interface text without page reload or navigation disruption. The selector uses a globe icon to indicate its purpose.
+
+### Pattern 4: Contextual Drawers for Deep Dives
 Building on the modularization of major functions into separate pages, to avoid "context loss" caused by repeated jumping:
 - **Contextual Drawer:** For instance, clicking on an Agent role on the Organization page slides out a full drawer on the right to configure its system Prompt or skill list, without having to navigate away from the current tree structure. When reading a detailed narrative summary within an approval chat, it can be expanded via a drawer, keeping the main communication stream in sight.

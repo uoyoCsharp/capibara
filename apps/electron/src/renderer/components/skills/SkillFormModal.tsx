@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from '../ui/dialog';
+import { useT } from '../../hooks/useLocale';
 
 interface SkillFormModalProps {
   skill: SkillRecord | null;
@@ -20,16 +21,10 @@ interface SkillFormModalProps {
   onSaved: () => void;
 }
 
-const CATEGORIES: Array<{ value: SkillCategory; label: string }> = [
-  { value: 'analysis', label: 'Analysis' },
-  { value: 'design', label: 'Design' },
-  { value: 'implementation', label: 'Implementation' },
-  { value: 'review', label: 'Review' },
-  { value: 'test', label: 'Test' },
-  { value: 'general', label: 'General' },
-];
+const CATEGORIES: SkillCategory[] = ['analysis', 'design', 'implementation', 'review', 'test', 'general'];
 
 export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps) {
+  const t = useT();
   const isEditing = skill != null;
   const [name, setName] = useState(skill?.name ?? '');
   const [command, setCommand] = useState(skill?.command ?? '/');
@@ -41,7 +36,7 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
 
   const handleSave = async () => {
     if (!name.trim() || !command.trim()) {
-      setError('Name and command are required');
+      setError(t.skillForm.nameCommandRequired);
       return;
     }
 
@@ -90,7 +85,7 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
       <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {isEditing ? 'Edit Custom Skill' : 'Create Custom Skill'}
+            {isEditing ? t.skillForm.editTitle : t.skillForm.createTitle}
           </DialogTitle>
         </DialogHeader>
 
@@ -103,10 +98,10 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
           )}
 
           <div className="space-y-2">
-            <Label>Name *</Label>
+            <Label>{t.skillForm.nameLabel} *</Label>
             <Input
               type="text"
-              placeholder="My Custom Skill"
+              placeholder={t.skillForm.namePlaceholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={100}
@@ -114,23 +109,23 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
           </div>
 
           <div className="space-y-2">
-            <Label>Command *</Label>
+            <Label>{t.skillForm.commandLabel} *</Label>
             <Input
               type="text"
               className="font-mono"
-              placeholder="/my-skill"
+              placeholder={t.skillForm.commandPlaceholder}
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               maxLength={200}
             />
-            <p className="text-xs text-muted-foreground">Unique command identifier (e.g., /my-skill)</p>
+            <p className="text-xs text-muted-foreground">{t.skillForm.commandHint}</p>
           </div>
 
           <div className="space-y-2">
-            <Label>Description</Label>
+            <Label>{t.skillForm.descriptionLabel}</Label>
             <Textarea
               rows={2}
-              placeholder="What this skill does..."
+              placeholder={t.skillForm.descriptionPlaceholder}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={2000}
@@ -138,7 +133,7 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
           </div>
 
           <div className="space-y-2">
-            <Label>Category</Label>
+            <Label>{t.skillForm.categoryLabel}</Label>
             <Select
               value={category}
               onValueChange={(value) => setCategory(value as SkillCategory)}
@@ -148,36 +143,36 @@ export function SkillFormModal({ skill, onClose, onSaved }: SkillFormModalProps)
               </SelectTrigger>
               <SelectContent>
                 {CATEGORIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  <SelectItem key={c} value={c}>{t.skillCategories[c]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label>Prompt Content</Label>
+            <Label>{t.skillForm.promptContentLabel}</Label>
             <Textarea
               className="font-mono"
               rows={8}
-              placeholder="Enter the prompt template content..."
+              placeholder={t.skillForm.promptPlaceholder}
               value={promptContent}
               onChange={(e) => setPromptContent(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              The prompt content that will be injected when this skill is used by a role.
+              {t.skillForm.promptHint}
             </p>
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t.common.cancel}
           </Button>
           <Button
             onClick={handleSave}
             disabled={!name.trim() || !command.trim() || isSaving}
           >
-            {isSaving ? 'Saving...' : isEditing ? 'Update Skill' : 'Create Skill'}
+            {isSaving ? t.common.saving : isEditing ? t.skillForm.updateSkill : t.skillForm.createSkill}
           </Button>
         </DialogFooter>
       </DialogContent>

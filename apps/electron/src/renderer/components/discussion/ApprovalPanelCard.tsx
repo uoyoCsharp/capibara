@@ -12,6 +12,7 @@ import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Progress } from '../ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { useT } from '../../hooks/useLocale';
 
 interface ApprovalPanelCardProps {
   task: TaskRecord;
@@ -34,6 +35,7 @@ export function ApprovalPanelCard({
   onRevise,
   onDelegate,
 }: ApprovalPanelCardProps) {
+  const t = useT();
   const [mode, setMode] = useState<'idle' | 'revise' | 'delegate'>('idle');
   const [feedback, setFeedback] = useState('');
   const [selectedRoleId, setSelectedRoleId] = useState('');
@@ -69,10 +71,10 @@ export function ApprovalPanelCard({
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 bg-yellow-500/15 border-b border-yellow-500/30">
         <ShieldCheck size={18} weight="fill" className="text-yellow-500" />
-        <span className="text-sm font-semibold text-yellow-600">Human Approval Required</span>
+        <span className="text-sm font-semibold text-yellow-600">{t.approval.humanApprovalRequired}</span>
         {assigneeRole && (
           <span className="ml-auto text-xs text-yellow-600/70">
-            Reviewer: {assigneeRole.name}
+            {t.approval.reviewer}: {assigneeRole.name}
           </span>
         )}
       </div>
@@ -80,7 +82,7 @@ export function ApprovalPanelCard({
       <div className="px-4 py-4 space-y-4">
         {/* Task summary */}
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1">Task</p>
+          <p className="text-xs font-medium text-muted-foreground mb-1">{t.approval.taskLabel}</p>
           <p className="text-sm text-foreground font-medium">{task.title}</p>
           {task.description && (
             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
@@ -93,7 +95,7 @@ export function ApprovalPanelCard({
             <div className="flex items-center gap-1.5 mb-1.5">
               <TreeStructure size={14} className="text-muted-foreground" />
               <p className="text-xs font-medium text-muted-foreground">
-                Subtasks: {completedChildren.length}/{childTasks.length} completed
+                {t.approval.subtasksProgress}: {completedChildren.length}/{childTasks.length}
               </p>
             </div>
             <Progress value={subtaskPercent} className="h-1.5 [&>div]:bg-green-500" />
@@ -104,13 +106,13 @@ export function ApprovalPanelCard({
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <ChartBar size={14} className="text-muted-foreground" />
-            <p className="text-xs font-medium text-muted-foreground">Vote Summary</p>
+            <p className="text-xs font-medium text-muted-foreground">{t.approval.voteSummary}</p>
           </div>
           <div className="flex gap-3 text-xs">
-            <span className="text-green-600">Approve: {voteStats.APPROVE}</span>
-            <span className="text-yellow-600">Revise: {voteStats.REVISE}</span>
-            <span className="text-destructive">Concern: {voteStats.CONCERN}</span>
-            <span className="text-blue-600">Delegate: {voteStats.DELEGATE}</span>
+            <span className="text-green-600">{t.vote.APPROVE}: {voteStats.APPROVE}</span>
+            <span className="text-yellow-600">{t.vote.REVISE}: {voteStats.REVISE}</span>
+            <span className="text-destructive">{t.vote.CONCERN}: {voteStats.CONCERN}</span>
+            <span className="text-blue-600">{t.vote.DELEGATE}: {voteStats.DELEGATE}</span>
           </div>
         </div>
 
@@ -118,7 +120,7 @@ export function ApprovalPanelCard({
         {concerns.length > 0 && (
           <div>
             <p className="text-xs font-medium text-destructive mb-1">
-              Open Concerns ({concerns.length})
+              {t.approval.openConcerns} ({concerns.length})
             </p>
             <ul className="space-y-2">
               {concerns.slice(-3).map((c) => (
@@ -134,10 +136,10 @@ export function ApprovalPanelCard({
         {revisions.length > 0 && (
           <div>
             <p className="text-xs font-medium text-yellow-600 mb-1">
-              Revision History ({revisions.length})
+              {t.approval.revisionHistory} ({revisions.length})
             </p>
             <p className="text-xs text-muted-foreground pl-2 border-l-2 border-yellow-500/30">
-              Latest: {revisions[revisions.length - 1].content.slice(0, 120)}
+              {t.approval.latestRevision}: {revisions[revisions.length - 1].content.slice(0, 120)}
             </p>
           </div>
         )}
@@ -149,7 +151,7 @@ export function ApprovalPanelCard({
             className="bg-green-500 hover:bg-green-500/90 text-white"
           >
             <ShieldCheck size={16} />
-            Approve
+            {t.taskDetail.approve}
           </Button>
           <Button
             variant={mode === 'revise' ? 'default' : 'secondary'}
@@ -157,7 +159,7 @@ export function ApprovalPanelCard({
             className={cn(mode === 'revise' && 'bg-yellow-500 hover:bg-yellow-500/90 text-white')}
           >
             <ArrowsClockwise size={16} />
-            Revise
+            {t.vote.REVISE}
           </Button>
           <Button
             variant={mode === 'delegate' ? 'default' : 'secondary'}
@@ -165,7 +167,7 @@ export function ApprovalPanelCard({
             className={cn(mode === 'delegate' && 'bg-blue-500 hover:bg-blue-500/90 text-white')}
           >
             <UserSwitch size={16} />
-            Delegate
+            {t.approval.delegate}
           </Button>
         </div>
 
@@ -175,7 +177,7 @@ export function ApprovalPanelCard({
             <Textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Describe what needs to be revised..."
+              placeholder={t.approval.describeFeedback}
               rows={3}
               className="border-yellow-500/30 focus-visible:ring-yellow-500"
             />
@@ -188,7 +190,7 @@ export function ApprovalPanelCard({
                   : '',
               )}
             >
-              Submit Revision
+              {t.approval.submitRevision}
             </Button>
           </div>
         )}
@@ -201,10 +203,10 @@ export function ApprovalPanelCard({
               onValueChange={(value) => setSelectedRoleId(value === '_none' ? '' : value)}
             >
               <SelectTrigger className="border-blue-500/30 focus:ring-blue-500">
-                <SelectValue placeholder="Select a role to delegate to..." />
+                <SelectValue placeholder={t.approval.selectRoleToDelegate} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">Select a role to delegate to...</SelectItem>
+                <SelectItem value="_none">{t.approval.selectRoleToDelegate}</SelectItem>
                 {delegatableRoles.map((r) => (
                   <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                 ))}
@@ -219,7 +221,7 @@ export function ApprovalPanelCard({
                   : '',
               )}
             >
-              Confirm Delegation
+              {t.approval.confirmDelegation}
             </Button>
           </div>
         )}

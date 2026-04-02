@@ -30,6 +30,7 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
+import { useT } from '../../hooks/useLocale';
 
 interface RoleDrawerProps {
   role: RoleRecord;
@@ -40,6 +41,7 @@ interface RoleDrawerProps {
 }
 
 export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDrawerProps) {
+  const t = useT();
   const [name, setName] = useState(role.name);
   const [persona, setPersona] = useState(role.persona);
   const [canApprove, setCanApprove] = useState(role.canApprove);
@@ -112,9 +114,9 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
         <SheetContent side="right" className="w-96 flex flex-col p-0 sm:max-w-96">
           {/* Header */}
           <SheetHeader className="px-5 py-4 border-b border-border space-y-0">
-            <SheetTitle className="text-base">Configure Role</SheetTitle>
+            <SheetTitle className="text-base">{t.roleDrawer.title}</SheetTitle>
             <SheetDescription className="sr-only">
-              Edit role configuration and permissions
+              {t.roleDrawer.subtitle}
             </SheetDescription>
           </SheetHeader>
 
@@ -123,7 +125,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
             {/* Name */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-1.5">
-                Name
+                {t.roleDrawer.nameLabel}
               </Label>
               <Input
                 value={name}
@@ -131,14 +133,14 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
                 maxLength={100}
               />
               {!name.trim() && (
-                <p className="text-xs text-destructive mt-1">Name is required</p>
+                <p className="text-xs text-destructive mt-1">{t.roleDrawer.nameRequired}</p>
               )}
             </div>
 
             {/* Status */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-1.5">
-                Status
+                {t.roleDrawer.statusLabel}
               </Label>
               <Select
                 value={status}
@@ -148,9 +150,9 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="paused">Paused</SelectItem>
-                  <SelectItem value="idle">Idle</SelectItem>
+                  <SelectItem value="active">{t.status.active}</SelectItem>
+                  <SelectItem value="paused">{t.status.paused}</SelectItem>
+                  <SelectItem value="idle">{t.status.idle}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -158,7 +160,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
             {/* Parent Role */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-1.5">
-                Parent Role
+                {t.roleDrawer.parentRoleLabel}
               </Label>
               <Select
                 value={parentId ?? '__none__'}
@@ -168,7 +170,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None (Root)</SelectItem>
+                  <SelectItem value="__none__">{t.roleDrawer.noneRoot}</SelectItem>
                   {parentOptions.map((r) => (
                     <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                   ))}
@@ -179,21 +181,21 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
             {/* Persona */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-1.5">
-                Persona
+                {t.roleDrawer.personaLabel}
               </Label>
               <Textarea
                 className="min-h-[100px] resize-y"
                 rows={5}
                 value={persona}
                 onChange={(e) => { setPersona(e.target.value); markDirty(); }}
-                placeholder="Describe the role's persona, responsibilities, and behavior..."
+                placeholder={t.roleDrawer.personaPlaceholder}
               />
             </div>
 
             {/* Skills */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-1.5">
-                Skills
+                {t.roleDrawer.skillsLabel}
               </Label>
               <SkillSelector
                 selectedIds={skillIds}
@@ -204,21 +206,21 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
             {/* Knowledge Base Refs */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-1.5">
-                Knowledge Base References
+                {t.roleDrawer.knowledgeBaseLabel}
               </Label>
               <Textarea
                 className="resize-y"
                 rows={3}
                 value={knowledgeBaseRefs}
                 onChange={(e) => { setKnowledgeBaseRefs(e.target.value); markDirty(); }}
-                placeholder="One reference per line..."
+                placeholder={t.roleDrawer.knowledgePlaceholder}
               />
             </div>
 
             {/* Permissions */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-2">
-                Permissions
+                {t.roleDrawer.permissionsLabel}
               </Label>
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -228,7 +230,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
                     onCheckedChange={(checked) => { setCanApprove(!!checked); markDirty(); }}
                   />
                   <Label htmlFor="perm-approve" className="text-sm font-normal text-muted-foreground">
-                    Can Approve
+                    {t.roleDrawer.canApprove}
                   </Label>
                 </div>
                 <div className="flex items-center gap-2">
@@ -238,7 +240,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
                     onCheckedChange={(checked) => { setCanDelegate(!!checked); markDirty(); }}
                   />
                   <Label htmlFor="perm-delegate" className="text-sm font-normal text-muted-foreground">
-                    Can Delegate
+                    {t.roleDrawer.canDelegate}
                   </Label>
                 </div>
                 <div className="flex items-center gap-2">
@@ -248,7 +250,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
                     onCheckedChange={(checked) => { setRequiresHumanApproval(!!checked); markDirty(); }}
                   />
                   <Label htmlFor="perm-human" className="text-sm font-normal text-muted-foreground">
-                    Requires Human Approval
+                    {t.roleDrawer.requiresHumanApproval}
                   </Label>
                 </div>
               </div>
@@ -263,14 +265,14 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
               onClick={handleDelete}
             >
               <Trash size={16} />
-              Delete
+              {t.common.delete}
             </Button>
             <Button
               onClick={handleSave}
               disabled={!isDirty || !name.trim()}
             >
               <FloppyDisk size={16} />
-              Save
+              {t.common.save}
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -280,17 +282,17 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
       <Dialog open={showDeleteConfirm} onOpenChange={(open) => !open && setShowDeleteConfirm(false)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete Role with Children?</DialogTitle>
+            <DialogTitle>{t.roleDrawer.deleteWithChildren}</DialogTitle>
             <DialogDescription>
-              This role has child roles. They will become orphaned (moved to root level) after deletion.
+              {t.roleDrawer.deleteWithChildrenMessage}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button variant="destructive" onClick={() => onDelete(role.id)}>
-              Delete Anyway
+              {t.roleDrawer.deleteAnyway}
             </Button>
           </DialogFooter>
         </DialogContent>

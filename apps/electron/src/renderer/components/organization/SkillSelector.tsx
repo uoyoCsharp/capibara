@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
+import { useT } from '../../hooks/useLocale';
 
 interface SkillSelectorProps {
   selectedIds: string[];
@@ -23,6 +24,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
+  const t = useT();
   const [allSkills, setAllSkills] = useState<SkillRecord[]>([]);
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -93,7 +95,7 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
         className="w-full justify-start text-muted-foreground font-normal"
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? 'Close skill selector' : `Select skills (${selectedIds.length} selected)`}
+        {isOpen ? t.skillSelector.closeSelector : `${t.skillSelector.selectSkills} (${selectedIds.length})`}
       </Button>
 
       {isOpen && (
@@ -105,7 +107,7 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
               <input
                 type="text"
                 className="flex-1 text-xs text-foreground bg-transparent focus:outline-none placeholder:text-muted-foreground"
-                placeholder="Search skills..."
+                placeholder={t.skillSelector.searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -135,7 +137,7 @@ export function SkillSelector({ selectedIds, onChange }: SkillSelectorProps) {
               </label>
             ))}
             {filteredSkills.length === 0 && (
-              <p className="text-xs text-muted-foreground px-2 py-2">No skills found</p>
+              <p className="text-xs text-muted-foreground px-2 py-2">{t.skillSelector.noSkillsFound}</p>
             )}
           </div>
         </Card>

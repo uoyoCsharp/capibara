@@ -11,15 +11,9 @@ import { Badge } from '../ui/badge';
 import { Card, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Separator } from '../ui/separator';
+import { useT } from '../../hooks/useLocale';
 
-const CATEGORIES: Array<{ value: SkillCategory; label: string }> = [
-  { value: 'analysis', label: 'Analysis' },
-  { value: 'design', label: 'Design' },
-  { value: 'implementation', label: 'Implementation' },
-  { value: 'review', label: 'Review' },
-  { value: 'test', label: 'Test' },
-  { value: 'general', label: 'General' },
-];
+const CATEGORIES: SkillCategory[] = ['analysis', 'design', 'implementation', 'review', 'test', 'general'];
 
 const SOURCES: Array<{ value: SkillSource; label: string }> = [
   { value: 'builtin', label: 'Built-in' },
@@ -43,6 +37,7 @@ const SOURCE_COLORS: Record<string, string> = {
 };
 
 export function SkillsPage() {
+  const t = useT();
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<SkillCategory | ''>('');
@@ -63,7 +58,7 @@ export function SkillsPage() {
         setSkills(result.data);
       }
     } catch {
-      toast.error('Failed to load skills');
+      toast.error(t.skills.failedToLoadSkills);
     } finally {
       setIsLoading(false);
     }
@@ -81,7 +76,7 @@ export function SkillsPage() {
         await loadSkills(search, filterCategory, filterSource);
       }
     } catch {
-      toast.error('Failed to delete skill');
+      toast.error(t.skills.failedToDeleteSkill);
     }
   };
 
@@ -95,16 +90,16 @@ export function SkillsPage() {
     <div className="p-[var(--page-padding)]">
       <div className="flex items-center justify-between mb-[var(--section-gap)]">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">Skills & Knowledge</h1>
+          <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">{t.skills.title}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Browse, search, and manage skills. Upload custom prompt templates.
+            {t.skills.subtitle}
           </p>
         </div>
         <Button
           onClick={() => { setEditingSkill(null); setShowForm(true); }}
         >
           <Plus size={16} />
-          Custom Skill
+          {t.skills.customSkill}
         </Button>
       </div>
 
@@ -118,7 +113,7 @@ export function SkillsPage() {
           <Input
             type="text"
             className="pl-9"
-            placeholder="Search by name, command, or description..."
+            placeholder={t.skills.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -130,12 +125,12 @@ export function SkillsPage() {
             onValueChange={(value) => setFilterCategory(value === '_all' ? '' : value as SkillCategory)}
           >
             <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="All Categories" />
+              <SelectValue placeholder={t.skills.allCategories} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="_all">All Categories</SelectItem>
+              <SelectItem value="_all">{t.skills.allCategories}</SelectItem>
               {CATEGORIES.map((c) => (
-                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                <SelectItem key={c} value={c}>{t.skillCategories[c]}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -144,10 +139,10 @@ export function SkillsPage() {
             onValueChange={(value) => setFilterSource(value === '_all' ? '' : value as SkillSource)}
           >
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="All Sources" />
+              <SelectValue placeholder={t.skills.allSources} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="_all">All Sources</SelectItem>
+              <SelectItem value="_all">{t.skills.allSources}</SelectItem>
               {SOURCES.map((s) => (
                 <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
               ))}
@@ -159,15 +154,15 @@ export function SkillsPage() {
       {/* Skills Grid */}
       {isLoading ? (
         <div className="text-center py-12">
-          <p className="text-sm text-muted-foreground">Loading skills...</p>
+          <p className="text-sm text-muted-foreground">{t.skills.loadingSkills}</p>
         </div>
       ) : skills.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="p-12 text-center">
             <p className="text-sm text-muted-foreground">
               {search || filterCategory || filterSource
-                ? 'No skills match your current filters. Try adjusting your search or category selection.'
-                : 'Skills are prompt templates that give AI agents specialized abilities. They\'ll be loaded on the next app restart.'}
+                ? t.skills.noMatchMessage
+                : t.skills.emptyMessage}
             </p>
           </CardContent>
         </Card>
@@ -219,7 +214,7 @@ export function SkillsPage() {
                       onClick={() => { setEditingSkill(skill); setShowForm(true); }}
                     >
                       <Pencil size={12} />
-                      Edit
+                      {t.common.edit}
                     </Button>
                     <Button
                       variant="ghost"
@@ -228,7 +223,7 @@ export function SkillsPage() {
                       onClick={() => setConfirmDeleteId(skill.id)}
                     >
                       <Trash size={12} />
-                      Delete
+                      {t.common.delete}
                     </Button>
                   </div>
                 )}
@@ -250,8 +245,8 @@ export function SkillsPage() {
       {/* Delete Confirmation */}
       {confirmDeleteId && (
         <ConfirmDialog
-          title="Delete Skill?"
-          message="This will permanently remove this custom skill. Any roles using it will lose access."
+          title={t.skills.deleteSkillTitle}
+          message={t.skills.deleteSkillMessage}
           confirmLabel="Delete"
           onConfirm={() => {
             handleDelete(confirmDeleteId);

@@ -24,6 +24,7 @@ import {
   SheetFooter,
   SheetTitle,
 } from '../ui/sheet';
+import { useT } from '../../hooks/useLocale';
 
 interface TaskDetailDrawerProps {
   task: TaskRecord;
@@ -57,17 +58,6 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   cancelled: 'bg-muted text-muted-foreground',
 };
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: 'Pending',
-  in_progress: 'In Progress',
-  awaiting_review: 'Awaiting Review',
-  revision: 'Revision',
-  approved: 'Approved',
-  done: 'Done',
-  blocked: 'Blocked',
-  cancelled: 'Cancelled',
-};
-
 export function TaskDetailDrawer({
   task,
   roles,
@@ -77,6 +67,7 @@ export function TaskDetailDrawer({
   onStartRun,
   hasActiveRun,
 }: TaskDetailDrawerProps) {
+  const t = useT();
   const assignee = task.assigneeRoleId
     ? roles.find((r) => r.id === task.assigneeRoleId)
     : null;
@@ -107,7 +98,7 @@ export function TaskDetailDrawer({
         } else {
           setLatestRun(null);
         }
-      } catch { toast.error('Failed to load run history'); }
+      } catch { toast.error(t.errors.failedToLoad); }
 
       try {
         const groupRes = await window.capibara.getDiscussionGroupByTaskNodeId(task.id);
@@ -150,7 +141,7 @@ export function TaskDetailDrawer({
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent className="w-[var(--drawer-width)] sm:max-w-none p-0 flex flex-col">
         <SheetHeader className="px-5 py-4 border-b border-border">
-          <SheetTitle className="font-[family-name:var(--font-display)]">Task Details</SheetTitle>
+          <SheetTitle className="font-[family-name:var(--font-display)]">{t.taskDetail.title}</SheetTitle>
         </SheetHeader>
 
         {/* Content */}
@@ -158,9 +149,9 @@ export function TaskDetailDrawer({
           {/* Review banner */}
           {needsReview && (
             <div className="rounded-lg bg-yellow-500/10 border border-yellow-500 px-4 py-3">
-              <p className="text-sm font-medium text-yellow-600 mb-1">Awaiting Your Review</p>
+              <p className="text-sm font-medium text-yellow-600 mb-1">{t.taskDetail.awaitingReview}</p>
               <p className="text-xs text-yellow-600/80">
-                This task was completed by {assignee?.name ?? 'an AI role'}. Review the output and discussion below, then approve or request revision.
+                {t.taskDetail.awaitingReviewMessage}
               </p>
               <div className="flex gap-2 mt-3">
                 <Button
@@ -168,14 +159,14 @@ export function TaskDetailDrawer({
                   onClick={() => onStatusChange(task.id, 'approved')}
                   className="bg-green-500 hover:bg-green-500/90 text-white"
                 >
-                  Approve
+                  {t.taskDetail.approve}
                 </Button>
                 <Button
                   size="sm"
                   onClick={() => onStatusChange(task.id, 'revision')}
                   className="bg-yellow-500 hover:bg-yellow-500/90 text-white"
                 >
-                  Request Revision
+                  {t.taskDetail.requestRevision}
                 </Button>
               </div>
             </div>
@@ -184,7 +175,7 @@ export function TaskDetailDrawer({
           {/* Title */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-              Title
+              {t.taskDetail.titleLabel}
             </label>
             <p className="text-sm text-foreground font-medium">{task.title}</p>
           </div>
@@ -193,7 +184,7 @@ export function TaskDetailDrawer({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                Type
+                {t.taskDetail.typeLabel}
               </label>
               <span className="text-sm font-medium text-muted-foreground capitalize">
                 {task.type}
@@ -201,7 +192,7 @@ export function TaskDetailDrawer({
             </div>
             <div>
               <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                Status
+                {t.taskDetail.statusLabel}
               </label>
               <Select
                 value={task.status}
@@ -213,7 +204,7 @@ export function TaskDetailDrawer({
                 <SelectContent>
                   {STATUS_OPTIONS.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {STATUS_LABELS[s]}
+                      {t.task[s]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -224,20 +215,20 @@ export function TaskDetailDrawer({
           {/* Assignee */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-              Assignee
+              {t.taskDetail.assigneeLabel}
             </label>
             <span className="text-sm text-muted-foreground">
-              {assignee ? assignee.name : 'Unassigned'}
+              {assignee ? assignee.name : t.common.unassigned}
             </span>
           </div>
 
           {/* Description */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-              Description
+              {t.taskDetail.descriptionLabel}
             </label>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {task.description || 'No description'}
+              {task.description || t.common.noDescription}
             </p>
           </div>
 
@@ -245,7 +236,7 @@ export function TaskDetailDrawer({
           {task.artifactPaths && task.artifactPaths.length > 0 && (
             <div>
               <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                Artifacts
+                {t.taskDetail.artifactsLabel}
               </label>
               <ul className="space-y-1">
                 {task.artifactPaths.map((path, i) => (
@@ -264,13 +255,13 @@ export function TaskDetailDrawer({
                 {latestRun && (
                   <TabsTrigger value="output" className="gap-1">
                     <Terminal size={12} />
-                    Run Output
+                    {t.taskDetail.runOutputTab}
                   </TabsTrigger>
                 )}
                 {messages.length > 0 && (
                   <TabsTrigger value="discussion" className="gap-1">
                     <ChatCircleDots size={12} />
-                    Discussion ({messages.length})
+                    {t.taskDetail.discussionTab} ({messages.length})
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -303,15 +294,15 @@ export function TaskDetailDrawer({
                       ref={scrollRef}
                       className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed"
                     >
-                      {streamingLog || 'Waiting for output...'}
+                      {streamingLog || t.tasksExecution.waitingForOutput}
                     </pre>
                   ) : latestRun.outputLog ? (
                     <pre className="bg-muted text-foreground rounded-lg p-3 text-xs overflow-auto max-h-64 font-mono leading-relaxed">
                       {latestRun.outputLog.slice(0, 8000)}
-                      {latestRun.outputLog.length > 8000 && '\n... (truncated)'}
+                      {latestRun.outputLog.length > 8000 && `\n${t.common.truncated}`}
                     </pre>
                   ) : (
-                    <p className="text-xs text-muted-foreground">No output log available.</p>
+                    <p className="text-xs text-muted-foreground">{t.tasksExecution.noOutputLog}</p>
                   )}
                 </TabsContent>
               )}
@@ -355,11 +346,11 @@ export function TaskDetailDrawer({
           {/* Timestamps */}
           <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
             <div>
-              <span className="block uppercase tracking-wide mb-0.5">Created</span>
+              <span className="block uppercase tracking-wide mb-0.5">{t.common.created}</span>
               {new Date(task.createdAt).toLocaleDateString()}
             </div>
             <div>
-              <span className="block uppercase tracking-wide mb-0.5">Updated</span>
+              <span className="block uppercase tracking-wide mb-0.5">{t.common.updated}</span>
               {new Date(task.updatedAt).toLocaleDateString()}
             </div>
           </div>
@@ -373,7 +364,7 @@ export function TaskDetailDrawer({
             className="text-destructive hover:text-destructive hover:bg-destructive/10"
           >
             <Trash size={16} />
-            Delete Task
+            {t.taskDetail.deleteTask}
           </Button>
           {onStartRun && task.assigneeRoleId && (
             <Button
@@ -382,14 +373,14 @@ export function TaskDetailDrawer({
               variant={hasActiveRun ? 'secondary' : 'default'}
             >
               <Play size={16} weight="fill" />
-              {hasActiveRun ? 'Running...' : 'Execute'}
+              {hasActiveRun ? t.tasksExecution.running : t.tasksExecution.execute}
             </Button>
           )}
         </SheetFooter>
         {showDeleteConfirm && (
           <ConfirmDialog
-            title="Delete Task?"
-            message="This will permanently delete this task. This action cannot be undone."
+            title={t.taskDetail.deleteTaskConfirm}
+            message={t.taskDetail.deleteTaskMessage}
             confirmLabel="Delete"
             onConfirm={() => {
               onDelete(task.id);

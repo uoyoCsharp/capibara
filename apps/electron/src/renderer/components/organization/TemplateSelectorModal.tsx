@@ -13,6 +13,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { cn } from '../../lib/utils';
+import { useT } from '../../hooks/useLocale';
 
 interface TemplateSelectorModalProps {
   onClose: () => void;
@@ -41,6 +42,7 @@ function RolePreview({ role, depth }: { role: TemplateRoleDefinition; depth: num
 }
 
 export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorModalProps) {
+  const t = useT();
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [orgName, setOrgName] = useState('');
@@ -100,9 +102,9 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Choose Organization Template</DialogTitle>
+          <DialogTitle>{t.templateSelector.title}</DialogTitle>
           <DialogDescription className="sr-only">
-            Select a template to create a new organization
+            {t.templateSelector.subtitle}
           </DialogDescription>
         </DialogHeader>
 
@@ -128,7 +130,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-foreground">{template.name}</span>
                     <span className="text-xs text-muted-foreground">
-                      {countRoles(template.rootRoles)} roles
+                      {countRoles(template.rootRoles)} {t.templateSelector.roles}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">{template.description}</p>
@@ -148,11 +150,11 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
             <div className="space-y-4 pt-3">
               <div>
                 <Label htmlFor="tmpl-org-name" className="mb-1">
-                  Organization Name *
+                  {t.templateSelector.orgNameLabel} *
                 </Label>
                 <Input
                   id="tmpl-org-name"
-                  placeholder="My AI Team"
+                  placeholder={t.templateSelector.orgNamePlaceholder}
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
                   maxLength={100}
@@ -160,11 +162,11 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
               </div>
               <div>
                 <Label htmlFor="tmpl-org-desc" className="mb-1">
-                  Description
+                  {t.templateSelector.descriptionLabel}
                 </Label>
                 <Input
                   id="tmpl-org-desc"
-                  placeholder="Optional description"
+                  placeholder={t.templateSelector.descriptionPlaceholder}
                   value={orgDescription}
                   onChange={(e) => setOrgDescription(e.target.value)}
                   maxLength={500}
@@ -172,13 +174,13 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
               </div>
               <div>
                 <Label htmlFor="tmpl-workspace" className="mb-1">
-                  Workspace Folder *
+                  {t.templateSelector.workspaceLabel} *
                 </Label>
                 <div className="flex items-center gap-2">
                   <Input
                     id="tmpl-workspace"
                     className="flex-1 bg-muted cursor-default"
-                    placeholder="Select a folder..."
+                    placeholder={t.templateSelector.workspacePlaceholder}
                     value={workspacePath}
                     readOnly
                   />
@@ -188,7 +190,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
                     onClick={handleSelectFolder}
                   >
                     <FolderOpen size={16} />
-                    Browse
+                    {t.common.browse}
                   </Button>
                 </div>
               </div>
@@ -198,13 +200,13 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t.common.cancel}
           </Button>
           <Button
             onClick={handleLoad}
             disabled={!selectedId || !orgName.trim() || !workspacePath || isCreating}
           >
-            {isCreating ? 'Creating...' : 'Create Organization'}
+            {isCreating ? t.templateSelector.creating : t.templateSelector.createOrganization}
           </Button>
         </DialogFooter>
       </DialogContent>
