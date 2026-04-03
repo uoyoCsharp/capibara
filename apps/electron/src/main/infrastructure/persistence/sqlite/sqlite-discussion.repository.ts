@@ -22,6 +22,8 @@ interface GroupRow {
   status: string;
   summary: string | null;
   last_summary_at: string | null;
+  current_round: number;
+  revise_count: number;
   created_at: string;
 }
 
@@ -32,6 +34,8 @@ interface MessageRow {
   author_type: string;
   content: string;
   vote_tag: string | null;
+  review_round: number;
+  metadata: string | null;
   created_at: string;
 }
 
@@ -43,6 +47,8 @@ function groupRowToEntity(row: GroupRow): DiscussionGroup {
     status: row.status as DiscussionStatus,
     summary: row.summary,
     lastSummaryAt: row.last_summary_at,
+    currentRound: row.current_round ?? 1,
+    reviseCount: row.revise_count ?? 0,
     createdAt: row.created_at,
   };
 }
@@ -55,6 +61,8 @@ function messageRowToEntity(row: MessageRow): DiscussionMessage {
     authorType: row.author_type as DiscussionMessage['authorType'],
     content: row.content,
     voteTag: (row.vote_tag as DiscussionMessage['voteTag']) ?? null,
+    reviewRound: row.review_round ?? 1,
+    metadata: row.metadata ? JSON.parse(row.metadata) as Record<string, unknown> : null,
     createdAt: row.created_at,
   };
 }
@@ -130,11 +138,13 @@ export class SqliteDiscussionRepository implements IDiscussionRepository {
   async postMessage(input: PostMessageInput): Promise<DiscussionMessage> {
     const id = randomUUID();
     const now = new Date().toISOString();
+    const reviewRound = input.reviewRound ?? 1;
+    const metadata = input.metadata ? JSON.stringify(input.metadata) : null;
 
     this.conn.getDb().prepare(`
-      INSERT INTO discussion_messages (id, group_id, author_role_id, author_type, content, vote_tag, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.groupId, input.authorRoleId, input.authorType, input.content, input.voteTag, now);
+      INSERT INTO discussion_messages (id, group_id, author_role_id, author_type, content, vote_tag, review_round, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.groupId, input.authorRoleId, input.authorType, input.content, input.voteTag, reviewRound, metadata, now);
 
     const row = this.conn.getDb()
       .prepare('SELECT * FROM discussion_messages WHERE id = ?')
@@ -159,5 +169,56 @@ export class SqliteDiscussionRepository implements IDiscussionRepository {
       }
     }
     return stats;
+  }
+
+  async getVoteStatsForRound(groupId: string, round: number): Promise<VoteStats> {
+    const rows = this.conn.getDb()
+      .prepare(`
+        SELECT vote_tag, COUNT(*) as count
+        FROM discussion_messages
+        WHERE group_id = ? AND vote_tag IS NOT NULL AND review_round = ?
+        GROUP BY vote_tag
+      `)
+      .all(groupId, round) as Array<{ vote_tag: string; count: number }>;
+
+    const stats: VoteStats = { APPROVE: 0, REVISE: 0, CONCERN: 0, DELEGATE: 0 };
+    for (const row of rows) {
+      if (row.vote_tag in stats) {
+        stats[row.vote_tag as keyof VoteStats] = row.count;
+      }
+    }
+    return stats;
+  }
+
+  async incrementRound(groupId: string): Promise<number> {
+    const row = this.conn.getDb()
+      .prepare('UPDATE discussion_groups SET current_round = current_round + 1 WHERE id = ? RETURNING current_round')
+      .get(groupId) as { current_round: number } | undefined;
+    return row?.current_round ?? 1;
+  }
+
+  async incrementReviseCount(groupId: string): Promise<number> {
+    const row = this.conn.getDb()
+      .prepare('UPDATE discussion_groups SET revise_count = revise_count + 1 WHERE id = ? RETURNING revise_count')
+      .get(groupId) as { revise_count: number } | undefined;
+    return row?.revise_count ?? 0;
+  }
+
+  async resetReviseCount(groupId: string): Promise<void> {
+    this.conn.getDb()
+      .prepare('UPDATE discussion_groups SET revise_count = 0 WHERE id = ?')
+      .run(groupId);
+  }
+
+  async deleteGroupByTaskNodeId(taskNodeId: string): Promise<void> {
+    // Delete messages first (child records), then the group
+    const group = await this.findGroupByTaskNodeId(taskNodeId);
+    if (!group) return;
+    this.conn.getDb()
+      .prepare('DELETE FROM discussion_messages WHERE group_id = ?')
+      .run(group.id);
+    this.conn.getDb()
+      .prepare('DELETE FROM discussion_groups WHERE id = ?')
+      .run(group.id);
   }
 }

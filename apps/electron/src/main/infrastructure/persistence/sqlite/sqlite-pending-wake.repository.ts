@@ -10,6 +10,7 @@ interface WakeRow {
   role_id: string;
   org_id: string;
   trigger: string;
+  task_node_id: string | null;
   created_at: string;
 }
 
@@ -19,6 +20,7 @@ function rowToEntity(row: WakeRow): PendingWake {
     roleId: row.role_id,
     orgId: row.org_id,
     trigger: row.trigger as PendingWake['trigger'],
+    taskNodeId: row.task_node_id,
     createdAt: row.created_at,
   };
 }
@@ -48,9 +50,9 @@ export class SqlitePendingWakeRepository implements IPendingWakeRepository {
     const now = new Date().toISOString();
 
     this.conn.getDb().prepare(`
-      INSERT INTO pending_wakes (id, role_id, org_id, trigger, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, input.roleId, input.orgId, input.trigger, now);
+      INSERT INTO pending_wakes (id, role_id, org_id, trigger, task_node_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, input.roleId, input.orgId, input.trigger, input.taskNodeId ?? null, now);
 
     const row = this.conn.getDb()
       .prepare('SELECT * FROM pending_wakes WHERE id = ?')
@@ -68,6 +70,13 @@ export class SqlitePendingWakeRepository implements IPendingWakeRepository {
     const result = this.conn.getDb()
       .prepare('DELETE FROM pending_wakes WHERE role_id = ?')
       .run(roleId);
+    return result.changes;
+  }
+
+  async consumeByRoleAndTask(roleId: string, taskNodeId: string): Promise<number> {
+    const result = this.conn.getDb()
+      .prepare('DELETE FROM pending_wakes WHERE role_id = ? AND task_node_id = ?')
+      .run(roleId, taskNodeId);
     return result.changes;
   }
 }

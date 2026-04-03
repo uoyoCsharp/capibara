@@ -79,6 +79,7 @@ export interface Role {
   canApprove: boolean;
   canDelegate: boolean;
   requiresHumanApproval: boolean;
+  consecutiveWakeCount: number;
   status: RoleStatus;
   createdAt: string;
   updatedAt: string;
@@ -106,6 +107,8 @@ export interface DiscussionGroup {
   status: DiscussionStatus;
   summary: string | null;
   lastSummaryAt: string | null;
+  currentRound: number;
+  reviseCount: number;
   createdAt: string;
 }
 
@@ -116,6 +119,8 @@ export interface DiscussionMessage {
   authorType: AuthorType;
   content: string;
   voteTag: VoteTag;
+  reviewRound: number;
+  metadata: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -157,6 +162,7 @@ export interface PendingWake {
   roleId: string;
   orgId: string;
   trigger: WakeTrigger;
+  taskNodeId: string | null;
   createdAt: string;
 }
 

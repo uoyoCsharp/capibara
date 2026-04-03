@@ -204,6 +204,7 @@ export const postDiscussionMessageSchema = z.object({
   authorType: z.enum(['ai', 'human', 'system']),
   content: z.string().min(1).max(50000),
   voteTag: z.enum(['APPROVE', 'REVISE', 'CONCERN', 'DELEGATE']).nullable().default(null),
+  metadata: z.record(z.unknown()).nullable().optional(),
 });
 
 export const applyApprovalPresetSchema = z.object({
@@ -371,6 +372,7 @@ export interface RoleRecord {
   canApprove: boolean;
   canDelegate: boolean;
   requiresHumanApproval: boolean;
+  consecutiveWakeCount: number;
   status: RoleStatus;
   createdAt: string;
   updatedAt: string;
@@ -424,6 +426,8 @@ export interface DiscussionGroupRecord {
   status: DiscussionStatus;
   summary: string | null;
   lastSummaryAt: string | null;
+  currentRound: number;
+  reviseCount: number;
   createdAt: string;
 }
 
@@ -434,6 +438,8 @@ export interface DiscussionMessageRecord {
   authorType: AuthorType;
   content: string;
   voteTag: VoteTag;
+  reviewRound: number;
+  metadata: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -509,7 +515,7 @@ export interface PendingApprovalRecord {
   orgId: string;
   roleId: string;
   roleName: string;
-  groupId: string;
+  groupId: string | null;
   status: TaskStatus;
 }
 

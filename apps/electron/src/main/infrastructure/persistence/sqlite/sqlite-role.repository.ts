@@ -17,6 +17,7 @@ interface RoleRow {
   can_approve: number;
   can_delegate: number;
   requires_human_approval: number;
+  consecutive_wake_count: number;
   status: string;
   created_at: string;
   updated_at: string;
@@ -34,6 +35,7 @@ function rowToEntity(row: RoleRow): Role {
     canApprove: row.can_approve === 1,
     canDelegate: row.can_delegate === 1,
     requiresHumanApproval: row.requires_human_approval === 1,
+    consecutiveWakeCount: row.consecutive_wake_count ?? 0,
     status: row.status as RoleStatus,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -92,7 +94,7 @@ export class SqliteRoleRepository implements IRoleRepository {
     const now = new Date().toISOString();
     this.conn.getDb().prepare(`
       UPDATE roles SET name = ?, persona = ?, knowledge_base_refs = ?, skill_ids = ?,
-        can_approve = ?, can_delegate = ?, requires_human_approval = ?, status = ?, updated_at = ?
+        can_approve = ?, can_delegate = ?, requires_human_approval = ?, consecutive_wake_count = ?, status = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name ?? existing.name,
@@ -102,6 +104,7 @@ export class SqliteRoleRepository implements IRoleRepository {
       (input.canApprove ?? existing.canApprove) ? 1 : 0,
       (input.canDelegate ?? existing.canDelegate) ? 1 : 0,
       (input.requiresHumanApproval ?? existing.requiresHumanApproval) ? 1 : 0,
+      input.consecutiveWakeCount ?? existing.consecutiveWakeCount,
       input.status ?? existing.status,
       now,
       input.id,

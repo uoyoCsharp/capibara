@@ -230,11 +230,6 @@ export class ExecutionEngine {
             try {
               await this.taskStateMachine.transition(taskNodeId, 'awaiting_review');
               this.logger.info('Task advanced to awaiting_review after Phase 1 run', { runId, taskNodeId });
-              this.eventBus.emit({
-                type: 'task:status-changed',
-                timestamp: new Date().toISOString(),
-                payload: { taskId: taskNodeId, oldStatus: 'in_progress', newStatus: 'awaiting_review' },
-              });
             } catch {
               // Transition not allowed from current state — leave as-is
             }

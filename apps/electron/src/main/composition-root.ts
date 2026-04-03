@@ -169,10 +169,10 @@ export async function bootstrap(): Promise<void> {
   const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger);
 
   const taskStateMachine = new TaskStateMachine(taskRepo, eventBus, logger);
-  const taskService = new TaskService(taskRepo, roleRepo, eventBus, logger, taskStateMachine);
+  const taskService = new TaskService(taskRepo, roleRepo, pendingWakeRepo, discussionRepo, eventBus, logger, taskStateMachine);
   const decompositionAdvisor = new DecompositionAdvisor(config, taskRepo, logger);
 
-  const consensusDetector = new ConsensusDetector(discussionRepo, roleRepo, eventBus, logger);
+  const consensusDetector = new ConsensusDetector(discussionRepo, roleRepo, taskRepo, eventBus, logger);
   const discussionService = new DiscussionService(
     config, logger, eventBus, discussionRepo, taskRepo, roleRepo,
     consensusDetector, taskStateMachine,

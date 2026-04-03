@@ -4,6 +4,7 @@ export interface CreatePendingWakeInput {
   roleId: string;
   orgId: string;
   trigger: WakeTrigger;
+  taskNodeId?: string | null;
 }
 
 export interface IPendingWakeRepository {
@@ -12,4 +13,5 @@ export interface IPendingWakeRepository {
   create(input: CreatePendingWakeInput): Promise<PendingWake>;
   consume(id: string): Promise<void>;
   consumeAllForRole(roleId: string): Promise<number>;
+  consumeByRoleAndTask(roleId: string, taskNodeId: string): Promise<number>;
 }

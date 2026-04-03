@@ -27,8 +27,7 @@ import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
  */
 @injectable()
 export class DiscussionService {
-  /** Tracks REVISE count per taskNodeId for cycle protection. */
-  private reviseCounts = new Map<string, number>();
+  // reviseCounts now persisted in discussion_groups.revise_count (Bug 3 / Risk 9)
 
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
@@ -50,7 +49,8 @@ export class DiscussionService {
     this.logger.info('DiscussionService started — listening for task:created, discussion:vote-added, run:succeeded, run:failed');
   }
 
-  // ─── Story 5.2: Auto-creation (for Epic and Story tasks) ─────────
+  // ─── Story 5.2: Auto-creation ─────────
+  // Bug 1 fix: create discussion groups for epic/story AND any task whose assignee requires human approval
   private async onTaskCreated(event: DomainEvent): Promise<void> {
     const { taskId, orgId, type } = event.payload as {
       taskId: string;
@@ -59,10 +59,23 @@ export class DiscussionService {
       parentId: string | null;
     };
 
-    // Create discussion groups for decomposition-level tasks (epic and story)
-    if (type !== 'epic' && type !== 'story') return;
-
     try {
+      // Always create for epic/story (decomposition-level tasks)
+      let shouldCreate = type === 'epic' || type === 'story';
+
+      // Also create for any task type if the assigned role requires human approval
+      if (!shouldCreate) {
+        const task = await this.taskRepo.findById(taskId);
+        if (task?.assigneeRoleId) {
+          const role = await this.roleRepo.findById(task.assigneeRoleId);
+          if (role?.requiresHumanApproval) {
+            shouldCreate = true;
+          }
+        }
+      }
+
+      if (!shouldCreate) return;
+
       const existing = await this.discussionRepo.findGroupByTaskNodeId(taskId);
       if (existing) return;
 
@@ -212,7 +225,7 @@ export class DiscussionService {
             if (task.status === 'awaiting_review') {
               // Final approval: task_complete was called, approve the task
               await this.taskStateMachine.transition(task.id, 'approved');
-              this.reviseCounts.delete(task.id);
+              await this.discussionRepo.resetReviseCount(group.id);
               this.logger.info('Task approved by human', { taskId: task.id });
               return;
             }
@@ -223,7 +236,15 @@ export class DiscussionService {
       // If a human directly votes REVISE, trigger revision immediately
       if (isHumanVote && voteTag === 'REVISE') {
         const task = await this.taskRepo.findById(group.taskNodeId);
-        if (task && task.status === 'in_progress' && task.assigneeRoleId) {
+        if (!task) return;
+
+        // Risk 12 fix: skip if task is already in revision state
+        if (task.status === 'revision') {
+          this.logger.debug('Human REVISE skipped: task already in revision', { taskId: task.id });
+          return;
+        }
+
+        if (task.status === 'in_progress' && task.assigneeRoleId) {
           // Phase 1 revision: decomposition plan rejected, wake agent to re-propose
           this.logger.info('Decomposition plan revised by human, waking agent to re-propose', {
             taskId: task.id,
@@ -246,9 +267,11 @@ export class DiscussionService {
       }
 
       // If a human directly votes DELEGATE, trigger delegation immediately
+      // Bug 5 fix: read targetRoleId from metadata instead of regex on content
       if (isHumanVote && voteTag === 'DELEGATE') {
         const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
-        const targetRoleId = latestMsg[0]?.content?.match(/role\s+(\S+)/)?.[1] ?? '';
+        const rawTarget = (latestMsg[0]?.metadata as Record<string, unknown> | null)?.targetRoleId;
+        const targetRoleId = typeof rawTarget === 'string' ? rawTarget : '';
         if (targetRoleId) {
           await this.handleDelegated(group, targetRoleId);
         }
@@ -322,7 +345,7 @@ export class DiscussionService {
     }
 
     await this.taskStateMachine.transition(task.id, 'approved');
-    this.reviseCounts.delete(task.id);
+    await this.discussionRepo.resetReviseCount(group.id);
     this.logger.info('Task approved via consensus', { taskId: task.id });
   }
 
@@ -330,8 +353,8 @@ export class DiscussionService {
     const task = await this.taskRepo.findById(group.taskNodeId);
     if (!task) return;
 
-    const count = (this.reviseCounts.get(task.id) ?? 0) + 1;
-    this.reviseCounts.set(task.id, count);
+    // Bug 3 / Risk 9 fix: use persisted revise count
+    const count = await this.discussionRepo.incrementReviseCount(group.id);
 
     if (count >= this.config.execution.maxReviseAttempts) {
       this.logger.warn('REVISE cycle limit reached, escalating', {
@@ -358,6 +381,8 @@ export class DiscussionService {
     }
 
     await this.taskStateMachine.transition(task.id, 'revision');
+    // Bug 3 fix: increment round so next votes start fresh
+    await this.discussionRepo.incrementRound(group.id);
     this.logger.info('Task sent to revision', { taskId: task.id, round: count });
 
     // Wake assignee with revision feedback
@@ -404,8 +429,8 @@ export class DiscussionService {
       return;
     }
 
-    // Build dispute summary
-    const stats = await this.discussionRepo.getVoteStats(group.id);
+    // Build dispute summary (P4: use round-scoped stats)
+    const stats = await this.discussionRepo.getVoteStatsForRound(group.id, group.currentRound);
     const concernMessages = await this.discussionRepo.findMessagesByGroupId(group.id);
     const concerns = concernMessages.filter((m) => m.voteTag === 'CONCERN');
 
@@ -512,8 +537,12 @@ export class DiscussionService {
     authorType: AuthorType;
     content: string;
     voteTag: VoteTag;
+    metadata?: Record<string, unknown> | null;
   }): Promise<DiscussionMessage> {
-    const message = await this.discussionRepo.postMessage(input);
+    // Bug 3 fix: attach current review round to every message
+    const group = await this.discussionRepo.findGroupById(input.groupId);
+    const reviewRound = group?.currentRound ?? 1;
+    const message = await this.discussionRepo.postMessage({ ...input, reviewRound });
     this.logger.info('Discussion message posted', {
       groupId: input.groupId,
       authorType: input.authorType,

@@ -67,6 +67,7 @@ export function registerApprovalHandlers(
       const tasks = await taskRepo.findByOrgId(orgId);
       const awaitingTasks = tasks.filter((t) => t.status === 'awaiting_review');
 
+      // Bug 1 fix: also include tasks without discussion groups (non-epic/story with requiresHumanApproval)
       const results: PendingApprovalRecord[] = [];
       for (const task of awaitingTasks) {
         if (!task.assigneeRoleId) continue;
@@ -74,7 +75,6 @@ export function registerApprovalHandlers(
         if (!role?.requiresHumanApproval) continue;
 
         const group = await discussionRepo.findGroupByTaskNodeId(task.id);
-        if (!group) continue;
 
         results.push({
           taskId: task.id,
@@ -82,7 +82,7 @@ export function registerApprovalHandlers(
           orgId: task.orgId,
           roleId: role.id,
           roleName: role.name,
-          groupId: group.id,
+          groupId: group?.id ?? null,
           status: task.status,
         });
       }

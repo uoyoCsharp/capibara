@@ -37,9 +37,11 @@ interface WakeTarget {
  */
 @injectable()
 export class OrgOrchestrator {
-  private selfWakeCounts = new Map<string, number>();
+  // Risk 9: selfWakeCounts replaced by roles.consecutive_wake_count in DB
   private retryCounts = new Map<string, number>(); // key: taskNodeId
   private retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Risk 8: per-org event serialization queue
+  private orgQueues = new Map<string, Promise<void>>();
   private executionEngine!: ExecutionEngine;
   private taskStateMachine!: TaskStateMachine;
 
@@ -81,6 +83,35 @@ export class OrgOrchestrator {
   // ─── Story 7.1: Core Event Loop ──────────────────────────────
 
   async handleEvent(event: DomainEvent): Promise<void> {
+    // Risk 8: extract orgId and serialize event handling per org
+    const orgId = (event.payload as Record<string, unknown>)?.orgId as string | undefined;
+    if (orgId) {
+      this.enqueueForOrg(orgId, () => this.processEvent(event));
+    } else {
+      // Events without orgId are processed immediately (rare edge case)
+      await this.processEvent(event);
+    }
+  }
+
+  private enqueueForOrg(orgId: string, fn: () => Promise<void>): void {
+    const prev = this.orgQueues.get(orgId) ?? Promise.resolve();
+    const next = prev.then(fn).catch((err) => {
+      this.logger.error('OrgOrchestrator queued event error', { orgId, error: String(err) });
+      this.eventBus.emit({
+        type: 'orchestrator:error',
+        timestamp: new Date().toISOString(),
+        payload: { orgId, error: String(err) },
+      });
+    }).finally(() => {
+      // P1: clean up resolved queue entries to prevent memory leak
+      if (this.orgQueues.get(orgId) === next) {
+        this.orgQueues.delete(orgId);
+      }
+    });
+    this.orgQueues.set(orgId, next);
+  }
+
+  private async processEvent(event: DomainEvent): Promise<void> {
     this.logger.debug('OrgOrchestrator handling event', { type: event.type });
 
     try {
@@ -187,10 +218,14 @@ export class OrgOrchestrator {
         // When a decomposition task (epic/story) becomes 'approved', its children
         // still need to execute. Do NOT wake the next sibling yet — wait until
         // this task reaches 'done' (via checkAutoPropagate after all children complete).
+        // Risk 14 fix: only skip sibling progression if there are active (non-terminal) children
         if (newStatus === 'approved') {
           const children = await this.taskRepo.findByParentId(taskId);
-          if (children.length > 0) {
-            this.logger.debug('Skipping sibling progression: approved task has children to execute', {
+          const hasActiveChildren = children.some(
+            (c) => c.status !== 'done' && c.status !== 'cancelled',
+          );
+          if (children.length > 0 && hasActiveChildren) {
+            this.logger.debug('Skipping sibling progression: approved task has active children', {
               taskId, childCount: children.length,
             });
             return targets;
@@ -236,7 +271,7 @@ export class OrgOrchestrator {
         const orgId = payload.orgId as string;
         const taskNodeId = payload.taskNodeId as string;
 
-        this.resetSelfWakeCount(roleId);
+        await this.resetSelfWakeCount(roleId);
         this.retryCounts.delete(taskNodeId);
 
         await this.consumePendingWakes(roleId, orgId);
@@ -250,7 +285,7 @@ export class OrgOrchestrator {
         const orgId = payload.orgId as string;
         const taskNodeId = payload.taskNodeId as string;
 
-        this.resetSelfWakeCount(roleId);
+        await this.resetSelfWakeCount(roleId);
 
         const retryCount = this.retryCounts.get(taskNodeId) ?? 0;
         const maxRetries = this.config.execution.maxRetryOnFailure;
@@ -274,17 +309,28 @@ export class OrgOrchestrator {
       }
 
       // Explicit wake trigger from discussion service or other subsystems
+      // Bug 6 fix: prefer taskNodeId from payload, fallback to findByAssignee
       case 'wake:triggered': {
-        const { roleId, orgId, trigger } = payload as {
+        const { roleId, orgId, trigger, taskNodeId: explicitTaskId } = payload as {
           roleId: string;
           orgId: string;
           trigger: WakeTrigger;
+          taskNodeId?: string;
         };
-        // Find the task associated with this role
+
+        // If the event carries a specific taskNodeId, use it directly
+        if (explicitTaskId) {
+          return [{
+            roleId,
+            orgId,
+            taskNodeId: explicitTaskId,
+            trigger,
+          }];
+        }
+
+        // Fallback: find the task associated with this role
         const roleTasks = await this.taskRepo.findByAssignee(roleId);
 
-        // For review_requested/review_approve, also match tasks in 'approved' state
-        // (decomposition tasks whose children are executing, or Phase 2 re-wake)
         const eligibleStatuses = (trigger === 'review_requested' || trigger === 'review_approve')
           ? ['pending', 'in_progress', 'revision', 'approved']
           : ['pending', 'in_progress', 'revision'];
@@ -354,7 +400,7 @@ export class OrgOrchestrator {
     const activeRun = await this.runRepo.findActiveByOrgId(orgId);
     if (activeRun) {
       this.logger.debug('Wake deferred: org has active run, enqueuing pending wake', { roleId, orgId, trigger, activeRunId: activeRun.id });
-      await this.pendingWakeRepo.create({ roleId, orgId, trigger });
+      await this.pendingWakeRepo.create({ roleId, orgId, trigger, taskNodeId });
       this.eventBus.emit({
         type: 'wake:pending-enqueued',
         timestamp: new Date().toISOString(),
@@ -363,8 +409,8 @@ export class OrgOrchestrator {
       return false;
     }
 
-    // Gate 4: Self-wake circuit breaker
-    const selfWakeCount = this.selfWakeCounts.get(roleId) ?? 0;
+    // Gate 4: Self-wake circuit breaker (Risk 9: persisted in roles table)
+    const selfWakeCount = role.consecutiveWakeCount;
     if (selfWakeCount >= this.config.execution.maxConsecutiveWakes) {
       this.logger.warn('Circuit breaker: self-wake limit reached', { roleId, selfWakeCount });
       this.eventBus.emit({
@@ -384,7 +430,6 @@ export class OrgOrchestrator {
           });
         }
       } else {
-        // Story 8.5: Top-level safety valve — mandatory human notification
         this.logger.error('Escalation reached top-level role with no parent', { roleId, orgId, taskNodeId });
         this.eventBus.emit({
           type: 'escalation:top-level',
@@ -394,7 +439,7 @@ export class OrgOrchestrator {
             roleName: role.name,
             orgId,
             taskId: taskNodeId,
-            taskTitle: taskNodeId, // Will be resolved by notification service if needed
+            taskTitle: taskNodeId,
             escalationChain: [roleId],
             failureReason: `Self-wake circuit breaker triggered after ${selfWakeCount} consecutive wakes`,
           },
@@ -403,8 +448,8 @@ export class OrgOrchestrator {
       return false;
     }
 
-    // All gates passed — create and dispatch run
-    this.selfWakeCounts.set(roleId, selfWakeCount + 1);
+    // All gates passed — increment persistent wake count and dispatch run
+    await this.roleRepo.update({ id: roleId, consecutiveWakeCount: selfWakeCount + 1 });
     this.logger.info('Waking role', { roleId, trigger, taskNodeId });
 
     try {
@@ -452,6 +497,12 @@ export class OrgOrchestrator {
     }
 
     this.logger.info('Resumed org roles', { orgId, resumedCount });
+
+    // Risk 10 fix: trigger pending wake consumption after resume
+    if (resumedCount > 0) {
+      await this.consumePendingWakes('', orgId);
+    }
+
     return resumedCount;
   }
 
@@ -532,36 +583,35 @@ export class OrgOrchestrator {
     // Only one run can start (per-org serial), so stop after the first success.
     for (const wake of pendingWakes) {
       const wakeRoleId = wake.roleId;
-      const roleTasks = await this.taskRepo.findByAssignee(wakeRoleId);
 
-      const eligibleStatuses = (wake.trigger === 'review_requested' || wake.trigger === 'review_approve')
-        ? ['pending', 'in_progress', 'revision', 'approved']
-        : ['pending', 'in_progress', 'revision'];
+      // Bug 6 fix: prefer stored taskNodeId from the pending wake
+      let targetTaskId = wake.taskNodeId;
+      if (!targetTaskId) {
+        // Fallback: find eligible task by assignee
+        const roleTasks = await this.taskRepo.findByAssignee(wakeRoleId);
+        const eligibleStatuses = (wake.trigger === 'review_requested' || wake.trigger === 'review_approve')
+          ? ['pending', 'in_progress', 'revision', 'approved']
+          : ['pending', 'in_progress', 'revision'];
+        const activeTask = roleTasks.find((t) => eligibleStatuses.includes(t.status));
+        targetTaskId = activeTask?.id ?? null;
+      }
 
-      const activeTask = roleTasks.find(
-        (t) => eligibleStatuses.includes(t.status),
-      );
-
-      if (!activeTask) {
-        // No eligible task — consume this wake and try next
+      if (!targetTaskId) {
         await this.pendingWakeRepo.consume(wake.id);
         this.logger.debug('Pending wake consumed with no eligible task', { wakeId: wake.id, roleId: wakeRoleId });
         continue;
       }
 
-      // Consume before attempting wake. If wake fails, re-enqueue.
       await this.pendingWakeRepo.consume(wake.id);
-      const started = await this.wakeRoleIfPossible(wakeRoleId, orgId, activeTask.id, wake.trigger);
+      const started = await this.wakeRoleIfPossible(wakeRoleId, orgId, targetTaskId, wake.trigger);
       if (started) {
         return; // Run started — org slot is now occupied
       }
-      // wakeRoleIfPossible returned false but didn't re-enqueue (e.g., role inactive, budget exceeded).
-      // Continue to next pending wake.
     }
   }
 
-  resetSelfWakeCount(roleId: string): void {
-    this.selfWakeCounts.delete(roleId);
+  async resetSelfWakeCount(roleId: string): Promise<void> {
+    await this.roleRepo.update({ id: roleId, consecutiveWakeCount: 0 });
   }
 
   stop(): void {
@@ -570,7 +620,7 @@ export class OrgOrchestrator {
     }
     this.retryTimers.clear();
     this.retryCounts.clear();
-    this.selfWakeCounts.clear();
+    this.orgQueues.clear();
     this.logger.info('OrgOrchestrator stopped');
   }
 }

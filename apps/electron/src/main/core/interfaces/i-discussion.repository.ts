@@ -17,6 +17,8 @@ export interface PostMessageInput {
   authorType: AuthorType;
   content: string;
   voteTag: VoteTag;
+  reviewRound?: number;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface VoteStats {
@@ -38,4 +40,9 @@ export interface IDiscussionRepository {
   findRecentMessages(groupId: string, limit: number): Promise<DiscussionMessage[]>;
   postMessage(input: PostMessageInput): Promise<DiscussionMessage>;
   getVoteStats(groupId: string): Promise<VoteStats>;
+  getVoteStatsForRound(groupId: string, round: number): Promise<VoteStats>;
+  incrementRound(groupId: string): Promise<number>;
+  incrementReviseCount(groupId: string): Promise<number>;
+  resetReviseCount(groupId: string): Promise<void>;
+  deleteGroupByTaskNodeId(taskNodeId: string): Promise<void>;
 }

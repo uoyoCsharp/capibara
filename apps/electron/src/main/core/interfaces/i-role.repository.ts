@@ -21,6 +21,7 @@ export interface UpdateRoleInput {
   canApprove?: boolean;
   canDelegate?: boolean;
   requiresHumanApproval?: boolean;
+  consecutiveWakeCount?: number;
   status?: RoleStatus;
 }
 

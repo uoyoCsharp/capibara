@@ -102,7 +102,8 @@ export function ApprovalPanelCard({
           </div>
         )}
 
-        {/* Vote statistics */}
+        {/* Vote statistics — only show when there are votes */}
+        {(voteStats.APPROVE > 0 || voteStats.REVISE > 0 || voteStats.CONCERN > 0 || voteStats.DELEGATE > 0) && (
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <ChartBar size={14} className="text-muted-foreground" />
@@ -115,6 +116,7 @@ export function ApprovalPanelCard({
             <span className="text-blue-600">{t.vote.DELEGATE}: {voteStats.DELEGATE}</span>
           </div>
         </div>
+        )}
 
         {/* Key concerns */}
         {concerns.length > 0 && (

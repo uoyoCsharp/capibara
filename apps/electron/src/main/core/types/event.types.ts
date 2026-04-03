@@ -31,6 +31,7 @@ export type DomainEventType =
   | 'approval:required'
   | 'approval:completed'
   | 'escalation:top-level'
+  | 'orchestrator:error'
   | 'settings:locale-changed';
 
 export interface DomainEvent<T = unknown> {

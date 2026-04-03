@@ -263,6 +263,20 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE runs ADD COLUMN session_id TEXT;`);
     },
   },
+  {
+    version: 16,
+    description: 'Add review_round, metadata to discussion_messages; current_round, revise_count to discussion_groups; task_node_id to pending_wakes; consecutive_wake_count to roles',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE discussion_messages ADD COLUMN review_round INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE discussion_messages ADD COLUMN metadata TEXT;
+        ALTER TABLE discussion_groups ADD COLUMN current_round INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE discussion_groups ADD COLUMN revise_count INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE pending_wakes ADD COLUMN task_node_id TEXT REFERENCES task_nodes(id) ON DELETE SET NULL;
+        ALTER TABLE roles ADD COLUMN consecutive_wake_count INTEGER NOT NULL DEFAULT 0;
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {
