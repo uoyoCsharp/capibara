@@ -176,7 +176,8 @@ roles:
 | 任务类型标签 | **MVP** | analysis/design/code/review/test，用于匹配 BMAD skill |
 | 任务产出物（artifacts） | **MVP** | 每个任务的输出存储和引用 |
 | 子任务完成 -> 通知父任务 | **MVP** | 核心闭环驱动力 |
-| 任务评论/讨论 | V2 | 角色间围绕任务的沟通记录 |
+| 讨论组与共识投票 | **MVP** | 分解型任务(epic/story)及需人工审批的任务自动创建讨论组，支持 APPROVE/REVISE/CONCERN/DELEGATE 投票 |
+| Review Round 机制 | **MVP** | 每次 REVISE 退回后递增轮次，投票统计只计算当前轮次，防止历史投票污染 |
 | 任务优先级 | V2 | 影响调度顺序 |
 | 任务依赖（非父子关系） | V2 | 例如「后端 API 完成后前端才能集成」 |
 | 任务超时机制 | V2 | 超时自动升级 |
@@ -185,16 +186,14 @@ roles:
 
 ```
 pending ──────> in_progress ──────> awaiting_review ──────> approved ──────> done
-                    ^                      |
-                    |                      v
-                    +<──────────── revision (被打回)
+                    ^                      |                    |
+                    |                      v                    v
+                    +<──────────── revision (被打回)        done (叶子任务自动推进)
                                            |
-                                           v
-                                      delegated (上级分派新关联任务)
-                                           |
-                                           v
-                                       blocked (等待关联任务完成)
+                                      blocked (委派/升级/外部阻塞)
 ```
+
+> **注**: 原设计中的 `delegated` 状态已合并到 `blocked`。委派操作直接将任务置为 `blocked`，等待委派目标完成后解除。叶子类型任务（subtask/spike/bug/chore）approved 后自动推进到 done。
 
 ### 3.4 设计决策
 
@@ -262,38 +261,54 @@ delegate = 上级创建新的关联子任务分派给指定角色 + 原任务状
 
 | 功能点 | 优先级 | 说明 |
 |--------|--------|------|
-| 审批链（子 -> 父） | **MVP** | 任务完成后自动提交给 parentRole 审核 |
+| 审批链（子 -> 父） | **MVP** | 任务完成后根据审批策略路由到 AI 或人工审核 |
 | 审批决策：approve/revise/delegate | **MVP** | 三种操作覆盖核心场景 |
 | 审批上下文展示 | **MVP** | 审核者能看到任务描述 + 执行产物 + 子任务状态 |
-| 全智能审批（LLM 自动审核） | **MVP** | 审核角色用 BMAD review skill 自动评估 |
-| 半智能审批（人工介入） | **MVP** | 关键节点暂停，展示上下文让人决策 |
-| 审批记录持久化 | **MVP** | 记录每次审批的决策和反馈 |
-| 关键节点标记 | **MVP** | 用户可配置哪些层级是「关键节点」，半智能模式下必须人工审批 |
+| 全智能审批（LLM 自动审核） | **MVP** | 父角色用 BMAD review skill 自动评估 |
+| 半智能审批（人工介入） | **MVP** | `requiresHumanApproval=true` 的角色任务暂停等人工决策 |
+| 审批记录持久化 | **MVP** | 通过讨论组消息记录每次投票和反馈 |
+| 审批预设（per-role 配置） | **MVP** | `all_auto` / `top_level_human` / `custom` 三种预设 |
+| 共识法定人数检查 | **MVP** | 所有 `canApprove=true` 的角色需全部投 APPROVE 才通过 |
 | 审批超时 | V2 | 审批超时自动升级到更高层级 |
 | 审批策略引擎 | V2 | 规则化定义哪些情况需要审批 |
 
-### 5.3 审批流转示意
+### 5.3 审批路由逻辑
+
+任务进入 `awaiting_review` 时，按以下优先级决定审批路径：
 
 ```
-前端开发 完成任务
-  -> 提交给技术经理审核 (awaiting_review)
-    -> 技术经理审核 (全智能: LLM 自动 / 半智能: 人工)
-      -> approve: 检查同级任务是否全部完成
-        -> 全部完成: 技术经理汇总 -> 提交 CTO 审核
-        -> 未全部完成: 等待其他同级任务
-      -> revise: 打回前端开发，附带反馈 (revision)
-      -> delegate: 创建新子任务给后端开发 (delegated -> blocked)
+任务进入 awaiting_review
+  → 检查 1: assignee 角色 requiresHumanApproval = true?
+    → YES: 跳过 AI 审核，留在 awaiting_review 等待人工操作
+  → 检查 2: 有父任务且父任务有 assignee?
+    → YES: 唤醒父角色进行 AI 审核 (trigger: review_requested)
+  → 检查 3: 无上级审核者且无人工审批要求?
+    → auto-approve → 直接转为 approved
 ```
+
+**审批结果处理:**
+- `approve`: 叶子任务自动推进到 done；分解型任务检查子任务是否全部完成
+- `revise`: 退回 assignee 修改，附带反馈 (revision → in_progress)
+- `delegate`: 任务状态变为 `blocked`，唤醒委派目标角色
 
 ### 5.4 设计决策
 
-**D-REVIEW-1: 半智能模式的关键节点配置**
+**D-REVIEW-1: Per-Role 审批配置（替代 criticalReviewLevels）**
 
-通过 `criticalReviewLevels` 配置项控制哪些层级需要人工审批。`[0]` 表示只有顶层（CTO）需要人工审批，`[0, 1]` 表示 CTO 和经理层都需要人工审批。不在配置中的层级即使在半智能模式下也使用 LLM 自动审核。
+通过每个角色的 `requiresHumanApproval` 布尔字段控制是否需要人工审批，配合审批预设快捷配置：
+- `all_auto`：所有角色 `requiresHumanApproval=false` — 全自动
+- `top_level_human`：顶级角色（无父角色）需人工审批，其余自动
+- `custom`：用户自定义每个角色的审批配置
 
-**D-REVIEW-2: 审核 prompt 注入内容**
+> **变更说明**: 原设计使用 `criticalReviewLevels` 按层级深度控制，实际实现改为 per-role 粒度控制，更灵活且与角色配置统一管理。
 
-审核角色收到审核请求时，其 prompt 中需要包含：
+**D-REVIEW-2: `requiresHumanApproval` 优先于 AI 审核**
+
+当角色设置了 `requiresHumanApproval=true` 时，任务进入 `awaiting_review` 后**不会唤醒上级 AI 审核**，直接等待人工在讨论组中操作。这确保了人工审批的绝对控制权。
+
+**D-REVIEW-3: 审核 prompt 注入内容**
+
+AI 审核角色收到审核请求时，其 prompt 中需要包含：
 1. 原始任务描述
 2. 执行角色的产出物（完整内容或摘要）
 3. 同级子任务的状态汇总
@@ -362,7 +377,7 @@ MVP 使用 `EventBus.emit('task:completed')` -> 监听器计算唤醒目标 -> �
 
 **D-WAKE-2: 兄弟任务完成判定**
 
-每次子任务完成时检查所有兄弟任务状态，全部处于 `done` 或 `approved` 状态则唤醒父角色进行汇总。
+每次子任务完成时检查所有兄弟任务状态，全部处于 `done` 或 `cancelled` 状态则唤醒父角色进行汇总。叶子任务（subtask/spike/bug/chore）在 approved 后自动推进到 done，因此无需在兄弟完成判定中额外检查 approved 状态。
 
 ---
 
