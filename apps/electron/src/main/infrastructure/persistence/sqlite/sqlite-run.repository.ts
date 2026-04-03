@@ -17,11 +17,12 @@ interface RunRow {
   finished_at: string | null;
   cost_usd: number;
   token_count: number;
+  session_id: string | null;
   created_at: string;
 }
 
 /** Columns to SELECT (excludes dropped output_log) */
-const RUN_COLUMNS = 'id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, token_count, created_at';
+const RUN_COLUMNS = 'id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, token_count, session_id, created_at';
 
 function rowToEntity(row: RunRow): Run {
   return {
@@ -35,6 +36,7 @@ function rowToEntity(row: RunRow): Run {
     finishedAt: row.finished_at,
     costUsd: row.cost_usd,
     tokenCount: row.token_count,
+    sessionId: row.session_id,
     createdAt: row.created_at,
   };
 }
@@ -70,6 +72,13 @@ export class SqliteRunRepository implements IRunRepository {
     const row = this.conn.getDb()
       .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE role_id = ? AND status IN ('queued', 'running') LIMIT 1`)
       .get(roleId) as RunRow | undefined;
+    return row ? rowToEntity(row) : null;
+  }
+
+  async findActiveByOrgId(orgId: string): Promise<Run | null> {
+    const row = this.conn.getDb()
+      .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE org_id = ? AND status IN ('queued', 'running') LIMIT 1`)
+      .get(orgId) as RunRow | undefined;
     return row ? rowToEntity(row) : null;
   }
 
@@ -109,11 +118,22 @@ export class SqliteRunRepository implements IRunRepository {
       .run(costUsd, id);
   }
 
-  async finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number): Promise<void> {
+  async finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number, sessionId?: string | null): Promise<void> {
     const now = new Date().toISOString();
     const changes = this.conn.getDb()
-      .prepare('UPDATE runs SET status = ?, cost_usd = ?, token_count = ?, finished_at = ? WHERE id = ?')
-      .run(status, costUsd, tokenCount ?? 0, now, id);
+      .prepare('UPDATE runs SET status = ?, cost_usd = ?, token_count = ?, session_id = ?, finished_at = ? WHERE id = ?')
+      .run(status, costUsd, tokenCount ?? 0, sessionId ?? null, now, id);
     if (changes.changes === 0) throw new NotFoundError('Run', id);
+  }
+
+  async findLastSessionId(roleId: string, taskNodeId: string): Promise<string | null> {
+    const row = this.conn.getDb()
+      .prepare(
+        `SELECT session_id FROM runs
+         WHERE role_id = ? AND task_node_id = ? AND status = 'succeeded' AND session_id IS NOT NULL
+         ORDER BY finished_at DESC LIMIT 1`,
+      )
+      .get(roleId, taskNodeId) as { session_id: string } | undefined;
+    return row?.session_id ?? null;
   }
 }

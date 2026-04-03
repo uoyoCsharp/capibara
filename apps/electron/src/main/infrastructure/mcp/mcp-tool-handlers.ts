@@ -38,6 +38,7 @@ export class McpToolHandlers {
     registry.register('capibara_context_get_task', (args) => this.contextGetTask(args));
     registry.register('capibara_context_get_org_tree', (args) => this.contextGetOrgTree(args));
     registry.register('capibara_context_get_discussion_summary', (args) => this.contextGetDiscussionSummary(args));
+    registry.register('capibara_task_review', (args) => this.taskReview(args));
     registry.register('capibara_escalate', (args) => this.escalate(args));
   }
 
@@ -154,6 +155,103 @@ export class McpToolHandlers {
     const stats = await this.discussionRepo.getVoteStats(groupId);
     const recent = await this.discussionRepo.findRecentMessages(groupId, 5);
     return { success: true, data: { stats, recentMessages: recent } };
+  }
+
+  private async taskReview(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    // Input validation
+    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
+    const decision = typeof args.decision === 'string' ? args.decision : '';
+    const feedback = typeof args.feedback === 'string' ? args.feedback : '';
+    const reviewerRoleId = typeof args.reviewerRoleId === 'string' ? args.reviewerRoleId : '';
+
+    if (!taskId || !reviewerRoleId) {
+      return { success: false, error: 'taskId and reviewerRoleId are required' };
+    }
+    if (decision !== 'approve' && decision !== 'revise') {
+      return { success: false, error: 'decision must be "approve" or "revise"' };
+    }
+    if (decision === 'revise' && !feedback) {
+      return { success: false, error: 'feedback is required when decision is "revise"' };
+    }
+
+    const task = await this.taskRepo.findById(taskId);
+    if (!task) {
+      return { success: false, error: `Task ${taskId} not found` };
+    }
+
+    if (task.status !== 'awaiting_review') {
+      return { success: false, error: `Task ${taskId} is not awaiting review (status: ${task.status})` };
+    }
+
+    // Authorization: reviewer must be the parent task's assignee
+    if (task.parentId) {
+      const parentTask = await this.taskRepo.findById(task.parentId);
+      if (parentTask && parentTask.assigneeRoleId !== reviewerRoleId) {
+        return { success: false, error: `Role ${reviewerRoleId} is not authorized to review this task (parent assignee: ${parentTask.assigneeRoleId})` };
+      }
+    }
+
+    // Post review message to nearest discussion group for traceability
+    const group = await this.findNearestDiscussionGroup(taskId);
+    if (group) {
+      const voteTag = decision === 'approve' ? 'APPROVE' : 'REVISE';
+      const content = feedback || `Approved task "${task.title}"`;
+      const msg = await this.discussionRepo.postMessage({
+        groupId: group.id,
+        authorRoleId: reviewerRoleId,
+        authorType: 'ai',
+        content,
+        voteTag: voteTag as VoteTag,
+      });
+
+      this.eventBus.emit({
+        type: 'discussion:message-added',
+        timestamp: new Date().toISOString(),
+        payload: { groupId: group.id, messageId: msg.id },
+      });
+    }
+
+    if (decision === 'approve') {
+      await this.taskService.updateStatus(taskId, 'approved');
+      this.logger.info('Task approved by AI reviewer', { taskId, reviewerRoleId });
+      return { success: true, data: { taskId, status: 'approved' } };
+    } else {
+      await this.taskService.updateStatus(taskId, 'revision');
+      this.logger.info('Task sent to revision by AI reviewer', { taskId, reviewerRoleId, feedback });
+
+      // Wake the original assignee to address the revision
+      if (task.assigneeRoleId) {
+        this.eventBus.emit({
+          type: 'wake:triggered',
+          timestamp: new Date().toISOString(),
+          payload: {
+            roleId: task.assigneeRoleId,
+            orgId: task.orgId,
+            trigger: 'review_revise' as const,
+          },
+        });
+      } else {
+        this.logger.warn('Task has no assignee to wake for revision', { taskId });
+        return { success: true, data: { taskId, status: 'revision', feedback, warning: 'No assignee to wake for revision' } };
+      }
+
+      return { success: true, data: { taskId, status: 'revision', feedback } };
+    }
+  }
+
+  /** Walk up task tree to find nearest discussion group (story or epic). */
+  private async findNearestDiscussionGroup(taskId: string): Promise<{ id: string } | null> {
+    let currentId: string | null = taskId;
+    while (currentId) {
+      const t = await this.taskRepo.findById(currentId);
+      if (!t) return null;
+      if (t.type === 'story' || t.type === 'epic') {
+        const group = await this.discussionRepo.findGroupByTaskNodeId(t.id);
+        if (group) return group;
+      }
+      currentId = t.parentId;
+    }
+    return null;
   }
 
   private async escalate(args: Record<string, unknown>): Promise<McpToolCallResult> {

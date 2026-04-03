@@ -104,6 +104,20 @@ const TOOLS = [
     },
   },
   {
+    name: 'capibara_task_review',
+    description: 'Review a child task as a parent role. Approve or request revision with feedback.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        taskId: { type: 'string', description: 'The child task ID to review' },
+        decision: { type: 'string', enum: ['approve', 'revise'], description: 'Review decision' },
+        feedback: { type: 'string', description: 'Review feedback (required for revise, optional for approve)' },
+        reviewerRoleId: { type: 'string', description: 'Your role ID (the reviewer)' },
+      },
+      required: ['taskId', 'decision', 'reviewerRoleId'],
+    },
+  },
+  {
     name: 'capibara_escalate',
     description: 'Escalate a task to your superior role.',
     inputSchema: {

@@ -37,6 +37,7 @@ export type RunStatus =
 export type WakeTrigger =
   | 'task_assigned'
   | 'task_completed'
+  | 'review_requested'
   | 'review_approve'
   | 'review_revise'
   | 'review_delegate'
@@ -129,6 +130,7 @@ export interface Run {
   finishedAt: string | null;
   costUsd: number;
   tokenCount: number;
+  sessionId: string | null;
   createdAt: string;
 }
 

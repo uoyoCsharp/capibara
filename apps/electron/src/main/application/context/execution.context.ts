@@ -5,7 +5,7 @@ import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { PromptContext, DiscussionSummary } from '@main/core/interfaces/i-prompt-builder.js';
-import type { TaskNode, Role, Skill } from '@main/core/types/domain.types.js';
+import type { TaskNode, Role, Skill, WakeTrigger } from '@main/core/types/domain.types.js';
 import {
   TASK_REPO_TOKEN,
   ROLE_REPO_TOKEN,
@@ -28,7 +28,7 @@ export class ExecutionContext {
     private readonly orgContext: OrgContext,
   ) {}
 
-  async buildPromptContext(roleId: string, taskId: string): Promise<PromptContext> {
+  async buildPromptContext(roleId: string, taskId: string, trigger: WakeTrigger = 'task_assigned'): Promise<PromptContext> {
     const role = await this.roleRepo.findById(roleId);
     if (!role) throw new Error(`Role not found: ${roleId}`);
 
@@ -42,14 +42,23 @@ export class ExecutionContext {
     const skills = await this.resolveSkills(role.skillIds);
     const discussionSummary = await this.buildDiscussionSummary(task);
 
+    // When woken for review, find child tasks awaiting review
+    let childrenAwaitingReview: TaskNode[] = [];
+    if (trigger === 'review_requested') {
+      const children = await this.taskRepo.findByParentId(taskId);
+      childrenAwaitingReview = children.filter((c) => c.status === 'awaiting_review');
+    }
+
     return {
       role,
       task,
+      trigger,
       parentRole,
       subordinates,
       peers,
       skills,
       discussionSummary,
+      childrenAwaitingReview,
     };
   }
 

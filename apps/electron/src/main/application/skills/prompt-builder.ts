@@ -60,6 +60,7 @@ export class PromptBuilder implements IPromptBuilder {
     }
     lines.push('- capibara_context_get_task: Get details about any task');
     lines.push(`- capibara_context_get_org_tree: Get org tree. Use orgId="${context.task.orgId}"`);
+    lines.push(`- capibara_task_review: Review a child task. Use decision="approve" or "revise", reviewerRoleId="${context.role.id}"`);
     lines.push('- capibara_escalate: Escalate to your superior');
     lines.push('');
 
@@ -89,14 +90,47 @@ export class PromptBuilder implements IPromptBuilder {
     lines.push('## Instructions');
     lines.push(`IMPORTANT: When calling MCP tools, always use the exact IDs provided above. Your task ID is "${context.task.id}".`);
 
+    // ─── Review Mode: woken to review child task results ─────────────
+    if (context.trigger === 'review_requested' && context.childrenAwaitingReview.length === 0) {
+      // No children in awaiting_review (may have been approved/transitioned already).
+      // Fall through to normal execution instructions rather than generating an empty review prompt.
+    } else if (context.trigger === 'review_requested' && context.childrenAwaitingReview.length > 0) {
+      lines.push('### Your role: Review completed child tasks');
+      lines.push(`You are the owner of "${context.task.title}" (${context.task.type}). One or more child tasks have been completed and need your review.`);
+      lines.push('');
+      lines.push('**Child tasks awaiting your review:**');
+      for (const child of context.childrenAwaitingReview) {
+        lines.push(`- **[${child.type}] ${child.title}** (ID: ${child.id})`);
+        if (child.description) {
+          lines.push(`  Description: ${child.description}`);
+        }
+      }
+      lines.push('');
+      lines.push('**Review the recent discussion messages above** for execution summaries and context.');
+      lines.push('');
+      lines.push('For EACH child task awaiting review, use capibara_task_review:');
+      lines.push(`- **APPROVE**: capibara_task_review with taskId="<child_task_id>", decision="approve", reviewerRoleId="${context.role.id}", and optional feedback.`);
+      lines.push(`- **REVISE**: capibara_task_review with taskId="<child_task_id>", decision="revise", reviewerRoleId="${context.role.id}", and feedback describing what needs to change.`);
+      lines.push('');
+      lines.push('Review criteria:');
+      lines.push('- Does the completed work align with the task description and acceptance criteria?');
+      lines.push('- Are there any obvious issues, missing pieces, or quality concerns?');
+      lines.push('- Is the work consistent with the overall goals of your parent task?');
+
+      return lines.join('\n');
+    }
+
+    // ─── Normal execution instructions ──────────────────────────────
     const taskType = context.task.type;
     const requiresHumanApproval = context.role.requiresHumanApproval === true;
 
     // For decomposition tasks (epic/story), check if human approval has already been granted
-    // by looking for an APPROVE vote in the discussion context.
-    const hasHumanApproval = context.discussionSummary?.voteStats
-      ? context.discussionSummary.voteStats.APPROVE > 0
-      : false;
+    // either via discussion APPROVE vote OR by the task already being in 'approved' status
+    // (e.g., human clicked approve button in UI directly).
+    const hasHumanApproval = context.task.status === 'approved'
+      || (context.discussionSummary?.voteStats
+        ? context.discussionSummary.voteStats.APPROVE > 0
+        : false);
 
     if (taskType === 'epic' && requiresHumanApproval && !hasHumanApproval) {
       // Phase 1: Propose decomposition plan (do NOT create children yet)

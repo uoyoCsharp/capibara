@@ -12,9 +12,11 @@ export interface IRunRepository {
   findByOrgId(orgId: string): Promise<Run[]>;
   findByTaskId(taskNodeId: string): Promise<Run[]>;
   findActiveByRoleId(roleId: string): Promise<Run | null>;
+  findActiveByOrgId(orgId: string): Promise<Run | null>;
   findAnyActiveRun(): Promise<Run | null>;
   create(input: CreateRunInput): Promise<Run>;
   updateStatus(id: string, status: RunStatus): Promise<void>;
   setCost(id: string, costUsd: number): Promise<void>;
-  finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number): Promise<void>;
+  finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number, sessionId?: string | null): Promise<void>;
+  findLastSessionId(roleId: string, taskNodeId: string): Promise<string | null>;
 }

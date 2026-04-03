@@ -127,19 +127,68 @@ export class TaskService {
   async updateStatus(taskId: string, status: TaskStatus): Promise<void> {
     await this.stateMachine.transition(taskId, status);
 
-    // Auto-approval: when task moves to awaiting_review and the assignee role
-    // does NOT require human approval, automatically transition to approved.
+    // When task moves to awaiting_review, determine review strategy:
+    // 1. If task has a parent with an assignee → wake parent role as AI reviewer
+    // 2. If no parent reviewer available and role doesn't require human approval → auto-approve
+    // 3. Otherwise → stay in awaiting_review for human or consensus review
     if (status === 'awaiting_review') {
       const task = await this.taskRepo.findById(taskId);
+      if (task?.parentId) {
+        const parentTask = await this.taskRepo.findById(task.parentId);
+        if (parentTask?.assigneeRoleId) {
+          // Wake the parent role to review this child task
+          this.logger.info('Waking parent role for AI review', {
+            taskId,
+            parentTaskId: parentTask.id,
+            reviewerRoleId: parentTask.assigneeRoleId,
+          });
+          this.eventBus.emit({
+            type: 'wake:triggered',
+            timestamp: new Date().toISOString(),
+            payload: {
+              roleId: parentTask.assigneeRoleId,
+              orgId: task.orgId,
+              trigger: 'review_requested' as const,
+            },
+          });
+          return; // Leave in awaiting_review — reviewer AI will decide
+        }
+      }
+
+      // Fallback: no parent reviewer available — use original auto-approve logic
       if (task?.assigneeRoleId) {
         const role = await this.roleRepo.findById(task.assigneeRoleId);
         if (role && !role.requiresHumanApproval) {
-          this.logger.info('Auto-approving task (role does not require human approval)', {
+          this.logger.info('Auto-approving task (no parent reviewer, role does not require human approval)', {
             taskId,
             roleId: role.id,
           });
           await this.stateMachine.transition(taskId, 'approved');
           status = 'approved';
+        }
+      }
+    }
+
+    // When a decomposition task (epic/story) is approved but has no children yet,
+    // this is Phase 1 approval — wake the assignee to execute Phase 2 (create children).
+    if (status === 'approved') {
+      const approvedTask = await this.taskRepo.findById(taskId);
+      if (approvedTask && (approvedTask.type === 'epic' || approvedTask.type === 'story')) {
+        const children = await this.taskRepo.findByParentId(taskId);
+        if (children.length === 0 && approvedTask.assigneeRoleId) {
+          this.logger.info('Phase 1 approved, waking assignee for Phase 2 decomposition', {
+            taskId, roleId: approvedTask.assigneeRoleId, type: approvedTask.type,
+          });
+          this.eventBus.emit({
+            type: 'wake:triggered',
+            timestamp: new Date().toISOString(),
+            payload: {
+              roleId: approvedTask.assigneeRoleId,
+              orgId: approvedTask.orgId,
+              trigger: 'review_approve' as const,
+            },
+          });
+          return; // Don't auto-propagate — Phase 2 needs to run first
         }
       }
     }

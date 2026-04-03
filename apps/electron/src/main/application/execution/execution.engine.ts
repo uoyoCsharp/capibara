@@ -91,10 +91,10 @@ export class ExecutionEngine {
       throw new BudgetExceededError(orgId, this.config.execution.budgetLimit, totalCost);
     }
 
-    // Global serial execution — only one run at a time across all roles
-    const activeRun = await this.runRepo.findAnyActiveRun();
+    // Per-org serial execution — only one run at a time within an organization
+    const activeRun = await this.runRepo.findActiveByOrgId(orgId);
     if (activeRun) {
-      throw new ExecutionError('', `Another run is already active: ${activeRun.id}`);
+      throw new ExecutionError('', `Org ${orgId} already has an active run: ${activeRun.id}`);
     }
 
     // ─── Create Run Record ─────────────────────────────────────
@@ -153,7 +153,7 @@ export class ExecutionEngine {
       this.runLogCtx.set(runId, { orgName, taskId: taskNodeId });
 
       // ─── Build Context and Prompt ──────────────────────────
-      const ctx = await this.executionContext.buildPromptContext(roleId, taskNodeId);
+      const ctx = await this.executionContext.buildPromptContext(roleId, taskNodeId, trigger);
       const systemPrompt = this.promptBuilder.build(ctx);
 
       // ─── Generate MCP Config ───────────────────────────────
@@ -173,6 +173,18 @@ export class ExecutionEngine {
       // ─── Resolve Org Workspace Path ──────────────────────
       const projectDir = org?.workspacePath || this.config.cli.projectDir;
 
+      // ─── Resolve Session ID for --resume ──────────────────
+      // Do NOT resume sessions for phase transitions (e.g., review_approve triggers Phase 2
+      // after Phase 1 posted a plan). Resuming would carry Phase 1's conversation context
+      // where the AI was told "do NOT create children", causing it to ignore Phase 2's prompt.
+      const NO_RESUME_TRIGGERS: WakeTrigger[] = ['review_approve'];
+      const lastSessionId = NO_RESUME_TRIGGERS.includes(trigger)
+        ? null
+        : await this.runRepo.findLastSessionId(roleId, taskNodeId);
+      if (lastSessionId) {
+        this.logger.info('Resuming previous session', { runId, sessionId: lastSessionId.slice(0, 8) });
+      }
+
       // ─── Invoke Executor (via UtilityProcess Worker) ───────
       this.logger.info('Dispatching run to worker', { runId, executor: this.config.cli.defaultExecutor, projectDir });
 
@@ -186,6 +198,7 @@ export class ExecutionEngine {
         mcpConfigPath,
         projectDir,
         executor: this.config.cli.defaultExecutor,
+        sessionId: lastSessionId ?? undefined,
         cliConfig: {
           model: this.config.cli.model ?? undefined,
           maxTurnsPerRun: this.config.cli.maxTurnsPerRun,
@@ -201,11 +214,32 @@ export class ExecutionEngine {
       const tokenCount = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
 
       if (result.status === 'succeeded') {
-        await this.runRepo.finish(runId, 'succeeded', costUsd, tokenCount);
+        await this.runRepo.finish(runId, 'succeeded', costUsd, tokenCount, result.sessionId);
         this.logger.info('Run succeeded', {
           runId, costUsd, model: result.model,
           inputTokens: result.inputTokens, outputTokens: result.outputTokens,
         });
+
+        // Phase 1 advancement: if the run succeeded but the task is still in_progress
+        // (e.g., requiresHumanApproval roles that post a plan without calling task_complete),
+        // advance the task to awaiting_review so the user sees it needs attention.
+        const postRunTask = await this.taskRepo.findById(taskNodeId);
+        if (postRunTask && postRunTask.status === 'in_progress') {
+          const role = await this.roleRepo.findById(roleId);
+          if (role?.requiresHumanApproval) {
+            try {
+              await this.taskStateMachine.transition(taskNodeId, 'awaiting_review');
+              this.logger.info('Task advanced to awaiting_review after Phase 1 run', { runId, taskNodeId });
+              this.eventBus.emit({
+                type: 'task:status-changed',
+                timestamp: new Date().toISOString(),
+                payload: { taskId: taskNodeId, oldStatus: 'in_progress', newStatus: 'awaiting_review' },
+              });
+            } catch {
+              // Transition not allowed from current state — leave as-is
+            }
+          }
+        }
 
         // Record cost entry
         if (costUsd > 0) {
@@ -226,7 +260,7 @@ export class ExecutionEngine {
           },
         });
       } else if (result.status === 'cancelled') {
-        await this.runRepo.finish(runId, 'cancelled', costUsd, tokenCount);
+        await this.runRepo.finish(runId, 'cancelled', costUsd, tokenCount, result.sessionId);
         this.logger.info('Run cancelled by worker', { runId });
 
         this.eventBus.emit({
@@ -236,7 +270,7 @@ export class ExecutionEngine {
         });
       } else {
         // failed or interrupted
-        await this.runRepo.finish(runId, result.status, costUsd, tokenCount);
+        await this.runRepo.finish(runId, result.status, costUsd, tokenCount, result.sessionId);
         this.logger.warn('Run failed', {
           runId, exitCode: result.exitCode, error: result.errorMessage,
         });

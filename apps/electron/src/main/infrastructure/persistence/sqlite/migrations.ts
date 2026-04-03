@@ -256,6 +256,13 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE runs ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0;`);
     },
   },
+  {
+    version: 15,
+    description: 'Add session_id column to runs table for --resume support',
+    up: (db) => {
+      db.exec(`ALTER TABLE runs ADD COLUMN session_id TEXT;`);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

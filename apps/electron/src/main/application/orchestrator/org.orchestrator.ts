@@ -184,8 +184,28 @@ export class OrgOrchestrator {
         // Check 2: Sequential sibling execution
         if (!task.parentId) return targets;
 
+        // When a decomposition task (epic/story) becomes 'approved', its children
+        // still need to execute. Do NOT wake the next sibling yet — wait until
+        // this task reaches 'done' (via checkAutoPropagate after all children complete).
+        if (newStatus === 'approved') {
+          const children = await this.taskRepo.findByParentId(taskId);
+          if (children.length > 0) {
+            this.logger.debug('Skipping sibling progression: approved task has children to execute', {
+              taskId, childCount: children.length,
+            });
+            return targets;
+          }
+        }
+
         const siblings = await this.taskRepo.findByParentId(task.parentId);
-        const allDone = siblings.every((s) => terminalStatuses.includes(s.status));
+        const allDone = siblings.every((s) => {
+          if (s.status === 'done' || s.status === 'cancelled') return true;
+          // An 'approved' task with unfinished children is NOT complete
+          if (s.status === 'approved') {
+            return true; // Leaf approved tasks are complete for sibling progression
+          }
+          return false;
+        });
 
         if (allDone) {
           // All siblings complete → checkAutoPropagate handles parent advancement
@@ -262,8 +282,15 @@ export class OrgOrchestrator {
         };
         // Find the task associated with this role
         const roleTasks = await this.taskRepo.findByAssignee(roleId);
+
+        // For review_requested/review_approve, also match tasks in 'approved' state
+        // (decomposition tasks whose children are executing, or Phase 2 re-wake)
+        const eligibleStatuses = (trigger === 'review_requested' || trigger === 'review_approve')
+          ? ['pending', 'in_progress', 'revision', 'approved']
+          : ['pending', 'in_progress', 'revision'];
+
         const activeTask = roleTasks.find(
-          (t) => t.status === 'pending' || t.status === 'in_progress' || t.status === 'revision',
+          (t) => eligibleStatuses.includes(t.status),
         );
         if (activeTask) {
           return [{
@@ -323,10 +350,10 @@ export class OrgOrchestrator {
       return false;
     }
 
-    // Gate 3: Global serial execution — only one run at a time
-    const activeRun = await this.runRepo.findAnyActiveRun();
+    // Gate 3: Per-org serial execution — only one run at a time per organization
+    const activeRun = await this.runRepo.findActiveByOrgId(orgId);
     if (activeRun) {
-      this.logger.debug('Wake deferred: another run active, enqueuing pending wake', { roleId, trigger, activeRunId: activeRun.id });
+      this.logger.debug('Wake deferred: org has active run, enqueuing pending wake', { roleId, orgId, trigger, activeRunId: activeRun.id });
       await this.pendingWakeRepo.create({ roleId, orgId, trigger });
       this.eventBus.emit({
         type: 'wake:pending-enqueued',
@@ -494,23 +521,42 @@ export class OrgOrchestrator {
   // ─── Story 7.3: PendingWake Queue ────────────────────────────
 
   private async consumePendingWakes(roleId: string, orgId: string): Promise<void> {
-    const pendingWakes = await this.pendingWakeRepo.findByRoleId(roleId);
+    // With per-org serial execution, consume the oldest pending wake for the entire org
+    // (not just for the completed role), since the org slot is now free.
+    const pendingWakes = await this.pendingWakeRepo.findByOrgId(orgId);
     if (pendingWakes.length === 0) return;
 
-    this.logger.info('Consuming pending wakes', { roleId, count: pendingWakes.length });
+    this.logger.info('Consuming pending wakes for org', { orgId, count: pendingWakes.length });
 
-    // FIFO: process oldest first (already sorted by created_at)
-    const oldest = pendingWakes[0];
-    await this.pendingWakeRepo.consume(oldest.id);
+    // FIFO: try each pending wake until one successfully starts a run.
+    // Only one run can start (per-org serial), so stop after the first success.
+    for (const wake of pendingWakes) {
+      const wakeRoleId = wake.roleId;
+      const roleTasks = await this.taskRepo.findByAssignee(wakeRoleId);
 
-    // Find the task to wake for
-    const roleTasks = await this.taskRepo.findByAssignee(roleId);
-    const activeTask = roleTasks.find(
-      (t) => t.status === 'pending' || t.status === 'in_progress' || t.status === 'revision',
-    );
+      const eligibleStatuses = (wake.trigger === 'review_requested' || wake.trigger === 'review_approve')
+        ? ['pending', 'in_progress', 'revision', 'approved']
+        : ['pending', 'in_progress', 'revision'];
 
-    if (activeTask) {
-      await this.wakeRoleIfPossible(roleId, orgId, activeTask.id, oldest.trigger);
+      const activeTask = roleTasks.find(
+        (t) => eligibleStatuses.includes(t.status),
+      );
+
+      if (!activeTask) {
+        // No eligible task — consume this wake and try next
+        await this.pendingWakeRepo.consume(wake.id);
+        this.logger.debug('Pending wake consumed with no eligible task', { wakeId: wake.id, roleId: wakeRoleId });
+        continue;
+      }
+
+      // Consume before attempting wake. If wake fails, re-enqueue.
+      await this.pendingWakeRepo.consume(wake.id);
+      const started = await this.wakeRoleIfPossible(wakeRoleId, orgId, activeTask.id, wake.trigger);
+      if (started) {
+        return; // Run started — org slot is now occupied
+      }
+      // wakeRoleIfPossible returned false but didn't re-enqueue (e.g., role inactive, budget exceeded).
+      // Continue to next pending wake.
     }
   }
 
