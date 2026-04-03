@@ -104,7 +104,6 @@ export class DiscussionService {
       roleId: string;
       orgId: string;
       taskNodeId: string;
-      costUsd?: number;
       tokenCount?: number;
       error?: string;
     };

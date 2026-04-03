@@ -60,7 +60,6 @@ export class WorkerService {
         signal: null,
         model: null,
         sessionId: null,
-        costUsd: null,
         inputTokens: 0,
         outputTokens: 0,
         cachedInputTokens: 0,

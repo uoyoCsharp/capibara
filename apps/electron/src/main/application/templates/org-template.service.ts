@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
 import type { IRoleRepository, CreateRoleInput } from '@main/core/interfaces/i-role.repository.js';
 import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.js';
@@ -22,99 +24,25 @@ export interface OrgTemplate {
   rootRoles: TemplateRoleDefinition[];
 }
 
-const BMAD_TEMPLATE: OrgTemplate = {
-  id: 'bmad-software-team',
-  name: 'BMAD Software Team',
-  description:
-    'A hierarchical software development team with CTO, engineering manager, and specialized developer roles following the BMAD methodology.',
-  rootRoles: [
-    {
-      name: 'CTO',
-      persona:
-        'You are the Chief Technology Officer. You oversee the entire technical organization, make high-level architectural decisions, and ensure the team delivers quality software aligned with business objectives. You review critical technical decisions and resolve escalations.',
-      skillCommands: ['/bmad-create-architecture', '/bmad-code-review'],
-      knowledgeBaseRefs: [],
-      canApprove: true,
-      canDelegate: true,
-      requiresHumanApproval: true,
-      children: [
-        {
-          name: 'Engineering Manager',
-          persona:
-            'You are the Engineering Manager. You coordinate the development team, break down epics into stories, assign tasks, and ensure smooth execution. You review code, manage sprint planning, and escalate blockers to the CTO.',
-          skillCommands: ['/bmad-create-story', '/bmad-sprint-planning', '/bmad-code-review'],
-          knowledgeBaseRefs: [],
-          canApprove: true,
-          canDelegate: true,
-          requiresHumanApproval: false,
-          children: [
-            {
-              name: 'Senior Developer',
-              persona:
-                'You are the Senior Developer. You implement complex features, write clean production code, review peer code, and mentor junior developers. You follow the project architecture and coding standards strictly.',
-              skillCommands: ['/bmad-dev-story', '/bmad-code-review', '/security-audit'],
-              knowledgeBaseRefs: [],
-              canApprove: true,
-              canDelegate: false,
-              requiresHumanApproval: false,
-              children: [],
-            },
-            {
-              name: 'Developer',
-              persona:
-                'You are a Developer. You implement features and fix bugs following the project architecture, coding standards, and best practices. You write tests alongside your code and submit work for review.',
-              skillCommands: ['/bmad-dev-story', '/test-generation'],
-              knowledgeBaseRefs: [],
-              canApprove: false,
-              canDelegate: false,
-              requiresHumanApproval: false,
-              children: [],
-            },
-            {
-              name: 'QA Engineer',
-              persona:
-                'You are the QA Engineer. You design and execute test strategies, write automated tests, identify edge cases, and ensure the product meets quality standards. You report issues and verify fixes.',
-              skillCommands: ['/test-generation', '/bmad-code-review'],
-              knowledgeBaseRefs: [],
-              canApprove: true,
-              canDelegate: false,
-              requiresHumanApproval: false,
-              children: [],
-            },
-          ],
-        },
-        {
-          name: 'Analyst',
-          persona:
-            'You are the Business Analyst. You analyze requirements, decompose tasks, identify ambiguities, and ensure that the technical implementation aligns with business goals. You participate in design reviews and validate deliverables.',
-          skillCommands: ['/bmad-analyst', '/task-decomposition'],
-          knowledgeBaseRefs: [],
-          canApprove: true,
-          canDelegate: false,
-          requiresHumanApproval: false,
-          children: [],
-        },
-      ],
-    },
-  ],
-};
-
-const BUILTIN_TEMPLATES: OrgTemplate[] = [BMAD_TEMPLATE];
-
 export class OrgTemplateService {
+  private templates: OrgTemplate[] = [];
+
   constructor(
     private readonly orgRepo: IOrganizationRepository,
     private readonly roleRepo: IRoleRepository,
     private readonly skillRepo: ISkillRepository,
     private readonly logger: ILogger,
-  ) {}
+    private readonly templatesDir: string,
+  ) {
+    this.loadTemplatesFromDisk();
+  }
 
   getTemplates(): OrgTemplate[] {
-    return BUILTIN_TEMPLATES;
+    return this.templates;
   }
 
   getTemplateById(id: string): OrgTemplate | null {
-    return BUILTIN_TEMPLATES.find((t) => t.id === id) ?? null;
+    return this.templates.find((t) => t.id === id) ?? null;
   }
 
   async loadTemplate(
@@ -149,6 +77,34 @@ export class OrgTemplateService {
 
     this.logger.info('Template loaded', { templateId, orgId: org.id, orgName });
     return org;
+  }
+
+  private loadTemplatesFromDisk(): void {
+    if (!existsSync(this.templatesDir)) {
+      this.logger.warn('Templates directory not found', { path: this.templatesDir });
+      return;
+    }
+
+    const files = readdirSync(this.templatesDir).filter((f) => f.endsWith('.json'));
+    if (files.length === 0) {
+      this.logger.warn('No template files found', { path: this.templatesDir });
+      return;
+    }
+
+    for (const file of files) {
+      try {
+        const raw = readFileSync(join(this.templatesDir, file), 'utf-8');
+        const data = JSON.parse(raw) as OrgTemplate;
+        if (!data.id || !data.name || !Array.isArray(data.rootRoles)) {
+          this.logger.error('Invalid template file, missing required fields', { file });
+          continue;
+        }
+        this.templates.push(data);
+        this.logger.info('Template loaded from file', { file, id: data.id });
+      } catch (err) {
+        this.logger.error('Failed to parse template file', { file, error: String(err) });
+      }
+    }
   }
 
   private async createRoleFromDef(

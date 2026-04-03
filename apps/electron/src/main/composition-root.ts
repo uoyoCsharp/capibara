@@ -166,7 +166,12 @@ export async function bootstrap(): Promise<void> {
   }
   container.register<WorkerService>(WORKER_SERVICE_TOKEN, { useValue: workerService });
 
-  const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger);
+  // Resolve templates directory: dev uses source resources/, prod uses extraResources
+  const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
+  const templatesDir = isDev
+    ? join(dirname(__dirname), '..', 'resources', 'templates')
+    : join(process.resourcesPath, 'templates');
+  const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger, templatesDir);
 
   const taskStateMachine = new TaskStateMachine(taskRepo, eventBus, logger);
   const taskService = new TaskService(taskRepo, roleRepo, pendingWakeRepo, discussionRepo, eventBus, logger, taskStateMachine);

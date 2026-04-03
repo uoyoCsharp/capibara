@@ -16,7 +16,6 @@ export interface IRunRepository {
   findAnyActiveRun(): Promise<Run | null>;
   create(input: CreateRunInput): Promise<Run>;
   updateStatus(id: string, status: RunStatus): Promise<void>;
-  setCost(id: string, costUsd: number): Promise<void>;
-  finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number, sessionId?: string | null): Promise<void>;
+  finish(id: string, status: RunStatus, tokenCount?: number, sessionId?: string | null): Promise<void>;
   findLastSessionId(roleId: string, taskNodeId: string): Promise<string | null>;
 }

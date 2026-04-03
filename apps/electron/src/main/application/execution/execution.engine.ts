@@ -85,10 +85,14 @@ export class ExecutionEngine {
       throw new ExecutionError('', `Task ${taskNodeId} not found`);
     }
 
-    // Budget check
-    const totalCost = await this.costRepo.getTotalCostByOrgId(orgId);
-    if (totalCost >= this.config.execution.budgetLimit) {
-      throw new BudgetExceededError(orgId, this.config.execution.budgetLimit, totalCost);
+    // Budget check (token-based, units: millions of tokens)
+    const budgetLimit = this.config.execution.budgetLimit;
+    if (budgetLimit > 0) {
+      const totalTokens = await this.costRepo.getTotalTokensByOrgId(orgId);
+      const totalTokensM = totalTokens / 1_000_000;
+      if (totalTokensM >= budgetLimit) {
+        throw new BudgetExceededError(orgId, budgetLimit, totalTokensM);
+      }
     }
 
     // Per-org serial execution — only one run at a time within an organization
@@ -123,7 +127,7 @@ export class ExecutionEngine {
     }
 
     this.executor.abort(runId);
-    await this.runRepo.finish(runId, 'cancelled', run.costUsd);
+    await this.runRepo.finish(runId, 'cancelled', run.tokenCount);
 
     this.logger.info('Run cancelled', { runId });
     this.eventBus.emit({
@@ -185,6 +189,22 @@ export class ExecutionEngine {
         this.logger.info('Resuming previous session', { runId, sessionId: lastSessionId.slice(0, 8) });
       }
 
+      // ─── Log Input Prompt ──────────────────────────────────
+      this.fileLogService.writeInput(orgName, taskNodeId, runId, {
+        prompt: systemPrompt,
+        trigger,
+        roleId,
+        executor: this.config.cli.defaultExecutor,
+        projectDir,
+        sessionId: lastSessionId ?? undefined,
+        cliConfig: {
+          model: this.config.cli.model,
+          maxTurnsPerRun: this.config.cli.maxTurnsPerRun,
+          effort: this.config.cli.effort,
+          timeoutMs: this.config.cli.timeoutMs,
+        },
+      });
+
       // ─── Invoke Executor (via UtilityProcess Worker) ───────
       this.logger.info('Dispatching run to worker', { runId, executor: this.config.cli.defaultExecutor, projectDir });
 
@@ -209,14 +229,12 @@ export class ExecutionEngine {
       });
 
       // ─── Process Result ────────────────────────────────────
-      const costUsd = result.costUsd ?? 0;
-
       const tokenCount = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
 
       if (result.status === 'succeeded') {
-        await this.runRepo.finish(runId, 'succeeded', costUsd, tokenCount, result.sessionId);
+        await this.runRepo.finish(runId, 'succeeded', tokenCount, result.sessionId);
         this.logger.info('Run succeeded', {
-          runId, costUsd, model: result.model,
+          runId, tokenCount, model: result.model,
           inputTokens: result.inputTokens, outputTokens: result.outputTokens,
         });
 
@@ -237,13 +255,12 @@ export class ExecutionEngine {
         }
 
         // Record cost entry
-        if (costUsd > 0) {
+        if (tokenCount > 0) {
           await this.costRepo.create({
             runId,
             roleId,
             orgId,
-            tokenCount: result.inputTokens + result.outputTokens,
-            costUsd,
+            tokenCount,
           });
         }
 
@@ -251,11 +268,11 @@ export class ExecutionEngine {
           type: 'run:succeeded',
           timestamp: new Date().toISOString(),
           payload: {
-            runId, roleId, orgId, taskNodeId, costUsd, tokenCount,
+            runId, roleId, orgId, taskNodeId, tokenCount,
           },
         });
       } else if (result.status === 'cancelled') {
-        await this.runRepo.finish(runId, 'cancelled', costUsd, tokenCount, result.sessionId);
+        await this.runRepo.finish(runId, 'cancelled', tokenCount, result.sessionId);
         this.logger.info('Run cancelled by worker', { runId });
 
         this.eventBus.emit({
@@ -265,19 +282,18 @@ export class ExecutionEngine {
         });
       } else {
         // failed or interrupted
-        await this.runRepo.finish(runId, result.status, costUsd, tokenCount, result.sessionId);
+        await this.runRepo.finish(runId, result.status, tokenCount, result.sessionId);
         this.logger.warn('Run failed', {
           runId, exitCode: result.exitCode, error: result.errorMessage,
         });
 
         // Still record cost even for failed runs
-        if (costUsd > 0) {
+        if (tokenCount > 0) {
           await this.costRepo.create({
             runId,
             roleId,
             orgId,
-            tokenCount: result.inputTokens + result.outputTokens,
-            costUsd,
+            tokenCount,
           });
         }
 
@@ -301,7 +317,7 @@ export class ExecutionEngine {
       this.logger.error('Run execution error', { runId, error: String(err) });
 
       try {
-        await this.runRepo.finish(runId, 'failed', 0);
+        await this.runRepo.finish(runId, 'failed', 0, null);
       } catch {
         // Best-effort status update
       }

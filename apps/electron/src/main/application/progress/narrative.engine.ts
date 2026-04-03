@@ -23,8 +23,7 @@ export interface NarrativeTemplateData {
   orgName: string;
   orgStatus: string;
   budgetLimit: number;
-  budgetUsed: number;
-  tokensUsed: number;
+  totalTokens: number;
   budgetPercent: number;
   totalTasks: number;
   statusCounts: Record<string, number>;
@@ -73,8 +72,7 @@ export class NarrativeEngine {
     const org = await this.orgRepo.findById(orgId);
     const tasks = await this.taskRepo.findByOrgId(orgId);
     const runs = await this.runRepo.findByOrgId(orgId);
-    const budgetUsed = await this.costRepo.getTotalCostByOrgId(orgId);
-    const tokensUsed = await this.costRepo.getTotalTokensByOrgId(orgId);
+    const totalTokens = await this.costRepo.getTotalTokensByOrgId(orgId);
     const discussions = await this.discussionRepo.findGroupsByOrgId(orgId);
 
     const statusCounts: Record<string, number> = {};
@@ -97,14 +95,14 @@ export class NarrativeEngine {
       .map((t) => ({ id: t.id, title: t.title, status: t.status }));
 
     const budgetLimit = org?.budgetLimit ?? 50;
+    const totalTokensM = totalTokens / 1_000_000;
 
     return {
       orgName: org?.name ?? 'Unknown',
       orgStatus: org?.status ?? 'unknown',
       budgetLimit,
-      budgetUsed,
-      tokensUsed,
-      budgetPercent: budgetLimit > 0 ? Math.round((budgetUsed / budgetLimit) * 100) : 0,
+      totalTokens,
+      budgetPercent: budgetLimit > 0 ? Math.round((totalTokensM / budgetLimit) * 100) : 0,
       totalTasks: tasks.length,
       statusCounts,
       activeRuns: runs.filter((r) => r.status === 'running').length,
@@ -127,7 +125,7 @@ export class NarrativeEngine {
     lines.push(`## ${data.orgName} — Project Status`);
     lines.push('');
     lines.push(`**Overall Health:** ${healthEmoji} ${data.orgStatus === 'active' ? 'Active' : data.orgStatus}`);
-    lines.push(`**Tokens Used:** ${(data.tokensUsed / 1_000_000).toFixed(4)}M (${data.budgetPercent}%)`);
+    lines.push(`**Tokens Used:** ${(data.totalTokens / 1_000_000).toFixed(4)}M / ${data.budgetLimit}M (${data.budgetPercent}%)`);
     lines.push('');
 
     // Task overview

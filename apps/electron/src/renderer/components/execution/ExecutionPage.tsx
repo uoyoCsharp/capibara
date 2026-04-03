@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Play, Stop, ArrowClockwise, Lightning, Timer } from '@phosphor-icons/react';
+import { Plus, Play, Stop, ArrowClockwise, Lightning, Timer, Eye, EyeSlash } from '@phosphor-icons/react';
 import type {
   OrganizationRecord,
   TaskRecord,
@@ -149,6 +149,7 @@ export function ExecutionPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('tasks');
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [createModal, setCreateModal] = useState<{
     open: boolean;
     parentId: string | null;
@@ -244,6 +245,47 @@ export function ExecutionPage() {
     }
     return map;
   }, [tasks]);
+
+  const runningTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const run of runs) {
+      if (run.status === 'running' || run.status === 'queued') {
+        ids.add(run.taskNodeId);
+      }
+    }
+    return ids;
+  }, [runs]);
+
+  const filteredTasks = useMemo(() => {
+    if (!hideCompleted) return tasks;
+    // Keep tasks that are NOT in a terminal state, plus keep parents of visible tasks
+    const completedStatuses = new Set<TaskStatus>(['done', 'cancelled']);
+    const visibleIds = new Set<string>();
+
+    // First pass: identify non-completed tasks
+    for (const task of tasks) {
+      if (!completedStatuses.has(task.status)) {
+        visibleIds.add(task.id);
+      }
+    }
+
+    // Second pass: add ancestors of visible tasks so the tree stays connected
+    for (const task of tasks) {
+      if (visibleIds.has(task.id)) {
+        let parentId = task.parentId;
+        const visited = new Set<string>();
+        while (parentId) {
+          if (visibleIds.has(parentId) || visited.has(parentId)) break;
+          visited.add(parentId);
+          visibleIds.add(parentId);
+          const parent = tasks.find((t) => t.id === parentId);
+          parentId = parent?.parentId ?? null;
+        }
+      }
+    }
+
+    return tasks.filter((t) => visibleIds.has(t.id));
+  }, [tasks, hideCompleted]);
 
   const handleCreateTask = async (input: CreateTaskInput) => {
     try {
@@ -434,6 +476,19 @@ export function ExecutionPage() {
                     {statusCounts['pending']} {t.tasksExecution.pendingCount}
                   </span>
                 )}
+                <span className="flex-1" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setHideCompleted(!hideCompleted)}
+                  className={cn(
+                    'text-xs h-7 gap-1',
+                    hideCompleted && 'text-primary',
+                  )}
+                >
+                  {hideCompleted ? <EyeSlash size={14} /> : <Eye size={14} />}
+                  {hideCompleted ? t.tasksExecution.showCompleted : t.tasksExecution.hideCompleted}
+                </Button>
               </div>
             )}
 
@@ -441,8 +496,9 @@ export function ExecutionPage() {
             <Card>
               <CardContent className="p-[var(--card-padding)]">
                 <TaskTreeView
-                  tasks={tasks}
+                  tasks={filteredTasks}
                   selectedTaskId={selectedTaskId}
+                  runningTaskIds={runningTaskIds}
                   onSelectTask={setSelectedTaskId}
                   onAddTask={handleAddTask}
                   onDeleteTask={handleDeleteTask}

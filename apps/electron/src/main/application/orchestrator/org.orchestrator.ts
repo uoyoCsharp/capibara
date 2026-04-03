@@ -384,16 +384,20 @@ export class OrgOrchestrator {
       return false;
     }
 
-    // Gate 2: Budget check
-    const totalCost = await this.costRepo.getTotalCostByOrgId(orgId);
-    if (totalCost >= this.config.execution.budgetLimit) {
-      this.logger.warn('Wake skipped: budget exceeded', { orgId, totalCost });
-      this.eventBus.emit({
-        type: 'budget:exceeded',
-        timestamp: new Date().toISOString(),
-        payload: { orgId, totalCost, limit: this.config.execution.budgetLimit },
-      });
-      return false;
+    // Gate 2: Budget check (token-based, units: millions of tokens)
+    const budgetLimit = this.config.execution.budgetLimit;
+    if (budgetLimit > 0) {
+      const totalTokens = await this.costRepo.getTotalTokensByOrgId(orgId);
+      const totalTokensM = totalTokens / 1_000_000;
+      if (totalTokensM >= budgetLimit) {
+        this.logger.warn('Wake skipped: budget exceeded', { orgId, totalTokensM });
+        this.eventBus.emit({
+          type: 'budget:exceeded',
+          timestamp: new Date().toISOString(),
+          payload: { orgId, totalTokens, limit: budgetLimit },
+        });
+        return false;
+      }
     }
 
     // Gate 3: Per-org serial execution — only one run at a time per organization
@@ -468,11 +472,11 @@ export class OrgOrchestrator {
   // ─── Story 10.3: Budget Auto-Pause ──────────────────────────────
 
   private async handleBudgetExceeded(event: DomainEvent): Promise<void> {
-    const { orgId, totalCost, limit } = event.payload as {
-      orgId: string; totalCost: number; limit: number;
+    const { orgId, totalTokens, limit } = event.payload as {
+      orgId: string; totalTokens: number; limit: number;
     };
 
-    this.logger.warn('Budget exceeded — pausing all org roles', { orgId, totalCost, limit });
+    this.logger.warn('Budget exceeded — pausing all org roles', { orgId, totalTokens, limit });
 
     const roles = await this.roleRepo.findByOrgId(orgId);
     let pausedCount = 0;

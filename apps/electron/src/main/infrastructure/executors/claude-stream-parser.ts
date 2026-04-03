@@ -16,8 +16,6 @@ export interface ClaudeStreamResult {
   resultJson: Record<string, unknown> | null;
   /** Aggregated token usage */
   usage: ClaudeUsage | null;
-  /** Total cost in USD */
-  costUsd: number | null;
   /** Model used */
   model: string;
   /** Session ID for resumption */
@@ -59,7 +57,6 @@ export function parseClaudeStreamJson(stdout: string): ClaudeStreamResult {
   const result: ClaudeStreamResult = {
     resultJson: null,
     usage: null,
-    costUsd: null,
     model: '',
     sessionId: '',
     summary: '',
@@ -98,7 +95,6 @@ export function parseClaudeStreamJson(stdout: string): ClaudeStreamResult {
         };
       }
 
-      result.costUsd = asNumber(parsed.total_cost_usd, 0);
       result.summary = asString(parsed.result);
       result.model = asString(parsed.model, result.model);
       result.sessionId = asString(parsed.session_id, result.sessionId);

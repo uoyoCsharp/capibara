@@ -97,7 +97,6 @@ export class UtilityProcessExecutor implements IExecutor {
       errorMessage: event.errorMessage,
       model: event.model,
       sessionId: event.sessionId,
-      costUsd: event.costUsd,
       inputTokens: event.inputTokens,
       outputTokens: event.outputTokens,
       cachedInputTokens: event.cachedInputTokens,

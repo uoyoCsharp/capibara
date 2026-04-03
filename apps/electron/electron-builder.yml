@@ -7,6 +7,11 @@ files:
   - out/**
   - package.json
   - assets/icon.png
+extraResources:
+  - from: resources/templates
+    to: templates
+    filter:
+      - "**/*.json"
 asar: true
 icon: assets/icon.png
 

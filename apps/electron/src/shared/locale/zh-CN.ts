@@ -57,7 +57,7 @@ export const zhCN: LocaleMessages = {
     notFound: '未找到',
     validation: '验证错误',
     internal: '内部错误',
-    budgetExceeded: '预算已超出',
+    budgetExceeded: 'Token 预算已超出',
     failedToLoad: '加载失败',
     failedToCreate: '创建失败',
     failedToUpdate: '更新失败',
@@ -239,6 +239,8 @@ export const zhCN: LocaleMessages = {
     failedToDeleteTask: '删除任务失败',
     failedToStartRun: '启动运行失败',
     failedToCancelRun: '取消运行失败',
+    hideCompleted: '隐藏已完成',
+    showCompleted: '显示已完成',
   },
   taskCreate: {
     createChild: '创建子任务',
@@ -250,6 +252,7 @@ export const zhCN: LocaleMessages = {
     descriptionLabel: '描述',
     descriptionPlaceholder: '描述任务...',
     assigneeLabel: '指派角色',
+    assigneeRequired: '负责人为必填项',
     createTask: '创建任务',
   },
   taskDetail: {

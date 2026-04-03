@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { ChatCircleDots } from '@phosphor-icons/react';
+import { ChatCircleDots, ShieldCheck } from '@phosphor-icons/react';
 import type {
   OrganizationRecord,
   DiscussionGroupRecord,
@@ -103,6 +103,21 @@ export function DiscussionPage() {
     return map;
   }, [tasks]);
 
+  const roleMap = useMemo(() => {
+    const map = new Map<string, RoleRecord>();
+    for (const r of roles) map.set(r.id, r);
+    return map;
+  }, [roles]);
+
+  /** Check if a discussion group's task is awaiting human approval */
+  const needsHumanApproval = useCallback((group: DiscussionGroupRecord): boolean => {
+    const task = taskMap.get(group.taskNodeId);
+    if (!task || task.status !== 'awaiting_review') return false;
+    if (!task.assigneeRoleId) return false;
+    const role = roleMap.get(task.assigneeRoleId);
+    return role?.requiresHumanApproval === true;
+  }, [taskMap, roleMap]);
+
   const handlePostMessage = async (content: string, voteTag: VoteTag) => {
     if (!selectedGroupId) return;
     try {
@@ -137,6 +152,10 @@ export function DiscussionPage() {
       if (event.type === 'discussion:message-added' && event.groupId === selectedGroupId) {
         loadMessages(event.groupId);
         loadVoteStats(event.groupId);
+      }
+      // Refresh tasks when task status changes (e.g., after approval vote processed)
+      if (event.type === 'task:changed' && event.orgId === currentOrgId) {
+        loadOrgData(currentOrgId);
       }
     });
     return unsub;
@@ -216,9 +235,17 @@ export function DiscussionPage() {
                     <span className="text-sm font-medium text-foreground truncate">
                       {task?.title ?? t.discussions.unknownEpic}
                     </span>
-                    {group.status === 'archived' && (
-                      <Badge variant="secondary" className="ml-2 text-xs">Archived</Badge>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {needsHumanApproval(group) && (
+                        <Badge variant="secondary" className="text-[10px] bg-yellow-500/15 text-yellow-600 border-yellow-500/30 gap-0.5">
+                          <ShieldCheck size={10} weight="fill" />
+                          {t.approval.humanApprovalRequired}
+                        </Badge>
+                      )}
+                      {group.status === 'archived' && (
+                        <Badge variant="secondary" className="text-xs">Archived</Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Created {new Date(group.createdAt).toLocaleDateString()}

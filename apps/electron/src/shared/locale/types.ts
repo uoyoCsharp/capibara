@@ -239,6 +239,8 @@ export interface LocaleMessages {
     failedToDeleteTask: string;
     failedToStartRun: string;
     failedToCancelRun: string;
+    hideCompleted: string;
+    showCompleted: string;
   };
   taskCreate: {
     createChild: string;
@@ -250,6 +252,7 @@ export interface LocaleMessages {
     descriptionLabel: string;
     descriptionPlaceholder: string;
     assigneeLabel: string;
+    assigneeRequired: string;
     createTask: string;
   };
   taskDetail: {

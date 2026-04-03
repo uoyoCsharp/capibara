@@ -98,10 +98,10 @@ export type DesktopEvent =
   | { type: 'run:changed'; orgId: string }
   | { type: 'run:log'; runId: string; stream: 'stdout' | 'stderr'; chunk: string }
   | { type: 'run:output'; runId: string; chunk: string }
-  | { type: 'run:completed'; runId: string; orgId: string; taskNodeId: string; roleId: string; status: 'succeeded' | 'failed' | 'cancelled'; costUsd: number; tokenCount: number }
+  | { type: 'run:completed'; runId: string; orgId: string; taskNodeId: string; roleId: string; status: 'succeeded' | 'failed' | 'cancelled'; tokenCount: number }
   | { type: 'notification'; title: string; body: string }
   | { type: 'approval:required'; taskId: string; taskTitle: string; orgId: string; roleId: string; roleName: string; groupId: string }
-  | { type: 'budget:roles-paused'; orgId: string; totalCost: number; budgetLimit: number }
+  | { type: 'budget:roles-paused'; orgId: string; totalTokens: number; budgetLimit: number }
   | { type: 'settings:locale-changed'; locale: string };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
@@ -459,7 +459,6 @@ export interface RunRecord {
   trigger: WakeTrigger;
   startedAt: string | null;
   finishedAt: string | null;
-  costUsd: number;
   tokenCount: number;
   createdAt: string;
 }
@@ -492,7 +491,6 @@ export interface NarrativeRecord {
 
 export interface CostSummaryRecord {
   orgId: string;
-  totalCost: number;
   totalTokens: number;
   budgetLimit: number;
   budgetPercent: number;
@@ -505,7 +503,6 @@ export interface CostEntryRecord {
   roleId: string;
   orgId: string;
   tokenCount: number;
-  costUsd: number;
   createdAt: string;
 }
 

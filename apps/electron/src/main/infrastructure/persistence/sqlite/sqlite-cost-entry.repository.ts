@@ -11,7 +11,6 @@ interface CostRow {
   role_id: string;
   org_id: string;
   token_count: number;
-  cost_usd: number;
   created_at: string;
 }
 
@@ -22,7 +21,6 @@ function rowToEntity(row: CostRow): CostEntry {
     roleId: row.role_id,
     orgId: row.org_id,
     tokenCount: row.token_count,
-    costUsd: row.cost_usd,
     createdAt: row.created_at,
   };
 }
@@ -35,23 +33,16 @@ export class SqliteCostEntryRepository implements ICostEntryRepository {
 
   async findByRunId(runId: string): Promise<CostEntry[]> {
     const rows = this.conn.getDb()
-      .prepare('SELECT * FROM cost_entries WHERE run_id = ? ORDER BY created_at')
+      .prepare('SELECT id, run_id, role_id, org_id, token_count, created_at FROM cost_entries WHERE run_id = ? ORDER BY created_at')
       .all(runId) as CostRow[];
     return rows.map(rowToEntity);
   }
 
   async findByOrgId(orgId: string): Promise<CostEntry[]> {
     const rows = this.conn.getDb()
-      .prepare('SELECT * FROM cost_entries WHERE org_id = ? ORDER BY created_at')
+      .prepare('SELECT id, run_id, role_id, org_id, token_count, created_at FROM cost_entries WHERE org_id = ? ORDER BY created_at')
       .all(orgId) as CostRow[];
     return rows.map(rowToEntity);
-  }
-
-  async getTotalCostByOrgId(orgId: string): Promise<number> {
-    const row = this.conn.getDb()
-      .prepare('SELECT COALESCE(SUM(cost_usd), 0) as total FROM cost_entries WHERE org_id = ?')
-      .get(orgId) as { total: number };
-    return row.total;
   }
 
   async getTotalTokensByOrgId(orgId: string): Promise<number> {
@@ -66,9 +57,9 @@ export class SqliteCostEntryRepository implements ICostEntryRepository {
     const now = new Date().toISOString();
 
     this.conn.getDb().prepare(`
-      INSERT INTO cost_entries (id, run_id, role_id, org_id, token_count, cost_usd, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.runId, input.roleId, input.orgId, input.tokenCount, input.costUsd, now);
+      INSERT INTO cost_entries (id, run_id, role_id, org_id, token_count, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, input.runId, input.roleId, input.orgId, input.tokenCount, now);
 
     return (await this.findByRunId(input.runId)).find((e) => e.id === id)!;
   }

@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { cn } from '../../lib/utils';
 import { Avatar, AvatarFallback } from '../ui/avatar';
+import { MarkdownContent } from '../shared/MarkdownContent';
 import type { DiscussionMessageRecord, RoleRecord, VoteTag } from '@shared/contracts';
 import type { LocaleMessages } from '@shared/locale/types.js';
 import { useT } from '../../hooks/useLocale';
@@ -50,9 +51,25 @@ export function DiscussionMessageList({ messages, roles }: DiscussionMessageList
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const prevFirstIdRef = useRef<string | null>(null);
+  const prevLastIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    const firstId = messages[0]?.id ?? null;
+    const lastId = messages[messages.length - 1]?.id ?? null;
+    const isGroupSwitch = firstId !== prevFirstIdRef.current;
+    const hasNewMessage = lastId !== prevLastIdRef.current;
+    prevFirstIdRef.current = firstId;
+    prevLastIdRef.current = lastId;
+
+    // Only auto-scroll on group switch or when a genuinely new message arrives.
+    // Skip scroll when messages are just re-fetched with the same content.
+    if (isGroupSwitch) {
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+    } else if (hasNewMessage) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   if (messages.length === 0) {
     return (
@@ -137,7 +154,7 @@ function MessageBubble({
             {new Date(createdAt).toLocaleTimeString()}
           </span>
         </div>
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{content}</p>
+        <MarkdownContent content={content} className="text-sm text-muted-foreground break-words" />
       </div>
     </div>
   );
@@ -174,7 +191,7 @@ function VoteCard({
           </span>
         </div>
         {content && (
-          <p className="text-sm whitespace-pre-wrap break-words opacity-90">{content}</p>
+          <MarkdownContent content={content} className="text-sm break-words opacity-90" />
         )}
       </div>
     </div>

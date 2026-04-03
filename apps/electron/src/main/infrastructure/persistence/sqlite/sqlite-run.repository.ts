@@ -15,14 +15,13 @@ interface RunRow {
   trigger: string;
   started_at: string | null;
   finished_at: string | null;
-  cost_usd: number;
   token_count: number;
   session_id: string | null;
   created_at: string;
 }
 
-/** Columns to SELECT (excludes dropped output_log) */
-const RUN_COLUMNS = 'id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, token_count, session_id, created_at';
+/** Columns to SELECT (excludes dropped output_log and legacy cost_usd) */
+const RUN_COLUMNS = 'id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, token_count, session_id, created_at';
 
 function rowToEntity(row: RunRow): Run {
   return {
@@ -34,7 +33,6 @@ function rowToEntity(row: RunRow): Run {
     trigger: row.trigger as Run['trigger'],
     startedAt: row.started_at,
     finishedAt: row.finished_at,
-    costUsd: row.cost_usd,
     tokenCount: row.token_count,
     sessionId: row.session_id,
     createdAt: row.created_at,
@@ -94,8 +92,8 @@ export class SqliteRunRepository implements IRunRepository {
     const now = new Date().toISOString();
 
     this.conn.getDb().prepare(`
-      INSERT INTO runs (id, org_id, task_node_id, role_id, status, trigger, cost_usd, created_at)
-      VALUES (?, ?, ?, ?, 'queued', ?, 0, ?)
+      INSERT INTO runs (id, org_id, task_node_id, role_id, status, trigger, created_at)
+      VALUES (?, ?, ?, ?, 'queued', ?, ?)
     `).run(id, input.orgId, input.taskNodeId, input.roleId, input.trigger, now);
 
     return (await this.findById(id))!;
@@ -112,17 +110,11 @@ export class SqliteRunRepository implements IRunRepository {
     if (changes.changes === 0) throw new NotFoundError('Run', id);
   }
 
-  async setCost(id: string, costUsd: number): Promise<void> {
-    this.conn.getDb()
-      .prepare('UPDATE runs SET cost_usd = ? WHERE id = ?')
-      .run(costUsd, id);
-  }
-
-  async finish(id: string, status: RunStatus, costUsd: number, tokenCount?: number, sessionId?: string | null): Promise<void> {
+  async finish(id: string, status: RunStatus, tokenCount?: number, sessionId?: string | null): Promise<void> {
     const now = new Date().toISOString();
     const changes = this.conn.getDb()
-      .prepare('UPDATE runs SET status = ?, cost_usd = ?, token_count = ?, session_id = ?, finished_at = ? WHERE id = ?')
-      .run(status, costUsd, tokenCount ?? 0, sessionId ?? null, now, id);
+      .prepare('UPDATE runs SET status = ?, token_count = ?, session_id = ?, finished_at = ? WHERE id = ?')
+      .run(status, tokenCount ?? 0, sessionId ?? null, now, id);
     if (changes.changes === 0) throw new NotFoundError('Run', id);
   }
 

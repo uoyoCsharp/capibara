@@ -33,7 +33,6 @@ export class CostTracker {
       roleId: string;
       orgId: string;
       tokenCount: number;
-      costUsd: number;
     };
 
     if (!payload.runId || !payload.orgId) return;
@@ -43,12 +42,11 @@ export class CostTracker {
       roleId: payload.roleId,
       orgId: payload.orgId,
       tokenCount: payload.tokenCount ?? 0,
-      costUsd: payload.costUsd ?? 0,
     });
 
     this.logger.debug('Cost entry recorded', {
       runId: payload.runId,
-      costUsd: payload.costUsd,
+      tokenCount: payload.tokenCount,
     });
   }
 }

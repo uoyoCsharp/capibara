@@ -133,7 +133,6 @@ export interface Run {
   trigger: WakeTrigger;
   startedAt: string | null;
   finishedAt: string | null;
-  costUsd: number;
   tokenCount: number;
   sessionId: string | null;
   createdAt: string;
@@ -145,7 +144,6 @@ export interface CostEntry {
   roleId: string;
   orgId: string;
   tokenCount: number;
-  costUsd: number;
   createdAt: string;
 }
 

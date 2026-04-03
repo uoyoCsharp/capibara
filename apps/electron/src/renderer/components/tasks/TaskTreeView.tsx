@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CaretRight, CaretDown, Plus, Trash, ListBullets } from '@phosphor-icons/react';
+import { CaretRight, CaretDown, Plus, Trash, ListBullets, CircleNotch } from '@phosphor-icons/react';
 import type { TaskRecord, TaskStatus, TaskType } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -11,6 +11,7 @@ interface TaskTreeViewProps {
   tasks: TaskRecord[];
   selectedTaskId: string | null;
   pendingApprovalTaskIds?: Set<string>;
+  runningTaskIds?: Set<string>;
   onSelectTask: (id: string) => void;
   onAddTask: (parentId: string | null) => void;
   onDeleteTask: (id: string) => void;
@@ -77,6 +78,7 @@ function TaskNodeItem({
   depth,
   selectedTaskId,
   pendingApprovalTaskIds,
+  runningTaskIds,
   onSelectTask,
   onAddTask,
   onRequestDelete,
@@ -87,6 +89,7 @@ function TaskNodeItem({
   depth: number;
   selectedTaskId: string | null;
   pendingApprovalTaskIds?: Set<string>;
+  runningTaskIds?: Set<string>;
   onSelectTask: (id: string) => void;
   onAddTask: (parentId: string) => void;
   onRequestDelete: (id: string) => void;
@@ -102,6 +105,7 @@ function TaskNodeItem({
     : null;
   const hasApprovalPending = pendingApprovalTaskIds?.has(node.task.id) ||
     hasDescendantApproval(node, pendingApprovalTaskIds);
+  const isRunning = runningTaskIds?.has(node.task.id) ?? false;
 
   return (
     <div>
@@ -129,13 +133,19 @@ function TaskNodeItem({
         </button>
 
         {/* Status indicator */}
-        <span
-          className={cn(
-            'w-2.5 h-2.5 rounded-full shrink-0',
-            STATUS_COLORS[node.task.status],
-          )}
-          title={t.task[node.task.status]}
-        />
+        {isRunning ? (
+          <span className="shrink-0" title={t.tasksExecution.running}>
+            <CircleNotch size={14} className="text-blue-500 animate-spin" />
+          </span>
+        ) : (
+          <span
+            className={cn(
+              'w-2.5 h-2.5 rounded-full shrink-0',
+              STATUS_COLORS[node.task.status],
+            )}
+            title={t.task[node.task.status]}
+          />
+        )}
 
         {/* Type badge */}
         <Badge
@@ -213,6 +223,7 @@ function TaskNodeItem({
               depth={depth + 1}
               selectedTaskId={selectedTaskId}
               pendingApprovalTaskIds={pendingApprovalTaskIds}
+              runningTaskIds={runningTaskIds}
               onSelectTask={onSelectTask}
               onAddTask={onAddTask}
               onRequestDelete={onRequestDelete}
@@ -230,6 +241,7 @@ export function TaskTreeView({
   tasks,
   selectedTaskId,
   pendingApprovalTaskIds,
+  runningTaskIds,
   onSelectTask,
   onAddTask,
   onDeleteTask,
@@ -264,6 +276,7 @@ export function TaskTreeView({
           depth={0}
           selectedTaskId={selectedTaskId}
           pendingApprovalTaskIds={pendingApprovalTaskIds}
+          runningTaskIds={runningTaskIds}
           onSelectTask={onSelectTask}
           onAddTask={onAddTask}
           onRequestDelete={setConfirmDelete}

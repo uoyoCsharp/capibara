@@ -78,23 +78,21 @@ export function registerNarrativeHandlers(
         return fail('VALIDATION_ERROR', 'orgId must be a non-empty string');
       }
       const org = await orgRepo.findById(orgId);
-      const totalCost = await costRepo.getTotalCostByOrgId(orgId);
       const totalTokens = await costRepo.getTotalTokensByOrgId(orgId);
       const entries = await costRepo.findByOrgId(orgId);
       const budgetLimit = org?.budgetLimit ?? 50;
+      const totalTokensM = totalTokens / 1_000_000;
       return ok({
         orgId,
-        totalCost,
         totalTokens,
         budgetLimit,
-        budgetPercent: budgetLimit > 0 ? Math.round((totalCost / budgetLimit) * 100) : 0,
+        budgetPercent: budgetLimit > 0 ? Math.round((totalTokensM / budgetLimit) * 100) : 0,
         entries: entries.map((e) => ({
           id: e.id,
           runId: e.runId,
           roleId: e.roleId,
           orgId: e.orgId,
           tokenCount: e.tokenCount,
-          costUsd: e.costUsd,
           createdAt: e.createdAt,
         })),
       });
@@ -116,7 +114,6 @@ export function registerNarrativeHandlers(
         roleId: e.roleId,
         orgId: e.orgId,
         tokenCount: e.tokenCount,
-        costUsd: e.costUsd,
         createdAt: e.createdAt,
       })));
     } catch (err) {

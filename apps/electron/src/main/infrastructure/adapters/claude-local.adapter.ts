@@ -158,7 +158,6 @@ export class ClaudeLocalAdapter implements ICliAdapter {
       errorMessage,
       model: parsed.model || null,
       sessionId: parsed.sessionId || null,
-      costUsd: parsed.costUsd,
       inputTokens: parsed.usage?.inputTokens ?? 0,
       outputTokens: parsed.usage?.outputTokens ?? 0,
       cachedInputTokens: parsed.usage?.cachedInputTokens ?? 0,

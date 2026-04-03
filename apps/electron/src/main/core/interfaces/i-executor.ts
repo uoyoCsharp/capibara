@@ -23,7 +23,6 @@ export interface ExecutorOutput {
   errorMessage: string | null;
   model: string | null;
   sessionId: string | null;
-  costUsd: number | null;
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;

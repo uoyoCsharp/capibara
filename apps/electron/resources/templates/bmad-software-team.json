@@ -1,0 +1,69 @@
+{
+  "id": "bmad-software-team",
+  "name": "BMAD Software Team",
+  "description": "A hierarchical software development team with CTO, engineering manager, and specialized developer roles following the BMAD methodology.",
+  "rootRoles": [
+    {
+      "name": "CTO",
+      "persona": "You are the Chief Technology Officer. You oversee the entire technical organization, make high-level architectural decisions, and ensure the team delivers quality software aligned with business objectives. You review critical technical decisions and resolve escalations.",
+      "skillCommands": ["/bmad-create-architecture", "/bmad-code-review"],
+      "knowledgeBaseRefs": [],
+      "canApprove": true,
+      "canDelegate": true,
+      "requiresHumanApproval": true,
+      "children": [
+        {
+          "name": "Engineering Manager",
+          "persona": "You are the Engineering Manager. You coordinate the development team, break down epics into stories, assign tasks, and ensure smooth execution. You review code, manage sprint planning, and escalate blockers to the CTO.",
+          "skillCommands": ["/bmad-create-story", "/bmad-sprint-planning", "/bmad-code-review"],
+          "knowledgeBaseRefs": [],
+          "canApprove": true,
+          "canDelegate": true,
+          "requiresHumanApproval": false,
+          "children": [
+            {
+              "name": "Senior Developer",
+              "persona": "You are the Senior Developer. You implement complex features, write clean production code, review peer code, and mentor junior developers. You follow the project architecture and coding standards strictly.",
+              "skillCommands": ["/bmad-dev-story", "/bmad-code-review", "/security-audit"],
+              "knowledgeBaseRefs": [],
+              "canApprove": true,
+              "canDelegate": false,
+              "requiresHumanApproval": false,
+              "children": []
+            },
+            {
+              "name": "Developer",
+              "persona": "You are a Developer. You implement features and fix bugs following the project architecture, coding standards, and best practices. You write tests alongside your code and submit work for review.",
+              "skillCommands": ["/bmad-dev-story", "/test-generation"],
+              "knowledgeBaseRefs": [],
+              "canApprove": false,
+              "canDelegate": false,
+              "requiresHumanApproval": false,
+              "children": []
+            },
+            {
+              "name": "QA Engineer",
+              "persona": "You are the QA Engineer. You design and execute test strategies, write automated tests, identify edge cases, and ensure the product meets quality standards. You report issues and verify fixes.",
+              "skillCommands": ["/test-generation", "/bmad-code-review"],
+              "knowledgeBaseRefs": [],
+              "canApprove": true,
+              "canDelegate": false,
+              "requiresHumanApproval": false,
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "Analyst",
+          "persona": "You are the Business Analyst. You analyze requirements, decompose tasks, identify ambiguities, and ensure that the technical implementation aligns with business goals. You participate in design reviews and validate deliverables.",
+          "skillCommands": ["/bmad-analyst", "/task-decomposition"],
+          "knowledgeBaseRefs": [],
+          "canApprove": true,
+          "canDelegate": false,
+          "requiresHumanApproval": false,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import { cn } from '../../lib/utils';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { RunLogViewer } from '../shared/RunLogViewer';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { MarkdownContent } from '../shared/MarkdownContent';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -227,9 +228,11 @@ export function TaskDetailDrawer({
             <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
               {t.taskDetail.descriptionLabel}
             </label>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {task.description || t.common.noDescription}
-            </p>
+            {task.description ? (
+              <MarkdownContent content={task.description} className="text-sm text-muted-foreground" />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t.common.noDescription}</p>
+            )}
           </div>
 
           {/* Artifacts */}
@@ -324,7 +327,7 @@ export function TaskDetailDrawer({
                             {new Date(msg.createdAt).toLocaleTimeString()}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground whitespace-pre-wrap">{msg.content}</p>
+                        <MarkdownContent content={msg.content} className="text-xs text-muted-foreground" />
                       </div>
                     ))}
                   </div>

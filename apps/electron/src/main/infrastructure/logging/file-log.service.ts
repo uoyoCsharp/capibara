@@ -36,6 +36,46 @@ export class FileLogService {
   constructor(private readonly logDir: string) {}
 
   /**
+   * Write the input prompt and execution context as the first entry in the run log.
+   * This records what was sent to the CLI, enabling full request/response traceability.
+   */
+  writeInput(orgName: string, taskId: string, runId: string, input: {
+    prompt: string;
+    trigger: string;
+    roleId: string;
+    executor: string;
+    projectDir: string;
+    sessionId?: string;
+    cliConfig?: Record<string, unknown>;
+  }): void {
+    const filePath = this.resolveLogPath(orgName, taskId, runId);
+    const dir = join(this.logDir, sanitizeName(orgName), taskId);
+
+    const prev = this.writeQueues.get(runId) ?? Promise.resolve();
+    const next = prev.then(async () => {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      const entry = JSON.stringify({
+        type: 'input',
+        ts: new Date().toISOString(),
+        runId,
+        trigger: input.trigger,
+        roleId: input.roleId,
+        executor: input.executor,
+        projectDir: input.projectDir,
+        sessionId: input.sessionId ?? null,
+        cliConfig: input.cliConfig ?? null,
+        prompt: input.prompt,
+      }) + '\n';
+      await appendFile(filePath, entry, 'utf-8');
+    }).catch(() => {
+      // Best-effort write
+    });
+    this.writeQueues.set(runId, next);
+  }
+
+  /**
    * Append a raw stdout/stderr chunk to the run log file.
    * Creates directories lazily on first write per run.
    */
@@ -191,6 +231,21 @@ function parseStreamJsonObject(obj: Record<string, unknown>): ParsedLogEntry | n
   const type = typeof obj.type === 'string' ? obj.type : '';
 
   switch (type) {
+    case 'input': {
+      const ts = typeof obj.ts === 'string' ? obj.ts : null;
+      const trigger = typeof obj.trigger === 'string' ? obj.trigger : '';
+      const executor = typeof obj.executor === 'string' ? obj.executor : '';
+      const sessionId = typeof obj.sessionId === 'string' ? obj.sessionId : null;
+      const prompt = typeof obj.prompt === 'string' ? obj.prompt : '';
+      const truncated = prompt.length > 500 ? prompt.slice(0, 500) + '…' : prompt;
+      const sessionNote = sessionId ? `, resume: ${sessionId.slice(0, 8)}…` : '';
+      return {
+        ts,
+        kind: 'input',
+        text: `[Input] trigger=${trigger}, executor=${executor}${sessionNote}\n${truncated}`,
+      };
+    }
+
     case 'system': {
       const subtype = typeof obj.subtype === 'string' ? obj.subtype : '';
       if (subtype === 'init') {

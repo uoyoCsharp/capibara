@@ -57,7 +57,7 @@ export const enUS: LocaleMessages = {
     notFound: 'Not found',
     validation: 'Validation error',
     internal: 'Internal error',
-    budgetExceeded: 'Budget exceeded',
+    budgetExceeded: 'Token budget exceeded',
     failedToLoad: 'Failed to load',
     failedToCreate: 'Failed to create',
     failedToUpdate: 'Failed to update',
@@ -239,6 +239,8 @@ export const enUS: LocaleMessages = {
     failedToDeleteTask: 'Failed to delete task',
     failedToStartRun: 'Failed to start run',
     failedToCancelRun: 'Failed to cancel run',
+    hideCompleted: 'Hide completed',
+    showCompleted: 'Show completed',
   },
   taskCreate: {
     createChild: 'Create Child Task',
@@ -250,6 +252,7 @@ export const enUS: LocaleMessages = {
     descriptionLabel: 'Description',
     descriptionPlaceholder: 'Describe the task...',
     assigneeLabel: 'Assignee Role',
+    assigneeRequired: 'Assignee role is required',
     createTask: 'Create Task',
   },
   taskDetail: {

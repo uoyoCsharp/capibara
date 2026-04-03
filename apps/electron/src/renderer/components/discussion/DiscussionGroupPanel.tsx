@@ -12,6 +12,7 @@ import { DiscussionMessageList } from './DiscussionMessageList';
 import { VoteStatsBar } from './VoteStatsBar';
 import { HumanVotePanel } from './HumanVotePanel';
 import { ApprovalPanelCard } from './ApprovalPanelCard';
+import { MarkdownContent } from '../shared/MarkdownContent';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 
@@ -105,7 +106,7 @@ export function DiscussionGroupPanel({
       {group.summary && (
         <div className="mx-5 mb-2 rounded-lg bg-primary/10 border border-primary/20 px-4 py-3">
           <p className="text-xs font-medium text-primary mb-1">Discussion Summary</p>
-          <p className="text-xs text-primary/80 whitespace-pre-wrap">{group.summary}</p>
+          <MarkdownContent content={group.summary} className="text-xs text-primary/80" />
         </div>
       )}
 

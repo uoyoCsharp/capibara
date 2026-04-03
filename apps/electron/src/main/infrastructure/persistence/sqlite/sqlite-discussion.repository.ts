@@ -89,7 +89,17 @@ export class SqliteDiscussionRepository implements IDiscussionRepository {
 
   async findGroupsByOrgId(orgId: string): Promise<DiscussionGroup[]> {
     const rows = this.conn.getDb()
-      .prepare('SELECT * FROM discussion_groups WHERE org_id = ? ORDER BY created_at DESC')
+      .prepare(`
+        SELECT g.*
+        FROM discussion_groups g
+        LEFT JOIN (
+          SELECT group_id, MAX(created_at) as last_msg_at
+          FROM discussion_messages
+          GROUP BY group_id
+        ) m ON m.group_id = g.id
+        WHERE g.org_id = ?
+        ORDER BY COALESCE(m.last_msg_at, g.created_at) DESC
+      `)
       .all(orgId) as GroupRow[];
     return rows.map(groupRowToEntity);
   }

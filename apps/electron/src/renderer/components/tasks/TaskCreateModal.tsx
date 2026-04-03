@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { X } from '@phosphor-icons/react';
+import { useState } from 'react';
 import type { TaskType, RoleRecord, CreateTaskInput } from '@shared/contracts';
+import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -61,6 +61,10 @@ export function TaskCreateModal({
     e.preventDefault();
     if (!title.trim()) {
       setError(t.taskCreate.titleRequired);
+      return;
+    }
+    if (!assigneeRoleId) {
+      setError(t.taskCreate.assigneeRequired);
       return;
     }
     onSubmit({
@@ -134,16 +138,21 @@ export function TaskCreateModal({
 
           {/* Assignee Role */}
           <div className="space-y-2">
-            <Label>{t.taskCreate.assigneeLabel}</Label>
+            <Label>
+              {t.taskCreate.assigneeLabel}
+              <span className="text-destructive ml-0.5">*</span>
+            </Label>
             <Select
-              value={assigneeRoleId ?? '_unassigned'}
-              onValueChange={(value) => setAssigneeRoleId(value === '_unassigned' ? null : value)}
+              value={assigneeRoleId ?? ''}
+              onValueChange={(value) => {
+                setAssigneeRoleId(value || null);
+                setError(null);
+              }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder={t.common.unassigned} />
+              <SelectTrigger className={cn(!assigneeRoleId && error ? 'border-destructive' : '')}>
+                <SelectValue placeholder={t.taskCreate.assigneeLabel} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_unassigned">{t.common.unassigned}</SelectItem>
                 {roles.map((role) => (
                   <SelectItem key={role.id} value={role.id}>
                     {role.name}

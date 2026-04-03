@@ -72,13 +72,13 @@ export class NotificationService {
   }
 
   private onBudgetExceeded(event: DomainEvent): void {
-    const { orgId, totalCost, limit } = event.payload as {
-      orgId: string; totalCost: number; limit: number;
+    const { orgId, totalTokens, limit } = event.payload as {
+      orgId: string; totalTokens: number; limit: number;
     };
 
     this.sendNotification({
       title: 'Budget Limit Reached',
-      body: `Budget exceeded. All roles paused.`,
+      body: `Token budget exceeded. All roles paused.`,
       urgency: 'critical',
       navigateTo: { orgId },
     });
@@ -87,7 +87,7 @@ export class NotificationService {
     this.sendRendererEvent({
       type: 'budget:roles-paused',
       orgId,
-      totalCost,
+      totalTokens,
       budgetLimit: limit,
     });
   }

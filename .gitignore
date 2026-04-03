@@ -31,7 +31,6 @@ pnpm-debug.log*
 
 # Electron
 apps/electron/release/
-apps/electron/resources/
 
 # Database
 *.db

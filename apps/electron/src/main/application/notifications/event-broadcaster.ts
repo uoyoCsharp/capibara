@@ -77,7 +77,6 @@ export class EventBroadcaster {
           taskNodeId: payload.taskNodeId as string,
           roleId: payload.roleId as string,
           status: event.type === 'run:succeeded' ? 'succeeded' : event.type === 'run:failed' ? 'failed' : 'cancelled',
-          costUsd: (payload.costUsd as number) ?? 0,
           tokenCount: (payload.tokenCount as number) ?? 0,
         };
         for (const win of windows) {
