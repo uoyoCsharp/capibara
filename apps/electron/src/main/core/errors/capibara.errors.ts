@@ -2,22 +2,23 @@ export class CapibaraError extends Error {
   constructor(
     message: string,
     public readonly code: string,
+    options?: { cause?: Error },
   ) {
-    super(message);
+    super(message, options);
     this.name = 'CapibaraError';
   }
 }
 
 export class NotFoundError extends CapibaraError {
-  constructor(entity: string, id: string) {
-    super(`${entity} not found: ${id}`, 'NOT_FOUND');
+  constructor(entity: string, id: string, options?: { cause?: Error }) {
+    super(`${entity} not found: ${id}`, 'NOT_FOUND', options);
     this.name = 'NotFoundError';
   }
 }
 
 export class ValidationError extends CapibaraError {
-  constructor(message: string) {
-    super(message, 'VALIDATION_ERROR');
+  constructor(message: string, options?: { cause?: Error }) {
+    super(message, 'VALIDATION_ERROR', options);
     this.name = 'ValidationError';
   }
 }
@@ -50,8 +51,8 @@ export class CircuitBreakerError extends CapibaraError {
 }
 
 export class ExecutionError extends CapibaraError {
-  constructor(runId: string, message: string) {
-    super(`Run ${runId} failed: ${message}`, 'EXECUTION_ERROR');
+  constructor(runId: string, message: string, options?: { cause?: Error }) {
+    super(`Run ${runId} failed: ${message}`, 'EXECUTION_ERROR', options);
     this.name = 'ExecutionError';
   }
 }
@@ -60,5 +61,34 @@ export class ConsensusError extends CapibaraError {
   constructor(groupId: string, message: string) {
     super(`Consensus error in group ${groupId}: ${message}`, 'CONSENSUS_ERROR');
     this.name = 'ConsensusError';
+  }
+}
+
+// ─── Conversation Domain Errors ──────────────────────────────────────
+
+export class ConversationStateError extends CapibaraError {
+  constructor(workflowId: string, from: string, to: string) {
+    super(
+      `Invalid conversation transition: ${from} → ${to} (workflow: ${workflowId})`,
+      'INVALID_CONVERSATION_TRANSITION',
+    );
+    this.name = 'ConversationStateError';
+  }
+}
+
+export class ConversationRoutingError extends CapibaraError {
+  constructor(taskId: string, reason: string) {
+    super(`Routing failed for task ${taskId}: ${reason}`, 'CONVERSATION_ROUTING_FAILED');
+    this.name = 'ConversationRoutingError';
+  }
+}
+
+export class ConversationTimeoutError extends CapibaraError {
+  constructor(workflowId: string, message: string) {
+    super(
+      `Conversation timeout: ${message} (workflow: ${workflowId})`,
+      'CONVERSATION_TIMEOUT',
+    );
+    this.name = 'ConversationTimeoutError';
   }
 }

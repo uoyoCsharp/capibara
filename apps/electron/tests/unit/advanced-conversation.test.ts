@@ -180,6 +180,14 @@ describe('Epic 15 — Advanced Conversation Features', () => {
   beforeEach(() => {
     roleRepo = {
       findById: vi.fn(),
+      findByIds: vi.fn(async (ids: string[]) => {
+        const results = [];
+        for (const id of ids) {
+          const role = await roleRepo.findById(id);
+          if (role) results.push(role);
+        }
+        return results;
+      }),
       findByOrgId: vi.fn(() => Promise.resolve([])),
       findChildren: vi.fn(() => Promise.resolve([])),
     };

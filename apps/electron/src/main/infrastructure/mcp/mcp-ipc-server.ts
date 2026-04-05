@@ -14,7 +14,8 @@ import type { McpToolRegistry } from './mcp-tool-registry.js';
 export class McpIpcServer {
   private server: Server | null = null;
   private port = 0;
-  private activeTokens = new Map<string, string>(); // runId → token
+  private activeTokens = new Map<string, { token: string; expiresAt: number }>(); // runId → { token, expiresAt }
+  private tokenCleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
@@ -34,6 +35,7 @@ export class McpIpcServer {
         if (addr && typeof addr === 'object') {
           this.port = addr.port;
           this.server = srv;
+          this.startTokenCleanup();
           this.logger.info('MCP IPC server started', { port: this.port });
           resolve(this.port);
         } else {
@@ -49,10 +51,15 @@ export class McpIpcServer {
   }
 
   stop(): void {
+    if (this.tokenCleanupTimer) {
+      clearInterval(this.tokenCleanupTimer);
+      this.tokenCleanupTimer = null;
+    }
     if (this.server) {
       this.server.close();
       this.server = null;
       this.port = 0;
+      this.activeTokens.clear();
       this.logger.info('MCP IPC server stopped');
     }
   }
@@ -62,7 +69,20 @@ export class McpIpcServer {
   }
 
   registerToken(runId: string, token: string): void {
-    this.activeTokens.set(runId, token);
+    // Parse expiry from JWT payload, fallback to 1 hour
+    let expiresAt = Date.now() + 3_600_000;
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+        if (payload.exp) {
+          expiresAt = payload.exp * 1000;
+        }
+      }
+    } catch {
+      // Use default expiry
+    }
+    this.activeTokens.set(runId, { token, expiresAt });
   }
 
   revokeToken(runId: string): void {
@@ -109,8 +129,14 @@ export class McpIpcServer {
   }
 
   private validateJwt(runId: string, token: string): boolean {
-    const storedToken = this.activeTokens.get(runId);
-    if (!storedToken || storedToken !== token) return false;
+    const entry = this.activeTokens.get(runId);
+    if (!entry || entry.token !== token) return false;
+
+    // Check if token has expired
+    if (entry.expiresAt < Date.now()) {
+      this.activeTokens.delete(runId);
+      return false;
+    }
 
     try {
       const parts = token.split('.');
@@ -122,6 +148,23 @@ export class McpIpcServer {
     } catch {
       return false;
     }
+  }
+
+  /** Periodically remove expired tokens to prevent memory leaks from orphaned runs */
+  private startTokenCleanup(): void {
+    this.tokenCleanupTimer = setInterval(() => {
+      const now = Date.now();
+      let cleaned = 0;
+      for (const [runId, entry] of this.activeTokens) {
+        if (entry.expiresAt < now) {
+          this.activeTokens.delete(runId);
+          cleaned++;
+        }
+      }
+      if (cleaned > 0) {
+        this.logger.debug('Cleaned expired MCP tokens', { count: cleaned });
+      }
+    }, 60_000); // every minute
   }
 
   private readBody(req: IncomingMessage): Promise<string> {

@@ -55,6 +55,20 @@ export class SqliteRoleRepository implements IRoleRepository {
     return row ? rowToEntity(row) : null;
   }
 
+  async findByIds(ids: string[]): Promise<Role[]> {
+    if (ids.length === 0) return [];
+    const results: Role[] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = this.conn.getDb()
+        .prepare(`SELECT * FROM roles WHERE id IN (${placeholders})`)
+        .all(...chunk) as RoleRow[];
+      results.push(...rows.map(rowToEntity));
+    }
+    return results;
+  }
+
   async findByOrgId(orgId: string): Promise<Role[]> {
     const rows = this.conn.getDb()
       .prepare('SELECT * FROM roles WHERE org_id = ? ORDER BY name')

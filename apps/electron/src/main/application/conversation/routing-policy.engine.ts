@@ -213,7 +213,16 @@ export class RoutingPolicyEngine implements IRoutingPolicyEngine {
     }
 
     // Layer 3: Pair cycle (check recent conversation chain)
-    const recentChain = await this.workflowRepo.findRecentChainByTask(request.taskNodeId, 4);
+    let recentChain: Awaited<ReturnType<typeof this.workflowRepo.findRecentChainByTask>>;
+    try {
+      recentChain = await this.workflowRepo.findRecentChainByTask(request.taskNodeId, 4);
+    } catch (err) {
+      this.logger.error('Cycle detection failed, assuming cycle for safety', {
+        taskNodeId: request.taskNodeId, error: String(err),
+      });
+      return { hasCycle: true, reason: 'detection_error', action: 'force_human' };
+    }
+
     for (const wf of recentChain) {
       const pair1 = `${wf.askingRoleId}:${wf.respondentRoleId}`;
       const pair2 = `${wf.respondentRoleId}:${wf.askingRoleId}`;

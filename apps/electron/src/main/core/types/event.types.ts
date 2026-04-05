@@ -36,6 +36,7 @@ export type DomainEventType =
   | 'conversation:question-posted'
   | 'conversation:reply-posted'
   | 'conversation:state-changed'
+  | 'conversation:routing-failed'
   | 'conversation:escalated'
   | 'conversation:timed-out'
   | 'conversation:resolved'

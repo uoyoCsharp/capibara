@@ -287,7 +287,18 @@ export class TaskService {
       await this.checkAutoPropagate(parentTask.id);
     } else if (parentTask.status === 'in_progress') {
       // Parent is still in_progress → advance to awaiting_review
-      await this.updateStatus(parentTask.id, 'awaiting_review');
+      try {
+        await this.updateStatus(parentTask.id, 'awaiting_review');
+      } catch (err) {
+        this.logger.error('Auto-propagation to parent failed', {
+          taskId, parentId: parentTask.id, error: String(err),
+        });
+        this.eventBus.emit({
+          type: 'task:propagation-failed' as const,
+          timestamp: new Date().toISOString(),
+          payload: { taskId, parentId: parentTask.id, error: String(err) },
+        });
+      }
     }
   }
 }

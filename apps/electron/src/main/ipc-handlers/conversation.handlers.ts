@@ -17,7 +17,7 @@ function fail<T>(code: string, message: string): DesktopResult<T> {
   return { ok: false, error: { code, message } };
 }
 
-const TERMINAL_STATES = ['resolved', 'timed_out', 'cancelled'] as const;
+const TERMINAL_STATES: ReadonlySet<string> = new Set(['resolved', 'timed_out', 'cancelled']);
 
 function toRecord(wf: import('@main/core/types/conversation.types.js').ConversationWorkflow): ConversationWorkflowRecord {
   return {
@@ -56,7 +56,7 @@ export function registerConversationHandlers(
         return fail('VALIDATION_ERROR', 'orgId must be a non-empty string');
       }
       const workflows = await workflowRepo.findByOrgId(orgId);
-      const active = workflows.filter((wf) => !TERMINAL_STATES.includes(wf.state as typeof TERMINAL_STATES[number]));
+      const active = workflows.filter((wf) => !TERMINAL_STATES.has(wf.state));
       return ok(active.map(toRecord));
     } catch (err) {
       logger.error('Failed to get active conversations', { error: String(err) });
@@ -98,7 +98,7 @@ export function registerConversationHandlers(
       if (!workflow) {
         return fail('NOT_FOUND', `Conversation workflow ${workflowId} not found`);
       }
-      if (TERMINAL_STATES.includes(workflow.state as typeof TERMINAL_STATES[number])) {
+      if (TERMINAL_STATES.has(workflow.state)) {
         return fail('INVALID_STATE', `Conversation is already in terminal state '${workflow.state}'`);
       }
 
@@ -140,7 +140,7 @@ export function registerConversationHandlers(
       }
       const workflows = await workflowRepo.findByOrgId(orgId);
       const total = workflows.length;
-      const active = workflows.filter((wf) => !TERMINAL_STATES.includes(wf.state as typeof TERMINAL_STATES[number])).length;
+      const active = workflows.filter((wf) => !TERMINAL_STATES.has(wf.state)).length;
       const resolved = workflows.filter((wf) => wf.state === 'resolved').length;
       const escalated = workflows.filter((wf) => wf.state === 'escalated').length;
       const timedOut = workflows.filter((wf) => wf.state === 'timed_out').length;

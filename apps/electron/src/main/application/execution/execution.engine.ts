@@ -331,11 +331,7 @@ export class ExecutionEngine {
       }
 
       // ─── Cleanup ───────────────────────────────────────────
-      await this.fileLogService.flush(runId);
-      this.runLogCtx.delete(runId);
-      this.mcpIpcServer.revokeToken(runId);
-      this.jwtSecrets.delete(runId);
-      this.mcpConfigGen.cleanup(runId);
+      await this.cleanupRun(runId);
     } catch (err) {
       this.logger.error('Run execution error', { runId, error: String(err) });
 
@@ -351,12 +347,30 @@ export class ExecutionEngine {
         payload: { runId, roleId, orgId, taskNodeId, error: String(err) },
       });
 
-      await this.fileLogService.flush(runId).catch(() => {});
-      this.runLogCtx.delete(runId);
-      this.mcpIpcServer.revokeToken(runId);
-      this.jwtSecrets.delete(runId);
-      this.mcpConfigGen.cleanup(runId);
+      await this.cleanupRun(runId);
     }
+  }
+
+  /**
+   * Cleanup all resources for a run. Each operation is isolated so
+   * a failure in one (e.g. flush) does not prevent token revocation.
+   */
+  private async cleanupRun(runId: string): Promise<void> {
+    const results = await Promise.allSettled([
+      this.fileLogService.flush(runId),
+      Promise.resolve(this.mcpConfigGen.cleanup(runId)),
+    ]);
+
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        this.logger.warn('Run cleanup step failed', { runId, error: String(r.reason) });
+      }
+    }
+
+    // Synchronous cleanup always runs regardless of above
+    this.runLogCtx.delete(runId);
+    this.mcpIpcServer.revokeToken(runId);
+    this.jwtSecrets.delete(runId);
   }
 
   private generateRunToken(runId: string): string {

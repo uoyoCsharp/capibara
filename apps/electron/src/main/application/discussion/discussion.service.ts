@@ -171,7 +171,7 @@ export class DiscussionService {
       // Find the nearest discussion group by walking up the task tree (story or epic)
       const group = await this.findNearestDiscussionGroup(payload.taskNodeId);
       if (!group) {
-        this.logger.debug('No discussion group found for run', {
+        this.logger.warn('No discussion group found for run summary', {
           runId: payload.runId,
           taskNodeId: payload.taskNodeId,
         });
@@ -189,7 +189,7 @@ export class DiscussionService {
 
       const content = `**[${taskTitle}]** Run ${status} by ${roleName}${tokenLine}${errorLine}`;
 
-      await this.discussionRepo.postMessage({
+      const postedMsg = await this.discussionRepo.postMessage({
         groupId: group.id,
         authorRoleId: payload.roleId,
         authorType: 'system',
@@ -206,7 +206,7 @@ export class DiscussionService {
       this.eventBus.emit({
         type: 'discussion:message-added',
         timestamp: new Date().toISOString(),
-        payload: { groupId: group.id, messageId: payload.runId },
+        payload: { groupId: group.id, messageId: postedMsg.id },
       });
     } catch (err) {
       this.logger.error('Failed to post run summary to discussion', {

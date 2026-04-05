@@ -116,7 +116,9 @@ export interface DiscussionGroup {
   taskNodeId: string;
   orgId: string;
   status: DiscussionStatus;
+  /** Populated after discussion completes; null while active */
   summary: string | null;
+  /** Timestamp of last summary generation; null if never summarized */
   lastSummaryAt: string | null;
   currentRound: number;
   reviseCount: number;
@@ -126,13 +128,16 @@ export interface DiscussionGroup {
 export interface DiscussionMessage {
   id: string;
   groupId: string;
+  /** null for system-generated messages */
   authorRoleId: string | null;
   authorType: AuthorType;
   content: string;
+  /** null if message has not been voted on yet */
   voteTag: VoteTag;
   reviewRound: number;
   metadata: Record<string, unknown> | null;
   intent: MessageIntent;
+  /** null for top-level messages (not a reply) */
   inReplyToMessageId: string | null;
   createdAt: string;
 }
@@ -144,9 +149,12 @@ export interface Run {
   roleId: string;
   status: RunStatus;
   trigger: WakeTrigger;
+  /** null until run actually begins execution */
   startedAt: string | null;
+  /** null while run is still in progress */
   finishedAt: string | null;
   tokenCount: number;
+  /** null if run does not support session resumption */
   sessionId: string | null;
   createdAt: string;
 }
@@ -173,6 +181,7 @@ export interface PendingWake {
   roleId: string;
   orgId: string;
   trigger: WakeTrigger;
+  /** null when wake was enqueued without a specific task context */
   taskNodeId: string | null;
   priority: number;
   createdAt: string;

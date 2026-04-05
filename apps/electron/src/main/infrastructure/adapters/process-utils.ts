@@ -25,6 +25,10 @@ export interface RunProcessResult {
   timedOut: boolean;
   stdout: string;
   stderr: string;
+  /** True if stdout was truncated due to exceeding capture limit */
+  stdoutTruncated: boolean;
+  /** True if stderr was truncated due to exceeding capture limit */
+  stderrTruncated: boolean;
 }
 
 export interface RunProcessOptions {
@@ -215,9 +219,17 @@ export function filterConflictingArgs(extraArgs: string[], managedFlags: string[
 
 // ─── String append with cap ───────────────────────────────────────────
 
-function appendWithCap(prev: string, chunk: string, cap = MAX_CAPTURE_BYTES): string {
-  const combined = prev + chunk;
-  return combined.length > cap ? combined.slice(combined.length - cap) : combined;
+interface CappedString {
+  value: string;
+  truncated: boolean;
+}
+
+function appendWithCap(prev: CappedString, chunk: string, cap = MAX_CAPTURE_BYTES): CappedString {
+  const combined = prev.value + chunk;
+  if (combined.length > cap) {
+    return { value: combined.slice(combined.length - cap), truncated: true };
+  }
+  return { value: combined, truncated: prev.truncated };
 }
 
 // ─── Environment building ─────────────────────────────────────────────
@@ -281,8 +293,8 @@ export async function runChildProcess(
     }
 
     let timedOut = false;
-    let stdout = '';
-    let stderr = '';
+    let stdoutCap: CappedString = { value: '', truncated: false };
+    let stderrCap: CappedString = { value: '', truncated: false };
 
     // Use StringDecoder to handle multi-byte characters split across chunks.
     // Detects GBK per-stream and falls back when UTF-8 produces replacement chars.
@@ -319,7 +331,7 @@ export async function runChildProcess(
       } else {
         text = String(chunk);
       }
-      stdout = appendWithCap(stdout, text);
+      stdoutCap = appendWithCap(stdoutCap, text);
       logChain = logChain
         .then(() => { opts.onLog('stdout', text); })
         .catch(() => {});
@@ -340,7 +352,7 @@ export async function runChildProcess(
       } else {
         text = String(chunk);
       }
-      stderr = appendWithCap(stderr, text);
+      stderrCap = appendWithCap(stderrCap, text);
       logChain = logChain
         .then(() => { opts.onLog('stderr', text); })
         .catch(() => {});
@@ -364,16 +376,18 @@ export async function runChildProcess(
       // Flush remaining partial multi-byte characters
       const stdoutTail = stdoutDecoder.end();
       const stderrTail = stderrDecoder.end();
-      if (stdoutTail) stdout = appendWithCap(stdout, stdoutTail);
-      if (stderrTail) stderr = appendWithCap(stderr, stderrTail);
+      if (stdoutTail) stdoutCap = appendWithCap(stdoutCap, stdoutTail);
+      if (stderrTail) stderrCap = appendWithCap(stderrCap, stderrTail);
 
       void logChain.finally(() => {
         resolve({
           exitCode: code,
           signal,
           timedOut,
-          stdout,
-          stderr,
+          stdout: stdoutCap.value,
+          stderr: stderrCap.value,
+          stdoutTruncated: stdoutCap.truncated,
+          stderrTruncated: stderrCap.truncated,
         });
       });
     });

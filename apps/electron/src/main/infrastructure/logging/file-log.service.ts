@@ -11,6 +11,7 @@ import { createReadStream, existsSync, mkdirSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import type { ILogger } from '@main/core/interfaces/i-logger.js';
 
 /** A single parsed log entry for user-friendly display */
 export interface ParsedLogEntry {
@@ -33,7 +34,7 @@ export class FileLogService {
   /** Per-run write queues to guarantee ordering without file locking */
   private readonly writeQueues = new Map<string, Promise<void>>();
 
-  constructor(private readonly logDir: string) {}
+  constructor(private readonly logDir: string, private readonly logger?: ILogger) {}
 
   /**
    * Write the input prompt and execution context as the first entry in the run log.
@@ -69,8 +70,8 @@ export class FileLogService {
         prompt: input.prompt,
       }) + '\n';
       await appendFile(filePath, entry, 'utf-8');
-    }).catch(() => {
-      // Best-effort write
+    }).catch((err) => {
+      this.logger?.warn('Log writeInput failed', { runId, error: String(err) });
     });
     this.writeQueues.set(runId, next);
   }
@@ -90,8 +91,8 @@ export class FileLogService {
         mkdirSync(dir, { recursive: true });
       }
       await appendFile(filePath, chunk, 'utf-8');
-    }).catch(() => {
-      // Best-effort write — don't block execution
+    }).catch((err) => {
+      this.logger?.warn('Log append failed', { runId, error: String(err) });
     });
     this.writeQueues.set(runId, next);
   }

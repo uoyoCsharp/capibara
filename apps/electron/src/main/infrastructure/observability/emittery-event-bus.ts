@@ -8,7 +8,9 @@ export class EmitteryEventBus implements IEventBus {
   private readonly emitter = new Emittery();
 
   emit<T>(event: DomainEvent<T>): void {
-    void this.emitter.emit(event.type, event);
+    this.emitter.emit(event.type, event).catch((err) => {
+      console.error(`[EventBus] Unhandled error in handler for '${event.type}':`, err);
+    });
   }
 
   on<T>(eventType: DomainEventType, handler: (event: DomainEvent<T>) => void): void {

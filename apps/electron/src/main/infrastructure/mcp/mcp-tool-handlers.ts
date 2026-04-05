@@ -63,9 +63,10 @@ export class McpToolHandlers {
   }
 
   private async taskComplete(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const taskId = args.taskId as string;
-    const summary = args.summary as string;
-    const artifactPaths = args.artifactPaths as string[] | undefined;
+    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
+    if (!taskId) return { success: false, error: 'taskId is required and must be a string' };
+    const summary = typeof args.summary === 'string' ? args.summary : '';
+    const artifactPaths = Array.isArray(args.artifactPaths) ? args.artifactPaths as string[] : undefined;
 
     if (artifactPaths) {
       await this.taskRepo.setArtifactPaths(taskId, artifactPaths);
@@ -96,7 +97,12 @@ export class McpToolHandlers {
   }
 
   private async taskCreateChild(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const parentTask = await this.taskRepo.findById(args.parentTaskId as string);
+    const parentTaskId = typeof args.parentTaskId === 'string' ? args.parentTaskId : '';
+    if (!parentTaskId) return { success: false, error: 'parentTaskId is required and must be a string' };
+    const title = typeof args.title === 'string' ? args.title : '';
+    if (!title) return { success: false, error: 'title is required and must be a string' };
+
+    const parentTask = await this.taskRepo.findById(parentTaskId);
     if (!parentTask) {
       return { success: false, error: 'Parent task not found' };
     }
@@ -109,9 +115,9 @@ export class McpToolHandlers {
         orgId: parentTask.orgId,
         parentId: parentTask.id,
         type: childType as any,
-        title: args.title as string,
-        description: (args.description as string) ?? '',
-        assigneeRoleId: (args.assigneeRoleId as string) ?? null,
+        title,
+        description: (typeof args.description === 'string' ? args.description : ''),
+        assigneeRoleId: (typeof args.assigneeRoleId === 'string' ? args.assigneeRoleId : null),
       });
       return { success: true, data: { taskId: child.id } };
     } catch (err) {
@@ -120,12 +126,23 @@ export class McpToolHandlers {
   }
 
   private async discussionPost(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    const groupId = typeof args.discussionGroupId === 'string' ? args.discussionGroupId : '';
+    if (!groupId) return { success: false, error: 'discussionGroupId is required and must be a string' };
+    const content = typeof args.content === 'string' ? args.content : '';
+    if (!content) return { success: false, error: 'content is required and must be a string' };
+
+    const validVoteTags = ['APPROVE', 'REVISE', 'CONCERN', 'DELEGATE'];
+    const rawVoteTag = typeof args.voteTag === 'string' ? args.voteTag : null;
+    if (rawVoteTag && !validVoteTags.includes(rawVoteTag)) {
+      return { success: false, error: `Invalid voteTag: ${rawVoteTag}. Expected one of: ${validVoteTags.join(', ')}` };
+    }
+
     const msg = await this.discussionRepo.postMessage({
-      groupId: args.discussionGroupId as string,
-      authorRoleId: (args.authorRoleId as string) ?? null,
+      groupId,
+      authorRoleId: (typeof args.authorRoleId === 'string' ? args.authorRoleId : null),
       authorType: 'ai',
-      content: args.content as string,
-      voteTag: (args.voteTag as VoteTag) ?? null,
+      content,
+      voteTag: (rawVoteTag as VoteTag) ?? null,
     });
 
     // Emit message event so UI updates in real time
@@ -147,13 +164,16 @@ export class McpToolHandlers {
   }
 
   private async contextGetTask(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const task = await this.taskRepo.findById(args.taskId as string);
+    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
+    if (!taskId) return { success: false, error: 'taskId is required and must be a string' };
+    const task = await this.taskRepo.findById(taskId);
     if (!task) return { success: false, error: 'Task not found' };
     return { success: true, data: task };
   }
 
   private async contextGetOrgTree(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const orgId = args.orgId as string;
+    const orgId = typeof args.orgId === 'string' ? args.orgId : '';
+    if (!orgId) return { success: false, error: 'orgId is required and must be a string' };
     const roles = await this.roleRepo.findByOrgId(orgId);
     if (!roles.length) return { success: false, error: 'No roles found for org' };
 
@@ -171,7 +191,8 @@ export class McpToolHandlers {
   }
 
   private async contextGetDiscussionSummary(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const groupId = args.discussionGroupId as string;
+    const groupId = typeof args.discussionGroupId === 'string' ? args.discussionGroupId : '';
+    if (!groupId) return { success: false, error: 'discussionGroupId is required and must be a string' };
     const stats = await this.discussionRepo.getVoteStats(groupId);
     const recent = await this.discussionRepo.findRecentMessages(groupId, 5);
     return { success: true, data: { stats, recentMessages: recent } };
@@ -275,8 +296,9 @@ export class McpToolHandlers {
   }
 
   private async escalate(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const taskId = args.taskId as string;
-    const reason = args.reason as string;
+    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
+    const reason = typeof args.reason === 'string' ? args.reason : '';
+    if (!taskId) return { success: false, error: 'taskId is required and must be a string' };
 
     this.logger.warn('Task escalated', { taskId, reason });
     return { success: true, data: { taskId, escalated: true, reason } };
@@ -287,9 +309,9 @@ export class McpToolHandlers {
       return { success: false, error: 'Conversation service not initialized' };
     }
 
-    const taskId = args.taskId as string;
-    const question = args.question as string;
-    const urgency = (args.urgency as 'normal' | 'urgent') ?? 'normal';
+    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
+    const question = typeof args.question === 'string' ? args.question : '';
+    const urgency = (args.urgency === 'urgent' ? 'urgent' : 'normal') as 'normal' | 'urgent';
 
     if (!taskId || !question) {
       return { success: false, error: 'taskId and question are required' };
@@ -347,14 +369,14 @@ export class McpToolHandlers {
       return { success: false, error: 'Conversation service not initialized' };
     }
 
-    const taskId = args.taskId as string;
-    const summary = args.summary as string | undefined;
+    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
+    const summary = typeof args.summary === 'string' ? args.summary : undefined;
 
     if (!taskId) {
-      return { success: false, error: 'taskId is required' };
+      return { success: false, error: 'taskId is required and must be a string' };
     }
 
-    const roleId = (args._roleId as string) ?? '';
+    const roleId = typeof args._roleId === 'string' ? args._roleId : '';
 
     // Find active workflow for this task where asking role matches
     const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(roleId, taskId);

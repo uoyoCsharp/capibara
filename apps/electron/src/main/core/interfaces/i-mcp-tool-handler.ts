@@ -4,11 +4,9 @@ export interface McpToolCallInput {
   arguments: Record<string, unknown>;
 }
 
-export interface McpToolCallResult {
-  success: boolean;
-  data?: unknown;
-  error?: string;
-}
+export type McpToolCallResult =
+  | { success: true; data: unknown }
+  | { success: false; error: string };
 
 export interface IMcpToolHandler {
   handle(input: McpToolCallInput): Promise<McpToolCallResult>;

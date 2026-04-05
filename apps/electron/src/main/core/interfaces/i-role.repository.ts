@@ -27,6 +27,7 @@ export interface UpdateRoleInput {
 
 export interface IRoleRepository {
   findById(id: string): Promise<Role | null>;
+  findByIds(ids: string[]): Promise<Role[]>;
   findByOrgId(orgId: string): Promise<Role[]>;
   findChildren(parentId: string): Promise<Role[]>;
   create(input: CreateRoleInput): Promise<Role>;

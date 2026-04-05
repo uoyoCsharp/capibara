@@ -24,6 +24,8 @@ export class WorkerService {
   private worker: Electron.UtilityProcess | null = null;
   private destroyed = false;
   private callbacks: WorkerRunCallbacks | null = null;
+  /** Track run IDs that are currently in-flight in the worker */
+  private activeRunIds = new Set<string>();
 
   constructor(
     private readonly workerPath: string,
@@ -68,6 +70,7 @@ export class WorkerService {
     }
 
     const msg: ParentMessage = { type: 'enqueue-run', payload: job };
+    this.activeRunIds.add(job.runId);
     w.postMessage(msg);
   }
 
@@ -119,6 +122,32 @@ export class WorkerService {
       if (this.destroyed) return;
 
       this.logger.warn(`Worker exited with code ${code}, restarting...`);
+
+      // Fail all in-flight runs — their promises would otherwise
+      // hang forever since the worker that was processing them is gone.
+      if (this.callbacks && this.activeRunIds.size > 0) {
+        this.logger.warn('Failing in-flight runs due to worker crash', {
+          runIds: [...this.activeRunIds],
+        });
+        for (const runId of this.activeRunIds) {
+          this.callbacks.onFinished({
+            type: 'run-finished',
+            runId,
+            status: 'failed',
+            summary: null,
+            errorMessage: `Worker process crashed (exit code: ${code})`,
+            exitCode: code,
+            signal: null,
+            model: null,
+            sessionId: null,
+            inputTokens: 0,
+            outputTokens: 0,
+            cachedInputTokens: 0,
+          });
+        }
+        this.activeRunIds.clear();
+      }
+
       this.createWorker();
     });
 
@@ -140,6 +169,7 @@ export class WorkerService {
         break;
 
       case 'run-finished':
+        this.activeRunIds.delete(message.runId);
         this.callbacks.onFinished(message);
         break;
     }

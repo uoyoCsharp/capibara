@@ -46,13 +46,17 @@ export class ConversationContextBuilder {
     // Sort by creation time for correct chronological order
     allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-    // Build role name lookup
-    const roleNames = new Map<string, string>();
-    for (const msg of allMessages) {
-      if (msg.authorRoleId && !roleNames.has(msg.authorRoleId)) {
-        const role = await this.roleRepo.findById(msg.authorRoleId);
-        roleNames.set(msg.authorRoleId, role?.name ?? msg.authorRoleId);
-      }
+    // Build role name lookup (batch query instead of N individual queries)
+    const uniqueRoleIds = [...new Set(
+      allMessages.map((m) => m.authorRoleId).filter((id): id is string => id != null),
+    )];
+    const roles = await this.roleRepo.findByIds(uniqueRoleIds);
+    const roleNames = new Map<string, string>(
+      roles.map((r) => [r.id, r.name]),
+    );
+    // Ensure all referenced roleIds have an entry (fallback to ID if not found in DB)
+    for (const id of uniqueRoleIds) {
+      if (!roleNames.has(id)) roleNames.set(id, id);
     }
 
     // Format messages

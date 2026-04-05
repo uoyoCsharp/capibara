@@ -21,6 +21,9 @@ import {
 } from '@main/core/tokens.js';
 import type { ExecutionEngine } from '../execution/execution.engine.js';
 import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
+import { WakeGateValidator } from './wake-gate.validator.js';
+import { RetryScheduler } from './retry.scheduler.js';
+import { BudgetGuard } from './budget.guard.js';
 
 interface WakeTarget {
   roleId: string;
@@ -33,17 +36,20 @@ interface WakeTarget {
  * Central orchestration engine. Listens for domain events and coordinates
  * wake-up calls to roles based on event triggers.
  *
+ * Delegates gate checks to WakeGateValidator, retry logic to RetryScheduler,
+ * and budget management to BudgetGuard (P2-2 decomposition).
+ *
  * See Architecture §6 — Event-Driven Wake-Up Loop.
  */
 @injectable()
 export class OrgOrchestrator {
-  // Risk 9: selfWakeCounts replaced by roles.consecutive_wake_count in DB
-  private retryCounts = new Map<string, number>(); // key: taskNodeId
-  private retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // Risk 8: per-org event serialization queue
   private orgQueues = new Map<string, Promise<void>>();
   private executionEngine!: ExecutionEngine;
-  private taskStateMachine!: TaskStateMachine;
+
+  private readonly gateValidator: WakeGateValidator;
+  private readonly retryScheduler: RetryScheduler;
+  private readonly budgetGuard: BudgetGuard;
 
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
@@ -54,7 +60,13 @@ export class OrgOrchestrator {
     @inject(RUN_REPO_TOKEN) private readonly runRepo: IRunRepository,
     @inject(PENDING_WAKE_REPO_TOKEN) private readonly pendingWakeRepo: IPendingWakeRepository,
     @inject(COST_ENTRY_REPO_TOKEN) private readonly costRepo: ICostEntryRepository,
-  ) {}
+  ) {
+    this.gateValidator = new WakeGateValidator(
+      config, logger, eventBus, roleRepo, runRepo, costRepo, pendingWakeRepo,
+    );
+    this.retryScheduler = new RetryScheduler(config, logger, eventBus, roleRepo);
+    this.budgetGuard = new BudgetGuard(logger, roleRepo);
+  }
 
   /** Inject ExecutionEngine after construction to break circular dependency. */
   setExecutionEngine(engine: ExecutionEngine): void {
@@ -63,7 +75,7 @@ export class OrgOrchestrator {
 
   /** Inject TaskStateMachine after construction. */
   setTaskStateMachine(sm: TaskStateMachine): void {
-    this.taskStateMachine = sm;
+    this.retryScheduler.setTaskStateMachine(sm);
   }
 
   start(): void {
@@ -76,7 +88,7 @@ export class OrgOrchestrator {
     this.eventBus.on('run:timed-out', (e) => void this.handleEvent(e));
     this.eventBus.on('wake:triggered', (e) => void this.handleEvent(e));
     this.eventBus.on('dispute:detected', (e) => void this.handleEvent(e));
-    this.eventBus.on('budget:exceeded', (e) => void this.handleBudgetExceeded(e));
+    this.eventBus.on('budget:exceeded', (e) => void this.budgetGuard.handleBudgetExceeded(e));
     // Conversation system events
     this.eventBus.on('conversation:reply-posted', (e) => void this.handleEvent(e));
     this.eventBus.on('conversation:escalated', (e) => void this.handleEvent(e));
@@ -275,8 +287,8 @@ export class OrgOrchestrator {
         const orgId = payload.orgId as string;
         const taskNodeId = payload.taskNodeId as string;
 
-        await this.resetSelfWakeCount(roleId);
-        this.retryCounts.delete(taskNodeId);
+        await this.gateValidator.resetWakeCount(roleId);
+        this.retryScheduler.clearRetryState(taskNodeId);
 
         await this.consumePendingWakes(roleId, orgId);
         return [];
@@ -289,26 +301,11 @@ export class OrgOrchestrator {
         const orgId = payload.orgId as string;
         const taskNodeId = payload.taskNodeId as string;
 
-        await this.resetSelfWakeCount(roleId);
-
-        const retryCount = this.retryCounts.get(taskNodeId) ?? 0;
-        const maxRetries = this.config.execution.maxRetryOnFailure;
-
-        if (retryCount < maxRetries) {
-          // Schedule retry with exponential backoff
-          const backoff = this.config.execution.retryBackoffMs * Math.pow(2, retryCount);
-          this.retryCounts.set(taskNodeId, retryCount + 1);
-          this.logger.info('Scheduling retry with backoff', {
-            roleId, taskNodeId, retryCount: retryCount + 1, maxRetries, backoffMs: backoff,
-          });
-
-          this.scheduleRetry(roleId, orgId, taskNodeId, backoff);
-        } else {
-          // Retries exhausted → escalate to parent role (Story 10.2)
-          this.logger.warn('Retries exhausted, escalating', { roleId, taskNodeId, retryCount });
-          this.retryCounts.delete(taskNodeId);
-          await this.escalateToParent(roleId, orgId, taskNodeId);
-        }
+        await this.gateValidator.resetWakeCount(roleId);
+        await this.retryScheduler.handleFailure(
+          roleId, orgId, taskNodeId,
+          (rId, oId, tId, trigger) => this.wakeRoleIfPossible(rId, oId, tId, trigger),
+        );
         return [];
       }
 
@@ -417,84 +414,12 @@ export class OrgOrchestrator {
     taskNodeId: string,
     trigger: WakeTrigger,
   ): Promise<boolean> {
-    // Gate 1: Role status check
-    const role = await this.roleRepo.findById(roleId);
-    if (!role || role.status !== 'active') {
-      this.logger.debug('Wake skipped: role inactive or not found', { roleId });
-      return false;
-    }
-
-    // Gate 2: Budget check (token-based, units: millions of tokens)
-    const budgetLimit = this.config.execution.budgetLimit;
-    if (budgetLimit > 0) {
-      const totalTokens = await this.costRepo.getTotalTokensByOrgId(orgId);
-      const totalTokensM = totalTokens / 1_000_000;
-      if (totalTokensM >= budgetLimit) {
-        this.logger.warn('Wake skipped: budget exceeded', { orgId, totalTokensM });
-        this.eventBus.emit({
-          type: 'budget:exceeded',
-          timestamp: new Date().toISOString(),
-          payload: { orgId, totalTokens, limit: budgetLimit },
-        });
-        return false;
-      }
-    }
-
-    // Gate 3: Per-org serial execution — only one run at a time per organization
-    const activeRun = await this.runRepo.findActiveByOrgId(orgId);
-    if (activeRun) {
-      this.logger.debug('Wake deferred: org has active run, enqueuing pending wake', { roleId, orgId, trigger, activeRunId: activeRun.id });
-      const priority = this.triggerToPriority(trigger);
-      await this.pendingWakeRepo.create({ roleId, orgId, trigger, taskNodeId, priority });
-      this.eventBus.emit({
-        type: 'wake:pending-enqueued',
-        timestamp: new Date().toISOString(),
-        payload: { roleId, trigger, priority },
-      });
-      return false;
-    }
-
-    // Gate 4: Self-wake circuit breaker (Risk 9: persisted in roles table)
-    const selfWakeCount = role.consecutiveWakeCount;
-    if (selfWakeCount >= this.config.execution.maxConsecutiveWakes) {
-      this.logger.warn('Circuit breaker: self-wake limit reached', { roleId, selfWakeCount });
-      this.eventBus.emit({
-        type: 'circuit-breaker:self-wake',
-        timestamp: new Date().toISOString(),
-        payload: { roleId, count: selfWakeCount },
-      });
-
-      // Escalate to parent role
-      if (role.parentId) {
-        const parentRole = await this.roleRepo.findById(role.parentId);
-        if (parentRole) {
-          this.eventBus.emit({
-            type: 'wake:triggered',
-            timestamp: new Date().toISOString(),
-            payload: { roleId: role.parentId, orgId, trigger: 'retry_failed' as WakeTrigger },
-          });
-        }
-      } else {
-        this.logger.error('Escalation reached top-level role with no parent', { roleId, orgId, taskNodeId });
-        this.eventBus.emit({
-          type: 'escalation:top-level',
-          timestamp: new Date().toISOString(),
-          payload: {
-            roleId,
-            roleName: role.name,
-            orgId,
-            taskId: taskNodeId,
-            taskTitle: taskNodeId,
-            escalationChain: [roleId],
-            failureReason: `Self-wake circuit breaker triggered after ${selfWakeCount} consecutive wakes`,
-          },
-        });
-      }
-      return false;
-    }
+    const gate = await this.gateValidator.check(roleId, orgId, taskNodeId, trigger);
+    if (!gate.allowed) return false;
 
     // All gates passed — increment persistent wake count and dispatch run
-    await this.roleRepo.update({ id: roleId, consecutiveWakeCount: selfWakeCount + 1 });
+    const role = gate.role;
+    await this.gateValidator.incrementWakeCount(roleId, role.consecutiveWakeCount);
     this.logger.info('Waking role', { roleId, trigger, taskNodeId });
 
     try {
@@ -510,107 +435,11 @@ export class OrgOrchestrator {
     }
   }
 
-  // ─── Story 10.3: Budget Auto-Pause ──────────────────────────────
-
-  private async handleBudgetExceeded(event: DomainEvent): Promise<void> {
-    const { orgId, totalTokens, limit } = event.payload as {
-      orgId: string; totalTokens: number; limit: number;
-    };
-
-    this.logger.warn('Budget exceeded — pausing all org roles', { orgId, totalTokens, limit });
-
-    const roles = await this.roleRepo.findByOrgId(orgId);
-    let pausedCount = 0;
-    for (const role of roles) {
-      if (role.status === 'active') {
-        await this.roleRepo.update({ id: role.id, status: 'paused' });
-        pausedCount++;
-      }
-    }
-
-    this.logger.info('Paused org roles due to budget', { orgId, pausedCount });
-  }
+  // ─── Story 10.3: Budget Auto-Pause (delegated to BudgetGuard) ──
 
   async resumeOrgRoles(orgId: string): Promise<number> {
-    const roles = await this.roleRepo.findByOrgId(orgId);
-    let resumedCount = 0;
-    for (const role of roles) {
-      if (role.status === 'paused') {
-        await this.roleRepo.update({ id: role.id, status: 'active' });
-        resumedCount++;
-      }
-    }
-
-    this.logger.info('Resumed org roles', { orgId, resumedCount });
-
-    // Risk 10 fix: trigger pending wake consumption after resume
-    if (resumedCount > 0) {
-      await this.consumePendingWakes('', orgId);
-    }
-
-    return resumedCount;
-  }
-
-  // ─── Story 10.1: Retry with Exponential Backoff ─────────────────
-
-  private scheduleRetry(roleId: string, orgId: string, taskNodeId: string, backoffMs: number): void {
-    // Clear any existing retry timer for this task
-    const existing = this.retryTimers.get(taskNodeId);
-    if (existing) clearTimeout(existing);
-
-    const timer = setTimeout(() => {
-      this.retryTimers.delete(taskNodeId);
-      void this.wakeRoleIfPossible(roleId, orgId, taskNodeId, 'retry_failed');
-    }, backoffMs);
-
-    this.retryTimers.set(taskNodeId, timer);
-  }
-
-  // ─── Story 10.2: Escalation Chain ─────────────────────────────
-
-  private async escalateToParent(roleId: string, orgId: string, taskNodeId: string): Promise<void> {
-    const role = await this.roleRepo.findById(roleId);
-    if (!role) return;
-
-    // Mark the failed task as blocked so the escalation is visible
-    try {
-      await this.taskStateMachine.transition(taskNodeId, 'blocked');
-      this.logger.info('Task marked as blocked due to escalation', { taskNodeId });
-    } catch {
-      // Task may already be in a state that doesn't allow blocked transition
-    }
-
-    if (role.parentId) {
-      const parentRole = await this.roleRepo.findById(role.parentId);
-      if (parentRole) {
-        this.logger.info('Escalating to parent role', {
-          fromRole: role.name, toRole: parentRole.name, taskNodeId,
-        });
-        this.eventBus.emit({
-          type: 'wake:triggered',
-          timestamp: new Date().toISOString(),
-          payload: { roleId: role.parentId, orgId, trigger: 'retry_failed' as WakeTrigger },
-        });
-        return;
-      }
-    }
-
-    // No parent — top-level escalation
-    this.logger.error('Escalation reached top-level role after retries exhausted', {
-      roleId, orgId, taskNodeId,
-    });
-    this.eventBus.emit({
-      type: 'escalation:top-level',
-      timestamp: new Date().toISOString(),
-      payload: {
-        roleId,
-        roleName: role.name,
-        orgId,
-        taskId: taskNodeId,
-        taskTitle: taskNodeId,
-        escalationChain: [roleId],
-        failureReason: `All ${this.config.execution.maxRetryOnFailure} retries exhausted for role "${role.name}"`,
-      },
+    return this.budgetGuard.resumeOrgRoles(orgId, async (oId) => {
+      await this.consumePendingWakes('', oId);
     });
   }
 
@@ -655,23 +484,11 @@ export class OrgOrchestrator {
   }
 
   async resetSelfWakeCount(roleId: string): Promise<void> {
-    await this.roleRepo.update({ id: roleId, consecutiveWakeCount: 0 });
-  }
-
-  private triggerToPriority(trigger: WakeTrigger): number {
-    switch (trigger) {
-      case 'conversation_escalation': return 2;
-      case 'discussion_reply': return 1;
-      default: return 0;
-    }
+    await this.gateValidator.resetWakeCount(roleId);
   }
 
   stop(): void {
-    for (const timer of this.retryTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.retryTimers.clear();
-    this.retryCounts.clear();
+    this.retryScheduler.stop();
     this.orgQueues.clear();
     this.logger.info('OrgOrchestrator stopped');
   }

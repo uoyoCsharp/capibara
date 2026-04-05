@@ -6,6 +6,7 @@ import type { IPendingWakeRepository } from '@main/core/interfaces/i-pending-wak
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { ConversationWorkflow, ConversationWorkflowState, TimeoutConfig } from '@main/core/types/conversation.types.js';
+import { canTransition } from '@main/core/types/conversation.types.js';
 import type { ConversationEventLogger } from '@main/infrastructure/persistence/sqlite/conversation-event.logger.js';
 
 const DEFAULT_TIMEOUT: TimeoutConfig = {
@@ -155,10 +156,11 @@ export class ConversationWorkflowService implements IConversationWorkflowService
       return;
     }
 
-    // 1. Update reply message and transition state
+    // 1. Update reply message
     await this.workflowRepo.updateReply(workflowId, messageId);
 
-    // 2. Create PendingWake for asking role
+    // 2. Create PendingWake for asking role BEFORE state transition
+    //    so if wake creation fails, workflow stays in waiting_for_reply
     await this.pendingWakeRepo.create({
       roleId: workflow.askingRoleId,
       orgId: workflow.orgId,
@@ -166,6 +168,9 @@ export class ConversationWorkflowService implements IConversationWorkflowService
       taskNodeId: workflow.taskNodeId,
       priority: workflow.priority,
     });
+
+    // 3. Transition state after wake is guaranteed
+    await this.workflowRepo.updateState(workflowId, 'reply_received');
 
     // 3. Emit event
     const message = (await this.discussionRepo.findMessagesByGroupId(workflow.discussionGroupId))
@@ -206,6 +211,17 @@ export class ConversationWorkflowService implements IConversationWorkflowService
     }
 
     const previousState = workflow.state;
+
+    // Validate transition against the state machine
+    if (!canTransition(previousState, targetState)) {
+      this.logger.warn('transitionState: invalid transition', {
+        workflowId,
+        from: previousState,
+        to: targetState,
+      });
+      return;
+    }
+
     await this.workflowRepo.updateState(workflowId, targetState);
 
     // Emit event

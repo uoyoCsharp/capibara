@@ -24,6 +24,8 @@ if (!parentPort) {
 
 /** Tracks which role has an active run (per-role serial execution) */
 const activeByRole = new Map<string, string>();
+/** Tracks which executor name is used for each active run */
+const activeExecutors = new Map<string, string>();
 const queue: RunJob[] = [];
 const cancelledRuns = new Set<string>();
 
@@ -62,6 +64,7 @@ async function maybeStartQueuedRuns(): Promise<void> {
 
 async function startRun(job: RunJob): Promise<void> {
   activeByRole.set(job.roleId, job.runId);
+  activeExecutors.set(job.runId, job.executor);
 
   post({
     type: 'run-status',
@@ -133,6 +136,7 @@ async function startRun(job: RunJob): Promise<void> {
     });
   } finally {
     activeByRole.delete(job.roleId);
+    activeExecutors.delete(job.runId);
     void maybeStartQueuedRuns();
   }
 }
@@ -166,7 +170,8 @@ function cancelRun(runId: string): void {
   // Active runs are no longer in the queue — adapters track their own
   // running child processes via childTracker, so calling abort is sufficient.
   try {
-    const adapter = getAdapter('claude-cli');
+    const executorName = activeExecutors.get(runId) ?? 'claude-cli';
+    const adapter = getAdapter(executorName);
     adapter.abort(runId);
   } catch { /* best effort */ }
 }

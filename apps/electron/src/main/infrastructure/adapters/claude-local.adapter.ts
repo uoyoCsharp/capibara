@@ -118,6 +118,11 @@ export class ClaudeLocalAdapter implements ICliAdapter {
     const { stdout, stderr, exitCode, timedOut } = proc;
     const parsed = parseClaudeStreamJson(stdout);
 
+    // Warn if output was truncated
+    if (proc.stdoutTruncated || proc.stderrTruncated) {
+      ctx.onLog('stderr', `[capibara] Output truncated: stdout=${proc.stdoutTruncated}, stderr=${proc.stderrTruncated}\n`);
+    }
+
     // Detect login requirement
     const loginCheck = detectClaudeLoginRequired({
       parsed: parsed.resultJson,
@@ -129,7 +134,7 @@ export class ClaudeLocalAdapter implements ICliAdapter {
     if (
       !isRetryAfterSessionError &&
       ctx.sessionId &&
-      this.isUnknownSessionError(stderr, stdout)
+      this.isUnknownSessionError(stderr, stdout, parsed.resultJson)
     ) {
       ctx.onLog('stderr', `[capibara] Session "${ctx.sessionId}" unavailable; retrying with fresh session.\n`);
       return this.doExecute(ctx, true);
@@ -161,7 +166,7 @@ export class ClaudeLocalAdapter implements ICliAdapter {
       inputTokens: parsed.usage?.inputTokens ?? 0,
       outputTokens: parsed.usage?.outputTokens ?? 0,
       cachedInputTokens: parsed.usage?.cachedInputTokens ?? 0,
-      clearSession: isRetryAfterSessionError || this.isUnknownSessionError(stderr, stdout),
+      clearSession: isRetryAfterSessionError || this.isUnknownSessionError(stderr, stdout, parsed.resultJson),
       requiresLogin: loginCheck.requiresLogin,
       loginUrl: loginCheck.loginUrl,
     };
@@ -218,7 +223,15 @@ export class ClaudeLocalAdapter implements ICliAdapter {
     return args;
   }
 
-  private isUnknownSessionError(stderr: string, stdout: string): boolean {
+  private isUnknownSessionError(stderr: string, stdout: string, parsedResult?: Record<string, unknown> | null): boolean {
+    // Prefer structured error code when available
+    if (parsedResult && typeof parsedResult === 'object') {
+      const errorCode = (parsedResult as Record<string, unknown>).error_code;
+      if (errorCode === 'unknown_session' || errorCode === 'session_not_found' || errorCode === 'invalid_session') {
+        return true;
+      }
+    }
+    // Fallback to pattern matching
     const combined = `${stdout}\n${stderr}`;
     return /unknown session|session not found|invalid session/i.test(combined);
   }

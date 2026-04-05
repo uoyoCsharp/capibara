@@ -30,12 +30,10 @@ function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial
   return result;
 }
 
-function tryLoadYaml(filePath: string): Record<string, unknown> | null {
+function tryLoadJsonConfig(filePath: string): Record<string, unknown> | null {
   if (!existsSync(filePath)) return null;
   try {
     const raw = readFileSync(filePath, 'utf-8');
-    // Simple YAML-like key:value parser for flat/nested config
-    // For MVP, we expect JSON config files
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return null;
@@ -56,7 +54,7 @@ export function loadConfig(projectDir?: string): CapibaraConfig {
 
   // Global config: ~/.capibara/config.json
   const globalConfigPath = join(capibaraDir, 'config.json');
-  const globalConfig = tryLoadYaml(globalConfigPath);
+  const globalConfig = tryLoadJsonConfig(globalConfigPath);
   if (globalConfig) {
     merged = deepMerge(merged, globalConfig);
   }
@@ -64,7 +62,7 @@ export function loadConfig(projectDir?: string): CapibaraConfig {
   // Project config: <projectDir>/capibara.config.json
   if (projectDir) {
     const projectConfigPath = join(projectDir, 'capibara.config.json');
-    const projectConfig = tryLoadYaml(projectConfigPath);
+    const projectConfig = tryLoadJsonConfig(projectConfigPath);
     if (projectConfig) {
       merged = deepMerge(merged, projectConfig);
     }

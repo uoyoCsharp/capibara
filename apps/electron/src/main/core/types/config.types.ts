@@ -4,11 +4,17 @@ export interface CapibaraConfig {
     customFile: string | null;
   };
   execution: {
+    /** Maximum review-revise cycles before escalation */
     maxReviseAttempts: number;
+    /** Maximum retry attempts on run failure before escalating to parent */
     maxRetryOnFailure: number;
+    /** Circuit breaker threshold — max consecutive wakes before pausing a role */
     maxConsecutiveWakes: number;
+    /** Organization token budget in millions of tokens (0 = unlimited) */
     budgetLimit: number;
+    /** Maximum task decomposition tree depth to prevent runaway nesting */
     maxDecompositionDepth: number;
+    /** Base retry backoff in milliseconds (doubles with each retry) */
     retryBackoffMs: number;
   };
   skills: {

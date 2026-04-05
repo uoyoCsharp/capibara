@@ -66,22 +66,23 @@ export class ConversationEventLogger {
 
   findByWorkflowIds(workflowIds: string[]): ConversationEvent[] {
     if (workflowIds.length === 0) return [];
-    try {
-      const results: ConversationEvent[] = [];
-      // Chunk to stay within SQLite's max variable limit (999)
-      for (let i = 0; i < workflowIds.length; i += 500) {
-        const chunk = workflowIds.slice(i, i + 500);
-        const placeholders = chunk.map(() => '?').join(',');
+    const results: ConversationEvent[] = [];
+    // Chunk to stay within SQLite's max variable limit (999)
+    for (let i = 0; i < workflowIds.length; i += 500) {
+      const chunk = workflowIds.slice(i, i + 500);
+      const placeholders = chunk.map(() => '?').join(',');
+      try {
         const rows = this.conn.getDb()
           .prepare(`SELECT * FROM conversation_events WHERE workflow_id IN (${placeholders}) ORDER BY created_at ASC`)
           .all(...chunk) as EventRow[];
         results.push(...rows.map(rowToEvent));
+      } catch (err) {
+        this.logger.warn('Chunk query failed in findByWorkflowIds', {
+          chunkStart: i, chunkSize: chunk.length, error: String(err),
+        });
       }
-      return results;
-    } catch (err) {
-      this.logger.error('Failed to query conversation events', { error: String(err) });
-      return [];
     }
+    return results;
   }
 
   countByTypeContaining(orgWorkflowIds: string[], eventType: string, payloadSubstring: string): number {

@@ -74,8 +74,14 @@ export const CONVERSATION_TRANSITIONS: ConversationTransition[] = [
   { from: 'waiting_for_reply', to: 'timed_out' },
   { from: 'waiting_for_reply', to: 'cancelled' },
   { from: 'reply_received', to: 'resumed' },
+  { from: 'reply_received', to: 'cancelled' },
   { from: 'resumed', to: 'resolved' },
   { from: 'resumed', to: 'escalated' },
+  { from: 'resumed', to: 'cancelled' },
+  { from: 'escalated', to: 'resolved' },
+  { from: 'escalated', to: 'cancelled' },
+  { from: 'timed_out', to: 'escalated' },
+  { from: 'timed_out', to: 'cancelled' },
 ];
 
 export function canTransition(

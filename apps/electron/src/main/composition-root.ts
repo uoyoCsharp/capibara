@@ -204,7 +204,7 @@ export async function bootstrap(): Promise<void> {
   }
 
   // ─── File Log Service ───────────────────────────────────
-  const fileLogService = new FileLogService(config.logging.logDir);
+  const fileLogService = new FileLogService(config.logging.logDir, logger);
 
   // ─── Execution Engine & MCP ──────────────────────────────
   const orgContext = new OrgContext(orgRepo, roleRepo, taskRepo, logger);
