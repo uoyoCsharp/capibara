@@ -62,6 +62,8 @@ export class PromptBuilder implements IPromptBuilder {
     lines.push(`- capibara_context_get_org_tree: Get org tree. Use orgId="${context.task.orgId}"`);
     lines.push(`- capibara_task_review: Review a child task. Use decision="approve" or "revise", reviewerRoleId="${context.role.id}"`);
     lines.push('- capibara_escalate: Escalate to your superior');
+    lines.push(`- capibara_ask_question: Ask a question and wait for a reply. Use taskId="${context.task.id}"`);
+    lines.push(`- capibara_mark_conversation_resolved: Mark conversation resolved. Use taskId="${context.task.id}"`);
     lines.push('');
 
     // Discussion Context
@@ -86,9 +88,39 @@ export class PromptBuilder implements IPromptBuilder {
       lines.push('');
     }
 
+    // Conversation Context (injected when trigger is discussion_reply or conversation_escalation)
+    if (context.conversationContext) {
+      lines.push(context.conversationContext);
+      lines.push('');
+    }
+
     // Instructions (type-specific)
     lines.push('## Instructions');
     lines.push(`IMPORTANT: When calling MCP tools, always use the exact IDs provided above. Your task ID is "${context.task.id}".`);
+
+    // ─── Conversation Resume Mode ──────────────────────────────────
+    if (context.trigger === 'discussion_reply' && context.conversationContext) {
+      lines.push('### Conversation Resume');
+      lines.push('You were previously working on this task and asked a question. A reply has been received.');
+      lines.push('');
+      lines.push('1. Review the Conversation Context above.');
+      lines.push('2. Continue your work, incorporating the reply.');
+      lines.push('3. If the reply is sufficient, proceed with task completion.');
+      lines.push('4. If you need further clarification, use capibara_ask_question to ask a follow-up.');
+      lines.push('5. When done with the conversation, use capibara_mark_conversation_resolved.');
+      return lines.join('\n');
+    }
+
+    if (context.trigger === 'conversation_escalation' && context.conversationContext) {
+      lines.push('### Escalated Question');
+      lines.push('A conversation has been escalated to you because the original respondent could not reply in time.');
+      lines.push('');
+      lines.push('1. Review the Conversation Context above.');
+      lines.push('2. Answer the escalated question to the best of your ability.');
+      lines.push('3. Use capibara_discussion_post to post your reply.');
+      lines.push('4. If you cannot answer, use capibara_ask_question to escalate further.');
+      return lines.join('\n');
+    }
 
     // ─── Review Mode: woken to review child task results ─────────────
     if (context.trigger === 'review_requested' && context.childrenAwaitingReview.length === 0) {

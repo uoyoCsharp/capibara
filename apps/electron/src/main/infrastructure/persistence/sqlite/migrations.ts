@@ -277,6 +277,67 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 17,
+    description: 'Conversation system: new tables and column extensions',
+    up: (db) => {
+      db.exec(`
+        -- Extend discussion_messages for conversation intent tracking
+        ALTER TABLE discussion_messages ADD COLUMN intent TEXT NOT NULL DEFAULT 'general'
+          CHECK(intent IN ('question', 'reply', 'escalation', 'resolution', 'vote', 'general'));
+        ALTER TABLE discussion_messages ADD COLUMN in_reply_to_message_id TEXT
+          REFERENCES discussion_messages(id);
+
+        -- Extend pending_wakes with priority for priority-based dispatch
+        ALTER TABLE pending_wakes ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
+
+        -- Create conversation_workflows table
+        CREATE TABLE IF NOT EXISTS conversation_workflows (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id),
+          task_node_id TEXT NOT NULL REFERENCES task_nodes(id),
+          discussion_group_id TEXT NOT NULL REFERENCES discussion_groups(id),
+          asking_role_id TEXT NOT NULL REFERENCES roles(id),
+          asking_run_id TEXT NOT NULL REFERENCES runs(id),
+          asking_session_id TEXT,
+          question_message_id TEXT NOT NULL REFERENCES discussion_messages(id),
+          reply_message_id TEXT REFERENCES discussion_messages(id),
+          respondent_role_id TEXT REFERENCES roles(id),
+          respondent_type TEXT NOT NULL CHECK(respondent_type IN ('ai', 'human')),
+          state TEXT NOT NULL CHECK(state IN (
+            'waiting_for_reply', 'reply_received', 'resumed',
+            'resolved', 'escalated', 'timed_out', 'cancelled'
+          )),
+          depth INTEGER NOT NULL DEFAULT 0,
+          parent_workflow_id TEXT REFERENCES conversation_workflows(id),
+          priority INTEGER NOT NULL DEFAULT 0,
+          timeout_at TEXT,
+          resolved_at TEXT,
+          audit_reason TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_conv_wf_org_state ON conversation_workflows(org_id, state);
+        CREATE INDEX idx_conv_wf_task ON conversation_workflows(task_node_id, state);
+        CREATE INDEX idx_conv_wf_asking_role ON conversation_workflows(asking_role_id, state);
+        CREATE INDEX idx_conv_wf_respondent ON conversation_workflows(respondent_role_id, state);
+        CREATE INDEX idx_conv_wf_timeout ON conversation_workflows(timeout_at)
+          WHERE state = 'waiting_for_reply';
+
+        -- Create conversation_events audit table (append-only)
+        CREATE TABLE IF NOT EXISTS conversation_events (
+          id TEXT PRIMARY KEY,
+          workflow_id TEXT NOT NULL REFERENCES conversation_workflows(id),
+          event_type TEXT NOT NULL,
+          event_payload TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_conv_events_workflow ON conversation_events(workflow_id, created_at);
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

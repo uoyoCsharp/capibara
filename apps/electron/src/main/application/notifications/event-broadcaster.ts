@@ -35,6 +35,11 @@ export class EventBroadcaster {
     this.eventBus.on('discussion:message-added', forward);
     this.eventBus.on('discussion:vote-added', forward);
 
+    // Conversation events
+    this.eventBus.on('conversation:question-posted', forward);
+    this.eventBus.on('conversation:resolved', forward);
+    this.eventBus.on('conversation:cancelled', forward);
+
     this.logger.info('EventBroadcaster started — forwarding domain events to renderer');
   }
 
@@ -112,6 +117,48 @@ export class EventBroadcaster {
         desktopEvent = {
           type: 'discussion:message-added',
           groupId: payload.groupId,
+        };
+        break;
+
+      // Conversation events
+      case 'conversation:question-posted':
+        desktopEvent = {
+          type: 'conversation:question-posted',
+          orgId: payload.orgId,
+          workflowId: payload.workflowId,
+          askingRoleName: (payload.askingRoleName as string) ?? '',
+          questionPreview: ((payload.questionPreview as string) ?? '').slice(0, 100),
+          urgency: (payload.urgency as string) ?? 'normal',
+          respondentType: (payload.respondentType as string) ?? 'ai',
+        };
+        // Send notification for human-targeted questions
+        if (payload.respondentType === 'human') {
+          const notification = {
+            type: 'notification' as const,
+            title: 'Question requires your attention',
+            body: `${(payload.askingRoleName as string) ?? 'An AI role'} needs your input`,
+          };
+          for (const win of windows) {
+            try {
+              win.webContents.send(IPC_CHANNELS.rendererEvent, notification);
+            } catch { /* Window may be destroyed */ }
+          }
+        }
+        break;
+
+      case 'conversation:resolved':
+        desktopEvent = {
+          type: 'conversation:resolved',
+          orgId: payload.orgId,
+          workflowId: payload.workflowId,
+        };
+        break;
+
+      case 'conversation:cancelled':
+        desktopEvent = {
+          type: 'conversation:cancelled',
+          orgId: payload.orgId,
+          workflowId: payload.workflowId,
         };
         break;
 

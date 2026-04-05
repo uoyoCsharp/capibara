@@ -4,6 +4,7 @@ import type {
   DiscussionStatus,
   VoteTag,
   AuthorType,
+  MessageIntent,
 } from '../types/domain.types.js';
 
 export interface CreateDiscussionGroupInput {
@@ -19,6 +20,8 @@ export interface PostMessageInput {
   voteTag: VoteTag;
   reviewRound?: number;
   metadata?: Record<string, unknown> | null;
+  intent?: MessageIntent;
+  inReplyToMessageId?: string | null;
 }
 
 export interface VoteStats {

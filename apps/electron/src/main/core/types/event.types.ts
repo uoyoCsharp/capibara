@@ -32,7 +32,14 @@ export type DomainEventType =
   | 'approval:completed'
   | 'escalation:top-level'
   | 'orchestrator:error'
-  | 'settings:locale-changed';
+  | 'settings:locale-changed'
+  | 'conversation:question-posted'
+  | 'conversation:reply-posted'
+  | 'conversation:state-changed'
+  | 'conversation:escalated'
+  | 'conversation:timed-out'
+  | 'conversation:resolved'
+  | 'conversation:cancelled';
 
 export interface DomainEvent<T = unknown> {
   type: DomainEventType;

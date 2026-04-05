@@ -4,9 +4,11 @@ import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js
 import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js';
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
+import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
+import type { IConversationWorkflowService } from '@main/core/interfaces/i-conversation-workflow.service.js';
 import type { CapibaraConfig } from '@main/core/types/config.types.js';
 import type { DomainEvent } from '@main/core/types/event.types.js';
-import type { DiscussionGroup, DiscussionMessage, AuthorType, VoteTag } from '@main/core/types/domain.types.js';
+import type { DiscussionGroup, DiscussionMessage, AuthorType, VoteTag, MessageIntent } from '@main/core/types/domain.types.js';
 import {
   CONFIG_TOKEN,
   LOGGER_TOKEN,
@@ -28,6 +30,8 @@ import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
 @injectable()
 export class DiscussionService {
   // reviseCounts now persisted in discussion_groups.revise_count (Bug 3 / Risk 9)
+  private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
+  private conversationWorkflowService: IConversationWorkflowService | null = null;
 
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
@@ -40,13 +44,68 @@ export class DiscussionService {
     private readonly taskStateMachine: TaskStateMachine,
   ) { }
 
+  setConversationDeps(
+    repo: IConversationWorkflowRepository,
+    service: IConversationWorkflowService,
+  ): void {
+    this.conversationWorkflowRepo = repo;
+    this.conversationWorkflowService = service;
+  }
+
   /** Subscribe to domain events for auto-creation, consensus evaluation, and run summaries. */
   start(): void {
     this.eventBus.on('task:created', (e: DomainEvent) => this.onTaskCreated(e));
     this.eventBus.on('discussion:vote-added', (e: DomainEvent) => this.onVoteAdded(e));
     this.eventBus.on('run:succeeded', (e: DomainEvent) => void this.onRunCompleted(e));
     this.eventBus.on('run:failed', (e: DomainEvent) => void this.onRunCompleted(e));
-    this.logger.info('DiscussionService started — listening for task:created, discussion:vote-added, run:succeeded, run:failed');
+    this.eventBus.on('discussion:message-added', (e: DomainEvent) => void this.onMessageAdded(e));
+    this.logger.info('DiscussionService started — listening for task:created, discussion:vote-added, run:succeeded, run:failed, discussion:message-added');
+  }
+
+  /** Detect conversation replies when a message is added to a discussion group */
+  private async onMessageAdded(event: DomainEvent): Promise<void> {
+    if (!this.conversationWorkflowRepo || !this.conversationWorkflowService) return;
+
+    const { groupId, messageId } = event.payload as { groupId: string; messageId: string };
+    if (!groupId || !messageId) return;
+
+    try {
+      // Check if there's an active conversation workflow waiting for a reply in this group
+      const workflow = await this.conversationWorkflowRepo.findWaitingByDiscussionGroup(groupId);
+      if (!workflow) return;
+
+      // Get the message to check if it's a reply
+      const messages = await this.discussionRepo.findMessagesByGroupId(groupId);
+      const message = messages.find((m) => m.id === messageId);
+      if (!message) return;
+
+      // Don't treat the asking role's own messages as replies
+      if (message.authorRoleId === workflow.askingRoleId) return;
+
+      // Check if this message is a reply:
+      // 1. Message has intent='reply'
+      // 2. OR message author matches the expected respondent
+      // 3. OR message is from authorType='human' and not a vote (humans can always intervene — Story 12.6)
+      const isReply =
+        message.intent === 'reply' ||
+        (message.authorRoleId === workflow.respondentRoleId) ||
+        (message.authorType === 'human' && message.intent !== 'vote');
+
+      if (isReply) {
+        this.logger.info('Conversation reply detected', {
+          workflowId: workflow.id,
+          messageId,
+          replierType: message.authorType,
+        });
+        await this.conversationWorkflowService.handleReply(workflow.id, messageId);
+      }
+    } catch (err) {
+      this.logger.error('Failed to detect conversation reply', {
+        groupId,
+        messageId,
+        error: String(err),
+      });
+    }
   }
 
   // ─── Story 5.2: Auto-creation ─────────
@@ -537,6 +596,8 @@ export class DiscussionService {
     content: string;
     voteTag: VoteTag;
     metadata?: Record<string, unknown> | null;
+    intent?: MessageIntent;
+    inReplyToMessageId?: string | null;
   }): Promise<DiscussionMessage> {
     // Bug 3 fix: attach current review round to every message
     const group = await this.discussionRepo.findGroupById(input.groupId);

@@ -10,6 +10,7 @@ import type { IExecutor } from '@main/core/interfaces/i-executor.js';
 import type { IPromptBuilder } from '@main/core/interfaces/i-prompt-builder.js';
 import type { CapibaraConfig } from '@main/core/types/config.types.js';
 import type { Run, WakeTrigger } from '@main/core/types/domain.types.js';
+import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
 import { TERMINAL_RUN_STATUSES } from '@main/core/constants/run.constants.js';
 import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
 import {
@@ -33,6 +34,7 @@ import type { FileLogService } from '../../infrastructure/logging/file-log.servi
 @injectable()
 export class ExecutionEngine {
   private jwtSecrets = new Map<string, string>();
+  private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
 
   /** Maps runId → { orgName, taskId } for log file path resolution */
   private runLogCtx = new Map<string, { orgName: string; taskId: string }>();
@@ -66,6 +68,10 @@ export class ExecutionEngine {
         payload: { runId, stream, chunk },
       });
     });
+  }
+
+  setConversationWorkflowRepo(repo: IConversationWorkflowRepository): void {
+    this.conversationWorkflowRepo = repo;
   }
 
   async startRun(
@@ -182,9 +188,26 @@ export class ExecutionEngine {
       // after Phase 1 posted a plan). Resuming would carry Phase 1's conversation context
       // where the AI was told "do NOT create children", causing it to ignore Phase 2's prompt.
       const NO_RESUME_TRIGGERS: WakeTrigger[] = ['review_approve'];
-      const lastSessionId = NO_RESUME_TRIGGERS.includes(trigger)
-        ? null
-        : await this.runRepo.findLastSessionId(roleId, taskNodeId);
+      let lastSessionId: string | null = null;
+
+      if (!NO_RESUME_TRIGGERS.includes(trigger)) {
+        // For discussion_reply: prefer the conversation workflow's asking session ID
+        if (trigger === 'discussion_reply' && this.conversationWorkflowRepo) {
+          const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(roleId, taskNodeId);
+          if (workflow?.askingSessionId) {
+            lastSessionId = workflow.askingSessionId;
+            this.logger.info('Resuming conversation session', {
+              runId, sessionId: lastSessionId.slice(0, 8), workflowId: workflow.id,
+            });
+          }
+        }
+
+        // Fallback to regular session resume
+        if (!lastSessionId) {
+          lastSessionId = await this.runRepo.findLastSessionId(roleId, taskNodeId);
+        }
+      }
+
       if (lastSessionId) {
         this.logger.info('Resuming previous session', { runId, sessionId: lastSessionId.slice(0, 8) });
       }

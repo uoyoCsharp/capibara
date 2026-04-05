@@ -79,6 +79,14 @@ const api: CapibaraApi = {
   updateSetting: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateSetting, input),
   getLocale: () => ipcRenderer.invoke(IPC_CHANNELS.getLocale),
 
+  // Conversation
+  getActiveConversations: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActiveConversations, orgId),
+  getConversationHistory: (workflowId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationHistory, workflowId),
+  cancelConversation: (input) => ipcRenderer.invoke(IPC_CHANNELS.cancelConversation, input),
+  getConversationMetrics: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationMetrics, orgId),
+  getConversationEvents: (workflowId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationEvents, workflowId),
+  getConversationAnalytics: (orgId, timeRange) => ipcRenderer.invoke(IPC_CHANNELS.getConversationAnalytics, orgId, timeRange),
+
   // Subscription
   subscribe: (callback: (event: DesktopEvent) => void) => {
     const listener = (

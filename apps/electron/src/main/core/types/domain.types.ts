@@ -43,7 +43,18 @@ export type WakeTrigger =
   | 'review_delegate'
   | 'delegation_completed'
   | 'retry_failed'
-  | 'dispute_detected';
+  | 'dispute_detected'
+  | 'discussion_reply'
+  | 'conversation_escalation';
+
+// ─── Conversation ───────────────────────────────────────────────────
+export type MessageIntent =
+  | 'question'
+  | 'reply'
+  | 'escalation'
+  | 'resolution'
+  | 'vote'
+  | 'general';
 
 // ─── Skill Source ───────────────────────────────────────────────────
 export type SkillSource = 'builtin' | 'template' | 'custom';
@@ -121,6 +132,8 @@ export interface DiscussionMessage {
   voteTag: VoteTag;
   reviewRound: number;
   metadata: Record<string, unknown> | null;
+  intent: MessageIntent;
+  inReplyToMessageId: string | null;
   createdAt: string;
 }
 
@@ -161,6 +174,7 @@ export interface PendingWake {
   orgId: string;
   trigger: WakeTrigger;
   taskNodeId: string | null;
+  priority: number;
   createdAt: string;
 }
 

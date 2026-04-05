@@ -36,6 +36,8 @@ interface MessageRow {
   vote_tag: string | null;
   review_round: number;
   metadata: string | null;
+  intent: string;
+  in_reply_to_message_id: string | null;
   created_at: string;
 }
 
@@ -63,6 +65,8 @@ function messageRowToEntity(row: MessageRow): DiscussionMessage {
     voteTag: (row.vote_tag as DiscussionMessage['voteTag']) ?? null,
     reviewRound: row.review_round ?? 1,
     metadata: row.metadata ? JSON.parse(row.metadata) as Record<string, unknown> : null,
+    intent: (row.intent as DiscussionMessage['intent']) ?? 'general',
+    inReplyToMessageId: row.in_reply_to_message_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -150,11 +154,13 @@ export class SqliteDiscussionRepository implements IDiscussionRepository {
     const now = new Date().toISOString();
     const reviewRound = input.reviewRound ?? 1;
     const metadata = input.metadata ? JSON.stringify(input.metadata) : null;
+    const intent = input.intent ?? (input.voteTag ? 'vote' : 'general');
+    const inReplyToMessageId = input.inReplyToMessageId ?? null;
 
     this.conn.getDb().prepare(`
-      INSERT INTO discussion_messages (id, group_id, author_role_id, author_type, content, vote_tag, review_round, metadata, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.groupId, input.authorRoleId, input.authorType, input.content, input.voteTag, reviewRound, metadata, now);
+      INSERT INTO discussion_messages (id, group_id, author_role_id, author_type, content, vote_tag, review_round, metadata, intent, in_reply_to_message_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.groupId, input.authorRoleId, input.authorType, input.content, input.voteTag, reviewRound, metadata, intent, inReplyToMessageId, now);
 
     const row = this.conn.getDb()
       .prepare('SELECT * FROM discussion_messages WHERE id = ?')

@@ -77,6 +77,10 @@ export class OrgOrchestrator {
     this.eventBus.on('wake:triggered', (e) => void this.handleEvent(e));
     this.eventBus.on('dispute:detected', (e) => void this.handleEvent(e));
     this.eventBus.on('budget:exceeded', (e) => void this.handleBudgetExceeded(e));
+    // Conversation system events
+    this.eventBus.on('conversation:reply-posted', (e) => void this.handleEvent(e));
+    this.eventBus.on('conversation:escalated', (e) => void this.handleEvent(e));
+    this.eventBus.on('conversation:timed-out', (e) => void this.handleEvent(e));
     this.logger.info('OrgOrchestrator started — listening for domain events');
   }
 
@@ -364,6 +368,42 @@ export class OrgOrchestrator {
         }];
       }
 
+      // Conversation: reply posted → wake asking role
+      case 'conversation:reply-posted': {
+        const workflow = (payload as Record<string, unknown>).workflow as {
+          askingRoleId: string;
+          orgId: string;
+          taskNodeId: string;
+        } | undefined;
+        if (!workflow) return [];
+        return [{
+          roleId: workflow.askingRoleId,
+          orgId: workflow.orgId,
+          taskNodeId: workflow.taskNodeId,
+          trigger: 'discussion_reply',
+        }];
+      }
+
+      // Conversation: escalated → wake the new respondent
+      case 'conversation:escalated': {
+        const { respondentRoleId, orgId: escOrgId, workflow: escWorkflow } = payload as {
+          respondentRoleId: string;
+          orgId: string;
+          workflow: { taskNodeId: string };
+        };
+        if (!respondentRoleId) return [];
+        return [{
+          roleId: respondentRoleId,
+          orgId: escOrgId,
+          taskNodeId: escWorkflow.taskNodeId,
+          trigger: 'conversation_escalation',
+        }];
+      }
+
+      // Conversation: timed out → already handled by TimeoutEscalationService
+      case 'conversation:timed-out':
+        return [];
+
       default:
         return [];
     }
@@ -404,11 +444,12 @@ export class OrgOrchestrator {
     const activeRun = await this.runRepo.findActiveByOrgId(orgId);
     if (activeRun) {
       this.logger.debug('Wake deferred: org has active run, enqueuing pending wake', { roleId, orgId, trigger, activeRunId: activeRun.id });
-      await this.pendingWakeRepo.create({ roleId, orgId, trigger, taskNodeId });
+      const priority = this.triggerToPriority(trigger);
+      await this.pendingWakeRepo.create({ roleId, orgId, trigger, taskNodeId, priority });
       this.eventBus.emit({
         type: 'wake:pending-enqueued',
         timestamp: new Date().toISOString(),
-        payload: { roleId, trigger },
+        payload: { roleId, trigger, priority },
       });
       return false;
     }
@@ -576,15 +617,14 @@ export class OrgOrchestrator {
   // ─── Story 7.3: PendingWake Queue ────────────────────────────
 
   private async consumePendingWakes(roleId: string, orgId: string): Promise<void> {
-    // With per-org serial execution, consume the oldest pending wake for the entire org
-    // (not just for the completed role), since the org slot is now free.
+    // With per-org serial execution, consume the highest-priority pending wake for the entire org
+    // Priority ordering: priority DESC, created_at ASC
     const pendingWakes = await this.pendingWakeRepo.findByOrgId(orgId);
     if (pendingWakes.length === 0) return;
 
     this.logger.info('Consuming pending wakes for org', { orgId, count: pendingWakes.length });
 
-    // FIFO: try each pending wake until one successfully starts a run.
-    // Only one run can start (per-org serial), so stop after the first success.
+    // Priority-ordered: try each pending wake until one successfully starts a run.
     for (const wake of pendingWakes) {
       const wakeRoleId = wake.roleId;
 
@@ -616,6 +656,14 @@ export class OrgOrchestrator {
 
   async resetSelfWakeCount(roleId: string): Promise<void> {
     await this.roleRepo.update({ id: roleId, consecutiveWakeCount: 0 });
+  }
+
+  private triggerToPriority(trigger: WakeTrigger): number {
+    switch (trigger) {
+      case 'conversation_escalation': return 2;
+      case 'discussion_reply': return 1;
+      default: return 0;
+    }
   }
 
   stop(): void {

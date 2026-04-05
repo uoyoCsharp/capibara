@@ -8,6 +8,7 @@ import { OrganizationPage } from './components/organization/OrganizationPage';
 import { SkillsPage } from './components/skills/SkillsPage';
 import { ExecutionPage } from './components/execution/ExecutionPage';
 import { DiscussionPage } from './components/discussion/DiscussionPage';
+import { ConversationPage } from './components/conversations/ConversationPage';
 import { ToastContainer } from './components/shared/ToastContainer';
 import { toast } from './store/toast.store';
 
@@ -72,6 +73,8 @@ function AppContent() {
         return <ExecutionPage />;
       case 'discussion':
         return <DiscussionPage />;
+      case 'conversations':
+        return <ConversationPage />;
       default:
         return <DashboardPage orgId={currentOrgId} />;
     }

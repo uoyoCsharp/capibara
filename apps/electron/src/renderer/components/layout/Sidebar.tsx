@@ -7,6 +7,7 @@ import {
   Question,
   CaretLeft,
   CaretRight,
+  Chats,
 } from '@phosphor-icons/react';
 import type { SectionId } from '@shared/contracts';
 import type { LocaleMessages } from '@shared/locale/types.js';
@@ -31,6 +32,7 @@ const NAV_ITEM_DEFS: Array<{ id: SectionId; sectionKey: keyof LocaleMessages['se
   { id: 'skills', sectionKey: 'skills', icon: Lightbulb },
   { id: 'execution', sectionKey: 'execution', icon: ListChecks },
   { id: 'discussion', sectionKey: 'discussion', icon: ChatCircleDots },
+  { id: 'conversations', sectionKey: 'conversations', icon: Chats },
 ];
 
 export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse }: SidebarProps) {

@@ -5,8 +5,12 @@ import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.r
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { McpToolCallResult } from '@main/core/interfaces/i-mcp-tool-handler.js';
+import type { IConversationWorkflowService } from '@main/core/interfaces/i-conversation-workflow.service.js';
+import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
 import type { VoteTag } from '@main/core/types/domain.types.js';
+import type { RecipientTarget } from '@main/core/types/conversation.types.js';
 import type { TaskService } from '@main/application/tasks/task.service.js';
+import type { ConversationEventLogger } from '@main/infrastructure/persistence/sqlite/conversation-event.logger.js';
 import {
   TASK_REPO_TOKEN,
   ROLE_REPO_TOKEN,
@@ -22,6 +26,10 @@ import { McpToolRegistry } from './mcp-tool-registry.js';
  */
 @injectable()
 export class McpToolHandlers {
+  private conversationService: IConversationWorkflowService | null = null;
+  private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
+  private conversationEventLogger: ConversationEventLogger | null = null;
+
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
     @inject(ROLE_REPO_TOKEN) private readonly roleRepo: IRoleRepository,
@@ -30,6 +38,16 @@ export class McpToolHandlers {
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
     private readonly taskService: TaskService,
   ) {}
+
+  setConversationDeps(
+    service: IConversationWorkflowService,
+    repo: IConversationWorkflowRepository,
+    eventLogger?: ConversationEventLogger,
+  ): void {
+    this.conversationService = service;
+    this.conversationWorkflowRepo = repo;
+    this.conversationEventLogger = eventLogger ?? null;
+  }
 
   registerAll(registry: McpToolRegistry): void {
     registry.register('capibara_task_complete', (args) => this.taskComplete(args));
@@ -40,6 +58,8 @@ export class McpToolHandlers {
     registry.register('capibara_context_get_discussion_summary', (args) => this.contextGetDiscussionSummary(args));
     registry.register('capibara_task_review', (args) => this.taskReview(args));
     registry.register('capibara_escalate', (args) => this.escalate(args));
+    registry.register('capibara_ask_question', (args) => this.askQuestion(args));
+    registry.register('capibara_mark_conversation_resolved', (args) => this.markConversationResolved(args));
   }
 
   private async taskComplete(args: Record<string, unknown>): Promise<McpToolCallResult> {
@@ -260,5 +280,126 @@ export class McpToolHandlers {
 
     this.logger.warn('Task escalated', { taskId, reason });
     return { success: true, data: { taskId, escalated: true, reason } };
+  }
+
+  private async askQuestion(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    if (!this.conversationService) {
+      return { success: false, error: 'Conversation service not initialized' };
+    }
+
+    const taskId = args.taskId as string;
+    const question = args.question as string;
+    const urgency = (args.urgency as 'normal' | 'urgent') ?? 'normal';
+
+    if (!taskId || !question) {
+      return { success: false, error: 'taskId and question are required' };
+    }
+
+    const task = await this.taskRepo.findById(taskId);
+    if (!task) {
+      return { success: false, error: `Task ${taskId} not found` };
+    }
+
+    // Parse recipientTarget
+    let recipientTarget: RecipientTarget = { type: 'supervisor' };
+    if (args.recipientTarget) {
+      const rt = args.recipientTarget as { type: string; roleId?: string };
+      if (rt.type === 'human') {
+        recipientTarget = { type: 'human' };
+      } else if (rt.type === 'role' && rt.roleId) {
+        recipientTarget = { type: 'role', roleId: rt.roleId };
+      } else if (rt.type === 'any') {
+        recipientTarget = { type: 'any' };
+      }
+    }
+
+    // Resolve current run for this task
+    const runId = (args._runId as string) ?? '';
+    const sessionId = (args._sessionId as string) ?? null;
+
+    const workflow = await this.conversationService.createWorkflow({
+      orgId: task.orgId,
+      taskNodeId: taskId,
+      askingRoleId: (args._roleId as string) ?? task.assigneeRoleId ?? '',
+      askingRunId: runId,
+      askingSessionId: sessionId,
+      question,
+      recipientTarget,
+      urgency,
+    });
+
+    return {
+      success: true,
+      data: {
+        status: 'question_posted',
+        workflowId: workflow.id,
+        respondentInfo: {
+          roleId: workflow.respondentRoleId,
+          type: workflow.respondentType,
+        },
+        timeoutAt: workflow.timeoutAt,
+      },
+    };
+  }
+
+  private async markConversationResolved(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    if (!this.conversationService || !this.conversationWorkflowRepo) {
+      return { success: false, error: 'Conversation service not initialized' };
+    }
+
+    const taskId = args.taskId as string;
+    const summary = args.summary as string | undefined;
+
+    if (!taskId) {
+      return { success: false, error: 'taskId is required' };
+    }
+
+    const roleId = (args._roleId as string) ?? '';
+
+    // Find active workflow for this task where asking role matches
+    const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(roleId, taskId);
+    if (!workflow) {
+      return { success: false, error: 'No active conversation found for this task and role' };
+    }
+
+    // Only 'resumed' state can transition to 'resolved'
+    if (workflow.state !== 'resumed') {
+      return { success: false, error: `Cannot resolve conversation in '${workflow.state}' state (must be 'resumed')` };
+    }
+
+    // Transition to resolved
+    const now = new Date().toISOString();
+    await this.conversationWorkflowRepo.resolve(workflow.id, now);
+
+    // Post resolution message if summary provided
+    if (summary) {
+      await this.discussionRepo.postMessage({
+        groupId: workflow.discussionGroupId,
+        authorRoleId: roleId || null,
+        authorType: 'ai',
+        content: summary,
+        voteTag: null,
+        intent: 'resolution',
+      });
+    }
+
+    // Emit event
+    this.eventBus.emit({
+      type: 'conversation:resolved',
+      timestamp: now,
+      payload: {
+        workflowId: workflow.id,
+        orgId: workflow.orgId,
+        summary: summary ?? null,
+      },
+    });
+
+    // Log audit event
+    this.conversationEventLogger?.log(workflow.id, 'resolved', {
+      summary: summary ?? null,
+      resolvedBy: roleId || 'unknown',
+    });
+
+    return { success: true, data: { workflowId: workflow.id, status: 'resolved' } };
   }
 }

@@ -4,6 +4,8 @@ inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
   - _bmad-output/planning-artifacts/ux-design-specification.md
+  - _bmad-output/planning-artifacts/prd-conversation-system.md
+  - _bmad-output/planning-artifacts/architecture-conversation-system.md
   - _bmad-output/project-context.md
   - docs/functional-analysis.md
 ---
@@ -90,6 +92,17 @@ This document provides the complete epic and story breakdown for Capibara, decom
 - FR-13 (Observability): Epic 9
 - FR-14 (Internationalization): Epic 1
 
+#### Conversation System FR Coverage
+
+- Conv-FR1-FR3 (Conversation Initiation): Epic 11
+- Conv-FR5-FR9 (Conversation Wake & Resume): Epic 11
+- Conv-FR10-FR14 (Agent-to-Agent Conversation): Epic 11, Epic 15
+- Conv-FR15-FR18 (Conversation Orchestration): Epic 13, Epic 15
+- Conv-FR19-FR22 (Timeout & Escalation): Epic 13
+- Conv-FR23-FR26 (Concurrent Conversation Management): Epic 14
+- Conv-FR27-FR31 (Human Interaction): Epic 12
+- Conv-FR32-FR35 (Audit & Observability): Epic 14
+
 ## Epic List
 
 ### Epic 1: Electron Application Shell & Core Infrastructure
@@ -131,6 +144,26 @@ Users see human-readable narrative project status on a rich dashboard with cost 
 ### Epic 10: Resilience & Safety
 The system handles failures gracefully with configurable retry logic, escalation chains along the org tree, global budget protection, REVISE cycle circuit breakers, and a mandatory top-level safety valve to protect against runaway costs and infinite loops.
 **FRs covered:** FR-12; NFR-01 (Cost Control — budget limits)
+
+### Epic 11: Conversation Core — Durable Workflow & Routing Engine
+AI roles can ask questions during task execution via MCP tools, the system routes questions to the appropriate supervisor AI role, the supervisor is automatically woken to respond, and the original asking role resumes execution with full conversation context — enabling the fundamental Agent-to-Agent multi-turn conversation loop.
+**FRs covered:** Conv-FR1-FR3, Conv-FR5-FR14; ADR-v2-01, ADR-v2-02, ADR-v2-04, ADR-v2-05, ADR-v2-06
+
+### Epic 12: Conversation Human Interaction
+Human users can participate in Agent conversations through the UI — receiving notifications when roles with `requiresHumanApproval=true` ask questions, replying directly in the discussion panel, marking conversations as resolved, and intervening in any Agent-to-Agent conversation.
+**FRs covered:** Conv-FR3, Conv-FR27-FR31; ADR-v2-03 (Human Gate)
+
+### Epic 13: Conversation Timeout, Escalation & Safety
+Conversations that stall without a reply are automatically escalated through the role hierarchy. Circular conversation patterns are detected and broken. Orphaned workflow states are recovered after system restart.
+**FRs covered:** Conv-FR17-FR22; ADR-v2-01 (Crash Recovery)
+
+### Epic 14: Concurrent Conversation Management & Observability
+Multiple conversations can be active simultaneously within an organization with deterministic priority-based scheduling. Conversation metrics are available for monitoring and analysis.
+**FRs covered:** Conv-FR23-FR26, Conv-FR32-FR35
+
+### Epic 15: Advanced Conversation Features
+Skill-based intelligent routing, cascaded multi-role discussions with full context propagation, token budget truncation for long conversations, and conversation pattern analytics.
+**FRs covered:** Conv-FR12, Conv-FR15-FR16
 
 ---
 
@@ -882,6 +915,681 @@ So that I'm not overwhelmed by notification storms during parallel execution.
 **Given** the event-driven system
 **When** multiple events fire in rapid succession
 **Then** `EventDigester` in `application/progress/` aggregates events within a configurable time window (default 30 seconds for notifications, 200-500ms for IPC batching)
+
+---
+
+## Conversation System Epics (Architecture v2)
+
+> The following epics implement the Multi-turn Conversation System defined in `architecture-conversation-system.md` v2 and `prd-conversation-system.md`. They extend the base architecture (Epics 1-10) and are sequenced according to the 5-phase implementation plan.
+
+### Conversation System FR Coverage Map
+
+- Conv-FR1-FR3 (Conversation Initiation): Epic 11
+- Conv-FR5-FR9 (Conversation Wake & Resume): Epic 11
+- Conv-FR10-FR14 (Agent-to-Agent Conversation): Epic 11, Epic 15
+- Conv-FR15-FR18 (Conversation Orchestration): Epic 13, Epic 15
+- Conv-FR19-FR22 (Timeout & Escalation): Epic 13
+- Conv-FR23-FR26 (Concurrent Conversation Management): Epic 14
+- Conv-FR27-FR31 (Human Interaction): Epic 12
+- Conv-FR32-FR35 (Audit & Observability): Epic 14
+
+---
+
+## Epic 11: Conversation Core — Durable Workflow & Routing Engine
+
+AI roles can ask questions during task execution via MCP tools, the system routes questions to the appropriate supervisor AI role, the supervisor is automatically woken to respond, and the original asking role resumes execution with full conversation context — enabling the fundamental Agent-to-Agent multi-turn conversation loop.
+
+**Architecture Ref:** Phase 1 (§4-§9, §14-§17)
+**PRD FRs covered:** FR1-FR3, FR5-FR14
+**ADRs implemented:** ADR-v2-01 (Durable Workflow), ADR-v2-02 (Routing Engine), ADR-v2-04 (Reuse DiscussionMessage), ADR-v2-05 (Priority Queue), ADR-v2-06 (Session Resume)
+
+### Story 11.1: Define Conversation Domain Types and Interfaces
+
+As a developer,
+I want to define the conversation workflow types, state machine, repository interface, and DI tokens,
+So that all conversation components have a shared contract to build upon.
+
+**Acceptance Criteria:**
+
+**Given** the existing core layer structure
+**When** conversation domain types are created
+**Then** `core/types/conversation.types.ts` defines: `ConversationWorkflowState` (7 states: waiting_for_reply, reply_received, resumed, resolved, escalated, timed_out, cancelled), `MessageIntent` (6 values: question, reply, escalation, resolution, vote, general), `RecipientTargetType` (supervisor, human, role, any), `RecipientTarget` discriminated union, `RoutingDecision`, `RoutingRequest`, `ConversationWorkflow` entity interface, `ConversationTransition`, `ContextBudgetConfig`, `TimeoutConfig`
+**And** `core/types/domain.types.ts` is extended: `WakeTrigger` gains `discussion_reply` and `conversation_escalation`, `DiscussionMessage` gains `intent: MessageIntent` and `inReplyToMessageId: string | null`, `PendingWake` gains `priority: number`
+**And** `core/types/event.types.ts` is extended with 7 new `conversation:*` event types and their payload interfaces
+**And** `core/tokens.ts` gains 4 new tokens: `CONVERSATION_WORKFLOW_REPO_TOKEN`, `ROUTING_POLICY_ENGINE_TOKEN`, `CONVERSATION_WORKFLOW_SERVICE_TOKEN`, `TIMEOUT_ESCALATION_SERVICE_TOKEN`
+**And** `core/interfaces/i-conversation-workflow.repository.ts` defines: `findById`, `findByTaskNodeId`, `findActiveByRoleAndTask`, `findWaitingByDiscussionGroup`, `findExpiredWorkflows`, `findByOrgId`, `create`, `updateState`, `updateReply`, `updateRespondent`
+**And** `core/interfaces/i-routing-policy-engine.ts` defines: `resolve(request: RoutingRequest): Promise<RoutingDecision>`
+**And** `core/interfaces/i-conversation-workflow.service.ts` defines: `createWorkflow`, `handleReply`, `transitionState`, `createEscalatedWorkflow`
+**And** all exports are named exports, all imports use `.js` extensions
+
+### Story 11.2: Implement Database Schema Extensions and Migrations
+
+As a developer,
+I want to create the `conversation_workflows` table, extend `discussion_messages` and `pending_wakes` tables, and create the `conversation_events` audit table,
+So that conversation state can be persisted and recovered after crashes.
+
+**Acceptance Criteria:**
+
+**Given** the existing SQLite migration system
+**When** conversation schema migrations run
+**Then** `conversation_workflows` table is created with all columns per Architecture §14.1 (id, org_id, task_node_id, discussion_group_id, asking_role_id, asking_run_id, asking_session_id, question_message_id, reply_message_id, respondent_role_id, respondent_type, state, depth, parent_workflow_id, priority, timeout_at, resolved_at, audit_reason, created_at, updated_at)
+**And** the table has CHECK constraints on `respondent_type` and `state` values
+**And** 5 indexes are created: org_id+state, task_node_id+state, asking_role_id+state, respondent_role_id+state, partial index on timeout_at WHERE state='waiting_for_reply'
+**And** `discussion_messages` table gains `intent` column (TEXT NOT NULL DEFAULT 'general' with CHECK constraint) and `in_reply_to_message_id` column (TEXT FK to self)
+**And** `pending_wakes` table gains `priority` column (INTEGER NOT NULL DEFAULT 0)
+**And** `conversation_events` table is created (id, workflow_id FK, event_type TEXT, event_payload TEXT/JSON, created_at) with index on workflow_id+created_at
+**And** all foreign key constraints are enforced
+**And** migrations are idempotent (safe to run multiple times)
+
+### Story 11.3: Implement Conversation Workflow Repository
+
+As a developer,
+I want a SQLite repository implementation for `ConversationWorkflow` entities,
+So that conversation state is persisted and queryable.
+
+**Acceptance Criteria:**
+
+**Given** the schema from Story 11.2 and interfaces from Story 11.1
+**When** `SqliteConversationWorkflowRepository` is implemented
+**Then** it implements `IConversationWorkflowRepository` in `infrastructure/persistence/sqlite/`
+**And** `findById` returns a single workflow or null
+**And** `findActiveByRoleAndTask` finds workflows in non-terminal states for a given role+task combination
+**And** `findWaitingByDiscussionGroup` finds workflows in `waiting_for_reply` state for a given discussion group
+**And** `findExpiredWorkflows(now: string)` returns all workflows where `timeout_at < now` AND `state = 'waiting_for_reply'`
+**And** `create` inserts a new workflow record and returns the entity
+**And** `updateState` updates state and updated_at, validates transition legality via state machine rules before writing
+**And** `updateReply` sets reply_message_id and transitions state atomically
+**And** the repository is registered in `composition-root.ts` via `CONVERSATION_WORKFLOW_REPO_TOKEN`
+**And** all methods return `Promise<T>` (per ADR-01)
+
+### Story 11.4: Implement Routing Policy Engine
+
+As a developer,
+I want a unified routing engine that evaluates all routing rules in a deterministic pipeline,
+So that "who should respond?" decisions are centralized, auditable, and consistent.
+
+**Acceptance Criteria:**
+
+**Given** the domain types and repository from Stories 11.1-11.3
+**When** `RoutingPolicyEngine` is implemented in `application/conversation/`
+**Then** it implements `IRoutingPolicyEngine` interface
+**And** the pipeline evaluates 6 steps in order per Architecture §6.3:
+  1. Human Gate Check — if `target=human` AND `askingRole.requiresHumanApproval !== true` → rewrite to supervisor, set `auditReason='human_target_blocked_by_role_gate'`, set `wasRewritten=true`
+  2. Specific Role Resolution — if `target=role` AND role is active → route to that role; else fall through
+  3. Supervisor Resolution — resolve `askingRole.parentId`; if parent active → route; if no parent → Step 6
+  4. Skill-Match Resolution (for `target=any`) — find peers with matching skill categories, rank by load → route to best; if no match → Step 3
+  5. Cycle Detection — depth limit (10), self-wake rejection, pair cycle detection within last 4 hops → escalate if detected
+  6. Top-Level Fallback — if no AI available → route to human (forced, priority=3), emit `escalation:top-level`
+**And** the method returns a `RoutingDecision` with: respondentRoleId, respondentType, priority, auditReason, wasRewritten
+**And** dependencies are injected via DI: IRoleRepository, IRunRepository, IConversationWorkflowRepository, config
+**And** the engine is registered via `ROUTING_POLICY_ENGINE_TOKEN`
+**And** each pipeline step logs its decision for audit
+
+### Story 11.5: Implement Conversation Workflow Service
+
+As a developer,
+I want a core service that manages conversation workflow lifecycles — creation, reply handling, state transitions, and escalation,
+So that all conversation operations flow through a single, coherent orchestration service.
+
+**Acceptance Criteria:**
+
+**Given** the repository and routing engine from Stories 11.3-11.4
+**When** `ConversationWorkflowService` is implemented in `application/conversation/`
+**Then** `createWorkflow(input)` performs: persist question as DiscussionMessage (intent='question'), create ConversationWorkflow in 'waiting_for_reply', call RoutingPolicyEngine.resolve(), set respondent on workflow, create PendingWake for respondent with priority, set timeout_at based on urgency config, emit 'conversation:question-posted', log conversation_event 'question_posted'
+**And** `handleReply(workflowId, messageId)` performs: validate workflow is in 'waiting_for_reply', update replyMessageId, transition to 'reply_received', cancel timeout, create PendingWake for askingRoleId with trigger='discussion_reply', emit 'conversation:reply-posted', log conversation_event 'reply_posted'
+**And** `transitionState(workflowId, targetState)` validates transition legality via state machine before persisting, emits 'conversation:state-changed', logs conversation_event 'state_changed'
+**And** `createEscalatedWorkflow(parentWorkflow, newRespondentRoleId)` creates a new workflow with parentWorkflowId set, depth incremented, priority=2, and routes to the new respondent
+**And** all operations write to SQLite before emitting events (crash safety)
+**And** the service is registered via `CONVERSATION_WORKFLOW_SERVICE_TOKEN`
+
+### Story 11.6: Implement `capibara_ask_question` MCP Tool
+
+As an AI agent,
+I want to call `capibara_ask_question` during task execution to post a question and pause,
+So that I can get clarification from my supervisor or another role before continuing.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationWorkflowService from Story 11.5
+**When** the MCP tool is registered and invoked
+**Then** `ask-question.handler.ts` is created in `infrastructure/mcp/tools/`
+**And** input is Zod-validated: `{ taskId: string, question: string, recipientTarget?: { type, roleId? }, urgency?: 'normal' | 'urgent' }`
+**And** `taskId` is validated against the active Run's task (security: agents cannot ask for other tasks)
+**And** `runId` + JWT token are validated (existing auth pattern)
+**And** the handler delegates to `ConversationWorkflowService.createWorkflow()`
+**And** it returns `{ status: 'question_posted', respondentInfo: { roleId?, type }, timeoutSeconds }`
+**And** the tool is registered in `McpToolRegistry` as `capibara_ask_question`
+**And** the handler finds or creates a DiscussionGroup for the task if one doesn't exist
+**And** the default recipientTarget is `{ type: 'supervisor' }` when not specified
+
+### Story 11.7: Extend Wake Triggers and OrgOrchestrator for Conversation Events
+
+As a developer,
+I want the OrgOrchestrator to subscribe to conversation events and calculate wake targets for conversation replies and escalations,
+So that the existing event-driven wake loop handles conversation flows seamlessly.
+
+**Acceptance Criteria:**
+
+**Given** the existing OrgOrchestrator event subscription pattern
+**When** conversation event support is added
+**Then** `OrgOrchestrator.start()` subscribes to: `conversation:reply-posted`, `conversation:escalated`, `conversation:timed-out`
+**And** `calculateWakeTargets()` handles `conversation:reply-posted` by returning askingRoleId with trigger `discussion_reply`
+**And** `calculateWakeTargets()` handles `conversation:escalated` by returning respondentRoleId with trigger `conversation_escalation`
+**And** `wakeRoleIfPossible()` uses `triggerToPriority()` to map triggers: conversation_escalation=2, discussion_reply=1, all others=0
+**And** when creating PendingWake, the priority is persisted
+**And** when consuming pending wakes after Run completion, `findHighestPriority(roleId, orgId)` selects by `priority DESC, created_at ASC` instead of FIFO
+**And** the `pending_wakes` ordered consumption is updated in `IPendingWakeRepository` and its SQLite implementation
+
+### Story 11.8: Implement Session Resume for `discussion_reply` Wake
+
+As a developer,
+I want the ExecutionEngine to use `--resume <sessionId>` when waking an agent for a conversation reply,
+So that the agent retains its full prior thought process and can continue seamlessly.
+
+**Acceptance Criteria:**
+
+**Given** the Run creation flow in ExecutionEngine
+**When** a Run is created with trigger `discussion_reply`
+**Then** the ExecutionEngine queries `ConversationWorkflowRepository.findActiveByRoleAndTask(roleId, taskNodeId)`
+**And** if the workflow has a non-null `askingSessionId`, the CLI is invoked with `--resume <askingSessionId>`
+**And** the `askingSessionId` is sourced from the `Run.sessionId` of the asking run at workflow creation time
+**And** if `askingSessionId` is null (edge case), the agent is started as a fresh session with full context injection
+**And** the session resume mechanism logs which sessionId is being resumed for audit
+
+### Story 11.9: Implement Conversation Context Builder for Prompt Injection
+
+As a developer,
+I want a `ConversationContextBuilder` that formats conversation history into a structured prompt section with token budget management,
+So that agents woken by `discussion_reply` receive complete and well-formatted conversation context.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationWorkflow and DiscussionMessage data
+**When** `ConversationContextBuilder` is invoked
+**Then** it is implemented in `application/conversation/conversation-context.builder.ts`
+**And** it retrieves all messages from the workflow's discussion group filtered by intent (question, reply, escalation)
+**And** messages are formatted as a numbered timeline: `[N] RoleName [intent]: Content -- timestamp`
+**And** a wake reason section is appended explaining the trigger and resume context
+**And** if total token estimate <= `maxConversationTokens` (default 8000), all messages are included
+**And** if exceeding budget, the first question + last 10 messages are preserved; older messages are summarized as `[N messages omitted]`
+**And** the original question and latest reply are NEVER truncated
+**And** token estimation uses a simple char/4 heuristic (no external tokenizer needed for MVP)
+
+### Story 11.10: Extend PromptBuilder for Conversation Context
+
+As a developer,
+I want the existing PromptBuilder to include conversation context and updated MCP tool listings when an agent is woken for a conversation,
+So that agents have all the information they need to continue work after receiving a reply.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationContextBuilder from Story 11.9
+**When** `PromptBuilder.build()` is called with trigger `discussion_reply` or `conversation_escalation`
+**Then** the conversation context section is appended to the prompt after Discussion Context
+**And** the MCP tool listing includes `capibara_ask_question` and `capibara_mark_conversation_resolved`
+**And** the Instructions section is replaced with conversation resume instructions per Architecture §17.3
+**And** for `conversation_escalation` trigger, the prompt explains the agent received an escalated question from a subordinate conversation
+**And** the prompt context type `PromptContext` is extended with optional `conversationWorkflow: ConversationWorkflow` field
+
+### Story 11.11: Extend DiscussionService for Conversation Reply Detection
+
+As a developer,
+I want the existing DiscussionService to detect when a posted message is a reply to an active conversation,
+So that conversation workflow state transitions happen automatically when agents or humans reply.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationWorkflowService from Story 11.5
+**When** a message is posted via `DiscussionService.postMessage()` or `capibara_discussion_post` MCP tool
+**Then** after persisting the message, the service checks if there is an active ConversationWorkflow in `waiting_for_reply` for the message's discussion group
+**And** if an active workflow exists and the message intent is 'reply' (or the message's author matches the workflow's respondentRoleId), `ConversationWorkflowService.handleReply()` is called
+**And** the detection logic handles both AI replies (via MCP tool) and human replies (via IPC)
+**And** if no active workflow exists, the message is persisted normally without triggering conversation logic
+
+### Story 11.12: Integration Test — Dev Asks EM, EM Replies, Dev Resumes
+
+As a developer,
+I want an integration test verifying the complete conversation loop: Developer asks → Engineering Manager replies → Developer resumes with context,
+So that I have confidence the end-to-end flow works correctly.
+
+**Acceptance Criteria:**
+
+**Given** all Phase 1 components from Stories 11.1-11.11
+**When** the integration test runs
+**Then** it creates an Organization with Developer (child) and Engineering Manager (parent) roles
+**And** it simulates a Developer Run that calls `capibara_ask_question` with a question
+**And** it verifies a ConversationWorkflow is created in `waiting_for_reply` state
+**And** it verifies a PendingWake exists for the EM role with the appropriate trigger
+**And** it simulates EM run and posting a reply message
+**And** it verifies the workflow transitions to `reply_received` then to `resumed`
+**And** it verifies a new PendingWake exists for the Developer with trigger `discussion_reply`
+**And** it verifies the Developer's resumed Run would use `--resume` with the original sessionId
+**And** it verifies conversation_events contains entries for: question_posted, routing_decided, reply_posted, state_changed
+**And** the test uses mocked CLI execution (no actual LLM calls)
+
+---
+
+## Epic 12: Conversation Human Interaction
+
+Human users can participate in Agent conversations through the UI — receiving notifications when roles with `requiresHumanApproval=true` ask questions, replying directly in the discussion panel, marking conversations as resolved, and intervening in any Agent-to-Agent conversation.
+
+**Architecture Ref:** Phase 2 (§13, §8.3)
+**PRD FRs covered:** FR3, FR27-FR31
+**ADRs implemented:** ADR-v2-03 (Human Gate)
+
+### Story 12.1: Implement Human Gate Enforcement in Routing Engine
+
+As a system,
+I want the RoutingPolicyEngine to enforce the human gate as a hard system-level constraint,
+So that only roles with `requiresHumanApproval=true` can send questions to human users.
+
+**Acceptance Criteria:**
+
+**Given** the RoutingPolicyEngine from Story 11.4
+**When** an agent specifies `recipientTarget = { type: 'human' }`
+**Then** if `askingRole.requiresHumanApproval === true`, the gate passes and routes to human
+**And** if `askingRole.requiresHumanApproval !== true`, the gate blocks, rewrites target to `supervisor`, sets `auditReason = 'human_target_blocked_by_role_gate'` and `wasRewritten = true`
+**And** a `conversation_event` with type `human_gate_enforced` is logged with original target, rewritten target, and role config
+**And** the blocked agent receives no error — the rewrite is transparent
+**And** no amount of prompt crafting by the agent can bypass this gate (it's server-side enforcement)
+
+### Story 12.2: Implement Conversation IPC Handlers
+
+As a developer,
+I want IPC endpoints for conversation operations so the Renderer UI can interact with conversation workflows,
+So that humans can view, reply to, cancel, and manage conversations from the desktop UI.
+
+**Acceptance Criteria:**
+
+**Given** the existing IPC handler pattern
+**When** `conversation.ipc-handler.ts` is created in `ipc-handlers/`
+**Then** the following IPC channels are implemented with Zod-validated payloads:
+  - `capibara:conversation:list-active` — list active conversations for an org (returns workflows with state not in terminal states)
+  - `capibara:conversation:get-history` — get full conversation message history for a workflow
+  - `capibara:conversation:cancel` — cancel an active conversation (transitions to 'cancelled')
+  - `capibara:conversation:get-metrics` — get conversation metrics for an org
+**And** all responses use `DesktopResult<T>` format
+**And** the IPC handler delegates to `ConversationWorkflowService` and repository
+**And** channel names follow `capibara:conversation:action` naming convention
+**And** channels are registered in `shared/contracts.ts`
+
+### Story 12.3: Implement Human Reply Detection in DiscussionService
+
+As a developer,
+I want the system to detect when a human posts a reply in a discussion that has an active conversation workflow,
+So that human replies automatically trigger the conversation reply flow and wake the asking agent.
+
+**Acceptance Criteria:**
+
+**Given** the DiscussionService reply detection from Story 11.11
+**When** a message is posted via IPC with `authorType = 'human'`
+**Then** the system checks for active ConversationWorkflow waiting on that discussion group
+**And** if found, calls `ConversationWorkflowService.handleReply()` which transitions workflow, creates PendingWake for the asking role
+**And** the human reply message is persisted with `intent = 'reply'` and `inReplyToMessageId` pointing to the question message
+**And** the flow works identically whether the reply comes from an AI agent or human — same handleReply path
+
+### Story 12.4: Implement Human Notification for Conversation Questions
+
+As a human user,
+I want to receive a desktop notification when an AI role with `requiresHumanApproval=true` asks a question requiring my input,
+So that I know there's an action requiring my attention.
+
+**Acceptance Criteria:**
+
+**Given** the conversation workflow creates a human-targeted question
+**When** the `conversation:question-posted` event fires with `respondentType = 'human'`
+**Then** `EventBroadcaster` relays the event to the Renderer via IPC
+**And** the Renderer shows a notification badge on the organization in the sidebar
+**And** the notification includes: asking role name, question preview (first 100 chars), urgency level
+**And** the notification in the discussion panel highlights the question message with a "Needs your reply" indicator
+**And** clicking the notification navigates to the relevant discussion panel
+
+### Story 12.5: Implement `capibara_mark_conversation_resolved` MCP Tool
+
+As an AI agent,
+I want to call `capibara_mark_conversation_resolved` after incorporating a reply,
+So that the conversation workflow is properly closed and no further wake triggers fire.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationWorkflowService from Story 11.5
+**When** the MCP tool is registered and invoked
+**Then** `mark-resolved.handler.ts` is created in `infrastructure/mcp/tools/`
+**And** input is Zod-validated: `{ taskId: string, summary?: string }`
+**And** the handler finds the active ConversationWorkflow for the task where `askingRoleId` matches the current role
+**And** transitions workflow state to `resolved`, sets `resolvedAt`
+**And** if `summary` is provided, posts a DiscussionMessage with `intent = 'resolution'`
+**And** emits `conversation:resolved` event
+**And** logs conversation_event 'resolved'
+**And** the tool is registered in `McpToolRegistry` as `capibara_mark_conversation_resolved`
+
+### Story 12.6: Implement Human Override — Cancel and Intervene
+
+As a human user,
+I want to cancel any active conversation or intervene in an Agent-to-Agent conversation by posting a direct reply,
+So that I maintain ultimate control over the conversation flow.
+
+**Acceptance Criteria:**
+
+**Given** the conversation IPC handlers from Story 12.2
+**When** a human cancels a conversation via `capibara:conversation:cancel`
+**Then** the workflow transitions to `cancelled` state
+**And** any pending wakes related to this workflow are cleaned up
+**And** a conversation_event 'cancelled' is logged
+**When** a human posts a reply in an Agent-to-Agent discussion
+**Then** the reply is accepted (no gate check — humans can always reply)
+**And** if there's an active `waiting_for_reply` workflow, the human reply triggers `handleReply()` (human reply preempts the AI respondent)
+**And** the original AI respondent's pending wake is cancelled (first-reply-wins)
+
+### Story 12.7: Integration Test — Analyst Asks Human, Human Replies, Analyst Resumes
+
+As a developer,
+I want an integration test verifying the human interaction flow: Analyst (requiresHumanApproval=true) asks human → human replies via IPC → Analyst resumes,
+So that the human gate and reply flow work end-to-end.
+
+**Acceptance Criteria:**
+
+**Given** all Phase 2 components
+**When** the integration test runs
+**Then** it creates an Analyst role with `requiresHumanApproval=true`
+**And** Analyst calls `capibara_ask_question` with `target=human`
+**And** routing engine passes the gate, workflow respondentType is 'human'
+**And** a simulated human reply is posted via IPC `capibara:discussion:post-message`
+**And** workflow transitions: waiting_for_reply → reply_received → resumed
+**And** PendingWake for Analyst is created with trigger `discussion_reply`
+**And** a separate test verifies gate blocking: Developer (requiresHumanApproval=false) asks `target=human` → gets rewritten to supervisor
+
+---
+
+## Epic 13: Conversation Timeout, Escalation & Safety
+
+Conversations that stall without a reply are automatically escalated through the role hierarchy. Circular conversation patterns are detected and broken. Orphaned workflow states are recovered after system restart.
+
+**Architecture Ref:** Phase 3 (§10, §11, §18)
+**PRD FRs covered:** FR17-FR22
+**ADRs leveraged:** ADR-v2-01 (Crash Recovery), ADR-v2-02 (Cycle Detection in Routing)
+
+### Story 13.1: Implement Timeout Escalation Service
+
+As a developer,
+I want a periodic scanner that detects timed-out conversations and automatically escalates them to the next level in the role hierarchy,
+So that stalled conversations are not left indefinitely waiting.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationWorkflow with `timeout_at` field
+**When** `TimeoutEscalationService` is implemented in `application/conversation/`
+**Then** it starts a periodic scan interval (default 15 seconds, configurable)
+**And** each scan queries `findExpiredWorkflows(now)` from the repository
+**And** for each expired workflow: if `depth < maxEscalationLevels` (default 3), it transitions the workflow to `escalated` and calls `createEscalatedWorkflow()` with the respondent's parent role
+**And** if `depth >= maxEscalationLevels`, it transitions to `timed_out` and emits `escalation:top-level` event for mandatory human notification
+**And** if the current respondent has no parent (top of hierarchy), it forces human escalation regardless of depth
+**And** each escalation creates a new ConversationWorkflow with: parentWorkflowId, depth+1, priority=2, new timeout_at
+**And** the service emits `conversation:escalated` event for each escalation
+**And** the service logs conversation_event `timeout_triggered` and `escalation_created`
+**And** the service is registered via `TIMEOUT_ESCALATION_SERVICE_TOKEN` and started in `composition-root.ts`
+**And** the scan interval handle is properly cleaned up on application shutdown
+
+### Story 13.2: Implement Cycle Detection in Routing Policy Engine
+
+As a developer,
+I want the RoutingPolicyEngine to detect and break circular conversation patterns,
+So that Agent-to-Agent conversations never enter infinite loops.
+
+**Acceptance Criteria:**
+
+**Given** the RoutingPolicyEngine from Story 11.4
+**When** the cycle detection pipeline step is fully implemented
+**Then** **Depth Limit**: if `conversationDepth >= maxConversationDepth` (10), returns `{ hasCycle: true, action: 'force_human' }`
+**And** **Self-Wake**: if `respondentRoleId === askingRoleId`, returns `{ hasCycle: true, action: 'route_to_supervisor' }`
+**And** **Pair Cycle**: retrieves the last 4 conversation hops for the task, checks if the asking↔respondent pair has appeared → if so, returns `{ hasCycle: true, action: 'escalate_respondent_parent' }`
+**And** cycle detection logs `conversation_event` with type `routing_decided` including cycle detection results
+**And** when a cycle is detected, the routing falls through to the next pipeline step (escalation or top-level fallback)
+
+### Story 13.3: Implement Conversation Events Audit Logging
+
+As a developer,
+I want all significant conversation actions logged to the `conversation_events` append-only table,
+So that the complete conversation decision trail is auditable and debuggable.
+
+**Acceptance Criteria:**
+
+**Given** the `conversation_events` table from Story 11.2
+**When** conversation operations occur
+**Then** the following events are logged with JSON payloads:
+  - `question_posted`: question content, recipient target, workflow ID
+  - `routing_decided`: pipeline steps evaluated, final decision, audit reason, wasRewritten flag
+  - `human_gate_enforced`: original target, rewritten target, role requiresHumanApproval value
+  - `reply_posted`: replier info, response time (createdAt diff from question)
+  - `state_changed`: from state, to state, trigger reason
+  - `timeout_triggered`: elapsed time, escalation target, depth
+  - `escalation_created`: parent workflow ID, new respondent, new depth
+  - `resolved`: resolution summary if provided
+  - `cancelled`: cancellation source (human or system)
+**And** events are written via a `ConversationEventLogger` helper injected into ConversationWorkflowService
+**And** the logger never throws — failures are logged to Pino but do not block the main flow
+**And** `conversation_events` table is strictly append-only (no UPDATE or DELETE operations)
+
+### Story 13.4: Implement Crash Recovery for Orphaned Workflows
+
+As a developer,
+I want the system to scan for and recover orphaned conversation workflows on startup,
+So that conversations interrupted by crashes are properly resumed or escalated.
+
+**Acceptance Criteria:**
+
+**Given** the TimeoutEscalationService and ConversationWorkflowService
+**When** the Main Process starts up
+**Then** the system queries all ConversationWorkflows in `waiting_for_reply` state
+**And** for each: if `timeout_at` has passed → immediately escalate (reuse escalation logic)
+**And** for each: if `timeout_at` has not passed → re-arm timeout (the periodic scanner will handle it)
+**And** the system queries all ConversationWorkflows in `reply_received` state
+**And** for each: create PendingWake for the asking role with trigger `discussion_reply` (the wake was lost in the crash)
+**And** recovery actions are logged at INFO level
+**And** recovery runs before the OrgOrchestrator starts processing events (to avoid race conditions)
+
+### Story 13.5: Integration Test — Timeout Escalation Chain to Human
+
+As a developer,
+I want an integration test verifying the timeout → escalation chain → forced human notification flow,
+So that I have confidence the safety mechanisms work correctly.
+
+**Acceptance Criteria:**
+
+**Given** all Phase 3 components
+**When** the integration test runs
+**Then** it creates a 3-level hierarchy: Developer → EM → CTO (no parent)
+**And** Developer asks EM a question with a very short timeout (e.g., 100ms for testing)
+**And** EM does not reply within the timeout
+**And** the system escalates: original workflow → escalated, new workflow created for CTO
+**And** CTO does not reply within timeout
+**And** the system reaches max depth → transitions to `timed_out`, emits `escalation:top-level`
+**And** conversation_events contains: question_posted, timeout_triggered, escalation_created, timeout_triggered, escalation:top-level
+**And** a separate test verifies crash recovery: create a workflow, simulate restart, verify recovery actions
+
+---
+
+## Epic 14: Concurrent Conversation Management & Observability
+
+Multiple conversations can be active simultaneously within an organization with deterministic priority-based scheduling. Conversation metrics are available for monitoring and analysis.
+
+**Architecture Ref:** Phase 4 (§12, §18)
+**PRD FRs covered:** FR23-FR26, FR32-FR35
+
+### Story 14.1: Implement Priority-Based Pending Wake Consumption
+
+As a developer,
+I want the OrgOrchestrator to consume pending wakes in priority order instead of FIFO,
+So that urgent conversations and escalations are processed before routine task wakes.
+
+**Acceptance Criteria:**
+
+**Given** the `pending_wakes` table with `priority` column from Story 11.2
+**When** a role's Run completes and pending wakes exist
+**Then** `IPendingWakeRepository.findHighestPriority(roleId, orgId)` returns the wake with highest priority (DESC) and earliest creation time (ASC)
+**And** `SqlitePendingWakeRepository` query uses `ORDER BY priority DESC, created_at ASC LIMIT 1`
+**And** the consumed wake is deleted atomically before processing
+**And** if multiple wakes have the same priority, FIFO ordering is preserved
+**And** priority values follow the convention: 0=normal, 1=conversation, 2=escalation, 3=system-critical
+
+### Story 14.2: Implement Conversation Metrics Queries
+
+As a developer,
+I want SQL aggregation queries that compute conversation metrics from existing tables,
+So that observability data is available without maintaining a separate metrics table.
+
+**Acceptance Criteria:**
+
+**Given** `conversation_workflows` and `conversation_events` tables
+**When** metrics are queried via `capibara:conversation:get-metrics` IPC
+**Then** the following metrics are computed per organization:
+  - `totalConversations`: COUNT of all workflows
+  - `avgResponseTimeMs`: AVG of (reply_posted.created_at - question_posted.created_at) from events
+  - `escalationRate`: COUNT(state='escalated') / COUNT(total) as percentage
+  - `timeoutRate`: COUNT(state='timed_out') / COUNT(total) as percentage
+  - `humanInterventionRate`: COUNT(respondent_type='human') / COUNT(total) as percentage
+  - `avgDepth`: AVG(depth) across all workflows
+  - `cycleDetectionCount`: COUNT of events where event_type='routing_decided' AND payload contains 'cycle'
+**And** queries are efficient using existing indexes
+**And** results are returned as a `ConversationMetrics` object
+
+### Story 14.3: Implement Active Conversation List UI
+
+As a human user,
+I want to see all active conversations across my organization in a unified list view,
+So that I can monitor ongoing Agent interactions and intervene when needed.
+
+**Acceptance Criteria:**
+
+**Given** the conversation IPC endpoints from Story 12.2
+**When** the user navigates to the organization's conversation view
+**Then** a list displays all active (non-terminal) conversations sorted by priority DESC, created_at DESC
+**And** each item shows: asking role name, question preview, respondent info, current state, time elapsed, priority badge
+**And** conversations requiring human reply are highlighted with a distinct indicator
+**And** clicking a conversation navigates to the relevant discussion panel with conversation history
+**And** the list auto-refreshes when `conversation:state-changed` events arrive via IPC
+**And** terminal-state conversations can be shown via a "Show resolved" toggle
+
+### Story 14.4: Implement Conversation Timeline View
+
+As a human user,
+I want to see a conversation timeline showing the complete flow of a multi-role discussion including routing decisions,
+So that I can audit the full conversation chain and understand why routing decisions were made.
+
+**Acceptance Criteria:**
+
+**Given** the conversation_events audit log from Story 13.3
+**When** the user opens a conversation detail view
+**Then** a timeline displays all events chronologically: question posted, routing decided, reply posted, state changes, escalations
+**And** routing decisions show the audit reason (e.g., "Routed to EM as supervisor", "Human gate blocked — rewritten to supervisor")
+**And** escalation chains show the parent→child workflow links visually
+**And** the timeline uses semantic colors: question=blue, reply=green, escalation=orange, timeout=red
+**And** timestamps show relative time (e.g., "2 min ago") with full timestamp on hover
+
+### Story 14.5: Stress Test — 5 Concurrent Conversations
+
+As a developer,
+I want a stress test verifying 5 simultaneous conversations within one organization work correctly without deadlocks or lost wakes,
+So that I have confidence in the concurrent conversation management.
+
+**Acceptance Criteria:**
+
+**Given** all Phase 4 components
+**When** the stress test runs
+**Then** it creates an organization with 6 roles (5 developers + 1 manager)
+**And** all 5 developers simultaneously ask questions to the manager
+**And** the manager's pending_wakes queue contains 5 entries at peak
+**And** the manager processes each conversation sequentially (one Run at a time)
+**And** each conversation completes successfully (reply → resume)
+**And** no pending wakes are lost
+**And** the total order of processing matches priority DESC, created_at ASC
+**And** conversation metrics show 5 total conversations with 0% timeout and 0% escalation rate
+
+---
+
+## Epic 15: Advanced Conversation Features
+
+Skill-based intelligent routing, cascaded multi-role discussions with full context propagation, token budget truncation for long conversations, and conversation pattern analytics.
+
+**Architecture Ref:** Phase 5 (§6.3 Step 4, §9.3-9.4)
+**PRD FRs covered:** FR12, FR15-FR16
+
+### Story 15.1: Implement Skill-Match Routing in Routing Policy Engine
+
+As a developer,
+I want the routing engine to match questions to peer roles based on skill category relevance,
+So that questions like "How should I test this?" are routed to a QA role rather than a generic supervisor.
+
+**Acceptance Criteria:**
+
+**Given** the RoutingPolicyEngine with the `target=any` path (Step 4)
+**When** skill-match routing is triggered
+**Then** the engine queries all peer roles (same parent) with active status
+**And** it compares the question content keywords against role skill descriptions and categories
+**And** roles are ranked by: skill relevance score (keyword match count) → current load (fewer active runs = better)
+**And** the highest-ranked peer is selected as respondent
+**And** if no peer matches, the routing falls through to supervisor resolution (Step 3)
+**And** skill matching is lightweight (keyword-based, not LLM-based) for MVP
+**And** routing decision audit includes the skill match scores
+
+### Story 15.2: Implement Multi-Hop Cascade with Context Propagation
+
+As a developer,
+I want the system to support multi-hop conversation cascades (Dev→EM→CTO) where each hop's respondent can ask further questions with full conversation chain context,
+So that complex questions can flow up the hierarchy with complete information.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationWorkflow's `parentWorkflowId` and `depth` fields
+**When** a respondent (EM) receives a question and asks their own supervisor (CTO)
+**Then** a new ConversationWorkflow is created with `parentWorkflowId` pointing to the original workflow
+**And** `depth` is incremented (original=0, EM's question=1, etc.)
+**And** the CTO's context injection includes the FULL cascade chain: Developer's original question → EM's analysis → EM's question to CTO
+**And** when CTO replies, EM is woken with CTO's reply + full cascade context
+**And** when EM replies to Developer, Developer is woken with the entire conversation chain
+**And** cycle detection prevents A→B→A loops within the cascade
+**And** the maximum cascade depth is enforced by `maxConversationDepth`
+
+### Story 15.3: Implement Token Budget Truncation for Long Conversations
+
+As a developer,
+I want the ConversationContextBuilder to intelligently truncate long conversation histories while preserving critical messages,
+So that agents always receive the most relevant context within token limits.
+
+**Acceptance Criteria:**
+
+**Given** the ConversationContextBuilder from Story 11.9
+**When** a conversation history exceeds `maxConversationTokens` (8000)
+**Then** the truncation strategy `oldest_first` is applied:
+  1. The original question message is always preserved (anchor)
+  2. The latest reply is always preserved (anchor)
+  3. The most recent 10 messages are preserved
+  4. Older messages between anchors and recent window are dropped
+  5. A summary line `[{N} earlier messages omitted]` is inserted at the truncation point
+**And** the token count includes the summary line
+**And** if even the anchored messages + recent 10 exceed budget, the recent window is reduced to 5
+**And** the truncation is deterministic — same input always produces same output
+**And** a future `summarize_oldest` strategy placeholder exists in the interface but is not implemented yet
+
+### Story 15.4: Implement Conversation Pattern Analytics
+
+As a human user,
+I want to see aggregated insights about conversation patterns across my organization,
+So that I can identify bottlenecks, optimize role configurations, and improve team efficiency.
+
+**Acceptance Criteria:**
+
+**Given** the conversation metrics from Story 14.2
+**When** the user views the organization analytics
+**Then** the following insights are computed and displayed:
+  - **Most asked role**: which role receives the most questions
+  - **Slowest responder**: which role has the highest avg response time
+  - **Escalation hotspots**: which role→role pairs escalate most frequently
+  - **Human intervention frequency**: how often humans need to step in
+  - **Conversation depth distribution**: histogram of conversation depths (1-hop, 2-hop, etc.)
+**And** analytics cover a configurable time range (last 7 days, 30 days, all time)
+**And** data is computed from existing tables via SQL queries (no pre-aggregation table)
+**And** the UI presents insights as simple data cards with numbers and optional mini-charts
 **And** events are grouped by Epic scope
 **And** a single aggregated notification is produced instead of multiple individual ones
 **And** state transitions within the window are summarized (e.g., "3 tasks completed, 1 review pending")

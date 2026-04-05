@@ -79,6 +79,14 @@ export const IPC_CHANNELS = {
   getSetting: 'capibara:settings:get',
   updateSetting: 'capibara:settings:update',
   getLocale: 'capibara:settings:get-locale',
+
+  // Conversation
+  getActiveConversations: 'capibara:conversation:list-active',
+  getConversationHistory: 'capibara:conversation:get-history',
+  cancelConversation: 'capibara:conversation:cancel',
+  getConversationMetrics: 'capibara:conversation:get-metrics',
+  getConversationEvents: 'capibara:conversation:get-events',
+  getConversationAnalytics: 'capibara:conversation:get-analytics',
 } as const;
 
 // ─── IPC Response Wrapper ───────────────────────────────────────────
@@ -102,7 +110,12 @@ export type DesktopEvent =
   | { type: 'notification'; title: string; body: string }
   | { type: 'approval:required'; taskId: string; taskTitle: string; orgId: string; roleId: string; roleName: string; groupId: string }
   | { type: 'budget:roles-paused'; orgId: string; totalTokens: number; budgetLimit: number }
-  | { type: 'settings:locale-changed'; locale: string };
+  | { type: 'settings:locale-changed'; locale: string }
+  | { type: 'conversation:question-posted'; orgId: string; workflowId: string; askingRoleName: string; questionPreview: string; urgency: 'normal' | 'urgent'; respondentType: 'ai' | 'human' }
+  | { type: 'conversation:resolved'; orgId: string; workflowId: string }
+  | { type: 'conversation:cancelled'; orgId: string; workflowId: string }
+  | { type: 'conversation:timed-out'; orgId: string; workflowId: string }
+  | { type: 'conversation:escalated'; orgId: string; workflowId: string };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -205,6 +218,8 @@ export const postDiscussionMessageSchema = z.object({
   content: z.string().min(1).max(50000),
   voteTag: z.enum(['APPROVE', 'REVISE', 'CONCERN', 'DELEGATE']).nullable().default(null),
   metadata: z.record(z.unknown()).nullable().optional(),
+  intent: z.enum(['question', 'reply', 'escalation', 'resolution', 'vote', 'general']).optional(),
+  inReplyToMessageId: z.string().nullable().optional(),
 });
 
 export const applyApprovalPresetSchema = z.object({
@@ -226,6 +241,7 @@ export const startRunSchema = z.object({
   trigger: z.enum([
     'task_assigned', 'task_completed', 'review_approve', 'review_revise',
     'review_delegate', 'delegation_completed', 'retry_failed', 'dispute_detected',
+    'discussion_reply', 'conversation_escalation',
   ]).default('task_assigned'),
 });
 
@@ -233,6 +249,12 @@ export const updateSettingSchema = z.object({
   key: z.string().min(1),
   value: z.string(),
 });
+
+export const cancelConversationSchema = z.object({
+  workflowId: z.string().min(1),
+});
+
+export type CancelConversationInput = z.infer<typeof cancelConversationSchema>;
 
 export type UpdateSettingInput = z.infer<typeof updateSettingSchema>;
 
@@ -329,6 +351,14 @@ export interface CapibaraApi {
   updateSetting: (input: UpdateSettingInput) => Promise<DesktopResult<void>>;
   getLocale: () => Promise<DesktopResult<string>>;
 
+  // Conversation
+  getActiveConversations: (orgId: string) => Promise<DesktopResult<ConversationWorkflowRecord[]>>;
+  getConversationHistory: (workflowId: string) => Promise<DesktopResult<DiscussionMessageRecord[]>>;
+  cancelConversation: (input: CancelConversationInput) => Promise<DesktopResult<void>>;
+  getConversationMetrics: (orgId: string) => Promise<DesktopResult<ConversationMetricsRecord>>;
+  getConversationEvents: (workflowId: string) => Promise<DesktopResult<ConversationEventRecord[]>>;
+  getConversationAnalytics: (orgId: string, timeRange: ConversationTimeRange) => Promise<DesktopResult<ConversationAnalyticsRecord>>;
+
   // Events subscription
   subscribe: (callback: (event: DesktopEvent) => void) => () => void;
 }
@@ -417,7 +447,9 @@ export type WakeTrigger =
   | 'review_delegate'
   | 'delegation_completed'
   | 'retry_failed'
-  | 'dispute_detected';
+  | 'dispute_detected'
+  | 'discussion_reply'
+  | 'conversation_escalation';
 
 export interface DiscussionGroupRecord {
   id: string;
@@ -431,6 +463,8 @@ export interface DiscussionGroupRecord {
   createdAt: string;
 }
 
+export type MessageIntent = 'question' | 'reply' | 'escalation' | 'resolution' | 'vote' | 'general';
+
 export interface DiscussionMessageRecord {
   id: string;
   groupId: string;
@@ -440,6 +474,8 @@ export interface DiscussionMessageRecord {
   voteTag: VoteTag;
   reviewRound: number;
   metadata: Record<string, unknown> | null;
+  intent: MessageIntent;
+  inReplyToMessageId: string | null;
   createdAt: string;
 }
 
@@ -546,4 +582,89 @@ export type SectionId =
   | 'organization'
   | 'skills'
   | 'execution'
-  | 'discussion';
+  | 'discussion'
+  | 'conversations';
+
+// ─── Conversation Records ──────────────────────────────────────────
+export type ConversationWorkflowState =
+  | 'waiting_for_reply'
+  | 'reply_received'
+  | 'resumed'
+  | 'resolved'
+  | 'escalated'
+  | 'timed_out'
+  | 'cancelled';
+
+export interface ConversationWorkflowRecord {
+  id: string;
+  orgId: string;
+  taskNodeId: string;
+  discussionGroupId: string;
+  askingRoleId: string;
+  askingRunId: string;
+  respondentRoleId: string | null;
+  respondentType: 'ai' | 'human';
+  state: ConversationWorkflowState;
+  depth: number;
+  parentWorkflowId: string | null;
+  priority: number;
+  timeoutAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMetricsRecord {
+  totalConversations: number;
+  activeConversations: number;
+  resolvedConversations: number;
+  escalatedConversations: number;
+  timedOutConversations: number;
+  cancelledConversations: number;
+  averageResolutionTimeMs: number | null;
+  avgResponseTimeMs: number | null;
+  escalationRate: number;
+  timeoutRate: number;
+  humanInterventionRate: number;
+  avgDepth: number;
+  cycleDetectionCount: number;
+}
+
+export interface ConversationEventRecord {
+  id: string;
+  workflowId: string;
+  eventType: string;
+  eventPayload: Record<string, unknown>;
+  createdAt: string;
+}
+
+// ─── Conversation Analytics ────────────────────────────────────────
+export type ConversationTimeRange = '7d' | '30d' | 'all';
+
+export interface RoleQuestionCount {
+  roleId: string;
+  roleName: string;
+  count: number;
+}
+
+export interface EscalationHotspot {
+  fromRoleId: string;
+  fromRoleName: string;
+  toRoleId: string;
+  toRoleName: string;
+  count: number;
+}
+
+export interface DepthBucket {
+  depth: number;
+  count: number;
+}
+
+export interface ConversationAnalyticsRecord {
+  mostAskedRoles: RoleQuestionCount[];
+  slowestResponders: Array<{ roleId: string; roleName: string; avgResponseTimeMs: number }>;
+  escalationHotspots: EscalationHotspot[];
+  humanInterventionCount: number;
+  depthDistribution: DepthBucket[];
+  timeRange: ConversationTimeRange;
+}

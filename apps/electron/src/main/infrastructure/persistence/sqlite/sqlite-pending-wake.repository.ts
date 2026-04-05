@@ -11,6 +11,7 @@ interface WakeRow {
   org_id: string;
   trigger: string;
   task_node_id: string | null;
+  priority: number;
   created_at: string;
 }
 
@@ -21,6 +22,7 @@ function rowToEntity(row: WakeRow): PendingWake {
     orgId: row.org_id,
     trigger: row.trigger as PendingWake['trigger'],
     taskNodeId: row.task_node_id,
+    priority: row.priority ?? 0,
     createdAt: row.created_at,
   };
 }
@@ -40,9 +42,16 @@ export class SqlitePendingWakeRepository implements IPendingWakeRepository {
 
   async findByOrgId(orgId: string): Promise<PendingWake[]> {
     const rows = this.conn.getDb()
-      .prepare('SELECT * FROM pending_wakes WHERE org_id = ? ORDER BY created_at')
+      .prepare('SELECT * FROM pending_wakes WHERE org_id = ? ORDER BY priority DESC, created_at ASC')
       .all(orgId) as WakeRow[];
     return rows.map(rowToEntity);
+  }
+
+  async findHighestPriority(roleId: string, orgId: string): Promise<PendingWake | null> {
+    const row = this.conn.getDb()
+      .prepare('SELECT * FROM pending_wakes WHERE role_id = ? AND org_id = ? ORDER BY priority DESC, created_at ASC LIMIT 1')
+      .get(roleId, orgId) as WakeRow | undefined;
+    return row ? rowToEntity(row) : null;
   }
 
   async create(input: CreatePendingWakeInput): Promise<PendingWake> {
@@ -50,9 +59,9 @@ export class SqlitePendingWakeRepository implements IPendingWakeRepository {
     const now = new Date().toISOString();
 
     this.conn.getDb().prepare(`
-      INSERT INTO pending_wakes (id, role_id, org_id, trigger, task_node_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, input.roleId, input.orgId, input.trigger, input.taskNodeId ?? null, now);
+      INSERT INTO pending_wakes (id, role_id, org_id, trigger, task_node_id, priority, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.roleId, input.orgId, input.trigger, input.taskNodeId ?? null, input.priority ?? 0, now);
 
     const row = this.conn.getDb()
       .prepare('SELECT * FROM pending_wakes WHERE id = ?')

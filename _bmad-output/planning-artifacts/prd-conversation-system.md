@@ -51,7 +51,7 @@ Multi-turn conversation capability is the critical missing piece for realizing t
 
 ### User Success
 
-- Agent asks a question during task execution; Human or supervisor AI role replies; Agent is woken with full conversation context and continues working — no manual restart or re-submission needed
+- Agent asks a question during task execution; by default the question is routed to the supervisor AI role, and only roles with `requiresHumanApproval=true` can require Human reply; Agent is woken with full conversation context and continues working — no manual restart or re-submission needed
 - Agent is woken within 30 seconds after a reply is posted in the discussion
 - Agent receives complete conversation history (not truncated) upon each wake, ensuring conversation coherence
 - Multi-role discussions (e.g., Analyst asks -> PM replies -> Analyst continues) flow naturally without manual intervention
@@ -84,7 +84,7 @@ Multi-turn conversation capability is the critical missing piece for realizing t
 1. **Discussion Reply Wake Trigger** — Reply messages in discussions trigger relevant Agent wake
 2. **Full Conversation Context Injection** — Agent receives complete discussion history upon wake (with token budget truncation strategy)
 3. **Agent Active Questioning** — MCP tool allows Agent to post a question and pause waiting for reply
-4. **Human Reply -> Agent Wake Loop** — User replies in UI, relevant Agent is automatically woken to continue execution
+4. **Conditional Human Reply -> Agent Wake Loop** — User replies in UI and relevant Agent is automatically woken, but only when the asking role has `requiresHumanApproval=true`; otherwise routing defaults to supervisor AI reply
 5. **Conversation State Tracking** — Distinguish "waiting for reply" vs "replied, ready to continue" task states
 6. **Agent-to-Agent Auto-conversation** — AI roles ask questions to supervisors/peers; target roles are automatically woken to respond
 7. **Conversation Routing Strategy** — Based on role hierarchy and skill matching, automatically determine who should respond
@@ -105,7 +105,7 @@ Multi-turn conversation capability is the critical missing piece for realizing t
 
 **Opening Scene**: Alex creates a task "Design Payment Module" and assigns it to the Analyst role. The Analyst is woken, reads the task description, and discovers missing critical information — which payment methods? Is PCI compliance needed?
 
-**Rising Action**: The Analyst uses the MCP `ask_question` tool to post a question in the discussion: "Which payment methods need to be supported? Are there PCI DSS compliance requirements?" Then actively pauses execution. Alex sees a notification in the UI discussion panel and replies: "Support credit cards and PayPal, need PCI Level 1."
+**Rising Action**: The Analyst role has `requiresHumanApproval=true`, so it can request direct Human input. The Analyst uses the MCP `ask_question` tool to post a question in the discussion: "Which payment methods need to be supported? Are there PCI DSS compliance requirements?" Then actively pauses execution. Alex sees a notification in the UI discussion panel and replies: "Support credit cards and PayPal, need PCI Level 1."
 
 **Climax**: The system detects the Human reply, triggering the `discussion_reply` wake trigger. The Analyst is woken with full conversation context (original task description + question + Alex's reply), and continues to complete the requirements analysis, producing a comprehensive requirements document.
 
@@ -185,7 +185,7 @@ Multi-turn conversation capability is the critical missing piece for realizing t
 
 - FR1: Agent can post a question to the discussion thread of its current task via MCP tool and pause execution waiting for a reply
 - FR2: Agent can specify the intended recipient of a question (specific role, supervisor, or "any")
-- FR3: System can detect when an Agent's question requires Human input vs can be auto-routed to another AI role
+- FR3: System enforces Human-input gating by role configuration: only roles with `requiresHumanApproval=true` can require Human reply; all other roles default to supervisor routing
 - FR4: Human user can initiate a conversation with any Agent by posting a message in the task's discussion thread
 
 ### Conversation Wake & Resume
@@ -227,7 +227,7 @@ Multi-turn conversation capability is the critical missing piece for realizing t
 
 ### Human Interaction
 
-- FR27: Human user receives notifications when an Agent asks a question requiring human input
+- FR27: Human user receives notifications only when an Agent with `requiresHumanApproval=true` asks a question requiring human input
 - FR28: Human user can reply to Agent questions directly in the discussion UI
 - FR29: Human user can view the complete conversation chain including all Agent-to-Agent interactions
 - FR30: Human user can intervene in any Agent-to-Agent conversation by posting a reply

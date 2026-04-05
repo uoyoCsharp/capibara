@@ -26,6 +26,11 @@ import {
   ORG_ORCHESTRATOR_TOKEN,
   WORKER_SERVICE_TOKEN,
   SETTINGS_REPO_TOKEN,
+  CONVERSATION_WORKFLOW_REPO_TOKEN,
+  CONVERSATION_WORKFLOW_SERVICE_TOKEN,
+  ROUTING_POLICY_ENGINE_TOKEN,
+  CONVERSATION_CONTEXT_BUILDER_TOKEN,
+  TIMEOUT_ESCALATION_SERVICE_TOKEN,
 } from './core/tokens.js';
 
 import { SqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.js';
@@ -40,6 +45,8 @@ import { SqliteCostEntryRepository } from './infrastructure/persistence/sqlite/s
 import { SqliteNarrativeRepository } from './infrastructure/persistence/sqlite/sqlite-narrative.repository.js';
 import { SqlitePendingWakeRepository } from './infrastructure/persistence/sqlite/sqlite-pending-wake.repository.js';
 import { SqliteSettingsRepository } from './infrastructure/persistence/sqlite/sqlite-settings.repository.js';
+import { SqliteConversationWorkflowRepository } from './infrastructure/persistence/sqlite/sqlite-conversation-workflow.repository.js';
+import { ConversationEventLogger } from './infrastructure/persistence/sqlite/conversation-event.logger.js';
 import { EmitteryEventBus } from './infrastructure/observability/emittery-event-bus.js';
 import { PinoLogger } from './infrastructure/observability/pino-logger.js';
 import { UtilityProcessExecutor } from './infrastructure/executors/utility-process.executor.js';
@@ -65,6 +72,10 @@ import { McpConfigGenerator } from './infrastructure/mcp/mcp-config-generator.js
 import { McpToolRegistry } from './infrastructure/mcp/mcp-tool-registry.js';
 import { McpToolHandlers } from './infrastructure/mcp/mcp-tool-handlers.js';
 import { McpIpcServer } from './infrastructure/mcp/mcp-ipc-server.js';
+import { RoutingPolicyEngine } from './application/conversation/routing-policy.engine.js';
+import { ConversationWorkflowService } from './application/conversation/conversation-workflow.service.js';
+import { ConversationContextBuilder } from './application/conversation/conversation-context.builder.js';
+import { TimeoutEscalationService } from './application/conversation/timeout-escalation.service.js';
 
 import { registerOrganizationHandlers } from './ipc-handlers/organization.handlers.js';
 import { registerSnapshotHandlers } from './ipc-handlers/snapshot.handlers.js';
@@ -77,6 +88,7 @@ import { registerRunHandlers } from './ipc-handlers/run.handlers.js';
 import { registerApprovalHandlers } from './ipc-handlers/approval.handlers.js';
 import { registerNarrativeHandlers } from './ipc-handlers/narrative.handlers.js';
 import { registerSettingsHandlers } from './ipc-handlers/settings.handlers.js';
+import { registerConversationHandlers } from './ipc-handlers/conversation.handlers.js';
 import { detectLocaleFromOS } from '@shared/locale/index.js';
 
 import type { IOrganizationRepository } from './core/interfaces/i-organization.repository.js';
@@ -145,6 +157,11 @@ export async function bootstrap(): Promise<void> {
 
   const settingsRepo = new SqliteSettingsRepository(sqliteConn);
   container.register<ISettingsRepository>(SETTINGS_REPO_TOKEN, { useValue: settingsRepo });
+
+  const conversationWorkflowRepo = new SqliteConversationWorkflowRepository(sqliteConn);
+  container.register(CONVERSATION_WORKFLOW_REPO_TOKEN, { useValue: conversationWorkflowRepo });
+
+  const conversationEventLogger = new ConversationEventLogger(sqliteConn, logger);
 
   // ─── Application Services ────────────────────────────────
   const promptBuilder = new PromptBuilder();
@@ -233,6 +250,43 @@ export async function bootstrap(): Promise<void> {
     narrativeRepo, orgRepo, taskRepo, runRepo, costRepo, discussionRepo, eventBus, logger,
   );
 
+  // ─── Conversation System (Epic 11) ──────────────────────────
+  const routingPolicyEngine = new RoutingPolicyEngine(roleRepo, runRepo, conversationWorkflowRepo, logger, skillRepo);
+  container.register(ROUTING_POLICY_ENGINE_TOKEN, { useValue: routingPolicyEngine });
+
+  const conversationWorkflowService = new ConversationWorkflowService(
+    conversationWorkflowRepo, routingPolicyEngine, discussionRepo, pendingWakeRepo,
+    eventBus, logger, conversationEventLogger,
+  );
+  container.register(CONVERSATION_WORKFLOW_SERVICE_TOKEN, { useValue: conversationWorkflowService });
+
+  const conversationContextBuilder = new ConversationContextBuilder(discussionRepo, conversationWorkflowRepo, roleRepo);
+  container.register(CONVERSATION_CONTEXT_BUILDER_TOKEN, { useValue: conversationContextBuilder });
+
+  const timeoutEscalationService = new TimeoutEscalationService(
+    conversationWorkflowRepo, conversationWorkflowService, roleRepo,
+    pendingWakeRepo, eventBus, logger, conversationEventLogger,
+  );
+  container.register(TIMEOUT_ESCALATION_SERVICE_TOKEN, { useValue: timeoutEscalationService });
+
+  // Crash recovery: scan orphaned workflows BEFORE orchestrator starts
+  try {
+    await timeoutEscalationService.recoverOrphaned();
+  } catch (err) {
+    logger.error('Conversation crash recovery failed', { error: String(err) });
+  }
+
+  // Wire conversation deps into existing services
+  mcpToolHandlers.setConversationDeps(conversationWorkflowService, conversationWorkflowRepo, conversationEventLogger);
+  discussionService.setConversationDeps(conversationWorkflowRepo, conversationWorkflowService);
+  executionEngine.setConversationWorkflowRepo(conversationWorkflowRepo);
+  executionContext.setConversationDeps(conversationWorkflowRepo, conversationContextBuilder);
+
+  // Start timeout escalation scanner (after recovery, before orchestrator)
+  try { timeoutEscalationService.start(); } catch (err) {
+    logger.error('Timeout escalation service failed to start', { error: String(err) });
+  }
+
   // ─── Notification Service (Epic 8) ───────────────────────────
   const notificationService = new NotificationService(eventBus, logger);
   try { notificationService.start(); } catch (err) {
@@ -295,6 +349,10 @@ export async function bootstrap(): Promise<void> {
   registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger);
   registerNarrativeHandlers(narrativeEngine, costRepo, orgRepo, logger);
   registerSettingsHandlers(settingsRepo, logger);
+  registerConversationHandlers(
+    conversationWorkflowRepo, discussionRepo, pendingWakeRepo,
+    eventBus, conversationEventLogger, logger, roleRepo,
+  );
 
   // ─── OS Locale Detection (first launch) ─────────────────
   try {
@@ -319,6 +377,12 @@ export function shutdown(): void {
     orchestrator.stop();
   } catch {
     // Orchestrator may not have been started
+  }
+  try {
+    const tes = container.resolve<TimeoutEscalationService>(TIMEOUT_ESCALATION_SERVICE_TOKEN);
+    tes.stop();
+  } catch {
+    // TimeoutEscalationService may not have been started
   }
   try {
     const digester = container.resolve<EventDigester>(EVENT_DIGESTER_TOKEN);
