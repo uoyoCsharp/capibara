@@ -24,7 +24,6 @@ export const useAppStore = create<AppState>((set) => ({
   isLoading: true,
 
   loadSnapshot: async () => {
-    set({ isLoading: true });
     try {
       const result = await window.capibara.loadSnapshot();
       if (result.ok) {

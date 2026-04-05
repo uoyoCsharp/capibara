@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/app.slice';
 
 export function useCapibaraSnapshot() {
@@ -6,9 +6,13 @@ export function useCapibaraSnapshot() {
   const organizations = useAppStore((s) => s.organizations);
   const currentOrgId = useAppStore((s) => s.currentOrgId);
   const isLoading = useAppStore((s) => s.isLoading);
+  const calledRef = useRef(false);
 
   useEffect(() => {
-    void loadSnapshot();
+    if (!calledRef.current) {
+      calledRef.current = true;
+      void loadSnapshot();
+    }
 
     // Subscribe to real-time events if the bridge is available
     if (typeof window.capibara?.subscribe !== 'function') return;
@@ -20,7 +24,8 @@ export function useCapibaraSnapshot() {
     });
 
     return unsubscribe;
-  }, [loadSnapshot]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return { organizations, currentOrgId, isLoading, refresh: loadSnapshot };
 }

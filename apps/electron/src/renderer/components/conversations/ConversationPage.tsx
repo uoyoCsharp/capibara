@@ -17,30 +17,20 @@ export function ConversationPage() {
   const [showResolved, setShowResolved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loadData = useCallback(async (orgId: string, options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setIsLoading(true);
-
-    const convPromise = window.capibara.getActiveConversations(orgId);
-    const metricsPromise = window.capibara.getConversationMetrics(orgId);
-
+  const loadData = useCallback(async (orgId: string) => {
+    setIsLoading(true);
     try {
-      const convResult = await convPromise;
+      const [convResult, metricsResult] = await Promise.all([
+        window.capibara.getActiveConversations(orgId),
+        window.capibara.getConversationMetrics(orgId),
+      ]);
       if (convResult.ok) setConversations(convResult.data);
       else toast.error(t.conversations.failedToLoad);
-    } catch {
-      toast.error(t.conversations.failedToLoad);
-    } finally {
-      if (!silent) setIsLoading(false);
-    }
-
-    try {
-      const metricsResult = await metricsPromise;
       if (metricsResult.ok) setMetrics(metricsResult.data);
-    } catch {
-      // Keep existing metrics if this refresh fails
+    } finally {
+      setIsLoading(false);
     }
-  }, [t.conversations.failedToLoad]);
+  }, [t]);
 
   useEffect(() => {
     if (!currentOrgId) return;
@@ -60,7 +50,7 @@ export function ConversationPage() {
           event.type === 'conversation:escalated') &&
         (event as Record<string, unknown>).orgId === currentOrgId
       ) {
-        void loadData(currentOrgId, { silent: true });
+        void loadData(currentOrgId);
       }
     });
 
