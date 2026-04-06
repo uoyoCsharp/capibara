@@ -30,6 +30,7 @@ export class NotificationService {
     this.eventBus.on('approval:required', (e: DomainEvent) => this.onApprovalRequired(e));
     this.eventBus.on('escalation:top-level', (e: DomainEvent) => this.onEscalationTopLevel(e));
     this.eventBus.on('budget:exceeded', (e: DomainEvent) => this.onBudgetExceeded(e));
+    this.eventBus.on('task:propagation-failed', (e: DomainEvent) => this.onTaskPropagationFailed(e));
     this.logger.info('NotificationService started');
   }
 
@@ -89,6 +90,24 @@ export class NotificationService {
       orgId,
       totalTokens,
       budgetLimit: limit,
+    });
+  }
+
+  private onTaskPropagationFailed(event: DomainEvent): void {
+    const { taskId, parentId, orgId, error } = event.payload as {
+      taskId: string;
+      parentId: string;
+      orgId?: string;
+      error: string;
+    };
+
+    this.logger.warn('Task propagation failed', { taskId, parentId, orgId, error });
+
+    this.sendNotification({
+      title: 'Task Propagation Failed',
+      body: `Failed to auto-advance parent task ${parentId} from child ${taskId}.`,
+      urgency: 'normal',
+      navigateTo: { orgId: orgId ?? '', taskId: parentId },
     });
   }
 

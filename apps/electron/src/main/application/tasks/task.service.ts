@@ -294,9 +294,9 @@ export class TaskService {
           taskId, parentId: parentTask.id, error: String(err),
         });
         this.eventBus.emit({
-          type: 'task:propagation-failed' as const,
+          type: 'task:propagation-failed',
           timestamp: new Date().toISOString(),
-          payload: { taskId, parentId: parentTask.id, error: String(err) },
+          payload: { taskId, parentId: parentTask.id, orgId: parentTask.orgId, error: String(err) },
         });
       }
     }

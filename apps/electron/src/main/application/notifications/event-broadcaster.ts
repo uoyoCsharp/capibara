@@ -21,6 +21,7 @@ export class EventBroadcaster {
     this.eventBus.on('task:created', forward);
     this.eventBus.on('task:status-changed', forward);
     this.eventBus.on('task:completed', forward);
+    this.eventBus.on('task:propagation-failed', forward);
 
     // Run events
     this.eventBus.on('run:queued', forward);
@@ -56,6 +57,7 @@ export class EventBroadcaster {
       case 'task:created':
       case 'task:status-changed':
       case 'task:completed':
+      case 'task:propagation-failed':
         desktopEvent = {
           type: 'task:changed',
           orgId: payload.orgId,

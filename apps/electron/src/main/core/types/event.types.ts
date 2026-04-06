@@ -5,6 +5,7 @@ export type DomainEventType =
   | 'task:created'
   | 'task:status-changed'
   | 'task:completed'
+  | 'task:propagation-failed'
   | 'discussion:vote-added'
   | 'discussion:message-added'
   | 'discussion:group-created'
