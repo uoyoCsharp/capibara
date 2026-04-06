@@ -46,7 +46,7 @@ export class PromptBuilder implements IPromptBuilder {
       for (const skill of context.skills) {
         lines.push(`- ${skill.command}: ${skill.description}`);
       }
-      lines.push('');
+      lines.push('You can invoke these skills when you want to perform actions related to their descriptions. Always use the exact command to invoke a skill.');
     }
 
     // System Tools

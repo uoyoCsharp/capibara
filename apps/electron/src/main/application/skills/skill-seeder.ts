@@ -1,53 +1,7 @@
 import type { ISkillRepository, CreateSkillInput } from '@main/core/interfaces/i-skill.repository.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 
-const BUILTIN_SKILLS: CreateSkillInput[] = [
-  {
-    name: 'Task Decomposition',
-    command: '/task-decomposition',
-    description: 'Analyze a task and break it down into smaller, actionable subtasks with appropriate depth and type labels.',
-    category: 'analysis',
-    source: 'builtin',
-    orgTemplateId: null,
-    customPromptContent: null,
-  },
-  {
-    name: 'Code Review',
-    command: '/code-review',
-    description: 'Review code changes for quality, security, performance, and adherence to coding standards.',
-    category: 'review',
-    source: 'builtin',
-    orgTemplateId: null,
-    customPromptContent: null,
-  },
-  {
-    name: 'Security Audit',
-    command: '/security-audit',
-    description: 'Perform a security audit identifying vulnerabilities, injection risks, authentication issues, and OWASP Top 10 concerns.',
-    category: 'review',
-    source: 'builtin',
-    orgTemplateId: null,
-    customPromptContent: null,
-  },
-  {
-    name: 'Test Generation',
-    command: '/test-generation',
-    description: 'Generate comprehensive test cases including unit tests, integration tests, and edge case coverage.',
-    category: 'test',
-    source: 'builtin',
-    orgTemplateId: null,
-    customPromptContent: null,
-  },
-  {
-    name: 'API Design',
-    command: '/api-design',
-    description: 'Design RESTful or GraphQL APIs following best practices for naming, versioning, error handling, and documentation.',
-    category: 'design',
-    source: 'builtin',
-    orgTemplateId: null,
-    customPromptContent: null,
-  },
-];
+const BUILTIN_SKILLS: CreateSkillInput[] = [];
 
 const BMAD_TEMPLATE_SKILLS: CreateSkillInput[] = [
   {
@@ -209,7 +163,7 @@ export class SkillSeeder {
   constructor(
     private readonly skillRepo: ISkillRepository,
     private readonly logger: ILogger,
-  ) {}
+  ) { }
 
   async seedBuiltinSkills(): Promise<void> {
     for (const skillInput of BUILTIN_SKILLS) {
