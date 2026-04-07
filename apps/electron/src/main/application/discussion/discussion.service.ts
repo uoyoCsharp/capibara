@@ -320,7 +320,7 @@ export class DiscussionService {
         }
         const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
         const feedback = latestMsg[0]?.content ?? '';
-        await this.handleRevision(group, feedback);
+        await this.handleRevision(group, feedback, true);
         return;
       }
 
@@ -407,14 +407,15 @@ export class DiscussionService {
     this.logger.info('Task approved via consensus', { taskId: task.id });
   }
 
-  private async handleRevision(group: DiscussionGroup, feedback: string): Promise<void> {
+  private async handleRevision(group: DiscussionGroup, feedback: string, isHuman = false): Promise<void> {
     const task = await this.taskRepo.findById(group.taskNodeId);
     if (!task) return;
 
     // Bug 3 / Risk 9 fix: use persisted revise count
     const count = await this.discussionRepo.incrementReviseCount(group.id);
 
-    if (count >= this.config.execution.maxReviseAttempts) {
+    // Circuit breaker only applies to AI-to-AI revise loops; human feedback is always allowed
+    if (!isHuman && count >= this.config.execution.maxReviseAttempts) {
       this.logger.warn('REVISE cycle limit reached, escalating', {
         taskId: task.id,
         count,
