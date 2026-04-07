@@ -211,6 +211,8 @@ export class OrgOrchestrator {
 
         // Check 1: When a task is approved, wake its first pending child.
         // This handles the decomposition gate: children wait until parent is approved.
+        // Also handles Phase 1→2 transition: if epic/story has no children yet,
+        // wake the assignee to execute Phase 2 (create children).
         if (newStatus === 'approved') {
           const children = await this.taskRepo.findByParentId(taskId);
           const firstPendingChild = children.find((c) => c.status === 'pending');
@@ -224,6 +226,23 @@ export class OrgOrchestrator {
               orgId: task.orgId,
               taskNodeId: firstPendingChild.id,
               trigger: 'task_assigned',
+            });
+          } else if (
+            children.length === 0
+            && (task.type === 'epic' || task.type === 'story')
+            && task.assigneeRoleId
+          ) {
+            // Phase 1 approved but no children yet → wake assignee for Phase 2 decomposition
+            this.logger.info('Phase 1 approved (no children), waking assignee for Phase 2', {
+              taskId,
+              roleId: task.assigneeRoleId,
+              type: task.type,
+            });
+            targets.push({
+              roleId: task.assigneeRoleId,
+              orgId: task.orgId,
+              taskNodeId: task.id,
+              trigger: 'review_approve',
             });
           }
         }

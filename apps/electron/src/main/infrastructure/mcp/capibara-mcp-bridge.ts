@@ -58,7 +58,7 @@ const TOOLS = [
   },
   {
     name: 'capibara_discussion_post',
-    description: 'Post a message or vote to a discussion group.',
+    description: 'Post a message or vote to a discussion group. Do NOT use this for task reviews — capibara_task_review posts automatically.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -71,41 +71,20 @@ const TOOLS = [
     },
   },
   {
-    name: 'capibara_context_get_task',
-    description: 'Get details about a task.',
+    name: 'capibara_context',
+    description: 'Query context information. Use query="task" with a task ID, query="org_tree" with an org ID, or query="discussion_summary" with a discussion group ID.',
     inputSchema: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: 'Task ID to look up' },
+        query: { type: 'string', enum: ['task', 'org_tree', 'discussion_summary'], description: 'Type of context to retrieve' },
+        id: { type: 'string', description: 'The ID to look up (taskId, orgId, or discussionGroupId depending on query)' },
       },
-      required: ['taskId'],
-    },
-  },
-  {
-    name: 'capibara_context_get_org_tree',
-    description: 'Get the organization tree with all roles and their statuses.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        orgId: { type: 'string', description: 'Organization ID' },
-      },
-      required: ['orgId'],
-    },
-  },
-  {
-    name: 'capibara_context_get_discussion_summary',
-    description: 'Get discussion group summary with vote stats and recent messages.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        discussionGroupId: { type: 'string', description: 'Discussion group ID' },
-      },
-      required: ['discussionGroupId'],
+      required: ['query', 'id'],
     },
   },
   {
     name: 'capibara_task_review',
-    description: 'Review a child task as a parent role. Approve or request revision with feedback.',
+    description: 'Review a child task as a parent role. Approve or request revision with feedback. Automatically posts review feedback to the discussion group — do NOT call capibara_discussion_post separately.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -118,15 +97,26 @@ const TOOLS = [
     },
   },
   {
-    name: 'capibara_escalate',
-    description: 'Escalate a task to your superior role.',
+    name: 'capibara_conversation',
+    description: 'Manage conversation workflows. Use action="ask" to post a question and wait for a reply, or action="resolve" to mark a conversation as resolved.',
     inputSchema: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: 'Task ID to escalate' },
-        reason: { type: 'string', description: 'Reason for escalation' },
+        action: { type: 'string', enum: ['ask', 'resolve'], description: 'Conversation action' },
+        taskId: { type: 'string', description: 'The task ID associated with the conversation' },
+        question: { type: 'string', description: 'The question to ask (required for action="ask")' },
+        recipientTarget: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['supervisor', 'human', 'role', 'any'], description: 'Recipient type' },
+            roleId: { type: 'string', description: 'Role ID (required when type="role")' },
+          },
+          description: 'Who to direct the question to (optional, defaults to supervisor)',
+        },
+        urgency: { type: 'string', enum: ['normal', 'urgent'], description: 'Question urgency (optional, defaults to normal)' },
+        summary: { type: 'string', description: 'Resolution summary (optional for action="resolve")' },
       },
-      required: ['taskId', 'reason'],
+      required: ['action', 'taskId'],
     },
   },
 ];

@@ -53,13 +53,9 @@ export class McpToolHandlers {
     registry.register('capibara_task_complete', (args) => this.taskComplete(args));
     registry.register('capibara_task_create_child', (args) => this.taskCreateChild(args));
     registry.register('capibara_discussion_post', (args) => this.discussionPost(args));
-    registry.register('capibara_context_get_task', (args) => this.contextGetTask(args));
-    registry.register('capibara_context_get_org_tree', (args) => this.contextGetOrgTree(args));
-    registry.register('capibara_context_get_discussion_summary', (args) => this.contextGetDiscussionSummary(args));
+    registry.register('capibara_context', (args) => this.context(args));
     registry.register('capibara_task_review', (args) => this.taskReview(args));
-    registry.register('capibara_escalate', (args) => this.escalate(args));
-    registry.register('capibara_ask_question', (args) => this.askQuestion(args));
-    registry.register('capibara_mark_conversation_resolved', (args) => this.markConversationResolved(args));
+    registry.register('capibara_conversation', (args) => this.conversation(args));
   }
 
   private async taskComplete(args: Record<string, unknown>): Promise<McpToolCallResult> {
@@ -79,7 +75,7 @@ export class McpToolHandlers {
       return { success: false, error: `Task ${taskId} not found` };
     }
 
-    if (currentTask.status === 'approved' || currentTask.status === 'done') {
+    if (currentTask.status === 'approved' || currentTask.status === 'done' || currentTask.status === 'cancelled') {
       this.logger.info('task_complete called but task already in terminal state, skipping transition', {
         taskId,
         currentStatus: currentTask.status,
@@ -107,7 +103,11 @@ export class McpToolHandlers {
       return { success: false, error: 'Parent task not found' };
     }
 
-    const childType = (args.type as string) ?? 'task';
+    const validChildTypes = ['story', 'task', 'subtask', 'spike', 'bug', 'chore'];
+    const childType = (typeof args.type === 'string' ? args.type : null) ?? 'task';
+    if (!validChildTypes.includes(childType)) {
+      return { success: false, error: `Invalid task type: "${childType}". Must be one of: ${validChildTypes.join(', ')}` };
+    }
 
     try {
       // Use TaskService for type hierarchy validation and proper event emission
@@ -163,39 +163,41 @@ export class McpToolHandlers {
     return { success: true, data: { messageId: msg.id } };
   }
 
-  private async contextGetTask(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
-    if (!taskId) return { success: false, error: 'taskId is required and must be a string' };
-    const task = await this.taskRepo.findById(taskId);
-    if (!task) return { success: false, error: 'Task not found' };
-    return { success: true, data: task };
-  }
+  private async context(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query : '';
+    const id = typeof args.id === 'string' ? args.id : '';
+    if (!id) return { success: false, error: 'id is required and must be a string' };
 
-  private async contextGetOrgTree(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const orgId = typeof args.orgId === 'string' ? args.orgId : '';
-    if (!orgId) return { success: false, error: 'orgId is required and must be a string' };
-    const roles = await this.roleRepo.findByOrgId(orgId);
-    if (!roles.length) return { success: false, error: 'No roles found for org' };
-
-    const tree = roles.map((r) => ({
-      id: r.id,
-      name: r.name,
-      parentId: r.parentId,
-      status: r.status,
-      canApprove: r.canApprove,
-      canDelegate: r.canDelegate,
-      requiresHumanApproval: r.requiresHumanApproval,
-    }));
-
-    return { success: true, data: { orgId, roles: tree } };
-  }
-
-  private async contextGetDiscussionSummary(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const groupId = typeof args.discussionGroupId === 'string' ? args.discussionGroupId : '';
-    if (!groupId) return { success: false, error: 'discussionGroupId is required and must be a string' };
-    const stats = await this.discussionRepo.getVoteStats(groupId);
-    const recent = await this.discussionRepo.findRecentMessages(groupId, 5);
-    return { success: true, data: { stats, recentMessages: recent } };
+    switch (query) {
+      case 'task': {
+        const task = await this.taskRepo.findById(id);
+        if (!task) return { success: false, error: 'Task not found' };
+        return { success: true, data: task };
+      }
+      case 'org_tree': {
+        const roles = await this.roleRepo.findByOrgId(id);
+        if (!roles.length) return { success: false, error: 'No roles found for org' };
+        const tree = roles.map((r) => ({
+          id: r.id,
+          name: r.name,
+          parentId: r.parentId,
+          status: r.status,
+          canApprove: r.canApprove,
+          canDelegate: r.canDelegate,
+          requiresHumanApproval: r.requiresHumanApproval,
+        }));
+        return { success: true, data: { orgId: id, roles: tree } };
+      }
+      case 'discussion_summary': {
+        const group = await this.discussionRepo.findGroupById(id);
+        const currentRound = group?.currentRound ?? 0;
+        const stats = await this.discussionRepo.getVoteStatsForRound(id, currentRound);
+        const recent = await this.discussionRepo.findRecentMessages(id, 5);
+        return { success: true, data: { stats, recentMessages: recent } };
+      }
+      default:
+        return { success: false, error: 'query must be "task", "org_tree", or "discussion_summary"' };
+    }
   }
 
   private async taskReview(args: Record<string, unknown>): Promise<McpToolCallResult> {
@@ -281,8 +283,10 @@ export class McpToolHandlers {
   }
 
   /** Walk up task tree to find nearest discussion group (story or epic). */
-  private async findNearestDiscussionGroup(taskId: string): Promise<{ id: string } | null> {
-    let currentId: string | null = taskId;
+  private async findNearestDiscussionGroup(taskId: string): Promise<{ id: string; currentRound: number } | null> {
+    const task = await this.taskRepo.findById(taskId);
+    if (!task) return null;
+    let currentId: string | null = (task.type === 'story' || task.type === 'epic') ? task.id : task.parentId;
     while (currentId) {
       const t = await this.taskRepo.findById(currentId);
       if (!t) return null;
@@ -295,13 +299,17 @@ export class McpToolHandlers {
     return null;
   }
 
-  private async escalate(args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const taskId = typeof args.taskId === 'string' ? args.taskId : '';
-    const reason = typeof args.reason === 'string' ? args.reason : '';
-    if (!taskId) return { success: false, error: 'taskId is required and must be a string' };
+  private async conversation(args: Record<string, unknown>): Promise<McpToolCallResult> {
+    const action = typeof args.action === 'string' ? args.action : '';
+    if (action !== 'ask' && action !== 'resolve') {
+      return { success: false, error: 'action must be "ask" or "resolve"' };
+    }
 
-    this.logger.warn('Task escalated', { taskId, reason });
-    return { success: true, data: { taskId, escalated: true, reason } };
+    if (action === 'ask') {
+      return this.askQuestion(args);
+    } else {
+      return this.markConversationResolved(args);
+    }
   }
 
   private async askQuestion(args: Record<string, unknown>): Promise<McpToolCallResult> {
@@ -328,10 +336,15 @@ export class McpToolHandlers {
       const rt = args.recipientTarget as { type: string; roleId?: string };
       if (rt.type === 'human') {
         recipientTarget = { type: 'human' };
-      } else if (rt.type === 'role' && rt.roleId) {
+      } else if (rt.type === 'role') {
+        if (!rt.roleId) {
+          return { success: false, error: 'recipientTarget.roleId is required when type is "role"' };
+        }
         recipientTarget = { type: 'role', roleId: rt.roleId };
       } else if (rt.type === 'any') {
         recipientTarget = { type: 'any' };
+      } else if (rt.type !== 'supervisor') {
+        return { success: false, error: `Invalid recipientTarget.type: "${rt.type}". Must be one of: supervisor, human, role, any` };
       }
     }
 

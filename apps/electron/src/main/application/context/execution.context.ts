@@ -5,8 +5,8 @@ import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
-import type { PromptContext, DiscussionSummary } from '@main/core/interfaces/i-prompt-builder.js';
-import type { TaskNode, Role, Skill, WakeTrigger } from '@main/core/types/domain.types.js';
+import type { PromptContext, DiscussionSummary, ReviewableChild, DecompositionDeliverable, LeafDeliverable } from '@main/core/interfaces/i-prompt-builder.js';
+import type { TaskNode, DiscussionGroup, Role, Skill, WakeTrigger } from '@main/core/types/domain.types.js';
 import type { ConversationContextBuilder } from '../conversation/conversation-context.builder.js';
 import {
   TASK_REPO_TOKEN,
@@ -55,11 +55,16 @@ export class ExecutionContext {
     const skills = await this.resolveSkills(role.skillIds);
     const discussionSummary = await this.buildDiscussionSummary(task);
 
-    // When woken for review, find child tasks awaiting review
-    let childrenAwaitingReview: TaskNode[] = [];
+    // Query children for review mode and revision sub-mode detection
+    const children = await this.taskRepo.findByParentId(taskId);
+    const hasChildren = children.length > 0;
+    let childrenAwaitingReview: ReviewableChild[] = [];
     if (trigger === 'review_requested') {
-      const children = await this.taskRepo.findByParentId(taskId);
-      childrenAwaitingReview = children.filter((c) => c.status === 'awaiting_review');
+      const rawChildren = children.filter((c) => c.status === 'awaiting_review');
+      const roleNameCache = new Map<string, string>();
+      childrenAwaitingReview = await Promise.all(
+        rawChildren.map((c) => this.buildReviewableChild(c, roleNameCache)),
+      );
     }
 
     // Build conversation context for conversation triggers
@@ -90,9 +95,83 @@ export class ExecutionContext {
       skills,
       discussionSummary,
       childrenAwaitingReview,
+      hasChildren,
       conversationContext,
       conversationWorkflow,
     };
+  }
+
+  private async buildReviewableChild(
+    child: TaskNode,
+    roleNameCache: Map<string, string>,
+  ): Promise<ReviewableChild> {
+    // Resolve assignee name
+    const assigneeRoleName = await this.resolveRoleName(child.assigneeRoleId, roleNameCache);
+
+    // Build deliverable based on task type
+    const isDecomposer = child.type === 'epic' || child.type === 'story';
+    let deliverable: DecompositionDeliverable | LeafDeliverable;
+
+    if (isDecomposer) {
+      const grandchildren = await this.taskRepo.findByParentId(child.id);
+      deliverable = {
+        kind: 'decomposition',
+        grandchildren: await Promise.all(grandchildren.map(async (gc) => ({
+          title: gc.title,
+          type: gc.type,
+          status: gc.status,
+          assigneeRoleName: await this.resolveRoleName(gc.assigneeRoleId, roleNameCache),
+        }))),
+      };
+    } else {
+      deliverable = {
+        kind: 'leaf',
+        artifactPaths: child.artifactPaths ?? [],
+      };
+    }
+
+    // Extract work summary
+    const workSummary = await this.extractWorkSummary(child);
+
+    return { task: child, assigneeRoleName, deliverable, workSummary };
+  }
+
+  private async resolveRoleName(
+    roleId: string | null,
+    cache: Map<string, string>,
+  ): Promise<string | null> {
+    if (!roleId) return null;
+    const cached = cache.get(roleId);
+    if (cached) return cached;
+    const role = await this.roleRepo.findById(roleId);
+    const name = role?.name ?? null;
+    if (name) cache.set(roleId, name);
+    return name;
+  }
+
+  /**
+   * Extract the latest work summary for a child task from discussion messages.
+   * Looks for system-posted run summary messages (posted by DiscussionService.onRunCompleted).
+   */
+  private async extractWorkSummary(child: TaskNode): Promise<string | null> {
+    if (!child.assigneeRoleId) return null;
+
+    const group = await this.findNearestDiscussionGroup(child);
+    if (!group) return null;
+
+    const messages = await this.discussionRepo.findRecentMessages(group.id, 10);
+    const summary = messages.find(
+      (m) => m.authorType === 'system'
+        && m.authorRoleId === child.assigneeRoleId
+        && m.content.startsWith('**[') && m.content.includes('] Run '),
+    );
+
+    if (!summary) return null;
+
+    const MAX_SUMMARY_LENGTH = 500;
+    return summary.content.length > MAX_SUMMARY_LENGTH
+      ? summary.content.slice(0, MAX_SUMMARY_LENGTH) + '...'
+      : summary.content;
   }
 
   private async resolveSkills(skillIds: string[]): Promise<Skill[]> {
@@ -103,12 +182,12 @@ export class ExecutionContext {
   }
 
   private async buildDiscussionSummary(task: TaskNode): Promise<DiscussionSummary | null> {
-    // Walk up the task tree to find the nearest discussion group (story or epic)
     const group = await this.findNearestDiscussionGroup(task);
     if (!group) return null;
 
     const recentMessages = await this.discussionRepo.findRecentMessages(group.id, 3);
-    const voteStats = await this.discussionRepo.getVoteStats(group.id);
+    // Use current-round vote stats to avoid cross-round misattribution
+    const voteStats = await this.discussionRepo.getVoteStatsForRound(group.id, group.currentRound);
 
     const roleNames = new Map<string, string>();
     for (const msg of recentMessages) {
@@ -129,11 +208,12 @@ export class ExecutionContext {
       })),
       voteStats,
       latestReviseFeedback: latestReviseMsg?.content ?? null,
+      disputeSummary: group.summary,
     };
   }
 
   /** Walk up the task tree to find the nearest discussion group (story or epic). */
-  private async findNearestDiscussionGroup(task: TaskNode): Promise<{ id: string } | null> {
+  private async findNearestDiscussionGroup(task: TaskNode): Promise<DiscussionGroup | null> {
     let currentId: string | null = (task.type === 'story' || task.type === 'epic') ? task.id : task.parentId;
     while (currentId) {
       const t = await this.taskRepo.findById(currentId);
