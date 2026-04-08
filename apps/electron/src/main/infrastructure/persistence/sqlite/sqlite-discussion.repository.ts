@@ -25,6 +25,7 @@ interface GroupRow {
   current_round: number;
   revise_count: number;
   created_at: string;
+  last_msg_at?: string | null;
 }
 
 interface MessageRow {
@@ -52,6 +53,7 @@ function groupRowToEntity(row: GroupRow): DiscussionGroup {
     currentRound: row.current_round ?? 1,
     reviseCount: row.revise_count ?? 0,
     createdAt: row.created_at,
+    lastMessageAt: row.last_msg_at ?? null,
   };
 }
 
@@ -94,7 +96,7 @@ export class SqliteDiscussionRepository implements IDiscussionRepository {
   async findGroupsByOrgId(orgId: string): Promise<DiscussionGroup[]> {
     const rows = this.conn.getDb()
       .prepare(`
-        SELECT g.*
+        SELECT g.*, m.last_msg_at
         FROM discussion_groups g
         LEFT JOIN (
           SELECT group_id, MAX(created_at) as last_msg_at

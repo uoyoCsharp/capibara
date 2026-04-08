@@ -185,32 +185,18 @@ export class TaskService {
       }
     }
 
-    // When a decomposition task (epic/story) is approved but has no children yet,
-    // this is Phase 1 approval — wake the assignee to execute Phase 2 (create children).
+    // Phase 1→2 wake for approved epic/story with no children is handled by
+    // OrgOrchestrator via task:status-changed event. Do NOT emit wake:triggered
     if (status === 'approved') {
       const approvedTask = await this.taskRepo.findById(taskId);
       if (approvedTask) {
         if ((approvedTask.type === 'epic' || approvedTask.type === 'story')) {
           const children = await this.taskRepo.findByParentId(taskId);
-          if (children.length === 0 && approvedTask.assigneeRoleId) {
-            this.logger.info('Phase 1 approved, waking assignee for Phase 2 decomposition', {
-              taskId, roleId: approvedTask.assigneeRoleId, type: approvedTask.type,
-            });
-            this.eventBus.emit({
-              type: 'wake:triggered',
-              timestamp: new Date().toISOString(),
-              payload: {
-                roleId: approvedTask.assigneeRoleId,
-                orgId: approvedTask.orgId,
-                trigger: 'review_approve' as const,
-              },
-            });
+          if (children.length === 0) {
             return; // Don't auto-propagate — Phase 2 needs to run first
           }
         }
 
-        // Bug 7 fix: auto-advance leaf tasks from approved → done
-        // Leaf types cannot have children, so approved = done
         const leafTypes: TaskType[] = ['subtask', 'spike', 'bug', 'chore'];
         if (leafTypes.includes(approvedTask.type)) {
           await this.stateMachine.transition(taskId, 'done');

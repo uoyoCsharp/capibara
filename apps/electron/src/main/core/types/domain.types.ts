@@ -124,6 +124,7 @@ export interface DiscussionGroup {
   currentRound: number;
   reviseCount: number;
   createdAt: string;
+  lastMessageAt: string | null;
 }
 
 export interface DiscussionMessage {

@@ -232,9 +232,20 @@ export function DiscussionPage() {
                   )}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {task?.title ?? t.discussions.unknownEpic}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {task?.type && (
+                        <Badge variant="outline" className={cn(
+                          'text-[10px] shrink-0 capitalize',
+                          task.type === 'epic' && 'bg-purple-500/15 text-purple-600 border-purple-500/30',
+                          task.type === 'story' && 'bg-blue-500/15 text-blue-600 border-blue-500/30',
+                        )}>
+                          {task.type}
+                        </Badge>
+                      )}
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {task?.title ?? t.discussions.unknownEpic}
+                      </span>
+                    </div>
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       {needsHumanApproval(group) && (
                         <Badge variant="secondary" className="text-[10px] bg-yellow-500/15 text-yellow-600 border-yellow-500/30 gap-0.5">
@@ -248,7 +259,7 @@ export function DiscussionPage() {
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Created {new Date(group.createdAt).toLocaleDateString()}
+                    {new Date(group.lastMessageAt ?? group.createdAt).toLocaleString()}
                   </div>
                 </button>
               );

@@ -470,6 +470,7 @@ export interface DiscussionGroupRecord {
   currentRound: number;
   reviseCount: number;
   createdAt: string;
+  lastMessageAt: string | null;
 }
 
 export type MessageIntent = 'question' | 'reply' | 'escalation' | 'resolution' | 'vote' | 'general';

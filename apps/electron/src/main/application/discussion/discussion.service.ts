@@ -199,7 +199,7 @@ export class DiscussionService {
       const postedMsg = await this.discussionRepo.postMessage({
         groupId: group.id,
         authorRoleId: payload.roleId,
-        authorType: 'system',
+        authorType: 'ai',
         content,
         voteTag: null,
       });

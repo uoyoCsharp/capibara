@@ -10,7 +10,6 @@ import type {
 } from '@shared/contracts';
 import { DiscussionMessageList } from './DiscussionMessageList';
 import { VoteStatsBar } from './VoteStatsBar';
-import { HumanVotePanel } from './HumanVotePanel';
 import { ApprovalPanelCard } from './ApprovalPanelCard';
 import { MarkdownContent } from '../shared/MarkdownContent';
 import { Button } from '../ui/button';
@@ -110,10 +109,6 @@ export function DiscussionGroupPanel({
         </div>
       )}
 
-      {/* Human vote panel */}
-      {!isArchived && (
-        <HumanVotePanel groupId={group.id} onSubmit={onPostMessage} />
-      )}
     </div>
   );
 }
