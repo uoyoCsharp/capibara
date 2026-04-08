@@ -3,6 +3,7 @@ import type { Organization } from '../types/domain.types.js';
 export interface CreateOrganizationInput {
   name: string;
   description: string;
+  customInstructions: string;
   budgetLimit: number;
   orgTemplateId: string | null;
   workspacePath: string;
@@ -12,6 +13,7 @@ export interface UpdateOrganizationInput {
   id: string;
   name?: string;
   description?: string;
+  customInstructions?: string;
   status?: Organization['status'];
   budgetLimit?: number;
   workspacePath?: string;

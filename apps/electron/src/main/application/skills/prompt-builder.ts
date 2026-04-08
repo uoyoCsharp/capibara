@@ -24,6 +24,7 @@ export class PromptBuilder implements IPromptBuilder {
     return [
       this.buildIdentity(context),
       this.buildOrgContext(context),
+      this.buildOrgInstructions(context),
       this.buildTaskContext(context),
       this.buildSkills(context),
       this.buildTools(context, scenario, ids),
@@ -74,6 +75,12 @@ export class PromptBuilder implements IPromptBuilder {
     }
 
     return lines.join('\n');
+  }
+
+  private buildOrgInstructions(ctx: PromptContext): string {
+    const instructions = ctx.organization?.customInstructions?.trim();
+    if (!instructions) return '';
+    return `## Organization Instructions\n${instructions}`;
   }
 
   private buildTaskContext(ctx: PromptContext): string {

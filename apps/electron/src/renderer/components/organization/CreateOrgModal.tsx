@@ -15,7 +15,7 @@ import { useT } from '../../hooks/useLocale';
 
 interface CreateOrgModalProps {
   onClose: () => void;
-  onCreate: (name: string, description: string, workspacePath: string) => void;
+  onCreate: (name: string, description: string, workspacePath: string, customInstructions: string) => void;
 }
 
 export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
@@ -23,6 +23,7 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [workspacePath, setWorkspacePath] = useState('');
+  const [customInstructions, setCustomInstructions] = useState('');
 
   const handleSelectFolder = async () => {
     const result = await window.capibara.selectFolder();
@@ -88,6 +89,20 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
               </Button>
             </div>
           </div>
+          <div>
+            <Label htmlFor="org-instructions" className="mb-1">
+              {t.createOrg.customInstructionsLabel}
+            </Label>
+            <textarea
+              id="org-instructions"
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder={t.createOrg.customInstructionsPlaceholder}
+              value={customInstructions}
+              onChange={(e) => setCustomInstructions(e.target.value)}
+              maxLength={5000}
+              rows={4}
+            />
+          </div>
         </div>
 
         <DialogFooter>
@@ -95,7 +110,7 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
             {t.common.cancel}
           </Button>
           <Button
-            onClick={() => onCreate(name.trim(), description.trim(), workspacePath)}
+            onClick={() => onCreate(name.trim(), description.trim(), workspacePath, customInstructions.trim())}
             disabled={!name.trim() || !workspacePath}
           >
             {t.common.create}

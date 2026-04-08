@@ -14,6 +14,7 @@ interface OrgRow {
   id: string;
   name: string;
   description: string;
+  custom_instructions: string;
   status: string;
   budget_limit: number;
   org_template_id: string | null;
@@ -27,6 +28,7 @@ function rowToEntity(row: OrgRow): Organization {
     id: row.id,
     name: row.name,
     description: row.description,
+    customInstructions: row.custom_instructions,
     status: row.status as Organization['status'],
     budgetLimit: row.budget_limit,
     orgTemplateId: row.org_template_id,
@@ -63,9 +65,9 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     const now = new Date().toISOString();
 
     this.conn.getDb().prepare(`
-      INSERT INTO organizations (id, name, description, budget_limit, org_template_id, workspace_path, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.name, input.description, input.budgetLimit, input.orgTemplateId, input.workspacePath, now, now);
+      INSERT INTO organizations (id, name, description, custom_instructions, budget_limit, org_template_id, workspace_path, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.name, input.description, input.customInstructions, input.budgetLimit, input.orgTemplateId, input.workspacePath, now, now);
 
     const org = await this.findById(id);
     return org!;
@@ -78,14 +80,15 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     const now = new Date().toISOString();
     const name = input.name ?? existing.name;
     const description = input.description ?? existing.description;
+    const customInstructions = input.customInstructions ?? existing.customInstructions;
     const status = input.status ?? existing.status;
     const budgetLimit = input.budgetLimit ?? existing.budgetLimit;
     const workspacePath = input.workspacePath ?? existing.workspacePath;
 
     this.conn.getDb().prepare(`
-      UPDATE organizations SET name = ?, description = ?, status = ?, budget_limit = ?, workspace_path = ?, updated_at = ?
+      UPDATE organizations SET name = ?, description = ?, custom_instructions = ?, status = ?, budget_limit = ?, workspace_path = ?, updated_at = ?
       WHERE id = ?
-    `).run(name, description, status, budgetLimit, workspacePath, now, input.id);
+    `).run(name, description, customInstructions, status, budgetLimit, workspacePath, now, input.id);
 
     const org = await this.findById(input.id);
     return org!;

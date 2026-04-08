@@ -1,4 +1,4 @@
-import type { Role, TaskNode, TaskType, TaskStatus, Skill, WakeTrigger } from '../types/domain.types.js';
+import type { Organization, Role, TaskNode, TaskType, TaskStatus, Skill, WakeTrigger } from '../types/domain.types.js';
 import type { ConversationWorkflow } from '../types/conversation.types.js';
 import type { VoteStats } from './i-discussion.repository.js';
 
@@ -28,6 +28,7 @@ export interface ReviewableChild {
 }
 
 export interface PromptContext {
+  organization?: Organization;
   role: Role;
   task: TaskNode;
   trigger: WakeTrigger;

@@ -85,7 +85,16 @@ export class ExecutionContext {
       }
     }
 
+    // Fetch organization for custom instructions injection (graceful degradation)
+    let organization: PromptContext['organization'];
+    try {
+      organization = await this.orgContext.getOrganization(task.orgId);
+    } catch {
+      organization = undefined;
+    }
+
     return {
+      organization,
       role,
       task,
       trigger,

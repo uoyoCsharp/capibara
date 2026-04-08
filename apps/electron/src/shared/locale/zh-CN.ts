@@ -154,6 +154,14 @@ export const zhCN: LocaleMessages = {
     descriptionPlaceholder: '可选描述',
     workspaceLabel: '工作区文件夹',
     workspacePlaceholder: '选择一个文件夹...',
+    customInstructionsLabel: '自定义指令',
+    customInstructionsPlaceholder: '为该组织所有 AI 角色注入的可选指令（例如编码规范、领域背景）...',
+  },
+  orgSettings: {
+    customInstructions: '自定义指令',
+    customInstructionsHint: '为该组织所有 AI 角色注入的指令',
+    saved: '自定义指令已保存',
+    failedToSave: '保存自定义指令失败',
   },
   deleteOrg: {
     title: '删除组织',

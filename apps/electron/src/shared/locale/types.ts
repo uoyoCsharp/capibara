@@ -154,6 +154,14 @@ export interface LocaleMessages {
     descriptionPlaceholder: string;
     workspaceLabel: string;
     workspacePlaceholder: string;
+    customInstructionsLabel: string;
+    customInstructionsPlaceholder: string;
+  };
+  orgSettings: {
+    customInstructions: string;
+    customInstructionsHint: string;
+    saved: string;
+    failedToSave: string;
   };
   deleteOrg: {
     title: string;

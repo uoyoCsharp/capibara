@@ -121,6 +121,7 @@ export type DesktopEvent =
 export const createOrganizationSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).default(''),
+  customInstructions: z.string().max(5000).default(''),
   budgetLimit: z.number().min(0).default(50.0),
   orgTemplateId: z.string().nullable().default(null),
   workspacePath: z.string().min(1),
@@ -130,6 +131,7 @@ export const updateOrganizationSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
+  customInstructions: z.string().max(5000).optional(),
   status: z.enum(['active', 'paused', 'archived']).optional(),
   budgetLimit: z.number().min(0).optional(),
   workspacePath: z.string().min(1).optional(),
@@ -383,6 +385,7 @@ export interface OrganizationRecord {
   id: string;
   name: string;
   description: string;
+  customInstructions: string;
   status: OrgStatus;
   budgetLimit: number;
   orgTemplateId: string | null;

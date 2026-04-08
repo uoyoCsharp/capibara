@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Plus, TreeStructure, Trash } from '@phosphor-icons/react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Plus, TreeStructure, Trash, CaretDown, CaretRight, FloppyDisk } from '@phosphor-icons/react';
 import type {
   OrganizationRecord,
   RoleRecord,
@@ -34,6 +34,10 @@ export function OrganizationPage() {
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [showDeleteOrg, setShowDeleteOrg] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [instructionsDraft, setInstructionsDraft] = useState('');
+  const [isSavingInstructions, setIsSavingInstructions] = useState(false);
+  const instructionsInitRef = useRef<string | null>(null);
 
   const loadOrgs = useCallback(async () => {
     try {
@@ -112,11 +116,12 @@ export function OrganizationPage() {
     } catch { toast.error(t.organization.failedToLoadTemplate); }
   };
 
-  const handleCreateBlankOrg = async (name: string, description: string, workspacePath: string) => {
+  const handleCreateBlankOrg = async (name: string, description: string, workspacePath: string, customInstructions: string) => {
     try {
       const result = await window.capibara.createOrganization({
         name,
         description,
+        customInstructions,
         budgetLimit: 50.0,
         orgTemplateId: null,
         workspacePath,
@@ -157,7 +162,36 @@ export function OrganizationPage() {
     }
   };
 
+  // Sync instructions draft when org changes
   const currentOrg = organizations.find((o) => o.id === currentOrgId);
+  const currentInstructions = currentOrg?.customInstructions ?? '';
+  if (instructionsInitRef.current !== currentOrgId) {
+    instructionsInitRef.current = currentOrgId;
+    if (instructionsDraft !== currentInstructions) {
+      setInstructionsDraft(currentInstructions);
+    }
+  }
+
+  const instructionsDirty = instructionsDraft !== currentInstructions;
+
+  const handleSaveInstructions = async () => {
+    if (!currentOrg) return;
+    setIsSavingInstructions(true);
+    try {
+      const result = await window.capibara.updateOrganization({
+        id: currentOrg.id,
+        customInstructions: instructionsDraft.trim(),
+      });
+      if (result.ok) {
+        toast.success(t.orgSettings.saved);
+        await loadOrgs();
+      }
+    } catch {
+      toast.error(t.orgSettings.failedToSave);
+    } finally {
+      setIsSavingInstructions(false);
+    }
+  };
   const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? null;
 
   if (isLoading) {
@@ -220,6 +254,47 @@ export function OrganizationPage() {
             </Button>
           </div>
         </div>
+
+        {currentOrg && (
+          <div className="mb-4">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setShowInstructions((v) => !v)}
+            >
+              {showInstructions ? <CaretDown size={14} /> : <CaretRight size={14} />}
+              {t.orgSettings.customInstructions}
+              {currentInstructions && !showInstructions && (
+                <span className="ml-1 text-xs text-muted-foreground/60">({currentInstructions.length} chars)</span>
+              )}
+            </button>
+            {showInstructions && (
+              <div className="mt-2">
+                <p className="text-xs text-muted-foreground mb-1">{t.orgSettings.customInstructionsHint}</p>
+                <textarea
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  placeholder={t.createOrg.customInstructionsPlaceholder}
+                  value={instructionsDraft}
+                  onChange={(e) => setInstructionsDraft(e.target.value)}
+                  maxLength={5000}
+                  rows={4}
+                />
+                {instructionsDirty && (
+                  <div className="flex justify-end mt-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveInstructions}
+                      disabled={isSavingInstructions}
+                    >
+                      <FloppyDisk size={14} />
+                      {isSavingInstructions ? t.common.saving : t.common.save}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {currentOrg && roles.length > 0 ? (
           <OrgTreeView

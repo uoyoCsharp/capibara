@@ -18,6 +18,7 @@ export function registerSnapshotHandlers(
             id: o.id,
             name: o.name,
             description: o.description,
+            customInstructions: o.customInstructions,
             status: o.status,
             budgetLimit: o.budgetLimit,
             orgTemplateId: o.orgTemplateId,

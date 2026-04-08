@@ -23,6 +23,7 @@ const migrations: Migration[] = [
           budget_limit REAL NOT NULL DEFAULT 50.0,
           org_template_id TEXT,
           workspace_path TEXT NOT NULL DEFAULT '',
+          custom_instructions TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -222,6 +223,17 @@ const migrations: Migration[] = [
 
         CREATE INDEX idx_conv_events_workflow ON conversation_events(workflow_id, created_at);
       `);
+    },
+  },
+  {
+    version: 2,
+    description: 'Add custom_instructions column to organizations',
+    up: (db) => {
+      // Check if column already exists (covers fresh installs where v1 already has it)
+      const cols = db.prepare("PRAGMA table_info('organizations')").all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === 'custom_instructions')) {
+        db.exec(`ALTER TABLE organizations ADD COLUMN custom_instructions TEXT NOT NULL DEFAULT ''`);
+      }
     },
   },
 ];

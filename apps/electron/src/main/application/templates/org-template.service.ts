@@ -61,6 +61,7 @@ export class OrgTemplateService {
     const org = await this.orgRepo.create({
       name: orgName,
       description: orgDescription,
+      customInstructions: '',
       budgetLimit,
       orgTemplateId: template.id,
       workspacePath,

@@ -71,6 +71,7 @@ export interface Organization {
   id: string;
   name: string;
   description: string;
+  customInstructions: string;
   status: OrgStatus;
   budgetLimit: number;
   orgTemplateId: string | null;

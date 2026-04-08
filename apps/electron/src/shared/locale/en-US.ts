@@ -154,6 +154,14 @@ export const enUS: LocaleMessages = {
     descriptionPlaceholder: 'Optional description',
     workspaceLabel: 'Workspace Folder',
     workspacePlaceholder: 'Select a folder...',
+    customInstructionsLabel: 'Custom Instructions',
+    customInstructionsPlaceholder: 'Optional instructions injected into all AI role prompts for this organization (e.g., coding conventions, domain context)...',
+  },
+  orgSettings: {
+    customInstructions: 'Custom Instructions',
+    customInstructionsHint: 'Instructions injected into all AI role prompts for this organization',
+    saved: 'Custom instructions saved',
+    failedToSave: 'Failed to save custom instructions',
   },
   deleteOrg: {
     title: 'Delete Organization',
