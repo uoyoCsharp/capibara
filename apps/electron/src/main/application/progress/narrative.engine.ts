@@ -245,7 +245,7 @@ export class NarrativeEngine {
     let revisionHistory: string[] = [];
 
     if (group) {
-      voteStats = await this.discussionRepo.getVoteStats(group.id);
+      voteStats = await this.discussionRepo.getVoteStatsForRound(group.id, group.currentRound);
       const messages = await this.discussionRepo.findMessagesByGroupId(group.id);
       concerns = messages.filter((m) => m.voteTag === 'CONCERN').map((m) => m.content.slice(0, 200));
       revisionHistory = messages.filter((m) => m.voteTag === 'REVISE').map((m) => m.content.slice(0, 200));

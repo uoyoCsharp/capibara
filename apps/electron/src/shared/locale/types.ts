@@ -262,6 +262,9 @@ export interface LocaleMessages {
     awaitingReviewMessage: string;
     approve: string;
     requestRevision: string;
+    blocked: string;
+    blockedMessage: string;
+    retry: string;
     titleLabel: string;
     typeLabel: string;
     statusLabel: string;

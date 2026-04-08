@@ -1,8 +1,8 @@
 ---
 document_type: 'product-requirements'
 project_name: 'capibara'
-version: '2.0'
-date: '2026-03-27'
+version: '2.1'
+date: '2026-04-08'
 status: 'draft'
 authors: ['uoyo', 'AI Facilitator']
 sources:
@@ -110,6 +110,10 @@ The system shall support a variable-depth task tree:
 - **Task Node Types**: `epic` / `story` / `task` / `subtask` / `spike` / `bug` / `chore` (type labels, not fixed layers)
 - **Variable Depth**: Tree depth is free; "Epic -> Task" and "Epic -> Story -> Task -> Subtask" are both valid
 - **Task State Machine**: `pending` -> `in_progress` -> `awaiting_review` -> `revision` -> `approved` -> `done` + `blocked` / `cancelled`
+- **Blocked State Recovery**: When a task enters `blocked` status (e.g., retry exhaustion or delegation), the user can recover it through the UI:
+  - **Retry**: Transitions task from `blocked` to `in_progress` and automatically triggers a new execution run
+  - **Cancel**: Transitions task from `blocked` to `cancelled`
+  - The status dropdown only displays valid transition targets based on the current state, preventing invalid state changes
 - **AI Auto-Creation**: AI roles create and assign sub-tasks via Agent API
 - **Auto Status Propagation**: When all sibling tasks complete, parent role is automatically awakened for review/summarization
 - **Task Assignment**: Each TaskNode has an `assigneeRoleId` binding to one organization role
@@ -132,8 +136,10 @@ The system shall provide intelligent task decomposition guidance:
 
 The system shall support Epic-based discussion groups as the primary collaboration and decision mechanism:
 
-- **Auto-Creation**: When a TaskNode with `type=epic` is created, a DiscussionGroup is automatically created and bound to it
-- **Auto-Membership**: Epic assignee + direct subordinates auto-join; roles are added when assigned tasks within the Epic
+- **Auto-Creation**: A DiscussionGroup is automatically created and bound to a TaskNode when any of the following conditions are met:
+  - Task type is `epic` or `story`
+  - Task's assignee role has `requiresHumanApproval=true` (regardless of task type)
+- **Implicit Membership**: Any role can post messages and vote in a discussion group; membership is implicit based on participation rather than an explicit join mechanism
 - **Structured Vote Tags**: Messages carry a `voteTag` field (structured data, not text parsing):
   - `APPROVE` — Approve the deliverable or proposal
   - `REVISE` — Request changes (message content contains revision requirements)
@@ -152,9 +158,10 @@ The system shall support Epic-based discussion groups as the primary collaborati
 
 The system shall implement hardcoded consensus detection logic:
 
-- `APPROVE` processing: Track all `canApprove` role votes; auto-approve when unanimous
-- `REVISE` processing: Set task status to `revision`, awaken assignee with revision feedback
-- `REVISE` cycle protection: Track REVISE count per task; escalate to parent role after `maxReviseAttempts` (default 3)
+- **Review Round Isolation**: Each discussion group tracks a `currentRound` counter. Vote statistics are scoped to the current round only — votes from previous rounds do not participate in consensus evaluation. When a revision is triggered, `currentRound` is incremented, effectively isolating the new voting cycle from prior rounds.
+- `APPROVE` processing: Track all `canApprove` role votes in the current round; auto-approve when unanimous
+- `REVISE` processing: Set task status to `revision`, increment review round, awaken assignee with revision feedback
+- `REVISE` cycle protection: Track `reviseCount` per discussion group (persisted); escalate to parent role after `maxReviseAttempts` (default 3)
 - `CONCERN` processing: Non-blocking; accumulate for dispute detection
 - `DELEGATE` processing: Create new TaskNode, set original task to `blocked`, awaken target role
 - MVP: Rules hardcoded in ConsensusDetector and OrgOrchestrator services
@@ -180,9 +187,9 @@ The system shall execute AI role tasks through an isolated worker process:
 
 The system shall implement an event-driven wake-up cycle:
 
-- **Wake Triggers**: task_assigned, task_completed, review_approve, review_revise, review_delegate, delegation_completed, retry_failed, dispute_detected
+- **Wake Triggers**: task_assigned, task_completed, review_approve, review_revise, review_delegate, delegation_completed, retry_failed, dispute_detected, `discussion_reply` (conversation system — reply posted to a waiting agent's discussion), `conversation_escalation` (conversation system — timeout or cycle detection escalation)
 - **Gate Checks**: Role status (active), budget not exceeded, no active Run
-- **Pending Wake Queue**: If role is busy when wake event arrives, queue it (don't lose the signal)
+- **Pending Wake Queue**: If role is busy when wake event arrives, queue it with a priority level (don't lose the signal). Priority levels: 0 (default), 1 (discussion_reply), 2 (conversation_escalation). Higher-priority wakes are consumed first.
 - **Self-Wake Circuit Breaker**: MAX_CONSECUTIVE_WAKES limit to prevent infinite loops; escalate on breach
 - **Wake Target Calculation**: Based on event type, determine which role(s) to wake
 
@@ -444,12 +451,14 @@ As a human user, I want to send messages and vote in any discussion group with e
 | `Role` | Org tree node | id, orgId, name, parentId, persona, knowledgeBaseRefs[], skillIds[], canApprove, canDelegate, requiresHumanApproval, status |
 | `Skill` | Skill definition | id, name, source (builtin/template/custom), templateId, promptContent, description |
 | `TaskNode` | Variable-depth task tree | id, orgId, parentId, type (epic/story/task/subtask/spike/bug/chore), title, description, status, assigneeRoleId, depth |
-| `DiscussionGroup` | Epic-bound discussion | id, taskNodeId (epic), orgId, status (active/archived), summary, lastSummaryAt |
-| `DiscussionMessage` | Message with vote tag | id, groupId, authorRoleId, authorType (ai/human), content, voteTag (APPROVE/REVISE/CONCERN/DELEGATE/null), createdAt |
-| `Run` | Execution instance | id, orgId, taskNodeId, roleId, status, trigger, startedAt, finishedAt, costUsd |
+| `DiscussionGroup` | Task-bound discussion | id, taskNodeId, orgId, status (active/archived), summary, lastSummaryAt, currentRound, reviseCount |
+| `DiscussionMessage` | Message with vote tag | id, groupId, authorRoleId, authorType (ai/human/system), content, voteTag (APPROVE/REVISE/CONCERN/DELEGATE/null), reviewRound, metadata (JSON), intent (question/reply/escalation/resolution/vote/general), inReplyToMessageId, createdAt |
+| `Run` | Execution instance | id, orgId, taskNodeId, roleId, status, trigger, startedAt, finishedAt, costUsd, tokenCount, sessionId |
 | `CostEntry` | Token cost tracking | id, runId, roleId, orgId, tokenCount, costUsd |
 | `Narrative` | Generated status snapshot | id, orgId, templateData (JSON), renderedText, generatedAt |
-| `PendingWake` | Wake event queue | id, roleId, orgId, trigger, createdAt |
+| `PendingWake` | Wake event queue | id, roleId, orgId, trigger, taskNodeId, priority, createdAt |
+| `ConversationWorkflow` | Multi-turn conversation state | id, orgId, taskNodeId, discussionGroupId, askingRoleId, askingRunId, askingSessionId, questionMessageId, replyMessageId, respondentRoleId, respondentType (ai/human), state (waiting_for_reply/reply_received/resumed/resolved/escalated/timed_out/cancelled), depth, parentWorkflowId, priority, timeoutAt, resolvedAt, auditReason |
+| `ConversationEvent` | Conversation audit log | id, workflowId, eventType, eventPayload (JSON), createdAt |
 | `Settings` | Application settings | key, value (e.g., locale: 'zh-CN' \| 'en-US') |
 
 ---

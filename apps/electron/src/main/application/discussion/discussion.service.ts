@@ -538,7 +538,7 @@ export class DiscussionService {
     if (!group) return '';
 
     const recentMessages = await this.discussionRepo.findRecentMessages(groupId, 3);
-    const stats = await this.discussionRepo.getVoteStats(groupId);
+    const stats = await this.discussionRepo.getVoteStatsForRound(groupId, group.currentRound);
 
     const roleNames = new Map<string, string>();
     for (const msg of recentMessages) {
@@ -587,7 +587,11 @@ export class DiscussionService {
   }
 
   async getVoteStats(groupId: string): Promise<VoteStats> {
-    return this.discussionRepo.getVoteStats(groupId);
+    const group = await this.discussionRepo.findGroupById(groupId);
+    if (!group) {
+      return { APPROVE: 0, REVISE: 0, CONCERN: 0, DELEGATE: 0 };
+    }
+    return this.discussionRepo.getVoteStatsForRound(groupId, group.currentRound);
   }
 
   async postMessage(input: {

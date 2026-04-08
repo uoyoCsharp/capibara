@@ -37,23 +37,29 @@ interface TaskDetailDrawerProps {
   hasActiveRun?: boolean;
 }
 
-const STATUS_OPTIONS: TaskStatus[] = [
-  'pending',
-  'in_progress',
-  'awaiting_review',
-  'revision',
-  'approved',
-  'done',
-  'blocked',
-  'cancelled',
-];
+// Valid task state transitions — must match main/core/constants/task.constants.ts
+const TASK_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
+  pending: ['in_progress', 'cancelled'],
+  in_progress: ['awaiting_review', 'blocked', 'cancelled'],
+  awaiting_review: ['approved', 'revision', 'blocked', 'cancelled'],
+  revision: ['in_progress', 'cancelled'],
+  approved: ['done', 'cancelled'],
+  done: [],
+  blocked: ['pending', 'in_progress', 'cancelled'],
+  cancelled: [],
+};
+
+function getValidTransitions(current: TaskStatus): TaskStatus[] {
+  // Always include the current status so the dropdown shows it, plus valid targets
+  return [current, ...TASK_TRANSITIONS[current]];
+}
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   pending: 'bg-muted text-muted-foreground',
   in_progress: 'bg-yellow-500/10 text-yellow-600',
-  awaiting_review: 'bg-yellow-500/10 text-yellow-600',
-  revision: 'bg-yellow-500/10 text-yellow-600',
-  approved: 'bg-green-500/10 text-green-600',
+  awaiting_review: 'bg-orange-500/10 text-orange-600',
+  revision: 'bg-amber-500/10 text-amber-600',
+  approved: 'bg-blue-500/10 text-blue-600',
   done: 'bg-green-500/10 text-green-600',
   blocked: 'bg-destructive/10 text-destructive',
   cancelled: 'bg-muted text-muted-foreground',
@@ -173,6 +179,40 @@ export function TaskDetailDrawer({
             </div>
           )}
 
+          {/* Blocked banner */}
+          {task.status === 'blocked' && (
+            <div className="rounded-lg bg-destructive/10 border border-destructive px-4 py-3">
+              <p className="text-sm font-medium text-destructive mb-1">{t.taskDetail.blocked}</p>
+              <p className="text-xs text-destructive/80">
+                {t.taskDetail.blockedMessage}
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  size="sm"
+                  disabled={!task.assigneeRoleId || hasActiveRun}
+                  onClick={() => {
+                    onStatusChange(task.id, 'in_progress');
+                    if (onStartRun && task.assigneeRoleId) {
+                      setTimeout(() => onStartRun(task.id, task.assigneeRoleId!), 300);
+                    }
+                  }}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  <Play size={14} weight="fill" />
+                  {t.taskDetail.retry}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onStatusChange(task.id, 'cancelled')}
+                  className="border-destructive text-destructive hover:bg-destructive/10"
+                >
+                  {t.common.cancel}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Title */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
@@ -203,7 +243,7 @@ export function TaskDetailDrawer({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((s) => (
+                  {getValidTransitions(task.status).map((s) => (
                     <SelectItem key={s} value={s}>
                       {t.task[s]}
                     </SelectItem>

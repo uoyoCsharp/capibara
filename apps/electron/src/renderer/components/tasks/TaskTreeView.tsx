@@ -47,9 +47,9 @@ function buildTree(tasks: TaskRecord[]): TreeNode[] {
 const STATUS_COLORS: Record<TaskStatus, string> = {
   pending: 'bg-muted-foreground',
   in_progress: 'bg-yellow-500',
-  awaiting_review: 'bg-yellow-500',
-  revision: 'bg-yellow-500',
-  approved: 'bg-green-500',
+  awaiting_review: 'bg-orange-500',
+  revision: 'bg-amber-500',
+  approved: 'bg-blue-500',
   done: 'bg-green-500',
   blocked: 'bg-destructive',
   cancelled: 'bg-muted-foreground',

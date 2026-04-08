@@ -9,9 +9,12 @@ interface Migration {
 const migrations: Migration[] = [
   {
     version: 1,
-    description: 'Create organizations table',
+    description: 'Initial schema — all tables',
     up: (db) => {
       db.exec(`
+        -- ═══════════════════════════════════════════════
+        -- 1. Organizations
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS organizations (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -19,42 +22,22 @@ const migrations: Migration[] = [
           status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'archived')),
           budget_limit REAL NOT NULL DEFAULT 50.0,
           org_template_id TEXT,
+          workspace_path TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 2,
-    description: 'Create schema version table',
-    up: (db) => {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS schema_version (
-          version INTEGER PRIMARY KEY,
-          description TEXT NOT NULL,
-          applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-    },
-  },
-  {
-    version: 3,
-    description: 'Create settings table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 2. Settings
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
         );
-      `);
-    },
-  },
-  {
-    version: 4,
-    description: 'Create roles table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 3. Roles
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS roles (
           id TEXT PRIMARY KEY,
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -66,18 +49,15 @@ const migrations: Migration[] = [
           can_approve INTEGER NOT NULL DEFAULT 0,
           can_delegate INTEGER NOT NULL DEFAULT 0,
           requires_human_approval INTEGER NOT NULL DEFAULT 0,
+          consecutive_wake_count INTEGER NOT NULL DEFAULT 0,
           status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'idle')),
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 5,
-    description: 'Create task_nodes table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 4. Task Nodes
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS task_nodes (
           id TEXT PRIMARY KEY,
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -92,14 +72,10 @@ const migrations: Migration[] = [
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 6,
-    description: 'Create skills table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 5. Skills
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS skills (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -111,14 +87,10 @@ const migrations: Migration[] = [
           custom_prompt_content TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 7,
-    description: 'Create discussion_groups and discussion_messages tables',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 6. Discussion Groups & Messages
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS discussion_groups (
           id TEXT PRIMARY KEY,
           task_node_id TEXT NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
@@ -126,6 +98,8 @@ const migrations: Migration[] = [
           status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
           summary TEXT,
           last_summary_at TEXT,
+          current_round INTEGER NOT NULL DEFAULT 1,
+          revise_count INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -136,16 +110,17 @@ const migrations: Migration[] = [
           author_type TEXT NOT NULL CHECK (author_type IN ('ai', 'human', 'system')),
           content TEXT NOT NULL,
           vote_tag TEXT CHECK (vote_tag IN ('APPROVE', 'REVISE', 'CONCERN', 'DELEGATE') OR vote_tag IS NULL),
+          review_round INTEGER NOT NULL DEFAULT 1,
+          metadata TEXT,
+          intent TEXT NOT NULL DEFAULT 'general'
+            CHECK(intent IN ('question', 'reply', 'escalation', 'resolution', 'vote', 'general')),
+          in_reply_to_message_id TEXT REFERENCES discussion_messages(id) ON DELETE SET NULL,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 8,
-    description: 'Create runs table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 7. Runs
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS runs (
           id TEXT PRIMARY KEY,
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -153,20 +128,17 @@ const migrations: Migration[] = [
           role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
           status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
           trigger TEXT NOT NULL,
-          output_log TEXT NOT NULL DEFAULT '',
           started_at TEXT,
           finished_at TEXT,
           cost_usd REAL NOT NULL DEFAULT 0,
+          token_count INTEGER NOT NULL DEFAULT 0,
+          session_id TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 9,
-    description: 'Create cost_entries table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 8. Cost Entries
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS cost_entries (
           id TEXT PRIMARY KEY,
           run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -176,14 +148,10 @@ const migrations: Migration[] = [
           cost_usd REAL NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 10,
-    description: 'Create narratives table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 9. Narratives
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS narratives (
           id TEXT PRIMARY KEY,
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -191,125 +159,41 @@ const migrations: Migration[] = [
           rendered_text TEXT NOT NULL DEFAULT '',
           generated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 11,
-    description: 'Create pending_wakes table',
-    up: (db) => {
-      db.exec(`
+
+        -- ═══════════════════════════════════════════════
+        -- 10. Pending Wakes
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS pending_wakes (
           id TEXT PRIMARY KEY,
           role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
           trigger TEXT NOT NULL,
+          task_node_id TEXT REFERENCES task_nodes(id) ON DELETE SET NULL,
+          priority INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-    },
-  },
-  {
-    version: 12,
-    description: 'Add workspace_path column to organizations',
-    up: (db) => {
-      db.exec(`
-        ALTER TABLE organizations ADD COLUMN workspace_path TEXT NOT NULL DEFAULT '';
-      `);
-    },
-  },
-  {
-    version: 13,
-    description: 'Drop output_log column from runs (logs moved to filesystem)',
-    up: (db) => {
-      // SQLite >= 3.35.0 supports DROP COLUMN.
-      // For older versions, fall back to recreate-table strategy.
-      try {
-        db.exec(`ALTER TABLE runs DROP COLUMN output_log;`);
-      } catch {
-        // Fallback: recreate table without output_log
-        db.exec(`
-          CREATE TABLE runs_new (
-            id TEXT PRIMARY KEY,
-            org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-            task_node_id TEXT NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
-            role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-            status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
-            trigger TEXT NOT NULL,
-            started_at TEXT,
-            finished_at TEXT,
-            cost_usd REAL NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-          );
-          INSERT INTO runs_new (id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, created_at)
-            SELECT id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, created_at FROM runs;
-          DROP TABLE runs;
-          ALTER TABLE runs_new RENAME TO runs;
-        `);
-      }
-    },
-  },
-  {
-    version: 14,
-    description: 'Add token_count column to runs table',
-    up: (db) => {
-      db.exec(`ALTER TABLE runs ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0;`);
-    },
-  },
-  {
-    version: 15,
-    description: 'Add session_id column to runs table for --resume support',
-    up: (db) => {
-      db.exec(`ALTER TABLE runs ADD COLUMN session_id TEXT;`);
-    },
-  },
-  {
-    version: 16,
-    description: 'Add review_round, metadata to discussion_messages; current_round, revise_count to discussion_groups; task_node_id to pending_wakes; consecutive_wake_count to roles',
-    up: (db) => {
-      db.exec(`
-        ALTER TABLE discussion_messages ADD COLUMN review_round INTEGER NOT NULL DEFAULT 1;
-        ALTER TABLE discussion_messages ADD COLUMN metadata TEXT;
-        ALTER TABLE discussion_groups ADD COLUMN current_round INTEGER NOT NULL DEFAULT 1;
-        ALTER TABLE discussion_groups ADD COLUMN revise_count INTEGER NOT NULL DEFAULT 0;
-        ALTER TABLE pending_wakes ADD COLUMN task_node_id TEXT REFERENCES task_nodes(id) ON DELETE SET NULL;
-        ALTER TABLE roles ADD COLUMN consecutive_wake_count INTEGER NOT NULL DEFAULT 0;
-      `);
-    },
-  },
-  {
-    version: 17,
-    description: 'Conversation system: new tables and column extensions',
-    up: (db) => {
-      db.exec(`
-        -- Extend discussion_messages for conversation intent tracking
-        ALTER TABLE discussion_messages ADD COLUMN intent TEXT NOT NULL DEFAULT 'general'
-          CHECK(intent IN ('question', 'reply', 'escalation', 'resolution', 'vote', 'general'));
-        ALTER TABLE discussion_messages ADD COLUMN in_reply_to_message_id TEXT
-          REFERENCES discussion_messages(id);
 
-        -- Extend pending_wakes with priority for priority-based dispatch
-        ALTER TABLE pending_wakes ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
-
-        -- Create conversation_workflows table
+        -- ═══════════════════════════════════════════════
+        -- 11. Conversation Workflows
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS conversation_workflows (
           id TEXT PRIMARY KEY,
-          org_id TEXT NOT NULL REFERENCES organizations(id),
-          task_node_id TEXT NOT NULL REFERENCES task_nodes(id),
-          discussion_group_id TEXT NOT NULL REFERENCES discussion_groups(id),
-          asking_role_id TEXT NOT NULL REFERENCES roles(id),
-          asking_run_id TEXT NOT NULL REFERENCES runs(id),
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          task_node_id TEXT NOT NULL REFERENCES task_nodes(id) ON DELETE CASCADE,
+          discussion_group_id TEXT NOT NULL REFERENCES discussion_groups(id) ON DELETE CASCADE,
+          asking_role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+          asking_run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
           asking_session_id TEXT,
-          question_message_id TEXT NOT NULL REFERENCES discussion_messages(id),
-          reply_message_id TEXT REFERENCES discussion_messages(id),
-          respondent_role_id TEXT REFERENCES roles(id),
+          question_message_id TEXT NOT NULL REFERENCES discussion_messages(id) ON DELETE CASCADE,
+          reply_message_id TEXT REFERENCES discussion_messages(id) ON DELETE SET NULL,
+          respondent_role_id TEXT REFERENCES roles(id) ON DELETE SET NULL,
           respondent_type TEXT NOT NULL CHECK(respondent_type IN ('ai', 'human')),
           state TEXT NOT NULL CHECK(state IN (
             'waiting_for_reply', 'reply_received', 'resumed',
             'resolved', 'escalated', 'timed_out', 'cancelled'
           )),
           depth INTEGER NOT NULL DEFAULT 0,
-          parent_workflow_id TEXT REFERENCES conversation_workflows(id),
+          parent_workflow_id TEXT REFERENCES conversation_workflows(id) ON DELETE SET NULL,
           priority INTEGER NOT NULL DEFAULT 0,
           timeout_at TEXT,
           resolved_at TEXT,
@@ -325,10 +209,12 @@ const migrations: Migration[] = [
         CREATE INDEX idx_conv_wf_timeout ON conversation_workflows(timeout_at)
           WHERE state = 'waiting_for_reply';
 
-        -- Create conversation_events audit table (append-only)
+        -- ═══════════════════════════════════════════════
+        -- 12. Conversation Events (append-only audit log)
+        -- ═══════════════════════════════════════════════
         CREATE TABLE IF NOT EXISTS conversation_events (
           id TEXT PRIMARY KEY,
-          workflow_id TEXT NOT NULL REFERENCES conversation_workflows(id),
+          workflow_id TEXT NOT NULL REFERENCES conversation_workflows(id) ON DELETE CASCADE,
           event_type TEXT NOT NULL,
           event_payload TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
