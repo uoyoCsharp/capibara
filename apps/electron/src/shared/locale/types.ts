@@ -132,6 +132,7 @@ export interface LocaleMessages {
     fromTemplate: string;
     blankOrg: string;
     deleteOrganization: string;
+    openWorkspace: string;
     roleHierarchy: string;
     addRoot: string;
     addChildRole: string;

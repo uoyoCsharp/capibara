@@ -39,6 +39,9 @@ export class ExecutionEngine {
   /** Maps runId → { orgName, taskId } for log file path resolution */
   private runLogCtx = new Map<string, { orgName: string; taskId: string }>();
 
+  /** Maps runId → sessionId for in-flight runs (before finish() persists to DB) */
+  private runSessionIds = new Map<string, string>();
+
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
@@ -72,6 +75,11 @@ export class ExecutionEngine {
 
   setConversationWorkflowRepo(repo: IConversationWorkflowRepository): void {
     this.conversationWorkflowRepo = repo;
+  }
+
+  /** Returns the sessionId for an in-flight run (before DB persistence). */
+  getRunSessionId(runId: string): string | null {
+    return this.runSessionIds.get(runId) ?? null;
   }
 
   async startRun(
@@ -166,6 +174,23 @@ export class ExecutionEngine {
       const ctx = await this.executionContext.buildPromptContext(roleId, taskNodeId, trigger);
       const systemPrompt = this.promptBuilder.build(ctx);
 
+      // ─── Transition conversation workflow to 'resumed' ─────
+      if (trigger === 'discussion_reply' && this.conversationWorkflowRepo) {
+        try {
+          const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(roleId, taskNodeId);
+          if (workflow && workflow.state === 'reply_received') {
+            await this.conversationWorkflowRepo.updateState(workflow.id, 'resumed');
+            this.logger.info('Conversation workflow transitioned to resumed', {
+              runId, workflowId: workflow.id,
+            });
+          }
+        } catch (err) {
+          this.logger.warn('Failed to transition conversation workflow to resumed', {
+            runId, error: String(err),
+          });
+        }
+      }
+
       // ─── Generate MCP Config ───────────────────────────────
       const token = this.generateRunToken(runId);
       this.mcpIpcServer.registerToken(runId, token);
@@ -209,6 +234,7 @@ export class ExecutionEngine {
       }
 
       if (lastSessionId) {
+        this.runSessionIds.set(runId, lastSessionId);
         this.logger.info('Resuming previous session', { runId, sessionId: lastSessionId.slice(0, 8) });
       }
 
@@ -251,6 +277,11 @@ export class ExecutionEngine {
         },
       });
 
+      // ─── Cache sessionId from result ──────────────────────
+      if (result.sessionId) {
+        this.runSessionIds.set(runId, result.sessionId);
+      }
+
       // ─── Process Result ────────────────────────────────────
       const tokenCount = (result.inputTokens ?? 0) + (result.outputTokens ?? 0);
 
@@ -292,6 +323,7 @@ export class ExecutionEngine {
           timestamp: new Date().toISOString(),
           payload: {
             runId, roleId, orgId, taskNodeId, tokenCount,
+            summary: result.summary,
           },
         });
       } else if (result.status === 'cancelled') {
@@ -369,6 +401,7 @@ export class ExecutionEngine {
 
     // Synchronous cleanup always runs regardless of above
     this.runLogCtx.delete(runId);
+    this.runSessionIds.delete(runId);
     this.mcpIpcServer.revokeToken(runId);
     this.jwtSecrets.delete(runId);
   }

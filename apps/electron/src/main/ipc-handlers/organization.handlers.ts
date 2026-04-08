@@ -1,5 +1,5 @@
 import { existsSync, statSync, accessSync, constants } from 'node:fs';
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import { IPC_CHANNELS, createOrganizationSchema, updateOrganizationSchema, deleteOrganizationSchema } from '@shared/contracts.js';
 import type { DesktopResult } from '@shared/contracts.js';
 import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
@@ -46,6 +46,25 @@ export function registerOrganizationHandlers(
     } catch (err) {
       logger.error('Failed to open folder dialog', { error: String(err) });
       return fail('INTERNAL', 'Failed to open folder dialog');
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.openFolder, async (_event, folderPath: unknown) => {
+    try {
+      if (typeof folderPath !== 'string' || !folderPath) {
+        return fail<void>('VALIDATION', 'Invalid folder path');
+      }
+      if (!existsSync(folderPath)) {
+        return fail<void>('NOT_FOUND', 'Folder does not exist');
+      }
+      const errorMessage = await shell.openPath(folderPath);
+      if (errorMessage) {
+        return fail<void>('OPEN_FAILED', errorMessage);
+      }
+      return ok(undefined as void);
+    } catch (err) {
+      logger.error('Failed to open folder', { error: String(err) });
+      return fail('INTERNAL', 'Failed to open folder');
     }
   });
 

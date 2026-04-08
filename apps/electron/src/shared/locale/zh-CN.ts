@@ -132,6 +132,7 @@ export const zhCN: LocaleMessages = {
     fromTemplate: '从模板创建',
     blankOrg: '空白组织',
     deleteOrganization: '删除组织',
+    openWorkspace: '打开项目文件夹',
     roleHierarchy: '角色层级',
     addRoot: '添加根角色',
     addChildRole: '添加子角色',

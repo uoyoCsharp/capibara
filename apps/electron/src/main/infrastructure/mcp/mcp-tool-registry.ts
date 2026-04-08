@@ -3,7 +3,7 @@ import type { IMcpToolHandler, McpToolCallInput, McpToolCallResult } from '@main
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import { LOGGER_TOKEN } from '@main/core/tokens.js';
 
-type ToolHandler = (args: Record<string, unknown>) => Promise<McpToolCallResult>;
+type ToolHandler = (args: Record<string, unknown>, runId: string) => Promise<McpToolCallResult>;
 
 /**
  * Registry for MCP tool handlers. Maps tool names to handler functions.
@@ -29,7 +29,7 @@ export class McpToolRegistry {
     }
 
     try {
-      return await handler(input.arguments);
+      return await handler(input.arguments, input.runId);
     } catch (err) {
       this.logger.error('MCP tool call failed', {
         toolName: input.toolName,

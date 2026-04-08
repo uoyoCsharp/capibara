@@ -132,6 +132,7 @@ export const enUS: LocaleMessages = {
     fromTemplate: 'From Template',
     blankOrg: 'Blank Org',
     deleteOrganization: 'Delete Organization',
+    openWorkspace: 'Open Workspace Folder',
     roleHierarchy: 'Role Hierarchy',
     addRoot: 'Add Root',
     addChildRole: 'Add child role',

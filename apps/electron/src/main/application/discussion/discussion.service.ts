@@ -156,7 +156,7 @@ export class DiscussionService {
     }
   }
 
-  // ─── Run completion → post summary to nearest discussion group ────────
+  // ─── Run completion → post work summary to nearest discussion group ────────
   private async onRunCompleted(event: DomainEvent): Promise<void> {
     const payload = event.payload as {
       runId: string;
@@ -164,10 +164,16 @@ export class DiscussionService {
       orgId: string;
       taskNodeId: string;
       tokenCount?: number;
+      summary?: string | null;
       error?: string;
     };
 
     try {
+      // Only post to discussion when there is meaningful content (summary or error)
+      const hasSummary = !!payload.summary?.trim();
+      const hasError = !!payload.error?.trim();
+      if (!hasSummary && !hasError) return;
+
       // Find the nearest discussion group by walking up the task tree (story or epic)
       const group = await this.findNearestDiscussionGroup(payload.taskNodeId);
       if (!group) {
@@ -178,16 +184,17 @@ export class DiscussionService {
         return;
       }
 
-      // Build summary message with task context
       const role = await this.roleRepo.findById(payload.roleId);
       const roleName = role?.name ?? 'Unknown Role';
       const task = await this.taskRepo.findById(payload.taskNodeId);
       const taskTitle = task?.title ?? 'Unknown Task';
-      const status = event.type === 'run:succeeded' ? 'succeeded' : 'failed';
-      const tokenLine = payload.tokenCount ? ` | Tokens: ${(payload.tokenCount / 1_000_000).toFixed(4)}M` : '';
-      const errorLine = payload.error ? `\nError: ${payload.error}` : '';
 
-      const content = `**[${taskTitle}]** Run ${status} by ${roleName}${tokenLine}${errorLine}`;
+      let content: string;
+      if (hasSummary) {
+        content = `**[${taskTitle}]** ${roleName}:\n${payload.summary!.trim()}`;
+      } else {
+        content = `**[${taskTitle}]** ${roleName} run failed\nError: ${payload.error}`;
+      }
 
       const postedMsg = await this.discussionRepo.postMessage({
         groupId: group.id,
@@ -200,7 +207,6 @@ export class DiscussionService {
       this.logger.info('Run summary posted to discussion', {
         groupId: group.id,
         runId: payload.runId,
-        status,
       });
 
       this.eventBus.emit({

@@ -31,6 +31,9 @@ export const IPC_CHANNELS = {
   // Dialogs
   selectFolder: 'capibara:dialog:select-folder',
 
+  // Shell
+  openFolder: 'capibara:shell:open-folder',
+
   // Templates
   getTemplates: 'capibara:template:get-all',
   loadTemplate: 'capibara:template:load',
@@ -281,6 +284,9 @@ export interface CapibaraApi {
 
   // Dialogs
   selectFolder: () => Promise<DesktopResult<string | null>>;
+
+  // Shell
+  openFolder: (folderPath: string) => Promise<DesktopResult<void>>;
 
   // Organization
   getOrganizations: () => Promise<DesktopResult<OrganizationRecord[]>>;

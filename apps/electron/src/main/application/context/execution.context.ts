@@ -172,7 +172,7 @@ export class ExecutionContext {
     const summary = messages.find(
       (m) => m.authorType === 'system'
         && m.authorRoleId === child.assigneeRoleId
-        && m.content.startsWith('**[') && m.content.includes('] Run '),
+        && m.content.startsWith('**['),
     );
 
     if (!summary) return null;

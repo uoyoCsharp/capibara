@@ -213,7 +213,7 @@ export async function bootstrap(): Promise<void> {
   const mcpConfigGen = new McpConfigGenerator(logger);
 
   const mcpToolRegistry = new McpToolRegistry(logger);
-  const mcpToolHandlers = new McpToolHandlers(taskRepo, roleRepo, discussionRepo, eventBus, logger, taskService);
+  const mcpToolHandlers = new McpToolHandlers(taskRepo, roleRepo, discussionRepo, eventBus, logger, runRepo, taskService);
   mcpToolHandlers.registerAll(mcpToolRegistry);
 
   const mcpIpcServer = new McpIpcServer(logger, mcpToolRegistry);
@@ -278,6 +278,7 @@ export async function bootstrap(): Promise<void> {
 
   // Wire conversation deps into existing services
   mcpToolHandlers.setConversationDeps(conversationWorkflowService, conversationWorkflowRepo, conversationEventLogger);
+  mcpToolHandlers.setExecutionEngine(executionEngine);
   discussionService.setConversationDeps(conversationWorkflowRepo, conversationWorkflowService);
   executionEngine.setConversationWorkflowRepo(conversationWorkflowRepo);
   executionContext.setConversationDeps(conversationWorkflowRepo, conversationContextBuilder);

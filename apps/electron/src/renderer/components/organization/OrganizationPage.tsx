@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, TreeStructure, Trash, CaretDown, CaretRight, FloppyDisk } from '@phosphor-icons/react';
+import { Plus, TreeStructure, Trash, CaretDown, CaretRight, FloppyDisk, FolderOpen } from '@phosphor-icons/react';
 import type {
   OrganizationRecord,
   RoleRecord,
@@ -231,15 +231,30 @@ export function OrganizationPage() {
               </Select>
             )}
             {currentOrg && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setShowDeleteOrg(true)}
-                title={t.organization.deleteOrganization}
-              >
-                <Trash size={16} />
-              </Button>
+              <>
+                {currentOrg.workspacePath && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={async () => {
+                      const result = await window.capibara.openFolder(currentOrg.workspacePath);
+                      if (!result.ok) toast.error(result.error.message);
+                    }}
+                    title={t.organization.openWorkspace}
+                  >
+                    <FolderOpen size={16} />
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setShowDeleteOrg(true)}
+                  title={t.organization.deleteOrganization}
+                >
+                  <Trash size={16} />
+                </Button>
+              </>
             )}
             <Button onClick={() => setShowTemplateSelector(true)}>
               <TreeStructure size={16} />

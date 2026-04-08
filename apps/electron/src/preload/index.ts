@@ -8,6 +8,9 @@ const api: CapibaraApi = {
   // Dialogs
   selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.selectFolder),
 
+  // Shell
+  openFolder: (folderPath) => ipcRenderer.invoke(IPC_CHANNELS.openFolder, folderPath),
+
   // Organization
   getOrganizations: () => ipcRenderer.invoke(IPC_CHANNELS.getOrganizations),
   getOrganization: (id) => ipcRenderer.invoke(IPC_CHANNELS.getOrganization, id),

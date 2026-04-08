@@ -9,7 +9,9 @@ import type { IConversationWorkflowService } from '@main/core/interfaces/i-conve
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
 import type { VoteTag } from '@main/core/types/domain.types.js';
 import type { RecipientTarget } from '@main/core/types/conversation.types.js';
+import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { TaskService } from '@main/application/tasks/task.service.js';
+import type { ExecutionEngine } from '@main/application/execution/execution.engine.js';
 import type { ConversationEventLogger } from '@main/infrastructure/persistence/sqlite/conversation-event.logger.js';
 import {
   TASK_REPO_TOKEN,
@@ -17,6 +19,7 @@ import {
   DISCUSSION_REPO_TOKEN,
   EVENT_BUS_TOKEN,
   LOGGER_TOKEN,
+  RUN_REPO_TOKEN,
 } from '@main/core/tokens.js';
 import { McpToolRegistry } from './mcp-tool-registry.js';
 
@@ -29,6 +32,7 @@ export class McpToolHandlers {
   private conversationService: IConversationWorkflowService | null = null;
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private conversationEventLogger: ConversationEventLogger | null = null;
+  private executionEngine: ExecutionEngine | null = null;
 
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -36,6 +40,7 @@ export class McpToolHandlers {
     @inject(DISCUSSION_REPO_TOKEN) private readonly discussionRepo: IDiscussionRepository,
     @inject(EVENT_BUS_TOKEN) private readonly eventBus: IEventBus,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
+    @inject(RUN_REPO_TOKEN) private readonly runRepo: IRunRepository,
     private readonly taskService: TaskService,
   ) {}
 
@@ -49,13 +54,17 @@ export class McpToolHandlers {
     this.conversationEventLogger = eventLogger ?? null;
   }
 
+  setExecutionEngine(engine: ExecutionEngine): void {
+    this.executionEngine = engine;
+  }
+
   registerAll(registry: McpToolRegistry): void {
-    registry.register('capibara_task_complete', (args) => this.taskComplete(args));
-    registry.register('capibara_task_create_child', (args) => this.taskCreateChild(args));
-    registry.register('capibara_discussion_post', (args) => this.discussionPost(args));
-    registry.register('capibara_context', (args) => this.context(args));
-    registry.register('capibara_task_review', (args) => this.taskReview(args));
-    registry.register('capibara_conversation', (args) => this.conversation(args));
+    registry.register('capibara_task_complete', (args, runId) => this.taskComplete(args));
+    registry.register('capibara_task_create_child', (args, runId) => this.taskCreateChild(args));
+    registry.register('capibara_discussion_post', (args, runId) => this.discussionPost(args));
+    registry.register('capibara_context', (args, runId) => this.context(args));
+    registry.register('capibara_task_review', (args, runId) => this.taskReview(args));
+    registry.register('capibara_conversation', (args, runId) => this.conversation(args, runId));
   }
 
   private async taskComplete(args: Record<string, unknown>): Promise<McpToolCallResult> {
@@ -299,20 +308,20 @@ export class McpToolHandlers {
     return null;
   }
 
-  private async conversation(args: Record<string, unknown>): Promise<McpToolCallResult> {
+  private async conversation(args: Record<string, unknown>, runId: string): Promise<McpToolCallResult> {
     const action = typeof args.action === 'string' ? args.action : '';
     if (action !== 'ask' && action !== 'resolve') {
       return { success: false, error: 'action must be "ask" or "resolve"' };
     }
 
     if (action === 'ask') {
-      return this.askQuestion(args);
+      return this.askQuestion(args, runId);
     } else {
-      return this.markConversationResolved(args);
+      return this.markConversationResolved(args, runId);
     }
   }
 
-  private async askQuestion(args: Record<string, unknown>): Promise<McpToolCallResult> {
+  private async askQuestion(args: Record<string, unknown>, runId: string): Promise<McpToolCallResult> {
     if (!this.conversationService) {
       return { success: false, error: 'Conversation service not initialized' };
     }
@@ -348,16 +357,24 @@ export class McpToolHandlers {
       }
     }
 
-    // Resolve current run for this task
-    const runId = (args._runId as string) ?? '';
-    const sessionId = (args._sessionId as string) ?? null;
+    // Resolve roleId and sessionId from the current run
+    if (!runId) {
+      this.logger.warn('conversation ask called without runId, falling back to task assignee', { taskId });
+    }
+    const run = runId ? await this.runRepo.findById(runId) : null;
+    const resolvedRoleId = run?.roleId ?? task.assigneeRoleId ?? '';
+    // Prefer in-memory sessionId (run still in-flight) over DB value
+    if (!this.executionEngine) {
+      this.logger.warn('executionEngine not set, sessionId resolution will fall back to DB', { runId });
+    }
+    const resolvedSessionId = this.executionEngine?.getRunSessionId(runId) ?? run?.sessionId ?? null;
 
     const workflow = await this.conversationService.createWorkflow({
       orgId: task.orgId,
       taskNodeId: taskId,
-      askingRoleId: (args._roleId as string) ?? task.assigneeRoleId ?? '',
+      askingRoleId: resolvedRoleId,
       askingRunId: runId,
-      askingSessionId: sessionId,
+      askingSessionId: resolvedSessionId,
       question,
       recipientTarget,
       urgency,
@@ -377,7 +394,7 @@ export class McpToolHandlers {
     };
   }
 
-  private async markConversationResolved(args: Record<string, unknown>): Promise<McpToolCallResult> {
+  private async markConversationResolved(args: Record<string, unknown>, runId: string): Promise<McpToolCallResult> {
     if (!this.conversationService || !this.conversationWorkflowRepo) {
       return { success: false, error: 'Conversation service not initialized' };
     }
@@ -389,7 +406,16 @@ export class McpToolHandlers {
       return { success: false, error: 'taskId is required and must be a string' };
     }
 
-    const roleId = typeof args._roleId === 'string' ? args._roleId : '';
+    // Resolve roleId from the current run
+    if (!runId) {
+      this.logger.warn('conversation resolve called without runId', { taskId });
+    }
+    const run = runId ? await this.runRepo.findById(runId) : null;
+    const roleId = run?.roleId ?? '';
+
+    if (!roleId) {
+      return { success: false, error: 'Could not resolve roleId from current run' };
+    }
 
     // Find active workflow for this task where asking role matches
     const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(roleId, taskId);

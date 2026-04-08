@@ -153,10 +153,13 @@ export class PromptBuilder implements IPromptBuilder {
     // capibara_conversation
     const showConversation: PromptScenario[] = [
       'conversation_resume', 'escalation_reply', 'revision', 'delegation_received',
-      'escalation_failure', 'dispute_arbitration', 'execute_decomposition', 'execute_leaf',
+      'escalation_failure', 'dispute_arbitration', 'propose_decomposition',
+      'execute_decomposition', 'execute_leaf',
     ];
     if (showConversation.includes(scenario)) {
-      lines.push(`- capibara_conversation: Ask a question (action="ask") or resolve a conversation (action="resolve"). Use taskId="${ids.task}"`);
+      lines.push(`- capibara_conversation: Manage conversations with other roles or humans.`);
+      lines.push(`  - action="ask": Ask your supervisor or a specific role for clarification. Use when requirements are unclear, you face a decision with multiple valid options, or you encounter a blocker. taskId="${ids.task}"`);
+      lines.push(`  - action="resolve": Mark a conversation as resolved after receiving and processing a reply. taskId="${ids.task}"`);
     }
 
     return lines.join('\n');
@@ -203,6 +206,13 @@ export class PromptBuilder implements IPromptBuilder {
       '## Instructions',
       `IMPORTANT: When calling MCP tools, always use the exact IDs from the sections above. Your task ID is "${ids.task}".`,
     ];
+
+    // Warn when task has no description — prompt AI to ask for requirements
+    const needsRequirements: PromptScenario[] = ['execute_leaf', 'execute_decomposition', 'propose_decomposition'];
+    if (!ctx.task.description?.trim() && needsRequirements.includes(scenario)) {
+      lines.push('');
+      lines.push(`**WARNING**: This task has no description. You SHOULD use capibara_conversation (action="ask", taskId="${ids.task}") to ask your supervisor for requirements before proceeding. Do not guess at requirements.`);
+    }
 
     switch (scenario) {
       case 'conversation_resume':
@@ -379,9 +389,9 @@ export class PromptBuilder implements IPromptBuilder {
       'Your previous work was reviewed and revision has been requested.',
       '',
       '1. Read the **Latest REVISE feedback** in the Discussion Context above carefully.',
-      '2. Address each point raised in the feedback.',
-      `3. When done, call capibara_task_complete with taskId="${ids.task}" and a summary of changes made.`,
-      `4. If the feedback is unclear or you need more context, use capibara_conversation (action="ask", taskId="${ids.task}") to ask the reviewer for clarification.`,
+      `2. If the feedback is unclear, contradictory, or you disagree with it, use capibara_conversation (action="ask", taskId="${ids.task}") to discuss with the reviewer BEFORE making changes.`,
+      '3. Address each point raised in the feedback.',
+      `4. When done, call capibara_task_complete with taskId="${ids.task}" and a summary of changes made.`,
     ].join('\n');
   }
 
@@ -440,12 +450,13 @@ export class PromptBuilder implements IPromptBuilder {
         `### Your role: Propose a decomposition plan for this ${parentLabel}`,
         'Your work requires human approval BEFORE creating child tasks.',
         `1. Analyze the ${parentLabel.toLowerCase()} requirements thoroughly.`,
-        `2. Design a decomposition plan: list the ${childLabel} you would create, their titles, descriptions, and which subordinate role should handle each.`,
+        `2. If the requirements are incomplete, vague, or contain contradictions, use capibara_conversation (action="ask", taskId="${ids.task}") to clarify with your supervisor BEFORE proposing a plan.`,
+        `3. Design a decomposition plan: list the ${childLabel} you would create, their titles, descriptions, and which subordinate role should handle each.`,
         ids.discussion
-          ? `3. Post your proposed plan using capibara_discussion_post with discussionGroupId="${ids.discussion}", authorRoleId="${ids.role}".`
-          : '3. Post your proposed plan using capibara_discussion_post (use the Discussion Group ID from the context above).',
-        '4. Your run will end naturally after posting the plan.',
-        '5. A human reviewer will approve or revise your plan. You will be re-awakened after approval.',
+          ? `4. Post your proposed plan using capibara_discussion_post with discussionGroupId="${ids.discussion}", authorRoleId="${ids.role}".`
+          : '4. Post your proposed plan using capibara_discussion_post (use the Discussion Group ID from the context above).',
+        '5. Your run will end naturally after posting the plan.',
+        '6. A human reviewer will approve or revise your plan. You will be re-awakened after approval.',
       ].join('\n');
     }
 
@@ -460,22 +471,22 @@ export class PromptBuilder implements IPromptBuilder {
     return [
       `### Your role: Decompose this ${parentLabel} into ${ChildLabel}`,
       approvalNote,
-      `1. Analyze the ${parentLabel.toLowerCase()} requirements and break them down into ${childLabel}.`,
+      `1. Review the ${parentLabel.toLowerCase()} requirements. If any aspect is unclear or ambiguous, use capibara_conversation (action="ask", taskId="${ids.task}") to ask your supervisor before decomposing.`,
       `2. Create each ${childType} using capibara_task_create_child with parentTaskId="${ids.task}" and ${childTypeHint}.`,
       `3. Assign each ${childType} to the most appropriate subordinate role using their role ID.`,
       `4. ${ChildLabel} will be executed sequentially in the order you create them.`,
       `5. After creating all ${childLabel}, call capibara_task_complete with taskId="${ids.task}" and a summary of the decomposition plan.`,
-      `6. If requirements are ambiguous or you need clarification on scope/priorities, use capibara_conversation (action="ask", taskId="${ids.task}") to ask your supervisor before decomposing.`,
     ].filter(Boolean).join('\n');
   }
 
   private instructLeaf(ids: PromptIds): string {
     return [
       '### Your role: Execute this task directly',
-      '1. Complete the assigned task by doing the actual implementation work.',
-      `2. When done, call capibara_task_complete with taskId="${ids.task}" and a detailed summary of your work.`,
-      '3. If the task is too large, you may create subtasks using capibara_task_create_child with type="subtask".',
-      `4. If you are blocked, unsure about requirements, or need clarification, use capibara_conversation (action="ask", taskId="${ids.task}") to ask your supervisor BEFORE guessing or proceeding blindly.`,
+      `1. Review the task requirements. If the description is missing or ambiguous, use capibara_conversation (action="ask", taskId="${ids.task}") to ask your supervisor for clarification BEFORE starting work.`,
+      '2. Complete the assigned task by doing the actual implementation work.',
+      `3. When done, call capibara_task_complete with taskId="${ids.task}" and a detailed summary of your work.`,
+      '4. If the task is too large, you may create subtasks using capibara_task_create_child with type="subtask".',
+      `5. If you encounter a blocker or need to make a decision that could go either way, use capibara_conversation (action="ask", taskId="${ids.task}") to ask your supervisor rather than guessing.`,
     ].join('\n');
   }
 }
