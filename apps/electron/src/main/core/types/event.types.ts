@@ -41,7 +41,9 @@ export type DomainEventType =
   | 'conversation:escalated'
   | 'conversation:timed-out'
   | 'conversation:resolved'
-  | 'conversation:cancelled';
+  | 'conversation:cancelled'
+  | 'schema:updated'
+  | 'behavior:executed';
 
 export interface DomainEvent<T = unknown> {
   type: DomainEventType;

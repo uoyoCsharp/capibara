@@ -136,11 +136,16 @@ export class PromptBuilder implements IPromptBuilder {
     // capibara_task_create_child
     const showCreateChild: PromptScenario[] = ['escalation_failure', 'execute_decomposition', 'execute_leaf'];
     if (showCreateChild.includes(scenario)) {
-      const isDecomposer = ctx.task.type === 'epic' || ctx.task.type === 'story';
+      const isDecomposer = ctx.taskTypeDef?.canDecompose ?? false;
       if (isDecomposer) {
-        lines.push(`- capibara_task_create_child: Create child tasks. Use parentTaskId="${ids.task}". Type hierarchy: epic→story|spike, story→task|bug|chore|spike, task→subtask`);
+        const hierarchyDesc = this.buildTypeHierarchyDescription(ctx);
+        lines.push(`- capibara_task_create_child: Create child tasks. Use parentTaskId="${ids.task}". Type hierarchy: ${hierarchyDesc}`);
       } else {
-        lines.push(`- capibara_task_create_child: Create subtasks if needed. Use parentTaskId="${ids.task}", type="subtask"`);
+        const allowedChildren = ctx.taskTypeDef?.allowedChildren ?? [];
+        const childHint = allowedChildren.length > 0
+          ? `type="${allowedChildren[0]}"${allowedChildren.length > 1 ? ` (or ${allowedChildren.slice(1).map(t => `"${t}"`).join(', ')})` : ''}`
+          : 'type="subtask"';
+        lines.push(`- capibara_task_create_child: Create subtasks if needed. Use parentTaskId="${ids.task}", ${childHint}`);
       }
     }
 
@@ -343,7 +348,7 @@ export class PromptBuilder implements IPromptBuilder {
 
     if (hasDecomposition) {
       lines.push('');
-      lines.push('For **decomposition tasks** (epic/story), evaluate the decomposition plan:');
+      lines.push('For **decomposition tasks**, evaluate the decomposition plan:');
       lines.push('- Are the child tasks well-structured and comprehensive? Do they cover the full scope?');
       lines.push('- Are tasks assigned to appropriate roles with the right expertise?');
       lines.push('- Is the sequencing logical? Are dependencies properly ordered?');
@@ -352,7 +357,7 @@ export class PromptBuilder implements IPromptBuilder {
 
     if (hasLeaf) {
       lines.push('');
-      lines.push('For **implementation tasks** (task/subtask/bug/chore/spike), evaluate the work output:');
+      lines.push('For **implementation tasks**, evaluate the work output:');
       lines.push('- Does the completed work align with the task description and acceptance criteria?');
       lines.push('- Are there any obvious issues, missing pieces, or quality concerns?');
       lines.push('- Are artifacts produced and paths recorded?');
@@ -365,11 +370,11 @@ export class PromptBuilder implements IPromptBuilder {
   }
 
   private instructRevision(ctx: PromptContext, ids: PromptIds): string {
-    const isDecomposer = ctx.task.type === 'epic' || ctx.task.type === 'story';
+    const isDecomposer = ctx.taskTypeDef?.canDecompose ?? false;
     const isProposalRevision = isDecomposer && !ctx.hasChildren;
 
     if (isProposalRevision) {
-      const label = ctx.task.type === 'epic' ? 'Epic' : 'Story';
+      const label = ctx.taskTypeDef?.label ?? ctx.task.type;
       const postStep = ids.discussion
         ? `3. Post the revised plan using capibara_discussion_post with discussionGroupId="${ids.discussion}", authorRoleId="${ids.role}".`
         : '3. Post the revised plan using capibara_discussion_post (use the Discussion Group ID from the context above).';
@@ -437,13 +442,14 @@ export class PromptBuilder implements IPromptBuilder {
   }
 
   private instructDecompose(ctx: PromptContext, ids: PromptIds, phase: 'propose' | 'execute'): string {
-    const isEpic = ctx.task.type === 'epic';
-    const parentLabel = isEpic ? 'Epic' : 'Story';
-    const childLabel = isEpic ? 'stories' : 'tasks';
-    const childType = isEpic ? 'story' : 'task';
-    const childTypeHint = isEpic
-      ? 'type="story"'
-      : 'type="task" (or "bug", "chore", "spike" as appropriate)';
+    const typeDef = ctx.taskTypeDef;
+    const parentLabel = typeDef?.label ?? ctx.task.type;
+    const allowedChildren = typeDef?.allowedChildren ?? [];
+    const primaryChildType = allowedChildren[0] ?? 'task';
+    const childLabel = allowedChildren.length > 0 ? allowedChildren.join('/') + 's' : 'tasks';
+    const childTypeHint = allowedChildren.length <= 1
+      ? `type="${primaryChildType}"`
+      : `type="${primaryChildType}" (or ${allowedChildren.slice(1).map(t => `"${t}"`).join(', ')} as appropriate)`;
 
     if (phase === 'propose') {
       return [
@@ -472,11 +478,20 @@ export class PromptBuilder implements IPromptBuilder {
       `### Your role: Decompose this ${parentLabel} into ${ChildLabel}`,
       approvalNote,
       `1. Review the ${parentLabel.toLowerCase()} requirements. If any aspect is unclear or ambiguous, use capibara_conversation (action="ask", taskId="${ids.task}") to ask your supervisor before decomposing.`,
-      `2. Create each ${childType} using capibara_task_create_child with parentTaskId="${ids.task}" and ${childTypeHint}.`,
-      `3. Assign each ${childType} to the most appropriate subordinate role using their role ID.`,
+      `2. Create each child using capibara_task_create_child with parentTaskId="${ids.task}" and ${childTypeHint}.`,
+      `3. Assign each child to the most appropriate subordinate role using their role ID.`,
       `4. ${ChildLabel} will be executed sequentially in the order you create them.`,
       `5. After creating all ${childLabel}, call capibara_task_complete with taskId="${ids.task}" and a summary of the decomposition plan.`,
     ].filter(Boolean).join('\n');
+  }
+
+  private buildTypeHierarchyDescription(ctx: PromptContext): string {
+    const types = ctx.allItemTypes ?? [];
+    if (types.length === 0) return '(no type hierarchy defined)';
+    return types
+      .filter((t) => t.allowedChildren.length > 0)
+      .map((t) => `${t.name}→${t.allowedChildren.join('|')}`)
+      .join(', ');
   }
 
   private instructLeaf(ids: PromptIds): string {

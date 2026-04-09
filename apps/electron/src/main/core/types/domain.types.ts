@@ -5,17 +5,10 @@ export type OrgStatus = 'active' | 'paused' | 'archived';
 export type RoleStatus = 'active' | 'paused' | 'idle';
 
 // ─── Task Types & Status ────────────────────────────────────────────
-export type TaskType = 'epic' | 'story' | 'task' | 'subtask' | 'spike' | 'bug' | 'chore';
+// Schema-driven: validated at runtime by WorkflowEngine, not at compile time.
+export type TaskType = string;
 
-export type TaskStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'awaiting_review'
-  | 'revision'
-  | 'approved'
-  | 'done'
-  | 'blocked'
-  | 'cancelled';
+export type TaskStatus = string;
 
 // ─── Vote Tags ──────────────────────────────────────────────────────
 export type VoteTag = 'APPROVE' | 'REVISE' | 'CONCERN' | 'DELEGATE' | null;

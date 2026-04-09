@@ -8,9 +8,11 @@ import type {
   TaskStatus,
   TaskType,
   CreateTaskInput,
+  UpdateTaskStatusInput,
   RunStatus,
 } from '@shared/contracts';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
+import { useWorkflowSchema } from '../../hooks/useWorkflowSchema';
 import { useT } from '../../hooks/useLocale';
 import { cn } from '../../lib/utils';
 import { TaskTreeView } from '../tasks/TaskTreeView';
@@ -155,6 +157,7 @@ export function ExecutionPage() {
     parentId: string | null;
     parentType: TaskType | null;
   }>({ open: false, parentId: null, parentType: null });
+  const schemaHelpers = useWorkflowSchema(currentOrgId);
 
   const loadOrgs = useCallback(async () => {
     try {
@@ -259,12 +262,11 @@ export function ExecutionPage() {
   const filteredTasks = useMemo(() => {
     if (!hideCompleted) return tasks;
     // Keep tasks that are NOT in a terminal state, plus keep parents of visible tasks
-    const completedStatuses = new Set<TaskStatus>(['done', 'cancelled']);
     const visibleIds = new Set<string>();
 
     // First pass: identify non-completed tasks
     for (const task of tasks) {
-      if (!completedStatuses.has(task.status)) {
+      if (!schemaHelpers.isTerminalStatus(task.status)) {
         visibleIds.add(task.id);
       }
     }
@@ -285,7 +287,7 @@ export function ExecutionPage() {
     }
 
     return tasks.filter((t) => visibleIds.has(t.id));
-  }, [tasks, hideCompleted]);
+  }, [tasks, hideCompleted, schemaHelpers]);
 
   const handleCreateTask = async (input: CreateTaskInput) => {
     try {
@@ -299,7 +301,7 @@ export function ExecutionPage() {
 
   const handleStatusChange = async (id: string, status: TaskStatus) => {
     try {
-      const result = await window.capibara.updateTaskStatus({ id, status });
+      const result = await window.capibara.updateTaskStatus({ id, status } as UpdateTaskStatusInput);
       if (result.ok) {
         await loadTasks();
       }
@@ -452,30 +454,22 @@ export function ExecutionPage() {
             {tasks.length > 0 && (
               <div className="flex items-center gap-5 mb-[var(--section-gap)] text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{tasks.length} {t.tasksExecution.tasksCount}</span>
-                {statusCounts['done'] && (
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-green-500" />
-                    {statusCounts['done']} {t.tasksExecution.doneCount}
-                  </span>
-                )}
-                {statusCounts['in_progress'] && (
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-yellow-500" />
-                    {statusCounts['in_progress']} {t.tasksExecution.inProgressCount}
-                  </span>
-                )}
-                {statusCounts['blocked'] && (
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-destructive" />
-                    {statusCounts['blocked']} {t.tasksExecution.blockedCount}
-                  </span>
-                )}
-                {statusCounts['pending'] && (
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-muted-foreground" />
-                    {statusCounts['pending']} {t.tasksExecution.pendingCount}
-                  </span>
-                )}
+                {(schemaHelpers.schema?.statuses ?? []).map((statusDef) => {
+                  const count = statusCounts[statusDef.name];
+                  if (!count) return null;
+                  const dotColor =
+                    statusDef.name === 'blocked' ? 'bg-destructive' :
+                    statusDef.category === 'terminal' ? 'bg-green-500' :
+                    statusDef.category === 'active' ? 'bg-yellow-500' :
+                    statusDef.category === 'review' ? 'bg-orange-500' :
+                    'bg-muted-foreground';
+                  return (
+                    <span key={statusDef.name} className="flex items-center gap-1">
+                      <span className={cn('w-2 h-2 rounded-full', dotColor)} />
+                      {count} {statusDef.label}
+                    </span>
+                  );
+                })}
                 <span className="flex-1" />
                 <Button
                   variant="ghost"
@@ -504,6 +498,7 @@ export function ExecutionPage() {
                   onDeleteTask={handleDeleteTask}
                   onStatusChange={handleStatusChange}
                   roleNames={roleNames}
+                  schema={schemaHelpers.schema}
                 />
               </CardContent>
             </Card>
@@ -558,6 +553,7 @@ export function ExecutionPage() {
           onStatusChange={handleStatusChange}
           onDelete={handleDeleteTask}
           onStartRun={handleStartRun}
+          schemaHelpers={schemaHelpers}
           hasActiveRun={
             selectedTask.assigneeRoleId
               ? runs.some(
@@ -577,6 +573,7 @@ export function ExecutionPage() {
           parentId={createModal.parentId}
           parentType={createModal.parentType}
           roles={roles}
+          allowedTypes={schemaHelpers.getAllowedTypes(createModal.parentType)}
           onClose={() => setCreateModal({ open: false, parentId: null, parentType: null })}
           onSubmit={handleCreateTask}
         />

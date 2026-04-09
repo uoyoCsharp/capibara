@@ -11,6 +11,7 @@ import type {
 } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { DiscussionGroupPanel } from './DiscussionGroupPanel';
+import { useWorkflowSchema } from '../../hooks/useWorkflowSchema';
 import { toast } from '../../store/toast.store';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -27,6 +28,7 @@ export function DiscussionPage() {
   const [messages, setMessages] = useState<DiscussionMessageRecord[]>([]);
   const [voteStats, setVoteStats] = useState<VoteStatsRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const schemaHelpers = useWorkflowSchema(currentOrgId);
 
   const loadOrgs = useCallback(async () => {
     try {
@@ -112,11 +114,11 @@ export function DiscussionPage() {
   /** Check if a discussion group's task is awaiting human approval */
   const needsHumanApproval = useCallback((group: DiscussionGroupRecord): boolean => {
     const task = taskMap.get(group.taskNodeId);
-    if (!task || task.status !== 'awaiting_review') return false;
+    if (!task || !schemaHelpers.isReviewStatus(task.status)) return false;
     if (!task.assigneeRoleId) return false;
     const role = roleMap.get(task.assigneeRoleId);
     return role?.requiresHumanApproval === true;
-  }, [taskMap, roleMap]);
+  }, [taskMap, roleMap, schemaHelpers]);
 
   const handlePostMessage = async (content: string, voteTag: VoteTag) => {
     if (!selectedGroupId) return;
@@ -234,12 +236,8 @@ export function DiscussionPage() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5 min-w-0">
                       {task?.type && (
-                        <Badge variant="outline" className={cn(
-                          'text-[10px] shrink-0 capitalize',
-                          task.type === 'epic' && 'bg-purple-500/15 text-purple-600 border-purple-500/30',
-                          task.type === 'story' && 'bg-blue-500/15 text-blue-600 border-blue-500/30',
-                        )}>
-                          {task.type}
+                        <Badge variant="outline" className="text-[10px] shrink-0 capitalize">
+                          {schemaHelpers.typeLabel(task.type)}
                         </Badge>
                       )}
                       <span className="text-sm font-medium text-foreground truncate">

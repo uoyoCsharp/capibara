@@ -83,6 +83,12 @@ export const IPC_CHANNELS = {
   updateSetting: 'capibara:settings:update',
   getLocale: 'capibara:settings:get-locale',
 
+  // Workflow Schema
+  getActiveSchema: 'capibara:schema:get-active',
+  saveSchema: 'capibara:schema:save',
+  validateSchema: 'capibara:schema:validate',
+  schemaImpactAnalysis: 'capibara:schema:impact-analysis',
+
   // Conversation
   getActiveConversations: 'capibara:conversation:list-active',
   getConversationHistory: 'capibara:conversation:get-history',
@@ -114,6 +120,7 @@ export type DesktopEvent =
   | { type: 'approval:required'; taskId: string; taskTitle: string; orgId: string; roleId: string; roleName: string; groupId: string }
   | { type: 'budget:roles-paused'; orgId: string; totalTokens: number; budgetLimit: number }
   | { type: 'settings:locale-changed'; locale: string }
+  | { type: 'schema:updated'; orgId: string }
   | { type: 'conversation:question-posted'; orgId: string; workflowId: string; askingRoleName: string; questionPreview: string; urgency: 'normal' | 'urgent'; respondentType: 'ai' | 'human' }
   | { type: 'conversation:resolved'; orgId: string; workflowId: string }
   | { type: 'conversation:cancelled'; orgId: string; workflowId: string }
@@ -205,7 +212,7 @@ export const loadTemplateSchema = z.object({
 export const createTaskSchema = z.object({
   orgId: z.string().min(1),
   parentId: z.string().nullable().default(null),
-  type: z.enum(['epic', 'story', 'task', 'subtask', 'spike', 'bug', 'chore']),
+  type: z.string().min(1),
   title: z.string().min(1).max(300),
   description: z.string().max(10000).default(''),
   assigneeRoleId: z.string().nullable().default(null),
@@ -213,7 +220,7 @@ export const createTaskSchema = z.object({
 
 export const updateTaskStatusSchema = z.object({
   id: z.string().min(1),
-  status: z.enum(['pending', 'in_progress', 'awaiting_review', 'revision', 'approved', 'done', 'blocked', 'cancelled']),
+  status: z.string().min(1),
 });
 
 export const postDiscussionMessageSchema = z.object({
@@ -258,6 +265,55 @@ export const updateSettingSchema = z.object({
 export const cancelConversationSchema = z.object({
   workflowId: z.string().min(1),
 });
+
+// ─── Workflow Schema Zod Schemas ─────────────────────────────────────
+export const saveSchemaSchema = z.object({
+  orgId: z.string().min(1),
+  schema: z.object({
+    workItemTypes: z.array(z.object({
+      name: z.string().min(1).regex(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/, 'Type name must be kebab-case'),
+      label: z.string().min(1),
+      icon: z.string().optional(),
+      color: z.string().optional(),
+      isLeaf: z.boolean(),
+      allowedChildren: z.array(z.string()),
+      allowedAtRoot: z.boolean(),
+      canDecompose: z.boolean(),
+      hasDiscussionGroup: z.boolean(),
+    })),
+    statuses: z.array(z.object({
+      name: z.string().min(1),
+      label: z.string().min(1),
+      category: z.enum(['initial', 'active', 'review', 'terminal']),
+    })),
+    transitions: z.array(z.object({
+      from: z.string().min(1),
+      to: z.string().min(1),
+      trigger: z.enum(['manual', 'auto', 'system']),
+    })),
+    behaviorRules: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      priority: z.number().int(),
+      trigger: z.discriminatedUnion('type', [
+        z.object({ type: z.literal('on_status_enter'), status: z.string().min(1) }),
+        z.object({ type: z.literal('on_task_created') }),
+        z.object({ type: z.literal('on_all_children_terminal') }),
+        z.object({ type: z.literal('on_children_of_type_terminal'), childTypes: z.array(z.string().min(1)) }),
+      ]),
+      condition: z.object({ type: z.string().min(1) }).passthrough(),
+      action: z.discriminatedUnion('type', [
+        z.object({ type: z.literal('auto_transition'), targetStatus: z.string().min(1) }),
+        z.object({ type: z.literal('wake_assignee'), trigger: z.string().min(1) }),
+        z.object({ type: z.literal('wake_parent_assignee'), trigger: z.string().min(1) }),
+        z.object({ type: z.literal('skip_propagation') }),
+        z.object({ type: z.literal('create_discussion_group') }),
+      ]),
+    })),
+  }),
+});
+
+export type SaveSchemaInput = z.infer<typeof saveSchemaSchema>;
 
 export type CancelConversationInput = z.infer<typeof cancelConversationSchema>;
 
@@ -359,6 +415,12 @@ export interface CapibaraApi {
   updateSetting: (input: UpdateSettingInput) => Promise<DesktopResult<void>>;
   getLocale: () => Promise<DesktopResult<string>>;
 
+  // Workflow Schema
+  getActiveSchema: (orgId: string) => Promise<DesktopResult<WorkflowSchemaRecord>>;
+  saveSchema: (input: SaveSchemaInput) => Promise<DesktopResult<SchemaImpactReportRecord | null>>;
+  validateSchema: (input: SaveSchemaInput) => Promise<DesktopResult<string[]>>;
+  schemaImpactAnalysis: (input: SaveSchemaInput) => Promise<DesktopResult<SchemaImpactReportRecord | null>>;
+
   // Conversation
   getActiveConversations: (orgId: string) => Promise<DesktopResult<ConversationWorkflowRecord[]>>;
   getConversationHistory: (workflowId: string) => Promise<DesktopResult<DiscussionMessageRecord[]>>;
@@ -376,16 +438,9 @@ export type OrgStatus = 'active' | 'paused' | 'archived';
 export type RoleStatus = 'active' | 'paused' | 'idle';
 export type SkillCategory = 'analysis' | 'design' | 'implementation' | 'review' | 'test' | 'general';
 export type SkillSource = 'builtin' | 'template' | 'custom';
-export type TaskType = 'epic' | 'story' | 'task' | 'subtask' | 'spike' | 'bug' | 'chore';
-export type TaskStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'awaiting_review'
-  | 'revision'
-  | 'approved'
-  | 'done'
-  | 'blocked'
-  | 'cancelled';
+// Schema-driven: validated at runtime by WorkflowEngine
+export type TaskType = string;
+export type TaskStatus = string;
 
 export interface OrganizationRecord {
   id: string;
@@ -668,6 +723,44 @@ export interface EscalationHotspot {
 export interface DepthBucket {
   depth: number;
   count: number;
+}
+
+// ─── Workflow Schema Records ─────────────────────────────────────────
+export interface WorkflowSchemaRecord {
+  workItemTypes: Array<{
+    name: string;
+    label: string;
+    icon?: string;
+    color?: string;
+    isLeaf: boolean;
+    allowedChildren: string[];
+    allowedAtRoot: boolean;
+    canDecompose: boolean;
+    hasDiscussionGroup: boolean;
+  }>;
+  statuses: Array<{
+    name: string;
+    label: string;
+    category: 'initial' | 'active' | 'review' | 'terminal';
+  }>;
+  transitions: Array<{
+    from: string;
+    to: string;
+    trigger: 'manual' | 'auto' | 'system';
+  }>;
+  behaviorRules: Array<{
+    id: string;
+    name: string;
+    priority: number;
+    trigger: Record<string, unknown>;
+    condition: Record<string, unknown>;
+    action: Record<string, unknown>;
+  }>;
+}
+
+export interface SchemaImpactReportRecord {
+  affectedTaskCount: number;
+  details: Array<{ taskId: string; type: string; status: string }>;
 }
 
 export interface ConversationAnalyticsRecord {

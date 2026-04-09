@@ -3,8 +3,10 @@ import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import { IPC_CHANNELS, createOrganizationSchema, updateOrganizationSchema, deleteOrganizationSchema } from '@shared/contracts.js';
 import type { DesktopResult } from '@shared/contracts.js';
 import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { Organization } from '@main/core/types/domain.types.js';
+import { DEFAULT_WORKFLOW_SCHEMA } from '@main/application/workflow/default-workflow-schema.js';
 
 function ok<T>(data: T): DesktopResult<T> {
   return { ok: true, data };
@@ -28,6 +30,7 @@ function validateWorkspacePath(path: string): string | null {
 export function registerOrganizationHandlers(
   orgRepo: IOrganizationRepository,
   logger: ILogger,
+  workflowEngine?: IWorkflowEngine,
 ): void {
   ipcMain.handle(IPC_CHANNELS.selectFolder, async () => {
     try {
@@ -102,6 +105,17 @@ export function registerOrganizationHandlers(
         return fail('INVALID_WORKSPACE_PATH', pathError);
       }
       const org = await orgRepo.create(parsed.data);
+
+      // Initialize default workflow schema for new organization
+      if (workflowEngine) {
+        try {
+          await workflowEngine.saveSchema(org.id, DEFAULT_WORKFLOW_SCHEMA);
+          logger.info('Default workflow schema created for org', { orgId: org.id });
+        } catch (schemaErr) {
+          logger.error('Failed to create default schema for org', { orgId: org.id, error: String(schemaErr) });
+        }
+      }
+
       return ok(org);
     } catch (err) {
       logger.error('Failed to create organization', { error: String(err) });

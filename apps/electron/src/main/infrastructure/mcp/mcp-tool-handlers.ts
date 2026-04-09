@@ -10,6 +10,7 @@ import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-co
 import type { VoteTag } from '@main/core/types/domain.types.js';
 import type { RecipientTarget } from '@main/core/types/conversation.types.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { TaskService } from '@main/application/tasks/task.service.js';
 import type { ExecutionEngine } from '@main/application/execution/execution.engine.js';
 import type { ConversationEventLogger } from '@main/infrastructure/persistence/sqlite/conversation-event.logger.js';
@@ -33,6 +34,7 @@ export class McpToolHandlers {
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private conversationEventLogger: ConversationEventLogger | null = null;
   private executionEngine: ExecutionEngine | null = null;
+  private workflowEngine: IWorkflowEngine | null = null;
 
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -56,6 +58,10 @@ export class McpToolHandlers {
 
   setExecutionEngine(engine: ExecutionEngine): void {
     this.executionEngine = engine;
+  }
+
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
   }
 
   registerAll(registry: McpToolRegistry): void {
@@ -84,7 +90,10 @@ export class McpToolHandlers {
       return { success: false, error: `Task ${taskId} not found` };
     }
 
-    if (currentTask.status === 'approved' || currentTask.status === 'done' || currentTask.status === 'cancelled') {
+    const isTerminal = this.workflowEngine
+      ? await this.workflowEngine.isTerminalStatus(currentTask.orgId, currentTask.status)
+      : false;
+    if (isTerminal) {
       this.logger.info('task_complete called but task already in terminal state, skipping transition', {
         taskId,
         currentStatus: currentTask.status,
@@ -112,10 +121,18 @@ export class McpToolHandlers {
       return { success: false, error: 'Parent task not found' };
     }
 
-    const validChildTypes = ['story', 'task', 'subtask', 'spike', 'bug', 'chore'];
     const childType = (typeof args.type === 'string' ? args.type : null) ?? 'task';
-    if (!validChildTypes.includes(childType)) {
-      return { success: false, error: `Invalid task type: "${childType}". Must be one of: ${validChildTypes.join(', ')}` };
+
+    // Validate child type via WorkflowEngine (schema-driven)
+    if (this.workflowEngine) {
+      const parentTypeDef = await this.workflowEngine.getItemTypeDefinition(parentTask.orgId, parentTask.type);
+      if (parentTypeDef?.isLeaf || (parentTypeDef && parentTypeDef.allowedChildren.length === 0)) {
+        return { success: false, error: `Type "${parentTask.type}" does not allow child tasks` };
+      }
+      const allowedChildren = parentTypeDef?.allowedChildren ?? [];
+      if (allowedChildren.length > 0 && !allowedChildren.includes(childType)) {
+        return { success: false, error: `Invalid child type: "${childType}" under "${parentTask.type}". Allowed: ${allowedChildren.join(', ')}` };
+      }
     }
 
     try {
@@ -231,8 +248,11 @@ export class McpToolHandlers {
       return { success: false, error: `Task ${taskId} not found` };
     }
 
-    if (task.status !== 'awaiting_review') {
-      return { success: false, error: `Task ${taskId} is not awaiting review (status: ${task.status})` };
+    const isReview = this.workflowEngine
+      ? await this.workflowEngine.isReviewStatus(task.orgId, task.status)
+      : task.status === 'awaiting_review';
+    if (!isReview) {
+      return { success: false, error: `Task ${taskId} is not in a review status (status: ${task.status})` };
     }
 
     // Authorization: reviewer must be the parent task's assignee
@@ -291,15 +311,21 @@ export class McpToolHandlers {
     }
   }
 
-  /** Walk up task tree to find nearest discussion group (story or epic). */
+  /** Walk up task tree to find nearest discussion group (schema-driven via hasDiscussionGroup). */
   private async findNearestDiscussionGroup(taskId: string): Promise<{ id: string; currentRound: number } | null> {
     const task = await this.taskRepo.findById(taskId);
     if (!task) return null;
-    let currentId: string | null = (task.type === 'story' || task.type === 'epic') ? task.id : task.parentId;
+    const taskTypeDef = this.workflowEngine
+      ? await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type)
+      : null;
+    let currentId: string | null = taskTypeDef?.hasDiscussionGroup ? task.id : task.parentId;
     while (currentId) {
       const t = await this.taskRepo.findById(currentId);
       if (!t) return null;
-      if (t.type === 'story' || t.type === 'epic') {
+      const typeDef = this.workflowEngine
+        ? await this.workflowEngine.getItemTypeDefinition(t.orgId, t.type)
+        : null;
+      if (typeDef?.hasDiscussionGroup) {
         const group = await this.discussionRepo.findGroupByTaskNodeId(t.id);
         if (group) return group;
       }

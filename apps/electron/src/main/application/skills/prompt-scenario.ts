@@ -46,7 +46,7 @@ export function resolveScenario(ctx: PromptContext): PromptScenario {
   // review_requested + children=0 falls through to normal execution
 
   // ── Normal execution (task_assigned, review_approve, etc) ──
-  const isDecomposer = ctx.task.type === 'epic' || ctx.task.type === 'story';
+  const isDecomposer = ctx.taskTypeDef?.canDecompose ?? false;
   if (isDecomposer) {
     const needsApproval = ctx.role.requiresHumanApproval === true;
     const hasApproval = ctx.task.status === 'approved'

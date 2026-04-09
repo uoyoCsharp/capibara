@@ -213,7 +213,7 @@ export const enUS: LocaleMessages = {
   },
   tasksExecution: {
     title: 'Tasks & Execution',
-    subtitle: 'View and manage your task tree. Create epics, stories, and track execution progress.',
+    subtitle: 'View and manage your task tree. Create work items and track execution progress.',
     noOrgMessage: 'Create an organization first to start managing tasks. Organizations let you define AI agent teams and assign work.',
     newTask: 'New Task',
     tasksTab: 'Tasks',
@@ -288,15 +288,15 @@ export const enUS: LocaleMessages = {
     approvalRequired: 'Approval required',
   },
   taskTree: {
-    emptyMessage: 'Your task board is empty. Create an epic to organize your project — epics contain stories, which break down into individual tasks for AI agents.',
-    createEpic: 'Create Epic',
+    emptyMessage: 'Your task board is empty. Create a work item to get started.',
+    createTask: 'Create Task',
     deleteConfirm: 'Delete Task?',
     deleteMessage: 'This will permanently delete this task and may affect child tasks. This action cannot be undone.',
   },
   discussions: {
     title: 'Discussions',
-    noOrgMessage: 'Create an organization first to start discussions. Discussions are automatically created for epic and story tasks, where AI agents debate and vote on decisions.',
-    noDiscussionsMessage: 'No discussions yet. Discussions appear automatically when you create epic or story tasks in the Execution tab.',
+    noOrgMessage: 'Create an organization first to start discussions. Discussions are automatically created for tasks with discussion groups, where AI agents debate and vote on decisions.',
+    noDiscussionsMessage: 'No discussions yet. Discussions appear automatically when you create tasks with discussion groups in the Execution tab.',
     selectDiscussionMessage: 'Select a discussion to view the conversation, see how AI agents voted, and add your own input.',
     unknownEpic: 'Unknown Task',
     system: 'System',

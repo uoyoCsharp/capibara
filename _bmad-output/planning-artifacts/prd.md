@@ -1,8 +1,8 @@
 ---
 document_type: 'product-requirements'
 project_name: 'capibara'
-version: '2.1'
-date: '2026-04-08'
+version: '2.2'
+date: '2026-04-09'
 status: 'draft'
 authors: ['uoyo', 'AI Facilitator']
 sources:
@@ -105,17 +105,17 @@ The system shall support dynamic organization tree modeling:
 
 **Priority: MVP**
 
-The system shall support a variable-depth task tree:
+The system shall support a variable-depth task tree with schema-driven work item types:
 
-- **Task Node Types**: `epic` / `story` / `task` / `subtask` / `spike` / `bug` / `chore` (type labels, not fixed layers)
-- **Variable Depth**: Tree depth is free; "Epic -> Task" and "Epic -> Story -> Task -> Subtask" are both valid
-- **Task State Machine**: `pending` -> `in_progress` -> `awaiting_review` -> `revision` -> `approved` -> `done` + `blocked` / `cancelled`
-- **Blocked State Recovery**: When a task enters `blocked` status (e.g., retry exhaustion or delegation), the user can recover it through the UI:
-  - **Retry**: Transitions task from `blocked` to `in_progress` and automatically triggers a new execution run
-  - **Cancel**: Transitions task from `blocked` to `cancelled`
-  - The status dropdown only displays valid transition targets based on the current state, preventing invalid state changes
+- **Task Node Types**: User-defined via WorkflowSchema at the organization level. Each type is a `WorkItemTypeDefinition` with properties: `name` (kebab-case identifier), `label` (display name, i18n), `icon`, `color`, `isLeaf` (cannot have children), `allowedChildren` (permitted child type names), `allowedAtRoot` (can be top-level), `canDecompose` (supports decomposition behavior), `hasDiscussionGroup` (auto-creates discussion group). The system provides a default schema template equivalent to the classic types (epic/story/task/subtask/spike/bug/chore).
+- **Variable Depth**: Tree depth is free; hierarchy rules are defined by `allowedChildren` in each type definition
+- **Task State Machine**: User-defined via WorkflowSchema. Each status carries a `category` classification (`initial` / `active` / `review` / `terminal`). Transitions are defined as `TransitionDefinition` with trigger types (`manual` / `auto` / `system`). Exactly one `initial` status and at least one `terminal` status required per schema.
+- **Blocked State Recovery**: When a task enters a blocked status (e.g., retry exhaustion or delegation), the user can recover it through the UI:
+  - **Retry**: Transitions task to an active-category status and automatically triggers a new execution run
+  - **Cancel**: Transitions task to a terminal-category status
+  - The status dropdown only displays valid manual transition targets based on the current state, preventing invalid state changes
 - **AI Auto-Creation**: AI roles create and assign sub-tasks via Agent API
-- **Auto Status Propagation**: When all sibling tasks complete, parent role is automatically awakened for review/summarization
+- **Auto Status Propagation**: Driven by BehaviorEngine rules (Trigger-Condition-Action model). Users can define rules such as "when all children reach terminal category, auto-transition parent to done". Default schema includes rules equivalent to current hardcoded behavior.
 - **Task Assignment**: Each TaskNode has an `assigneeRoleId` binding to one organization role
 - **Artifact Storage**: Each task's output artifacts are stored and referenced by downstream tasks
 
@@ -137,7 +137,7 @@ The system shall provide intelligent task decomposition guidance:
 The system shall support Epic-based discussion groups as the primary collaboration and decision mechanism:
 
 - **Auto-Creation**: A DiscussionGroup is automatically created and bound to a TaskNode when any of the following conditions are met:
-  - Task type is `epic` or `story`
+  - Task type has `hasDiscussionGroup: true` in its WorkItemTypeDefinition (default schema: epic and story)
   - Task's assignee role has `requiresHumanApproval=true` (regardless of task type)
 - **Implicit Membership**: Any role can post messages and vote in a discussion group; membership is implicit based on participation rather than an explicit join mechanism
 - **Structured Vote Tags**: Messages carry a `voteTag` field (structured data, not text parsing):
@@ -150,22 +150,21 @@ The system shall support Epic-based discussion groups as the primary collaborati
 - **Dispute Detection**: When N CONCERN votes accumulate with 0 APPROVE votes over M rounds, the parent role is automatically awakened to intervene
 - **Discussion Auto-Summary**: System auto-generates/updates discussion summaries. When a role is awakened, its prompt receives the summary + last 3 messages, not the full history
 - **Human Participation**: Human users can send messages and vote in any discussion group with equal authority to AI roles
-- **Discussion Group Lifecycle**: Active while Epic is in progress; archived when Epic reaches `done` status
+- **Discussion Group Lifecycle**: Active while the bound task is in progress; archived when the task reaches a terminal-category status
 
 ### FR-05: Consensus Detection & Vote Processing
 
 **Priority: MVP**
 
-The system shall implement hardcoded consensus detection logic:
+The system shall implement consensus detection logic with schema-driven status transitions:
 
 - **Review Round Isolation**: Each discussion group tracks a `currentRound` counter. Vote statistics are scoped to the current round only — votes from previous rounds do not participate in consensus evaluation. When a revision is triggered, `currentRound` is incremented, effectively isolating the new voting cycle from prior rounds.
 - `APPROVE` processing: Track all `canApprove` role votes in the current round; auto-approve when unanimous
-- `REVISE` processing: Set task status to `revision`, increment review round, awaken assignee with revision feedback
+- `REVISE` processing: Transition task to revision status (schema-defined), increment review round, awaken assignee with revision feedback
 - `REVISE` cycle protection: Track `reviseCount` per discussion group (persisted); escalate to parent role after `maxReviseAttempts` (default 3)
 - `CONCERN` processing: Non-blocking; accumulate for dispute detection
-- `DELEGATE` processing: Create new TaskNode, set original task to `blocked`, awaken target role
-- MVP: Rules hardcoded in ConsensusDetector and OrgOrchestrator services
-- V2: Abstract into declarative rules engine
+- `DELEGATE` processing: Create new TaskNode, set original task to blocked status, awaken target role
+- MVP: Consensus core logic (vote processing, round management) hardcoded in ConsensusDetector; status transitions and auto-propagation behaviors driven by BehaviorEngine
 
 ### FR-06: Execution Engine
 
@@ -191,7 +190,7 @@ The system shall implement an event-driven wake-up cycle:
 - **Gate Checks**: Role status (active), budget not exceeded, no active Run
 - **Pending Wake Queue**: If role is busy when wake event arrives, queue it with a priority level (don't lose the signal). Priority levels: 0 (default), 1 (discussion_reply), 2 (conversation_escalation). Higher-priority wakes are consumed first.
 - **Self-Wake Circuit Breaker**: MAX_CONSECUTIVE_WAKES limit to prevent infinite loops; escalate on breach
-- **Wake Target Calculation**: Based on event type, determine which role(s) to wake
+- **Wake Target Calculation**: Based on event type and WorkflowSchema type semantics (e.g., `canDecompose`, `isLeaf`), determine which role(s) to wake via WorkflowEngine queries
 
 ### FR-08: Human Intervention (Per-Role)
 
@@ -285,6 +284,22 @@ The system shall support multilingual user interface:
 - **Scope**: All static UI strings (navigation labels, button text, status labels, error messages, placeholder text) are translated
 - **Narrative Engine Integration**: The Narrative Engine's LLM polish layer receives the user's language preference and generates narratives in the selected language
 - **Desktop Notifications**: Notification text follows the user's language preference
+
+### FR-15: Custom Workflow Definition
+
+**Priority: MVP**
+
+The system shall support organization-level custom workflow definitions:
+
+- **WorkflowSchema**: Each organization has one active WorkflowSchema containing work item type definitions, status definitions, transition definitions, and behavior rules
+- **Custom Work Item Types**: Users define types with hierarchy rules (`allowedChildren`, `allowedAtRoot`), behavioral properties (`isLeaf`, `canDecompose`, `hasDiscussionGroup`), and display properties (`label`, `icon`, `color`)
+- **Custom Statuses**: Users define statuses with 4-category classification (`initial` / `active` / `review` / `terminal`). Exactly one initial status required, at least one terminal status required
+- **Custom State Transitions**: Users define allowed transitions with trigger types (`manual` — user/AI initiated, `auto` — BehaviorEngine initiated, `system` — infrastructure initiated)
+- **Behavior Rules Engine**: Trigger-Condition-Action (TCA) model with 4 trigger types (`on_status_enter`, `on_task_created`, `on_all_children_terminal`, `on_children_of_type_terminal`), 9 composable condition types (including recursive `and`/`or`/`not`), and 5 action types (`auto_transition`, `wake_assignee`, `wake_parent_assignee`, `skip_propagation`, `create_discussion_group`)
+- **Schema Validation**: On save, validate schema integrity — unique initial status, valid type/status references in transitions and rules, no hierarchy cycles, no orphan statuses
+- **In-Flight Task Impact Analysis**: When modifying schema, report active tasks referencing types/statuses being removed (informational, non-blocking)
+- **Default Schema Template**: System provides a default schema matching the classic workflow (epic/story/task/subtask/spike/bug/chore with standard statuses) applied automatically to new organizations
+- **Schema Access Gateway**: All services access workflow schema through WorkflowEngine semantic methods — no direct schema object consumption
 
 ---
 
@@ -429,7 +444,7 @@ As a human user, I want to send messages and vote in any discussion group with e
 | ID | Decision | Choice | Rationale |
 |----|----------|--------|-----------|
 | D-ARCH-1 | Agent model | Unified Agent (no separate Worker/Evaluator/Conductor/Messenger) | Each org role is a single entity; behavior driven by persona + skills + org position + task type |
-| D-ARCH-2 | Task hierarchy | Variable-depth tree with type labels | Decouples tree depth from task semantics; more flexible than fixed four layers |
+| D-ARCH-2 | Task hierarchy | Variable-depth tree with schema-defined type labels | Decouples tree depth from task semantics; types, statuses, and rules user-customizable per organization |
 | D-ARCH-3 | Decision mechanism | Discussion group consensus-as-approval | Eliminates redundant separate approval step; discussion records become knowledge assets |
 | D-ARCH-4 | Human intervention | Per-role `requiresHumanApproval` | Replaces global semi-auto/full-auto mode; more granular control per organizational branch |
 | D-ARCH-5 | Vote tags | Structured data field (APPROVE/REVISE/CONCERN/DELEGATE) | Not text parsing; hardcoded consensus detection in MVP |
@@ -440,6 +455,9 @@ As a human user, I want to send messages and vote in any discussion group with e
 | D-ARCH-10 | Prompt construction | User-configured 3 elements + system auto-injected 4 contexts | Separation of concerns: user controls identity/knowledge/skills, system handles org/task/discussion/actions |
 | D-ARCH-11 | Organization creation | Templates + AI assistant conversational guidance | Lowers barrier for new users while maintaining flexibility for experts |
 | D-ARCH-12 | Platform | Electron desktop application | Rich UI for discussions/narrative/org visualization |
+| D-ARCH-13 | Work item type system | Schema-driven (WorkflowSchema per organization) | Replaces hardcoded TaskType union; user-customizable types, statuses, transitions, and behavior rules |
+| D-ARCH-14 | Behavior automation | TCA rule engine (Trigger-Condition-Action) | Replaces hardcoded auto-propagation; composable conditions (and/or/not) for cross-level rules |
+| D-ARCH-15 | Schema access pattern | WorkflowEngine as sole gateway with in-process cache | Single point of schema access ensures consistency; EventBus refresh on mutation |
 
 ---
 
@@ -450,7 +468,8 @@ As a human user, I want to send messages and vote in any discussion group with e
 | `Organization` | Project root | id, name, description, status, budgetLimit, orgTemplateId, workspacePath |
 | `Role` | Org tree node | id, orgId, name, parentId, persona, knowledgeBaseRefs[], skillIds[], canApprove, canDelegate, requiresHumanApproval, status |
 | `Skill` | Skill definition | id, name, source (builtin/template/custom), templateId, promptContent, description |
-| `TaskNode` | Variable-depth task tree | id, orgId, parentId, type (epic/story/task/subtask/spike/bug/chore), title, description, status, assigneeRoleId, depth |
+| `TaskNode` | Variable-depth task tree | id, orgId, parentId, type (schema-defined, validated at runtime by WorkflowEngine), title, description, status (schema-defined, validated at runtime), assigneeRoleId, depth |
+| `WorkflowSchema` | Organization workflow definition | id, orgId, schemaJson (contains workItemTypes[], statuses[], transitions[], behaviorRules[]), isActive, createdAt, updatedAt |
 | `DiscussionGroup` | Task-bound discussion | id, taskNodeId, orgId, status (active/archived), summary, lastSummaryAt, currentRound, reviseCount |
 | `DiscussionMessage` | Message with vote tag | id, groupId, authorRoleId, authorType (ai/human/system), content, voteTag (APPROVE/REVISE/CONCERN/DELEGATE/null), reviewRound, metadata (JSON), intent (question/reply/escalation/resolution/vote/general), inReplyToMessageId, createdAt |
 | `Run` | Execution instance | id, orgId, taskNodeId, roleId, status, trigger, startedAt, finishedAt, costUsd, tokenCount, sessionId |
@@ -490,11 +509,13 @@ As a human user, I want to send messages and vote in any discussion group with e
 
 ### MVP (V1)
 
-All FR-01 through FR-14 as defined above.
+All FR-01 through FR-15 as defined above.
 
 ### V2 Enhancements
 
-- Declarative automation rules engine (replace hardcoded consensus/wake rules)
+- Schema versioning with migration support (track schema version per task for backward compatibility)
+- Visual workflow editor (drag-and-drop state machine builder in frontend)
+- Schema templates marketplace (Kanban, Scrum, Design Review, etc.)
 - Per-role budget limits
 - Parallel execution (multiple roles executing simultaneously)
 - Crash recovery (interrupted Run restoration)

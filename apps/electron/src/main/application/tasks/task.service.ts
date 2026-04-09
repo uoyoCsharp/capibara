@@ -5,7 +5,9 @@ import type { IPendingWakeRepository } from '@main/core/interfaces/i-pending-wak
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
-import type { TaskNode, TaskStatus, TaskType } from '@main/core/types/domain.types.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
+import type { TaskNode, TaskStatus } from '@main/core/types/domain.types.js';
+import type { BehaviorAction, BehaviorContext } from '@main/core/types/behavior.types.js';
 import {
   TASK_REPO_TOKEN,
   ROLE_REPO_TOKEN,
@@ -15,32 +17,13 @@ import {
   LOGGER_TOKEN,
 } from '@main/core/tokens.js';
 import { NotFoundError, ValidationError } from '@main/core/errors/capibara.errors.js';
+import { InvalidTypeError } from '@main/core/errors/workflow.errors.js';
 import { TaskStateMachine } from '../state-machine/task.state-machine.js';
-
-/**
- * Allowed child types per parent type.
- * - Root (null parent): only epic
- * - epic: story | spike
- * - story: task | bug | chore | spike
- * - task: subtask
- * - subtask: leaf (no children)
- * - spike: leaf (no children)
- * - bug: leaf (no children)
- * - chore: leaf (no children)
- */
-const ALLOWED_CHILDREN: Record<TaskType | 'root', TaskType[]> = {
-  root: ['epic'],
-  epic: ['story', 'spike'],
-  story: ['task', 'bug', 'chore', 'spike'],
-  task: ['subtask'],
-  subtask: [],
-  spike: [],
-  bug: [],
-  chore: [],
-};
 
 @injectable()
 export class TaskService {
+  private workflowEngine: IWorkflowEngine | null = null;
+
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
     @inject(ROLE_REPO_TOKEN) private readonly roleRepo: IRoleRepository,
@@ -50,6 +33,10 @@ export class TaskService {
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
     private readonly stateMachine: TaskStateMachine,
   ) {}
+
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
+  }
 
   async findById(id: string): Promise<TaskNode | null> {
     return this.taskRepo.findById(id);
@@ -83,7 +70,7 @@ export class TaskService {
       }
     }
 
-    // Calculate depth from parent and validate type hierarchy
+    // Calculate depth from parent and validate type hierarchy via WorkflowEngine
     let depth = 0;
     if (input.parentId) {
       const parent = await this.taskRepo.findById(input.parentId);
@@ -92,19 +79,28 @@ export class TaskService {
       }
       depth = parent.depth + 1;
 
-      const allowed = ALLOWED_CHILDREN[parent.type];
-      if (!allowed.includes(input.type)) {
-        throw new ValidationError(
-          `Cannot create "${input.type}" under "${parent.type}". Allowed: ${allowed.length ? allowed.join(', ') : 'none (leaf node)'}`,
-        );
+      if (this.workflowEngine) {
+        const valid = await this.workflowEngine.validateType(input.orgId, input.type, parent.type);
+        if (!valid) {
+          const parentDef = await this.workflowEngine.getItemTypeDefinition(input.orgId, parent.type);
+          const allowed = parentDef?.allowedChildren ?? [];
+          throw new InvalidTypeError(
+            input.type,
+            `Cannot create under "${parent.type}". Allowed: ${allowed.length ? allowed.join(', ') : 'none (leaf node)'}`,
+          );
+        }
       }
     } else {
-      // Root-level task must be epic
-      const allowed = ALLOWED_CHILDREN.root;
-      if (!allowed.includes(input.type)) {
-        throw new ValidationError(
-          `Root-level tasks must be of type: ${allowed.join(', ')}. Got "${input.type}"`,
-        );
+      // Root-level task validation
+      if (this.workflowEngine) {
+        const valid = await this.workflowEngine.validateType(input.orgId, input.type, null);
+        if (!valid) {
+          const rootTypes = await this.workflowEngine.getRootTypes(input.orgId);
+          throw new InvalidTypeError(
+            input.type,
+            `Root-level tasks must be of type: ${rootTypes.map((t) => t.name).join(', ')}`,
+          );
+        }
       }
     }
 
@@ -127,21 +123,36 @@ export class TaskService {
       payload: { taskId: task.id, orgId: task.orgId, type: task.type, parentId: task.parentId },
     });
 
+    // Evaluate on_task_created behavior rules
+    if (this.workflowEngine) {
+      const context = await this.buildBehaviorContext(task);
+      const actions = await this.workflowEngine.evaluateBehaviors(
+        task.orgId,
+        { type: 'on_task_created' },
+        context,
+      );
+      for (const action of actions) {
+        try {
+          await this.executeAction(action, task);
+        } catch (err) {
+          this.logger.error('on_task_created behavior action failed', { taskId: task.id, action: action.type, error: String(err) });
+        }
+        if (action.type === 'skip_propagation') break;
+      }
+    }
+
     return task;
   }
 
   async updateStatus(taskId: string, status: TaskStatus): Promise<void> {
     await this.stateMachine.transition(taskId, status);
 
-    // When task moves to awaiting_review, determine review strategy:
-    // 1. If task has a parent with an assignee → wake parent role as AI reviewer
-    // 2. If no parent reviewer available and role doesn't require human approval → auto-approve
-    // 3. Otherwise → stay in awaiting_review for human or consensus review
-    if (status === 'awaiting_review') {
-      const task = await this.taskRepo.findById(taskId);
+    const task = await this.taskRepo.findById(taskId);
+    if (!task) return;
 
-      // requiresHumanApproval takes priority — skip AI review, wait for human
-      const assigneeRole = task?.assigneeRoleId
+    // When task moves to a review-category status, determine review strategy
+    if (this.workflowEngine && await this.workflowEngine.isReviewStatus(task.orgId, status)) {
+      const assigneeRole = task.assigneeRoleId
         ? await this.roleRepo.findById(task.assigneeRoleId)
         : null;
 
@@ -149,12 +160,11 @@ export class TaskService {
         this.logger.info('Task requires human approval, skipping AI review', {
           taskId, roleId: assigneeRole.id,
         });
-        // Stay in awaiting_review for human decision via discussion/approval panel
         return;
       }
 
-      // No human approval required — try parent AI review
-      if (task?.parentId) {
+      // Try parent AI review
+      if (task.parentId) {
         const parentTask = await this.taskRepo.findById(task.parentId);
         if (parentTask?.assigneeRoleId) {
           this.logger.info('Waking parent role for AI review', {
@@ -171,50 +181,28 @@ export class TaskService {
               trigger: 'review_requested' as const,
             },
           });
-          return; // Leave in awaiting_review — reviewer AI will decide
+          return;
         }
       }
 
-      // Fallback: no parent reviewer available, no human approval — auto-approve
+      // Fallback: no parent reviewer, no human approval — auto-approve via behavior rules
       if (assigneeRole) {
         this.logger.info('Auto-approving task (no parent reviewer, no human approval required)', {
           taskId, roleId: assigneeRole.id,
         });
-        await this.stateMachine.transition(taskId, 'approved');
-        status = 'approved';
-      }
-    }
-
-    // Phase 1→2 wake for approved epic/story with no children is handled by
-    // OrgOrchestrator via task:status-changed event. Do NOT emit wake:triggered
-    if (status === 'approved') {
-      const approvedTask = await this.taskRepo.findById(taskId);
-      if (approvedTask) {
-        if ((approvedTask.type === 'epic' || approvedTask.type === 'story')) {
-          const children = await this.taskRepo.findByParentId(taskId);
-          if (children.length === 0) {
-            return; // Don't auto-propagate — Phase 2 needs to run first
-          }
-        }
-
-        const leafTypes: TaskType[] = ['subtask', 'spike', 'bug', 'chore'];
-        if (leafTypes.includes(approvedTask.type)) {
-          await this.stateMachine.transition(taskId, 'done');
-          status = 'done';
-        } else if (approvedTask.type === 'task') {
-          // 'task' can have subtasks — only auto-advance if no children
-          const children = await this.taskRepo.findByParentId(taskId);
-          if (children.length === 0) {
-            await this.stateMachine.transition(taskId, 'done');
-            status = 'done';
-          }
+        // Find the first terminal-bound transition from the current review status
+        const transitions = await this.workflowEngine.getManualTransitions(task.orgId, status);
+        const approveTransition = transitions[0];
+        if (approveTransition) {
+          await this.stateMachine.transition(taskId, approveTransition.to);
+          status = approveTransition.to;
         }
       }
     }
 
-    // Check for auto-propagation when task reaches done
-    if (status === 'done') {
-      await this.checkAutoPropagate(taskId);
+    // Evaluate behavior rules for the new status
+    if (this.workflowEngine) {
+      await this.evaluateAndExecuteBehaviors(task, status, new Set<string>());
     }
   }
 
@@ -230,61 +218,189 @@ export class TaskService {
       await this.delete(child.id);
     }
 
-    // Bug 13 fix: clean up pending wakes for this specific task's assignee
+    // Clean up pending wakes for this specific task's assignee
     if (task.assigneeRoleId) {
       await this.pendingWakeRepo.consumeByRoleAndTask(task.assigneeRoleId, taskId);
     }
 
-    // D1: cascade delete associated discussion group and its messages
+    // Cascade delete associated discussion group and its messages
     await this.discussionRepo.deleteGroupByTaskNodeId(taskId);
 
     await this.taskRepo.delete(taskId);
     this.logger.info('Task deleted', { taskId });
   }
 
-  private async checkAutoPropagate(taskId: string): Promise<void> {
-    const task = await this.taskRepo.findById(taskId);
-    if (!task || !task.parentId) return;
+  private async evaluateAndExecuteBehaviors(task: TaskNode, currentStatus: string, visitedStatuses?: Set<string>): Promise<void> {
+    if (!this.workflowEngine) return;
 
-    const siblings = await this.taskRepo.findByParentId(task.parentId);
+    // Cycle protection: prevent infinite auto_transition loops
+    const visited = visitedStatuses ?? new Set<string>();
+    if (visited.has(currentStatus)) {
+      this.logger.warn('Behavior cycle detected, breaking loop', { taskId: task.id, status: currentStatus });
+      return;
+    }
+    visited.add(currentStatus);
 
-    // Bug 7 fix: only trust done/cancelled as truly complete.
-    // Since leaf tasks now auto-advance approved→done, we no longer need to check
-    // approved status with children depth. This eliminates the multi-layer check issue.
-    const allComplete = siblings.every(
-      (s) => s.status === 'done' || s.status === 'cancelled',
+    // Build behavior context
+    const context = await this.buildBehaviorContext(task);
+
+    // Evaluate on_status_enter trigger
+    const actions = await this.workflowEngine.evaluateBehaviors(
+      task.orgId,
+      { type: 'on_status_enter', status: currentStatus },
+      context,
     );
 
-    if (!allComplete) return;
+    for (const action of actions) {
+      try {
+        await this.executeAction(action, task);
+      } catch (err) {
+        this.logger.error('Behavior action failed', { taskId: task.id, action: action.type, error: String(err) });
+      }
+      if (action.type === 'skip_propagation') return;
+    }
+
+    // Check terminal status for parent propagation
+    const isTerminal = await this.workflowEngine.isTerminalStatus(task.orgId, currentStatus);
+    if (isTerminal && task.parentId) {
+      await this.checkAutoPropagate(task, 0, visitedStatuses);
+    }
+  }
+
+  private static readonly MAX_PROPAGATION_DEPTH = 20;
+
+  private async checkAutoPropagate(task: TaskNode, depth = 0, visitedStatuses?: Set<string>): Promise<void> {
+    if (!task.parentId || !this.workflowEngine) return;
+    if (depth >= TaskService.MAX_PROPAGATION_DEPTH) {
+      this.logger.warn('checkAutoPropagate depth limit reached', { taskId: task.id, depth });
+      return;
+    }
+
+    const siblings = await this.taskRepo.findByParentId(task.parentId);
+    const allTerminal = await Promise.all(
+      siblings.map((s) => this.workflowEngine!.isTerminalStatus(task.orgId, s.status)),
+    );
+
+    if (!allTerminal.every(Boolean)) return;
 
     const parentTask = await this.taskRepo.findById(task.parentId);
     if (!parentTask) return;
 
-    this.logger.info('All children complete, advancing parent task', {
-      parentId: task.parentId,
+    // Build context for parent and evaluate on_all_children_terminal
+    const parentContext = await this.buildBehaviorContext(parentTask);
+    const actions = await this.workflowEngine.evaluateBehaviors(
+      task.orgId,
+      { type: 'on_all_children_terminal' },
+      parentContext,
+    );
+
+    this.logger.info('All children terminal, evaluating parent behaviors', {
+      parentId: parentTask.id,
       parentStatus: parentTask.status,
+      actionCount: actions.length,
     });
 
-    if (parentTask.status === 'approved') {
-      // Parent was already approved (decomposition reviewed) → advance to done
-      await this.stateMachine.transition(parentTask.id, 'done');
-      this.logger.info('Parent task advanced to done', { parentId: parentTask.id });
-      // Recursively check if grandparent should also advance
-      await this.checkAutoPropagate(parentTask.id);
-    } else if (parentTask.status === 'in_progress') {
-      // Parent is still in_progress → advance to awaiting_review
-      try {
-        await this.updateStatus(parentTask.id, 'awaiting_review');
-      } catch (err) {
-        this.logger.error('Auto-propagation to parent failed', {
-          taskId, parentId: parentTask.id, error: String(err),
-        });
-        this.eventBus.emit({
-          type: 'task:propagation-failed',
-          timestamp: new Date().toISOString(),
-          payload: { taskId, parentId: parentTask.id, orgId: parentTask.orgId, error: String(err) },
-        });
+    for (const action of actions) {
+      await this.executeAction(action, parentTask);
+      if (action.type === 'skip_propagation') return;
+    }
+
+    // If an auto_transition happened, recursively check grandparent
+    const updatedParent = await this.taskRepo.findById(parentTask.id);
+    if (updatedParent && updatedParent.parentId) {
+      const parentIsTerminal = await this.workflowEngine.isTerminalStatus(
+        updatedParent.orgId,
+        updatedParent.status,
+      );
+      if (parentIsTerminal) {
+        await this.checkAutoPropagate(updatedParent, depth + 1, visitedStatuses);
       }
     }
+  }
+
+  private async executeAction(action: BehaviorAction, task: TaskNode): Promise<void> {
+    this.eventBus.emit({
+      type: 'behavior:executed',
+      timestamp: new Date().toISOString(),
+      payload: { orgId: task.orgId, taskId: task.id, action: action.type },
+    });
+
+    switch (action.type) {
+      case 'auto_transition':
+        await this.stateMachine.transition(task.id, action.targetStatus);
+        this.logger.info('Behavior auto-transition', {
+          taskId: task.id,
+          targetStatus: action.targetStatus,
+        });
+        break;
+
+      case 'wake_assignee':
+        if (task.assigneeRoleId) {
+          this.eventBus.emit({
+            type: 'wake:triggered',
+            timestamp: new Date().toISOString(),
+            payload: {
+              roleId: task.assigneeRoleId,
+              orgId: task.orgId,
+              trigger: action.trigger,
+            },
+          });
+        }
+        break;
+
+      case 'wake_parent_assignee':
+        if (task.parentId) {
+          const parentTask = await this.taskRepo.findById(task.parentId);
+          if (parentTask?.assigneeRoleId) {
+            this.eventBus.emit({
+              type: 'wake:triggered',
+              timestamp: new Date().toISOString(),
+              payload: {
+                roleId: parentTask.assigneeRoleId,
+                orgId: task.orgId,
+                trigger: action.trigger,
+              },
+            });
+          }
+        }
+        break;
+
+      case 'create_discussion_group':
+        // Check if group already exists
+        const existingGroup = await this.discussionRepo.findGroupByTaskNodeId(task.id);
+        if (!existingGroup) {
+          await this.discussionRepo.createGroup({
+            taskNodeId: task.id,
+            orgId: task.orgId,
+          });
+          this.logger.info('Discussion group created by behavior rule', { taskId: task.id });
+        }
+        break;
+
+      case 'skip_propagation':
+        this.logger.info('Skip propagation triggered', { taskId: task.id });
+        break;
+    }
+  }
+
+  private async buildBehaviorContext(task: TaskNode): Promise<BehaviorContext> {
+    const children = await this.taskRepo.findByParentId(task.id);
+    let parentTask: TaskNode | null = null;
+    if (task.parentId) {
+      parentTask = await this.taskRepo.findById(task.parentId);
+    }
+
+    return {
+      taskId: task.id,
+      orgId: task.orgId,
+      taskType: task.type,
+      taskStatus: task.status,
+      parentTaskId: parentTask?.id ?? null,
+      parentTaskType: parentTask?.type ?? null,
+      parentTaskStatus: parentTask?.status ?? null,
+      childCount: children.length,
+      childTypes: children.map((c) => c.type),
+      childStatuses: children.map((c) => c.status),
+    };
   }
 }

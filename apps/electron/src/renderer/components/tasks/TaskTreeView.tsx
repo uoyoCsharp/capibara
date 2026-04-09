@@ -1,11 +1,39 @@
 import { useState } from 'react';
 import { CaretRight, CaretDown, Plus, Trash, ListBullets, CircleNotch } from '@phosphor-icons/react';
-import type { TaskRecord, TaskStatus, TaskType } from '@shared/contracts';
+import type { TaskRecord, TaskStatus, TaskType, WorkflowSchemaRecord } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useT } from '../../hooks/useLocale';
+
+/** Rotating color palette for type badges */
+const TYPE_COLOR_PALETTE = [
+  'bg-purple-100 text-purple-700',
+  'bg-blue-100 text-blue-700',
+  'bg-primary/10 text-primary',
+  'bg-yellow-500/10 text-yellow-600',
+  'bg-destructive/10 text-destructive',
+  'bg-muted text-muted-foreground',
+  'bg-green-100 text-green-700',
+  'bg-orange-100 text-orange-700',
+  'bg-pink-100 text-pink-700',
+  'bg-cyan-100 text-cyan-700',
+];
+
+/** Color mapping for status categories */
+const STATUS_CATEGORY_COLORS: Record<string, string> = {
+  initial: 'bg-muted-foreground',
+  active: 'bg-yellow-500',
+  review: 'bg-orange-500',
+  terminal: 'bg-green-500',
+};
+
+/** Fallback status colors for well-known statuses */
+const STATUS_OVERRIDE_COLORS: Record<string, string> = {
+  blocked: 'bg-destructive',
+  cancelled: 'bg-muted-foreground',
+};
 
 interface TaskTreeViewProps {
   tasks: TaskRecord[];
@@ -17,6 +45,7 @@ interface TaskTreeViewProps {
   onDeleteTask: (id: string) => void;
   onStatusChange: (id: string, status: TaskStatus) => void;
   roleNames: Map<string, string>;
+  schema: WorkflowSchemaRecord | null;
 }
 
 interface TreeNode {
@@ -44,26 +73,31 @@ function buildTree(tasks: TaskRecord[]): TreeNode[] {
   return roots;
 }
 
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: 'bg-muted-foreground',
-  in_progress: 'bg-yellow-500',
-  awaiting_review: 'bg-orange-500',
-  revision: 'bg-amber-500',
-  approved: 'bg-blue-500',
-  done: 'bg-green-500',
-  blocked: 'bg-destructive',
-  cancelled: 'bg-muted-foreground',
-};
+function getTypeBadgeColor(typeName: string, schema: WorkflowSchemaRecord | null): string {
+  if (!schema) return 'bg-muted text-muted-foreground';
+  const idx = schema.workItemTypes.findIndex((t) => t.name === typeName);
+  if (idx < 0) return 'bg-muted text-muted-foreground';
+  return TYPE_COLOR_PALETTE[idx % TYPE_COLOR_PALETTE.length];
+}
 
-const TYPE_BADGE_COLORS: Record<TaskType, string> = {
-  epic: 'bg-purple-100 text-purple-700',
-  story: 'bg-blue-100 text-blue-700',
-  task: 'bg-primary/10 text-primary',
-  subtask: 'bg-muted text-muted-foreground',
-  spike: 'bg-yellow-500/10 text-yellow-600',
-  bug: 'bg-destructive/10 text-destructive',
-  chore: 'bg-muted text-muted-foreground',
-};
+function getStatusDotColor(statusName: string, schema: WorkflowSchemaRecord | null): string {
+  if (STATUS_OVERRIDE_COLORS[statusName]) return STATUS_OVERRIDE_COLORS[statusName];
+  if (!schema) return 'bg-muted-foreground';
+  const def = schema.statuses.find((s) => s.name === statusName);
+  if (!def) return 'bg-muted-foreground';
+  return STATUS_CATEGORY_COLORS[def.category] ?? 'bg-muted-foreground';
+}
+
+function getTypeLabel(typeName: string, schema: WorkflowSchemaRecord | null): string {
+  if (!schema) return typeName;
+  return schema.workItemTypes.find((t) => t.name === typeName)?.label ?? typeName;
+}
+
+function getStatusLabel(statusName: string, schema: WorkflowSchemaRecord | null, t: Record<string, string>): string {
+  if (t[statusName]) return t[statusName];
+  if (!schema) return statusName;
+  return schema.statuses.find((s) => s.name === statusName)?.label ?? statusName;
+}
 
 function hasDescendantApproval(node: TreeNode, ids?: Set<string>): boolean {
   if (!ids) return false;
@@ -84,6 +118,7 @@ function TaskNodeItem({
   onRequestDelete,
   onStatusChange,
   roleNames,
+  schema,
 }: {
   node: TreeNode;
   depth: number;
@@ -95,6 +130,7 @@ function TaskNodeItem({
   onRequestDelete: (id: string) => void;
   onStatusChange: (id: string, status: TaskStatus) => void;
   roleNames: Map<string, string>;
+  schema: WorkflowSchemaRecord | null;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState(depth < 2);
@@ -106,6 +142,7 @@ function TaskNodeItem({
   const hasApprovalPending = pendingApprovalTaskIds?.has(node.task.id) ||
     hasDescendantApproval(node, pendingApprovalTaskIds);
   const isRunning = runningTaskIds?.has(node.task.id) ?? false;
+  const isTerminal = schema?.statuses.find((s) => s.name === node.task.status)?.category === 'terminal';
 
   return (
     <div>
@@ -141,9 +178,9 @@ function TaskNodeItem({
           <span
             className={cn(
               'w-2.5 h-2.5 rounded-full shrink-0',
-              STATUS_COLORS[node.task.status],
+              getStatusDotColor(node.task.status, schema),
             )}
-            title={t.task[node.task.status]}
+            title={getStatusLabel(node.task.status, schema, t.task as Record<string, string>)}
           />
         )}
 
@@ -152,10 +189,10 @@ function TaskNodeItem({
           variant="secondary"
           className={cn(
             'text-[10px] font-semibold uppercase px-1.5 py-0.5 shrink-0',
-            TYPE_BADGE_COLORS[node.task.type],
+            getTypeBadgeColor(node.task.type, schema),
           )}
         >
-          {node.task.type}
+          {getTypeLabel(node.task.type, schema)}
         </Badge>
 
         {/* Title */}
@@ -163,7 +200,7 @@ function TaskNodeItem({
           className={cn(
             'text-sm font-medium truncate flex-1',
             isSelected ? 'text-primary' : 'text-foreground',
-            node.task.status === 'cancelled' && 'line-through text-muted-foreground/50',
+            isTerminal && 'line-through text-muted-foreground/50',
           )}
         >
           {node.task.title}
@@ -229,6 +266,7 @@ function TaskNodeItem({
               onRequestDelete={onRequestDelete}
               onStatusChange={onStatusChange}
               roleNames={roleNames}
+              schema={schema}
             />
           ))}
         </div>
@@ -247,6 +285,7 @@ export function TaskTreeView({
   onDeleteTask,
   onStatusChange,
   roleNames,
+  schema,
 }: TaskTreeViewProps) {
   const t = useT();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -261,7 +300,7 @@ export function TaskTreeView({
         </p>
         <Button onClick={() => onAddTask(null)}>
           <Plus size={16} />
-          {t.taskTree.createEpic}
+          {t.taskTree.createTask}
         </Button>
       </div>
     );
@@ -282,6 +321,7 @@ export function TaskTreeView({
           onRequestDelete={setConfirmDelete}
           onStatusChange={onStatusChange}
           roleNames={roleNames}
+          schema={schema}
         />
       ))}
       {confirmDelete && (

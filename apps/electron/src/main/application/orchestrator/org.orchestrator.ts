@@ -6,6 +6,7 @@ import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { IPendingWakeRepository } from '@main/core/interfaces/i-pending-wake.repository.js';
 import type { ICostEntryRepository } from '@main/core/interfaces/i-cost-entry.repository.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { DomainEvent } from '@main/core/types/event.types.js';
 import type { WakeTrigger } from '@main/core/types/domain.types.js';
 import type { CapibaraConfig } from '@main/core/types/config.types.js';
@@ -46,6 +47,7 @@ export class OrgOrchestrator {
   // Risk 8: per-org event serialization queue
   private orgQueues = new Map<string, Promise<void>>();
   private executionEngine!: ExecutionEngine;
+  private workflowEngine: IWorkflowEngine | null = null;
 
   private readonly gateValidator: WakeGateValidator;
   private readonly retryScheduler: RetryScheduler;
@@ -71,6 +73,11 @@ export class OrgOrchestrator {
   /** Inject ExecutionEngine after construction to break circular dependency. */
   setExecutionEngine(engine: ExecutionEngine): void {
     this.executionEngine = engine;
+  }
+
+  /** Inject WorkflowEngine after construction. */
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
   }
 
   /** Inject TaskStateMachine after construction. */
@@ -157,7 +164,9 @@ export class OrgOrchestrator {
         if (task.parentId) {
           const parentTask = await this.taskRepo.findById(task.parentId);
           if (parentTask) {
-            const parentApproved = parentTask.status === 'approved' || parentTask.status === 'done';
+            const parentApproved = this.workflowEngine
+              ? await this.workflowEngine.isTerminalStatus(parentTask.orgId, parentTask.status)
+              : false;
             if (!parentApproved) {
               this.logger.debug('Wake skipped: parent task not yet approved', {
                 taskId: task.id,
@@ -201,11 +210,12 @@ export class OrgOrchestrator {
       // 2. When a parent task is approved → wake its first pending child (decomposition gate)
       case 'task:status-changed': {
         const { taskId, newStatus } = payload as { taskId: string; newStatus: string };
-        const terminalStatuses = ['approved', 'done', 'cancelled'];
-        if (!terminalStatuses.includes(newStatus)) return [];
-
         const task = await this.taskRepo.findById(taskId);
         if (!task) return [];
+        const isTerminal = this.workflowEngine
+          ? await this.workflowEngine.isTerminalStatus(task.orgId, newStatus)
+          : false;
+        if (!isTerminal) return [];
 
         const targets: WakeTarget[] = [];
 
@@ -227,23 +237,24 @@ export class OrgOrchestrator {
               taskNodeId: firstPendingChild.id,
               trigger: 'task_assigned',
             });
-          } else if (
-            children.length === 0
-            && (task.type === 'epic' || task.type === 'story')
-            && task.assigneeRoleId
-          ) {
-            // Phase 1 approved but no children yet → wake assignee for Phase 2 decomposition
-            this.logger.info('Phase 1 approved (no children), waking assignee for Phase 2', {
-              taskId,
-              roleId: task.assigneeRoleId,
-              type: task.type,
-            });
-            targets.push({
-              roleId: task.assigneeRoleId,
-              orgId: task.orgId,
-              taskNodeId: task.id,
-              trigger: 'review_approve',
-            });
+          } else if (children.length === 0 && task.assigneeRoleId) {
+            const typeDef = this.workflowEngine
+              ? await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type)
+              : null;
+            if (typeDef?.canDecompose) {
+              // Phase 1 approved but no children yet → wake assignee for Phase 2 decomposition
+              this.logger.info('Phase 1 approved (no children), waking assignee for Phase 2', {
+                taskId,
+                roleId: task.assigneeRoleId,
+                type: task.type,
+              });
+              targets.push({
+                roleId: task.assigneeRoleId,
+                orgId: task.orgId,
+                taskNodeId: task.id,
+                trigger: 'review_approve',
+              });
+            }
           }
         }
 
@@ -256,26 +267,30 @@ export class OrgOrchestrator {
         // Risk 14 fix: only skip sibling progression if there are active (non-terminal) children
         if (newStatus === 'approved') {
           const children = await this.taskRepo.findByParentId(taskId);
-          const hasActiveChildren = children.some(
-            (c) => c.status !== 'done' && c.status !== 'cancelled',
-          );
-          if (children.length > 0 && hasActiveChildren) {
-            this.logger.debug('Skipping sibling progression: approved task has active children', {
-              taskId, childCount: children.length,
-            });
-            return targets;
+          if (children.length > 0 && this.workflowEngine) {
+            const childTerminalResults = await Promise.allSettled(
+              children.map((c) => this.workflowEngine!.isTerminalStatus(task.orgId, c.status)),
+            );
+            const hasActiveChildren = childTerminalResults.some(
+              (r) => r.status === 'rejected' || !r.value,
+            );
+            if (hasActiveChildren) {
+              this.logger.debug('Skipping sibling progression: approved task has active children', {
+                taskId, childCount: children.length,
+              });
+              return targets;
+            }
           }
         }
 
         const siblings = await this.taskRepo.findByParentId(task.parentId);
-        const allDone = siblings.every((s) => {
-          if (s.status === 'done' || s.status === 'cancelled') return true;
-          // An 'approved' task with unfinished children is NOT complete
-          if (s.status === 'approved') {
-            return true; // Leaf approved tasks are complete for sibling progression
-          }
-          return false;
-        });
+        const siblingTerminalResults = this.workflowEngine
+          ? await Promise.allSettled(
+              siblings.map((s) => this.workflowEngine!.isTerminalStatus(task.orgId, s.status)),
+            )
+          : [];
+        const allDone = siblingTerminalResults.length > 0
+          && siblingTerminalResults.every((r) => r.status === 'fulfilled' && r.value);
 
         if (allDone) {
           // All siblings complete → checkAutoPropagate handles parent advancement
@@ -351,13 +366,17 @@ export class OrgOrchestrator {
         // Fallback: find the task associated with this role
         const roleTasks = await this.taskRepo.findByAssignee(roleId);
 
-        const eligibleStatuses = (trigger === 'review_requested' || trigger === 'review_approve')
-          ? ['pending', 'in_progress', 'revision', 'approved']
-          : ['pending', 'in_progress', 'revision'];
-
-        const activeTask = roleTasks.find(
-          (t) => eligibleStatuses.includes(t.status),
-        );
+        // Find a non-terminal task for this role
+        let activeTask = null;
+        for (const t of roleTasks) {
+          const isTerminal = this.workflowEngine
+            ? await this.workflowEngine.isTerminalStatus(t.orgId, t.status)
+            : false;
+          if (!isTerminal) {
+            activeTask = t;
+            break;
+          }
+        }
         if (activeTask) {
           return [{
             roleId,
@@ -479,12 +498,18 @@ export class OrgOrchestrator {
       // Bug 6 fix: prefer stored taskNodeId from the pending wake
       let targetTaskId = wake.taskNodeId;
       if (!targetTaskId) {
-        // Fallback: find eligible task by assignee
+        // Fallback: find non-terminal task by assignee
         const roleTasks = await this.taskRepo.findByAssignee(wakeRoleId);
-        const eligibleStatuses = (wake.trigger === 'review_requested' || wake.trigger === 'review_approve')
-          ? ['pending', 'in_progress', 'revision', 'approved']
-          : ['pending', 'in_progress', 'revision'];
-        const activeTask = roleTasks.find((t) => eligibleStatuses.includes(t.status));
+        let activeTask = null;
+        for (const t of roleTasks) {
+          const isTerminal = this.workflowEngine
+            ? await this.workflowEngine.isTerminalStatus(t.orgId, t.status)
+            : false;
+          if (!isTerminal) {
+            activeTask = t;
+            break;
+          }
+        }
         targetTaskId = activeTask?.id ?? null;
       }
 

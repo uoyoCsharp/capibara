@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TaskType, RoleRecord, CreateTaskInput } from '@shared/contracts';
+import type { TaskType, RoleRecord, CreateTaskInput, WorkflowSchemaRecord } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -15,29 +15,17 @@ import {
 } from '../ui/dialog';
 import { useT } from '../../hooks/useLocale';
 
+type ItemTypeDef = WorkflowSchemaRecord['workItemTypes'][number];
+
 interface TaskCreateModalProps {
   orgId: string;
   parentId: string | null;
   parentType: TaskType | null;
   roles: RoleRecord[];
+  /** Allowed types from the workflow schema (pre-filtered by parent) */
+  allowedTypes: ItemTypeDef[];
   onClose: () => void;
   onSubmit: (input: CreateTaskInput) => void;
-}
-
-/** Allowed child types per parent type (mirrors server-side ALLOWED_CHILDREN) */
-const ALLOWED_CHILDREN: Record<TaskType | 'root', TaskType[]> = {
-  root: ['epic'],
-  epic: ['story', 'spike'],
-  story: ['task', 'bug', 'chore', 'spike'],
-  task: ['subtask'],
-  subtask: [],
-  spike: [],
-  bug: [],
-  chore: [],
-};
-
-function getAllowedTypes(parentType: TaskType | null): TaskType[] {
-  return ALLOWED_CHILDREN[parentType ?? 'root'];
 }
 
 export function TaskCreateModal({
@@ -45,12 +33,12 @@ export function TaskCreateModal({
   parentId,
   parentType,
   roles,
+  allowedTypes,
   onClose,
   onSubmit,
 }: TaskCreateModalProps) {
   const t = useT();
-  const allowedTypes = getAllowedTypes(parentType);
-  const defaultType: TaskType = allowedTypes[0] ?? 'epic';
+  const defaultType: TaskType = allowedTypes[0]?.name ?? '';
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<TaskType>(defaultType);
@@ -70,7 +58,7 @@ export function TaskCreateModal({
     onSubmit({
       orgId,
       parentId,
-      type,
+      type: type as CreateTaskInput['type'],
       title: title.trim(),
       description: description.trim(),
       assigneeRoleId,
@@ -115,9 +103,9 @@ export function TaskCreateModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allowedTypes.map((taskType) => (
-                  <SelectItem key={taskType} value={taskType}>
-                    {t.taskTypes[taskType] ?? taskType} — {t.taskTypeDesc[taskType]}
+                {allowedTypes.map((typeDef) => (
+                  <SelectItem key={typeDef.name} value={typeDef.name}>
+                    {typeDef.label} — {(t.taskTypeDesc as Record<string, string>)[typeDef.name] ?? typeDef.name}
                   </SelectItem>
                 ))}
               </SelectContent>

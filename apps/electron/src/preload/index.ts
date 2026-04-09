@@ -82,6 +82,12 @@ const api: CapibaraApi = {
   updateSetting: (input) => ipcRenderer.invoke(IPC_CHANNELS.updateSetting, input),
   getLocale: () => ipcRenderer.invoke(IPC_CHANNELS.getLocale),
 
+  // Workflow Schema
+  getActiveSchema: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActiveSchema, orgId),
+  saveSchema: (input) => ipcRenderer.invoke(IPC_CHANNELS.saveSchema, input),
+  validateSchema: (input) => ipcRenderer.invoke(IPC_CHANNELS.validateSchema, input),
+  schemaImpactAnalysis: (input) => ipcRenderer.invoke(IPC_CHANNELS.schemaImpactAnalysis, input),
+
   // Conversation
   getActiveConversations: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActiveConversations, orgId),
   getConversationHistory: (workflowId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationHistory, workflowId),

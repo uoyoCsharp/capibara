@@ -213,7 +213,7 @@ export const zhCN: LocaleMessages = {
   },
   tasksExecution: {
     title: '任务与执行',
-    subtitle: '查看和管理任务树。创建史诗、用户故事并跟踪执行进度。',
+    subtitle: '查看和管理任务树。创建工作项并跟踪执行进度。',
     noOrgMessage: '请先创建一个组织以开始管理任务。组织让你定义 AI 代理团队并分配工作。',
     newTask: '新建任务',
     tasksTab: '任务',
@@ -288,15 +288,15 @@ export const zhCN: LocaleMessages = {
     approvalRequired: '需要审批',
   },
   taskTree: {
-    emptyMessage: '任务面板为空。创建一个史诗来组织你的项目 — 史诗包含用户故事，用户故事分解为 AI 代理执行的具体任务。',
-    createEpic: '创建史诗',
+    emptyMessage: '任务面板为空。创建一个工作项来开始。',
+    createTask: '创建任务',
     deleteConfirm: '删除任务？',
     deleteMessage: '这将永久删除此任务，并可能影响子任务。此操作不可撤销。',
   },
   discussions: {
     title: '讨论',
-    noOrgMessage: '请先创建一个组织以开始讨论。讨论会在创建 Epic 或 Story 任务时自动生成，AI 代理在其中进行辩论和投票。',
-    noDiscussionsMessage: '暂无讨论。在执行标签页中创建 Epic 或 Story 任务时，讨论会自动出现。',
+    noOrgMessage: '请先创建一个组织以开始讨论。讨论会在创建支持讨论组的任务时自动生成，AI 代理在其中进行辩论和投票。',
+    noDiscussionsMessage: '暂无讨论。在执行标签页中创建支持讨论组的任务时，讨论会自动出现。',
     selectDiscussionMessage: '选择一个讨论以查看对话、了解 AI 代理的投票情况并添加你的意见。',
     unknownEpic: '未知任务',
     system: '系统',

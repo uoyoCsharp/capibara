@@ -20,34 +20,9 @@ export interface LocaleMessages {
     archived: string;
     idle: string;
   };
-  task: {
-    pending: string;
-    in_progress: string;
-    awaiting_review: string;
-    revision: string;
-    approved: string;
-    done: string;
-    blocked: string;
-    cancelled: string;
-  };
-  taskTypes: {
-    epic: string;
-    story: string;
-    task: string;
-    subtask: string;
-    spike: string;
-    bug: string;
-    chore: string;
-  };
-  taskTypeDesc: {
-    epic: string;
-    story: string;
-    task: string;
-    subtask: string;
-    spike: string;
-    bug: string;
-    chore: string;
-  };
+  task: Record<string, string>;
+  taskTypes: Record<string, string>;
+  taskTypeDesc: Record<string, string>;
   vote: {
     APPROVE: string;
     REVISE: string;
@@ -289,7 +264,7 @@ export interface LocaleMessages {
   };
   taskTree: {
     emptyMessage: string;
-    createEpic: string;
+    createTask: string;
     deleteConfirm: string;
     deleteMessage: string;
   };

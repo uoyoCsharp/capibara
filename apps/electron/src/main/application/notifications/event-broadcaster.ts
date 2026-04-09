@@ -36,6 +36,9 @@ export class EventBroadcaster {
     this.eventBus.on('discussion:message-added', forward);
     this.eventBus.on('discussion:vote-added', forward);
 
+    // Schema events
+    this.eventBus.on('schema:updated', forward);
+
     // Conversation events
     this.eventBus.on('conversation:question-posted', forward);
     this.eventBus.on('conversation:resolved', forward);
@@ -119,6 +122,13 @@ export class EventBroadcaster {
         desktopEvent = {
           type: 'discussion:message-added',
           groupId: payload.groupId,
+        };
+        break;
+
+      case 'schema:updated':
+        desktopEvent = {
+          type: 'schema:updated',
+          orgId: payload.orgId,
         };
         break;
 

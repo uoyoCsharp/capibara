@@ -3,8 +3,10 @@ import { join } from 'node:path';
 import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
 import type { IRoleRepository, CreateRoleInput } from '@main/core/interfaces/i-role.repository.js';
 import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { Organization } from '@main/core/types/domain.types.js';
+import { DEFAULT_WORKFLOW_SCHEMA } from '../workflow/default-workflow-schema.js';
 
 export interface TemplateRoleDefinition {
   name: string;
@@ -26,6 +28,7 @@ export interface OrgTemplate {
 
 export class OrgTemplateService {
   private templates: OrgTemplate[] = [];
+  private workflowEngine: IWorkflowEngine | null = null;
 
   constructor(
     private readonly orgRepo: IOrganizationRepository,
@@ -35,6 +38,10 @@ export class OrgTemplateService {
     private readonly templatesDir: string,
   ) {
     this.loadTemplatesFromDisk();
+  }
+
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
   }
 
   getTemplates(): OrgTemplate[] {
@@ -74,6 +81,15 @@ export class OrgTemplateService {
     // Recursively create roles
     for (const rootDef of template.rootRoles) {
       await this.createRoleFromDef(org.id, null, rootDef, commandToId);
+    }
+
+    // Initialize default workflow schema
+    if (this.workflowEngine) {
+      try {
+        await this.workflowEngine.saveSchema(org.id, DEFAULT_WORKFLOW_SCHEMA);
+      } catch (err) {
+        this.logger.error('Failed to create default schema for template org', { orgId: org.id, error: String(err) });
+      }
     }
 
     this.logger.info('Template loaded', { templateId, orgId: org.id, orgName });

@@ -31,6 +31,9 @@ import {
   ROUTING_POLICY_ENGINE_TOKEN,
   CONVERSATION_CONTEXT_BUILDER_TOKEN,
   TIMEOUT_ESCALATION_SERVICE_TOKEN,
+  WORKFLOW_ENGINE_TOKEN,
+  BEHAVIOR_ENGINE_TOKEN,
+  WORKFLOW_SCHEMA_REPO_TOKEN,
 } from './core/tokens.js';
 
 import { SqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.js';
@@ -46,6 +49,7 @@ import { SqliteNarrativeRepository } from './infrastructure/persistence/sqlite/s
 import { SqlitePendingWakeRepository } from './infrastructure/persistence/sqlite/sqlite-pending-wake.repository.js';
 import { SqliteSettingsRepository } from './infrastructure/persistence/sqlite/sqlite-settings.repository.js';
 import { SqliteConversationWorkflowRepository } from './infrastructure/persistence/sqlite/sqlite-conversation-workflow.repository.js';
+import { SqliteWorkflowSchemaRepository } from './infrastructure/persistence/sqlite/sqlite-workflow-schema.repository.js';
 import { ConversationEventLogger } from './infrastructure/persistence/sqlite/conversation-event.logger.js';
 import { EmitteryEventBus } from './infrastructure/observability/emittery-event-bus.js';
 import { PinoLogger } from './infrastructure/observability/pino-logger.js';
@@ -72,6 +76,7 @@ import { McpConfigGenerator } from './infrastructure/mcp/mcp-config-generator.js
 import { McpToolRegistry } from './infrastructure/mcp/mcp-tool-registry.js';
 import { McpToolHandlers } from './infrastructure/mcp/mcp-tool-handlers.js';
 import { McpIpcServer } from './infrastructure/mcp/mcp-ipc-server.js';
+import { WorkflowEngine } from './application/workflow/workflow-engine.js';
 import { RoutingPolicyEngine } from './application/conversation/routing-policy.engine.js';
 import { ConversationWorkflowService } from './application/conversation/conversation-workflow.service.js';
 import { ConversationContextBuilder } from './application/conversation/conversation-context.builder.js';
@@ -89,6 +94,7 @@ import { registerApprovalHandlers } from './ipc-handlers/approval.handlers.js';
 import { registerNarrativeHandlers } from './ipc-handlers/narrative.handlers.js';
 import { registerSettingsHandlers } from './ipc-handlers/settings.handlers.js';
 import { registerConversationHandlers } from './ipc-handlers/conversation.handlers.js';
+import { registerWorkflowSchemaHandlers } from './ipc-handlers/workflow-schema.handlers.js';
 import { detectLocaleFromOS } from '@shared/locale/index.js';
 
 import type { IOrganizationRepository } from './core/interfaces/i-organization.repository.js';
@@ -161,6 +167,14 @@ export async function bootstrap(): Promise<void> {
   const conversationWorkflowRepo = new SqliteConversationWorkflowRepository(sqliteConn);
   container.register(CONVERSATION_WORKFLOW_REPO_TOKEN, { useValue: conversationWorkflowRepo });
 
+  const workflowSchemaRepo = new SqliteWorkflowSchemaRepository(sqliteConn);
+  container.register(WORKFLOW_SCHEMA_REPO_TOKEN, { useValue: workflowSchemaRepo });
+
+  // ─── Workflow Engine ────────────────────────────────────────────
+  const workflowEngine = new WorkflowEngine(workflowSchemaRepo, eventBus, logger);
+  workflowEngine.setTaskRepo(taskRepo);
+  container.register(WORKFLOW_ENGINE_TOKEN, { useValue: workflowEngine });
+
   const conversationEventLogger = new ConversationEventLogger(sqliteConn, logger);
 
   // ─── Application Services ────────────────────────────────
@@ -189,9 +203,12 @@ export async function bootstrap(): Promise<void> {
     ? join(dirname(__dirname), '..', 'resources', 'templates')
     : join(process.resourcesPath, 'templates');
   const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger, templatesDir);
+  templateService.setWorkflowEngine(workflowEngine);
 
   const taskStateMachine = new TaskStateMachine(taskRepo, eventBus, logger);
+  taskStateMachine.setWorkflowEngine(workflowEngine);
   const taskService = new TaskService(taskRepo, roleRepo, pendingWakeRepo, discussionRepo, eventBus, logger, taskStateMachine);
+  taskService.setWorkflowEngine(workflowEngine);
   const decompositionAdvisor = new DecompositionAdvisor(config, taskRepo, logger);
 
   const consensusDetector = new ConsensusDetector(discussionRepo, roleRepo, taskRepo, eventBus, logger);
@@ -240,6 +257,7 @@ export async function bootstrap(): Promise<void> {
   );
   orchestrator.setExecutionEngine(executionEngine);
   orchestrator.setTaskStateMachine(taskStateMachine);
+  orchestrator.setWorkflowEngine(workflowEngine);
   try { orchestrator.start(); } catch (err) {
     logger.error('Orchestrator failed to start', { error: String(err) });
   }
@@ -279,9 +297,11 @@ export async function bootstrap(): Promise<void> {
   // Wire conversation deps into existing services
   mcpToolHandlers.setConversationDeps(conversationWorkflowService, conversationWorkflowRepo, conversationEventLogger);
   mcpToolHandlers.setExecutionEngine(executionEngine);
+  mcpToolHandlers.setWorkflowEngine(workflowEngine);
   discussionService.setConversationDeps(conversationWorkflowRepo, conversationWorkflowService);
   executionEngine.setConversationWorkflowRepo(conversationWorkflowRepo);
   executionContext.setConversationDeps(conversationWorkflowRepo, conversationContextBuilder);
+  executionContext.setWorkflowEngine(workflowEngine);
 
   // Start timeout escalation scanner (after recovery, before orchestrator)
   try { timeoutEscalationService.start(); } catch (err) {
@@ -340,7 +360,7 @@ export async function bootstrap(): Promise<void> {
 
   // ─── IPC Handlers ────────────────────────────────────────
   registerSnapshotHandlers(orgRepo, logger);
-  registerOrganizationHandlers(orgRepo, logger);
+  registerOrganizationHandlers(orgRepo, logger, workflowEngine);
   registerRoleHandlers(roleRepo, logger);
   registerSkillHandlers(skillRepo, logger);
   registerTemplateHandlers(templateService, logger);
@@ -354,6 +374,7 @@ export async function bootstrap(): Promise<void> {
     conversationWorkflowRepo, discussionRepo, pendingWakeRepo,
     eventBus, conversationEventLogger, logger, roleRepo,
   );
+  registerWorkflowSchemaHandlers(workflowEngine, logger);
 
   // ─── OS Locale Detection (first launch) ─────────────────
   try {

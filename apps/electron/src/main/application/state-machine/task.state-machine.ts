@@ -2,26 +2,36 @@ import { injectable, inject } from 'tsyringe';
 import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js';
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { TaskStatus } from '@main/core/types/domain.types.js';
 import { TASK_REPO_TOKEN, EVENT_BUS_TOKEN, LOGGER_TOKEN } from '@main/core/tokens.js';
-import { TASK_TRANSITIONS } from '@main/core/constants/task.constants.js';
-import { TaskStateError, NotFoundError } from '@main/core/errors/capibara.errors.js';
+import { NotFoundError } from '@main/core/errors/capibara.errors.js';
+import { InvalidTransitionError } from '@main/core/errors/workflow.errors.js';
 
 /**
  * Validates and executes task state transitions.
- * See Architecture §6.4 — Consensus State Machine.
+ * Delegates transition validation to WorkflowEngine (schema-driven).
  */
 @injectable()
 export class TaskStateMachine {
+  private workflowEngine: IWorkflowEngine | null = null;
+
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
     @inject(EVENT_BUS_TOKEN) private readonly eventBus: IEventBus,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
   ) {}
 
-  canTransition(from: TaskStatus, to: TaskStatus): boolean {
-    const allowed = TASK_TRANSITIONS[from];
-    return allowed ? allowed.includes(to) : false;
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
+  }
+
+  async canTransition(orgId: string, from: TaskStatus, to: TaskStatus): Promise<boolean> {
+    if (!this.workflowEngine) {
+      this.logger.warn('WorkflowEngine not set, rejecting transition');
+      return false;
+    }
+    return this.workflowEngine.canTransition(orgId, from, to);
   }
 
   async transition(taskId: string, to: TaskStatus): Promise<void> {
@@ -30,8 +40,13 @@ export class TaskStateMachine {
       throw new NotFoundError('TaskNode', taskId);
     }
 
-    if (!this.canTransition(task.status, to)) {
-      throw new TaskStateError(task.status, to);
+    if (!this.workflowEngine) {
+      throw new InvalidTransitionError(task.status, to);
+    }
+
+    const allowed = await this.workflowEngine.canTransition(task.orgId, task.status, to);
+    if (!allowed) {
+      throw new InvalidTransitionError(task.status, to);
     }
 
     await this.taskRepo.updateStatus(taskId, to);

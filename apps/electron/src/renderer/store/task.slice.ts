@@ -63,7 +63,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   updateTaskStatus: async (id: string, status: TaskStatus) => {
-    const result = await window.capibara.updateTaskStatus({ id, status });
+    const result = await window.capibara.updateTaskStatus({ id, status } as import('@shared/contracts').UpdateTaskStatusInput);
     if (result.ok) {
       const { currentOrgId } = get();
       if (currentOrgId) {

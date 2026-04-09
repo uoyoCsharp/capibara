@@ -1,5 +1,6 @@
 import type { Organization, Role, TaskNode, TaskType, TaskStatus, Skill, WakeTrigger } from '../types/domain.types.js';
 import type { ConversationWorkflow } from '../types/conversation.types.js';
+import type { WorkItemTypeDefinition } from '../types/workflow-schema.types.js';
 import type { VoteStats } from './i-discussion.repository.js';
 
 /** A decomposition task's deliverable: the child tasks it created. */
@@ -45,6 +46,10 @@ export interface PromptContext {
   conversationContext?: string;
   /** Active conversation workflow (populated for conversation triggers) */
   conversationWorkflow?: ConversationWorkflow;
+  /** WorkItemTypeDefinition for the current task's type (from WorkflowEngine) */
+  taskTypeDef?: WorkItemTypeDefinition | null;
+  /** All item types defined in the schema (for dynamic hierarchy descriptions) */
+  allItemTypes?: WorkItemTypeDefinition[];
 }
 
 export interface DiscussionSummary {

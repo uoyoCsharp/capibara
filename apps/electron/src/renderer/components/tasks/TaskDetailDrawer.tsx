@@ -6,6 +6,7 @@ import type {
   RoleRecord,
   RunRecord,
   DiscussionMessageRecord,
+  WorkflowSchemaRecord,
 } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
@@ -26,6 +27,30 @@ import {
   SheetTitle,
 } from '../ui/sheet';
 import { useT } from '../../hooks/useLocale';
+import type { WorkflowSchemaHelpers } from '../../hooks/useWorkflowSchema';
+
+/** Color mapping for status badge by category */
+const STATUS_BADGE_CATEGORY_COLORS: Record<string, string> = {
+  initial: 'bg-muted text-muted-foreground',
+  active: 'bg-yellow-500/10 text-yellow-600',
+  review: 'bg-orange-500/10 text-orange-600',
+  terminal: 'bg-green-500/10 text-green-600',
+};
+
+const STATUS_BADGE_OVERRIDE_COLORS: Record<string, string> = {
+  blocked: 'bg-destructive/10 text-destructive',
+  cancelled: 'bg-muted text-muted-foreground',
+  revision: 'bg-amber-500/10 text-amber-600',
+  approved: 'bg-blue-500/10 text-blue-600',
+};
+
+function getStatusBadgeColor(statusName: string, schema: WorkflowSchemaRecord | null): string {
+  if (STATUS_BADGE_OVERRIDE_COLORS[statusName]) return STATUS_BADGE_OVERRIDE_COLORS[statusName];
+  if (!schema) return 'bg-muted text-muted-foreground';
+  const def = schema.statuses.find((s) => s.name === statusName);
+  if (!def) return 'bg-muted text-muted-foreground';
+  return STATUS_BADGE_CATEGORY_COLORS[def.category] ?? 'bg-muted text-muted-foreground';
+}
 
 interface TaskDetailDrawerProps {
   task: TaskRecord;
@@ -35,35 +60,8 @@ interface TaskDetailDrawerProps {
   onDelete: (id: string) => void;
   onStartRun?: (taskId: string, roleId: string) => void;
   hasActiveRun?: boolean;
+  schemaHelpers: WorkflowSchemaHelpers;
 }
-
-// Valid task state transitions — must match main/core/constants/task.constants.ts
-const TASK_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
-  pending: ['in_progress', 'cancelled'],
-  in_progress: ['awaiting_review', 'blocked', 'cancelled'],
-  awaiting_review: ['approved', 'revision', 'blocked', 'cancelled'],
-  revision: ['in_progress', 'cancelled'],
-  approved: ['done', 'cancelled'],
-  done: [],
-  blocked: ['pending', 'in_progress', 'cancelled'],
-  cancelled: [],
-};
-
-function getValidTransitions(current: TaskStatus): TaskStatus[] {
-  // Always include the current status so the dropdown shows it, plus valid targets
-  return [current, ...TASK_TRANSITIONS[current]];
-}
-
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: 'bg-muted text-muted-foreground',
-  in_progress: 'bg-yellow-500/10 text-yellow-600',
-  awaiting_review: 'bg-orange-500/10 text-orange-600',
-  revision: 'bg-amber-500/10 text-amber-600',
-  approved: 'bg-blue-500/10 text-blue-600',
-  done: 'bg-green-500/10 text-green-600',
-  blocked: 'bg-destructive/10 text-destructive',
-  cancelled: 'bg-muted text-muted-foreground',
-};
 
 export function TaskDetailDrawer({
   task,
@@ -73,6 +71,7 @@ export function TaskDetailDrawer({
   onDelete,
   onStartRun,
   hasActiveRun,
+  schemaHelpers,
 }: TaskDetailDrawerProps) {
   const t = useT();
   const assignee = task.assigneeRoleId
@@ -89,13 +88,20 @@ export function TaskDetailDrawer({
     latestRun?.status === 'running' ? latestRun.startedAt : null
   );
 
+  // Derive transitions from schema
+  const manualTransitions = schemaHelpers.getManualTransitions(task.status);
+  const validTransitions = [task.status, ...manualTransitions];
+
+  // Derive review/blocked status from schema
+  const needsReview = schemaHelpers.isReviewStatus(task.status) &&
+    assignee != null && assignee.requiresHumanApproval === true;
+
   // Load run history and discussion for this task
   useEffect(() => {
     (async () => {
       try {
         const runRes = await window.capibara.getRunsByTaskId(task.id);
         if (runRes.ok && runRes.data.length > 0) {
-          // Most recent run first
           const sorted = [...runRes.data].sort(
             (a, b) => b.createdAt.localeCompare(a.createdAt),
           );
@@ -122,7 +128,6 @@ export function TaskDetailDrawer({
     if (typeof window.capibara?.subscribe !== 'function') return;
     const unsub = window.capibara.subscribe((event) => {
       if (event.type === 'run:changed' || event.type === 'run:completed') {
-        // Reload the latest run for this task
         (async () => {
           try {
             const runRes = await window.capibara.getRunsByTaskId(task.id);
@@ -140,9 +145,18 @@ export function TaskDetailDrawer({
   }, [task.id]);
 
   const roleNameMap = new Map(roles.map((r) => [r.id, r.name]));
-  // Only show review banner when the assignee role requires human approval
-  const needsReview = task.status === 'awaiting_review' &&
-    assignee != null && assignee.requiresHumanApproval === true;
+
+  // Find the first "approved" equivalent status (for review approve button)
+  const approveTarget = schemaHelpers.schema?.transitions
+    .find((tr) => tr.from === task.status && tr.trigger === 'manual' &&
+      schemaHelpers.schema?.statuses.find((s) => s.name === tr.to)?.category === 'terminal')?.to
+    ?? manualTransitions.find((s) => !schemaHelpers.isReviewStatus(s) && !schemaHelpers.isTerminalStatus(s));
+
+  // Find the revision target
+  const revisionTarget = manualTransitions.find((s) => {
+    const def = schemaHelpers.schema?.statuses.find((st) => st.name === s);
+    return def?.category === 'active';
+  });
 
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -161,20 +175,24 @@ export function TaskDetailDrawer({
                 {t.taskDetail.awaitingReviewMessage}
               </p>
               <div className="flex gap-2 mt-3">
-                <Button
-                  size="sm"
-                  onClick={() => onStatusChange(task.id, 'approved')}
-                  className="bg-green-500 hover:bg-green-500/90 text-white"
-                >
-                  {t.taskDetail.approve}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => onStatusChange(task.id, 'revision')}
-                  className="bg-yellow-500 hover:bg-yellow-500/90 text-white"
-                >
-                  {t.taskDetail.requestRevision}
-                </Button>
+                {approveTarget && (
+                  <Button
+                    size="sm"
+                    onClick={() => onStatusChange(task.id, approveTarget)}
+                    className="bg-green-500 hover:bg-green-500/90 text-white"
+                  >
+                    {t.taskDetail.approve}
+                  </Button>
+                )}
+                {revisionTarget && (
+                  <Button
+                    size="sm"
+                    onClick={() => onStatusChange(task.id, revisionTarget)}
+                    className="bg-yellow-500 hover:bg-yellow-500/90 text-white"
+                  >
+                    {t.taskDetail.requestRevision}
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -187,28 +205,38 @@ export function TaskDetailDrawer({
                 {t.taskDetail.blockedMessage}
               </p>
               <div className="flex gap-2 mt-3">
-                <Button
-                  size="sm"
-                  disabled={!task.assigneeRoleId || hasActiveRun}
-                  onClick={() => {
-                    onStatusChange(task.id, 'in_progress');
-                    if (onStartRun && task.assigneeRoleId) {
-                      setTimeout(() => onStartRun(task.id, task.assigneeRoleId!), 300);
-                    }
-                  }}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  <Play size={14} weight="fill" />
-                  {t.taskDetail.retry}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onStatusChange(task.id, 'cancelled')}
-                  className="border-destructive text-destructive hover:bg-destructive/10"
-                >
-                  {t.common.cancel}
-                </Button>
+                {manualTransitions.filter((s) => !schemaHelpers.isTerminalStatus(s)).length > 0 && (
+                  <Button
+                    size="sm"
+                    disabled={!task.assigneeRoleId || hasActiveRun}
+                    onClick={() => {
+                      const resumeTarget = manualTransitions.find((s) => !schemaHelpers.isTerminalStatus(s));
+                      if (resumeTarget) {
+                        onStatusChange(task.id, resumeTarget);
+                        if (onStartRun && task.assigneeRoleId) {
+                          setTimeout(() => onStartRun(task.id, task.assigneeRoleId!), 300);
+                        }
+                      }
+                    }}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    <Play size={14} weight="fill" />
+                    {t.taskDetail.retry}
+                  </Button>
+                )}
+                {manualTransitions.some((s) => schemaHelpers.isTerminalStatus(s)) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const cancelTarget = manualTransitions.find((s) => schemaHelpers.isTerminalStatus(s));
+                      if (cancelTarget) onStatusChange(task.id, cancelTarget);
+                    }}
+                    className="border-destructive text-destructive hover:bg-destructive/10"
+                  >
+                    {t.common.cancel}
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -228,7 +256,7 @@ export function TaskDetailDrawer({
                 {t.taskDetail.typeLabel}
               </label>
               <span className="text-sm font-medium text-muted-foreground capitalize">
-                {task.type}
+                {schemaHelpers.typeLabel(task.type)}
               </span>
             </div>
             <div>
@@ -239,13 +267,13 @@ export function TaskDetailDrawer({
                 value={task.status}
                 onValueChange={(value) => onStatusChange(task.id, value as TaskStatus)}
               >
-                <SelectTrigger className={cn('w-auto h-auto px-2 py-1 text-xs font-semibold border-0', STATUS_COLORS[task.status])}>
+                <SelectTrigger className={cn('w-auto h-auto px-2 py-1 text-xs font-semibold border-0', getStatusBadgeColor(task.status, schemaHelpers.schema))}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {getValidTransitions(task.status).map((s) => (
+                  {validTransitions.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {t.task[s]}
+                      {schemaHelpers.statusLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>

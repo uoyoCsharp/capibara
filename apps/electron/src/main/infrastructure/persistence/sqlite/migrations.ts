@@ -236,6 +236,49 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 3,
+    description: 'Add workflow_schemas table and remove task_nodes CHECK constraints',
+    up: (db) => {
+      db.exec(`
+        -- ═══════════════════════════════════════════════
+        -- 13. Workflow Schemas
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE IF NOT EXISTS workflow_schemas (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          schema_json TEXT NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(org_id, is_active)
+        );
+      `);
+
+      // Recreate task_nodes without CHECK constraints on type and status.
+      // SQLite does not support DROP CONSTRAINT, so we recreate the table.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS task_nodes_new (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          parent_id TEXT REFERENCES task_nodes_new(id) ON DELETE SET NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'pending',
+          assignee_role_id TEXT REFERENCES roles(id) ON DELETE SET NULL,
+          depth INTEGER NOT NULL DEFAULT 0,
+          artifact_paths TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        INSERT INTO task_nodes_new SELECT * FROM task_nodes;
+        DROP TABLE task_nodes;
+        ALTER TABLE task_nodes_new RENAME TO task_nodes;
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

@@ -7,6 +7,7 @@ import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
 import type { PromptContext, DiscussionSummary, ReviewableChild, DecompositionDeliverable, LeafDeliverable } from '@main/core/interfaces/i-prompt-builder.js';
 import type { TaskNode, DiscussionGroup, Role, Skill, WakeTrigger } from '@main/core/types/domain.types.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ConversationContextBuilder } from '../conversation/conversation-context.builder.js';
 import {
   TASK_REPO_TOKEN,
@@ -24,6 +25,7 @@ import { OrgContext } from './org.context.js';
 export class ExecutionContext {
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private conversationContextBuilder: ConversationContextBuilder | null = null;
+  private workflowEngine: IWorkflowEngine | null = null;
 
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -39,6 +41,10 @@ export class ExecutionContext {
   ): void {
     this.conversationWorkflowRepo = repo;
     this.conversationContextBuilder = contextBuilder;
+  }
+
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
   }
 
   async buildPromptContext(roleId: string, taskId: string, trigger: WakeTrigger = 'task_assigned'): Promise<PromptContext> {
@@ -93,6 +99,14 @@ export class ExecutionContext {
       organization = undefined;
     }
 
+    // Fetch workflow type definitions for schema-driven prompt construction
+    let taskTypeDef: PromptContext['taskTypeDef'];
+    let allItemTypes: PromptContext['allItemTypes'];
+    if (this.workflowEngine) {
+      taskTypeDef = await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type);
+      allItemTypes = await this.workflowEngine.getAllItemTypes(task.orgId);
+    }
+
     return {
       organization,
       role,
@@ -107,6 +121,8 @@ export class ExecutionContext {
       hasChildren,
       conversationContext,
       conversationWorkflow,
+      taskTypeDef,
+      allItemTypes,
     };
   }
 
@@ -117,8 +133,11 @@ export class ExecutionContext {
     // Resolve assignee name
     const assigneeRoleName = await this.resolveRoleName(child.assigneeRoleId, roleNameCache);
 
-    // Build deliverable based on task type
-    const isDecomposer = child.type === 'epic' || child.type === 'story';
+    // Build deliverable based on task type (schema-driven)
+    const childTypeDef = this.workflowEngine
+      ? await this.workflowEngine.getItemTypeDefinition(child.orgId, child.type)
+      : null;
+    const isDecomposer = childTypeDef?.canDecompose ?? false;
     let deliverable: DecompositionDeliverable | LeafDeliverable;
 
     if (isDecomposer) {
@@ -221,13 +240,19 @@ export class ExecutionContext {
     };
   }
 
-  /** Walk up the task tree to find the nearest discussion group (story or epic). */
+  /** Walk up the task tree to find the nearest discussion group (schema-driven via hasDiscussionGroup). */
   private async findNearestDiscussionGroup(task: TaskNode): Promise<DiscussionGroup | null> {
-    let currentId: string | null = (task.type === 'story' || task.type === 'epic') ? task.id : task.parentId;
+    const hasDiscussion = this.workflowEngine
+      ? (await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type))?.hasDiscussionGroup ?? false
+      : false;
+    let currentId: string | null = hasDiscussion ? task.id : task.parentId;
     while (currentId) {
       const t = await this.taskRepo.findById(currentId);
       if (!t) return null;
-      if (t.type === 'story' || t.type === 'epic') {
+      const typeDef = this.workflowEngine
+        ? await this.workflowEngine.getItemTypeDefinition(t.orgId, t.type)
+        : null;
+      if (typeDef?.hasDiscussionGroup) {
         const group = await this.discussionRepo.findGroupByTaskNodeId(t.id);
         if (group) return group;
       }
