@@ -41,6 +41,7 @@ export class EventBroadcaster {
 
     // Conversation events
     this.eventBus.on('conversation:question-posted', forward);
+    this.eventBus.on('conversation:reply-posted', forward);
     this.eventBus.on('conversation:resolved', forward);
     this.eventBus.on('conversation:cancelled', forward);
 
@@ -156,6 +157,14 @@ export class EventBroadcaster {
             } catch { /* Window may be destroyed */ }
           }
         }
+        break;
+
+      case 'conversation:reply-posted':
+        desktopEvent = {
+          type: 'conversation:reply-posted',
+          orgId: payload.orgId as string,
+          workflowId: payload.workflowId as string,
+        };
         break;
 
       case 'conversation:resolved':

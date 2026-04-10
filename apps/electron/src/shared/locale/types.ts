@@ -421,5 +421,13 @@ export interface LocaleMessages {
     avgResponse: string;
     escalations: string;
     hop: string;
+    replyPlaceholder: string;
+    replySend: string;
+    replySuccess: string;
+    replyFailed: string;
+    questionFrom: string;
+    humanReplyNotification: string;
+    humanReplyNotificationBody: string;
+    goToConversations: string;
   };
 }

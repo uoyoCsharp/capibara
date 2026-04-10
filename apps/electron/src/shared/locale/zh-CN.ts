@@ -446,5 +446,13 @@ export const zhCN: LocaleMessages = {
     avgResponse: '平均响应',
     escalations: '次升级',
     hop: '跳',
+    replyPlaceholder: '输入你的回复...',
+    replySend: '发送回复',
+    replySuccess: '回复已发送',
+    replyFailed: '发送回复失败',
+    questionFrom: '来自',
+    humanReplyNotification: '需要人工回复',
+    humanReplyNotificationBody: '需要你的回复',
+    goToConversations: '前往对话管理',
   },
 };

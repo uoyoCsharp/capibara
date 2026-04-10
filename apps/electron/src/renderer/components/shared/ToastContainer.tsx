@@ -36,7 +36,17 @@ export function ToastContainer() {
             style={{ animation: 'toast-enter 200ms ease-out' }}
           >
             <Icon size={18} weight="fill" className="shrink-0 mt-0.5" />
-            <p className="text-sm flex-1 leading-snug">{t.message}</p>
+            <div className="flex-1">
+              <p className="text-sm leading-snug">{t.message}</p>
+              {t.action && (
+                <button
+                  onClick={() => { t.action!.onClick(); dismiss(t.id); }}
+                  className="mt-1.5 text-xs font-medium underline underline-offset-2 hover:no-underline"
+                >
+                  {t.action.label}
+                </button>
+              )}
+            </div>
             <button
               onClick={() => dismiss(t.id)}
               className="shrink-0 p-0.5 rounded opacity-60 hover:opacity-100 transition-opacity"

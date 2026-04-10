@@ -96,6 +96,7 @@ const api: CapibaraApi = {
   getConversationMetrics: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationMetrics, orgId),
   getConversationEvents: (workflowId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationEvents, workflowId),
   getConversationAnalytics: (orgId, timeRange) => ipcRenderer.invoke(IPC_CHANNELS.getConversationAnalytics, orgId, timeRange),
+  replyToConversation: (input) => ipcRenderer.invoke(IPC_CHANNELS.replyToConversation, input),
 
   // Subscription
   subscribe: (callback: (event: DesktopEvent) => void) => {

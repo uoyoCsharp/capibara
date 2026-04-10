@@ -382,7 +382,7 @@ export async function bootstrap(): Promise<void> {
   registerSettingsHandlers(settingsRepo, logger);
   registerConversationHandlers(
     conversationWorkflowRepo, discussionRepo, pendingWakeRepo,
-    eventBus, conversationEventLogger, logger, roleRepo,
+    eventBus, conversationEventLogger, logger, roleRepo, conversationWorkflowService,
   );
   registerWorkflowSchemaHandlers(workflowEngine, logger);
 

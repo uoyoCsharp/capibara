@@ -446,5 +446,13 @@ export const enUS: LocaleMessages = {
     avgResponse: 'avg response',
     escalations: 'escalations',
     hop: 'hop',
+    replyPlaceholder: 'Type your reply...',
+    replySend: 'Send Reply',
+    replySuccess: 'Reply sent successfully',
+    replyFailed: 'Failed to send reply',
+    questionFrom: 'Question from',
+    humanReplyNotification: 'Human reply needed',
+    humanReplyNotificationBody: 'needs your input',
+    goToConversations: 'Go to Conversations',
   },
 };

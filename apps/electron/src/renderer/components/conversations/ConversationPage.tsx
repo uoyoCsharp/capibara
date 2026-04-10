@@ -6,6 +6,7 @@ import { toast } from '../../store/toast.store';
 import { ConversationList } from './ConversationList';
 import { ConversationTimeline } from './ConversationTimeline';
 import { ConversationAnalytics } from './ConversationAnalytics';
+import { ConversationReplyPanel } from './ConversationReplyPanel';
 
 export function ConversationPage() {
   const { currentOrgId } = useCapibaraSnapshot();
@@ -44,6 +45,7 @@ export function ConversationPage() {
     const unsub = window.capibara.subscribe((event: DesktopEvent) => {
       if (
         (event.type === 'conversation:question-posted' ||
+          event.type === 'conversation:reply-posted' ||
           event.type === 'conversation:resolved' ||
           event.type === 'conversation:cancelled' ||
           event.type === 'conversation:timed-out' ||
@@ -126,11 +128,24 @@ export function ConversationPage() {
           />
         </div>
 
-        {selectedWorkflowId && (
-          <div className="w-[400px] shrink-0 overflow-auto border-l pl-4">
-            <ConversationTimeline workflowId={selectedWorkflowId} />
-          </div>
-        )}
+        {selectedWorkflowId && (() => {
+          const selectedWf = conversations.find((c) => c.id === selectedWorkflowId);
+          const isHumanWaiting = selectedWf?.respondentType === 'human' && selectedWf?.state === 'waiting_for_reply';
+          return (
+            <div className="w-[400px] shrink-0 overflow-hidden border-l flex flex-col">
+              {isHumanWaiting && selectedWf ? (
+                <ConversationReplyPanel
+                  workflow={selectedWf}
+                  onReplied={() => { if (currentOrgId) void loadData(currentOrgId); }}
+                />
+              ) : (
+                <div className="overflow-auto pl-4 pt-0">
+                  <ConversationTimeline workflowId={selectedWorkflowId} />
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

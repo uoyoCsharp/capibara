@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron';
-import { IPC_CHANNELS, cancelConversationSchema } from '@shared/contracts.js';
+import { IPC_CHANNELS, cancelConversationSchema, replyToConversationSchema } from '@shared/contracts.js';
 import type { DesktopResult, ConversationWorkflowRecord, ConversationMetricsRecord, ConversationAnalyticsRecord, ConversationTimeRange } from '@shared/contracts.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
+import type { IConversationWorkflowService } from '@main/core/interfaces/i-conversation-workflow.service.js';
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { IPendingWakeRepository } from '@main/core/interfaces/i-pending-wake.repository.js';
 import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js';
@@ -48,6 +49,7 @@ export function registerConversationHandlers(
   eventLogger: ConversationEventLogger,
   logger: ILogger,
   roleRepo: IRoleRepository,
+  conversationService?: IConversationWorkflowService,
 ): void {
   // List active conversations for an org
   ipcMain.handle(IPC_CHANNELS.getActiveConversations, async (_event, orgId: unknown) => {
@@ -364,6 +366,82 @@ export function registerConversationHandlers(
     } catch (err) {
       logger.error('Failed to get conversation analytics', { error: String(err) });
       return fail('INTERNAL', 'Failed to get conversation analytics');
+    }
+  });
+
+  // Reply to a conversation as a human
+  ipcMain.handle(IPC_CHANNELS.replyToConversation, async (_event, input: unknown) => {
+    try {
+      const parsed = replyToConversationSchema.safeParse(input);
+      if (!parsed.success) {
+        return fail('VALIDATION_ERROR', parsed.error.message);
+      }
+      const { workflowId, content } = parsed.data;
+
+      const workflow = await workflowRepo.findById(workflowId);
+      if (!workflow) {
+        return fail('NOT_FOUND', `Conversation workflow ${workflowId} not found`);
+      }
+      if (workflow.state !== 'waiting_for_reply') {
+        return fail('INVALID_STATE', `Conversation is not waiting for reply (state: '${workflow.state}')`);
+      }
+      if (workflow.respondentType !== 'human') {
+        return fail('INVALID_STATE', 'This conversation is not routed to a human respondent');
+      }
+
+      // Post the reply as a discussion message
+      const msg = await discussionRepo.postMessage({
+        groupId: workflow.discussionGroupId,
+        authorRoleId: null,
+        authorType: 'human',
+        content,
+        voteTag: null,
+        intent: 'reply',
+        inReplyToMessageId: workflow.questionMessageId,
+      });
+
+      // Emit message event so discussion UI updates
+      eventBus.emit({
+        type: 'discussion:message-added',
+        timestamp: new Date().toISOString(),
+        payload: { groupId: workflow.discussionGroupId, messageId: msg.id },
+      });
+
+      // Use ConversationWorkflowService.handleReply if available (creates PendingWake + state transition)
+      if (conversationService) {
+        await conversationService.handleReply(workflowId, msg.id);
+      } else {
+        // Fallback: manual state transition
+        await workflowRepo.updateReply(workflowId, msg.id);
+        await workflowRepo.updateState(workflowId, 'reply_received');
+      }
+
+      // Log audit event
+      eventLogger.log(workflowId, 'reply_posted', {
+        messageId: msg.id,
+        replierType: 'human',
+      });
+
+      // Emit conversation event for UI refresh
+      eventBus.emit({
+        type: 'conversation:reply-posted',
+        timestamp: new Date().toISOString(),
+        payload: {
+          workflowId: workflow.id,
+          orgId: workflow.orgId,
+          askingRoleId: workflow.askingRoleId,
+          messageId: msg.id,
+          replierRoleId: null,
+          replierType: 'human',
+          workflow: { ...workflow, state: 'reply_received', replyMessageId: msg.id },
+        },
+      });
+
+      logger.info('Human reply posted to conversation', { workflowId, messageId: msg.id });
+      return ok(undefined as void);
+    } catch (err) {
+      logger.error('Failed to reply to conversation', { error: String(err) });
+      return fail('INTERNAL', 'Failed to reply to conversation');
     }
   });
 }

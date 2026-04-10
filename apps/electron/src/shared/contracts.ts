@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
   getConversationMetrics: 'capibara:conversation:get-metrics',
   getConversationEvents: 'capibara:conversation:get-events',
   getConversationAnalytics: 'capibara:conversation:get-analytics',
+  replyToConversation: 'capibara:conversation:reply',
 } as const;
 
 // ─── IPC Response Wrapper ───────────────────────────────────────────
@@ -126,7 +127,8 @@ export type DesktopEvent =
   | { type: 'conversation:resolved'; orgId: string; workflowId: string }
   | { type: 'conversation:cancelled'; orgId: string; workflowId: string }
   | { type: 'conversation:timed-out'; orgId: string; workflowId: string }
-  | { type: 'conversation:escalated'; orgId: string; workflowId: string };
+  | { type: 'conversation:escalated'; orgId: string; workflowId: string }
+  | { type: 'conversation:reply-posted'; orgId: string; workflowId: string };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -269,6 +271,11 @@ export const cancelConversationSchema = z.object({
   workflowId: z.string().min(1),
 });
 
+export const replyToConversationSchema = z.object({
+  workflowId: z.string().min(1),
+  content: z.string().min(1).max(50000),
+});
+
 // ─── Workflow Schema Zod Schemas ─────────────────────────────────────
 export const saveSchemaSchema = z.object({
   orgId: z.string().min(1),
@@ -319,6 +326,7 @@ export const saveSchemaSchema = z.object({
 export type SaveSchemaInput = z.infer<typeof saveSchemaSchema>;
 
 export type CancelConversationInput = z.infer<typeof cancelConversationSchema>;
+export type ReplyToConversationInput = z.infer<typeof replyToConversationSchema>;
 
 export type UpdateSettingInput = z.infer<typeof updateSettingSchema>;
 
@@ -432,6 +440,7 @@ export interface CapibaraApi {
   getConversationMetrics: (orgId: string) => Promise<DesktopResult<ConversationMetricsRecord>>;
   getConversationEvents: (workflowId: string) => Promise<DesktopResult<ConversationEventRecord[]>>;
   getConversationAnalytics: (orgId: string, timeRange: ConversationTimeRange) => Promise<DesktopResult<ConversationAnalyticsRecord>>;
+  replyToConversation: (input: ReplyToConversationInput) => Promise<DesktopResult<void>>;
 
   // Events subscription
   subscribe: (callback: (event: DesktopEvent) => void) => () => void;

@@ -45,10 +45,19 @@ function AppContent() {
             break;
         }
       }
+      if (event.type === 'conversation:question-posted' && event.respondentType === 'human') {
+        toast.info(
+          `${t.conversations.humanReplyNotification}: ${event.askingRoleName || 'AI'} ${t.conversations.humanReplyNotificationBody}`,
+          {
+            duration: 10000,
+            action: { label: t.conversations.goToConversations, onClick: () => setActiveSection('conversations') },
+          },
+        );
+      }
     });
 
     return unsub;
-  }, [t]);
+  }, [t, setActiveSection]);
 
   if (isLoading) {
     return (
