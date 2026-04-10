@@ -8,6 +8,7 @@ import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.r
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { Narrative } from '@main/core/types/domain.types.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import {
   NARRATIVE_REPO_TOKEN,
   ORGANIZATION_REPO_TOKEN,
@@ -34,6 +35,7 @@ export interface NarrativeTemplateData {
   recentCompletions: Array<{ id: string; title: string }>;
   activeWork: Array<{ id: string; title: string; status: string }>;
   discussionCount: number;
+  statusCategoryCounts: Record<string, number>;
 }
 
 export interface ApprovalSummaryData {
@@ -43,6 +45,7 @@ export interface ApprovalSummaryData {
   voteStats: { APPROVE: number; REVISE: number; CONCERN: number; DELEGATE: number };
   concerns: string[];
   revisionHistory: string[];
+  terminalStatuses?: Set<string>;
 }
 
 /**
@@ -55,6 +58,8 @@ export interface ApprovalSummaryData {
  */
 @injectable()
 export class NarrativeEngine {
+  private workflowEngine!: IWorkflowEngine;
+
   constructor(
     @inject(NARRATIVE_REPO_TOKEN) private readonly narrativeRepo: INarrativeRepository,
     @inject(ORGANIZATION_REPO_TOKEN) private readonly orgRepo: IOrganizationRepository,
@@ -66,6 +71,10 @@ export class NarrativeEngine {
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
   ) {}
 
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
+  }
+
   // ─── Layer 1: Data Query ──────────────────────────────────────
 
   async queryTemplateData(orgId: string): Promise<NarrativeTemplateData> {
@@ -75,23 +84,45 @@ export class NarrativeEngine {
     const totalTokens = await this.costRepo.getTotalTokensByOrgId(orgId);
     const discussions = await this.discussionRepo.findGroupsByOrgId(orgId);
 
+    const allStatuses = await this.workflowEngine.getAllStatuses(orgId);
+
     const statusCounts: Record<string, number> = {};
+    const statusCategoryMap = new Map<string, string>();
+    for (const s of allStatuses) {
+      statusCategoryMap.set(s.name, s.category);
+    }
+    const statusCategoryCounts: Record<string, number> = {};
     for (const t of tasks) {
       statusCounts[t.status] = (statusCounts[t.status] ?? 0) + 1;
+      const category = statusCategoryMap.get(t.status) ?? 'unknown';
+      statusCategoryCounts[category] = (statusCategoryCounts[category] ?? 0) + 1;
     }
 
+    // Blocked tasks: find statuses that only have manual outgoing transitions (stuck tasks needing intervention)
+    const blockedStatusNames = new Set(
+      allStatuses
+        .filter((s) => s.name === 'blocked') // Convention: blocked status
+        .map((s) => s.name),
+    );
     const blockedTasks = tasks
-      .filter((t) => t.status === 'blocked')
+      .filter((t) => blockedStatusNames.has(t.status))
       .map((t) => ({ id: t.id, title: t.title }));
 
+    const terminalStatusNames = new Set(
+      allStatuses.filter((s) => s.category === 'terminal').map((s) => s.name),
+    );
     const recentCompletions = tasks
-      .filter((t) => t.status === 'done' || t.status === 'approved')
+      .filter((t) => terminalStatusNames.has(t.status))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, 5)
       .map((t) => ({ id: t.id, title: t.title }));
 
+    // Active work = tasks in non-initial, non-terminal statuses (schema-driven)
+    const activeStatusNames = new Set(
+      allStatuses.filter((s) => s.category === 'active' || s.category === 'review').map((s) => s.name),
+    );
     const activeWork = tasks
-      .filter((t) => t.status === 'in_progress' || t.status === 'awaiting_review' || t.status === 'revision')
+      .filter((t) => activeStatusNames.has(t.status))
       .map((t) => ({ id: t.id, title: t.title, status: t.status }));
 
     const budgetLimit = org?.budgetLimit ?? 50;
@@ -112,6 +143,7 @@ export class NarrativeEngine {
       recentCompletions,
       activeWork,
       discussionCount: discussions.length,
+      statusCategoryCounts,
     };
   }
 
@@ -128,16 +160,15 @@ export class NarrativeEngine {
     lines.push(`**Tokens Used:** ${(data.totalTokens / 1_000_000).toFixed(4)}M / ${data.budgetLimit}M (${data.budgetPercent}%)`);
     lines.push('');
 
-    // Task overview
-    const done = (data.statusCounts['done'] ?? 0) + (data.statusCounts['approved'] ?? 0);
-    const inProgress = data.statusCounts['in_progress'] ?? 0;
-    const pending = data.statusCounts['pending'] ?? 0;
-    const blocked = data.statusCounts['blocked'] ?? 0;
+    // Task overview — aggregate by category counts from statusCategoryCounts
+    const completed = data.statusCategoryCounts?.terminal ?? 0;
+    const inProgress = (data.statusCategoryCounts?.active ?? 0) + (data.statusCategoryCounts?.review ?? 0);
+    const pending = data.statusCategoryCounts?.initial ?? 0;
     lines.push(`### Tasks: ${data.totalTasks} total`);
-    lines.push(`- ✅ Completed: ${done}`);
+    lines.push(`- ✅ Completed: ${completed}`);
     lines.push(`- 🔄 In Progress: ${inProgress}`);
     lines.push(`- ⏳ Pending: ${pending}`);
-    if (blocked > 0) lines.push(`- 🚫 Blocked: ${blocked}`);
+    if (data.blockedTasks.length > 0) lines.push(`- 🚫 Blocked: ${data.blockedTasks.length}`);
     lines.push('');
 
     // Execution
@@ -195,7 +226,8 @@ export class NarrativeEngine {
     if (data.childSummaries.length > 0) {
       lines.push('**What was done:**');
       for (const child of data.childSummaries) {
-        const icon = child.status === 'done' || child.status === 'approved' ? '✅' : '🔄';
+        const isTerminal = data.terminalStatuses?.has(child.status) ?? false;
+        const icon = isTerminal ? '✅' : '🔄';
         lines.push(`- ${icon} ${child.title} (${child.status})`);
       }
       lines.push('');
@@ -239,6 +271,12 @@ export class NarrativeEngine {
     const children = await this.taskRepo.findByParentId(taskId);
     const childSummaries = children.map((c) => ({ title: c.title, status: c.status }));
 
+    // Build terminal status set from schema
+    const allStatuses = await this.workflowEngine.getAllStatuses(task.orgId);
+    const terminalStatuses = new Set(
+      allStatuses.filter((s) => s.category === 'terminal').map((s) => s.name),
+    );
+
     const group = await this.discussionRepo.findGroupByTaskNodeId(taskId);
     let voteStats = { APPROVE: 0, REVISE: 0, CONCERN: 0, DELEGATE: 0 };
     let concerns: string[] = [];
@@ -258,6 +296,7 @@ export class NarrativeEngine {
       voteStats,
       concerns,
       revisionHistory,
+      terminalStatuses,
     });
   }
 

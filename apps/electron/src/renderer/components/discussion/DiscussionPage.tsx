@@ -275,6 +275,8 @@ export function DiscussionPage() {
             voteStats={voteStats}
             roles={roles}
             tasks={tasks}
+            isReviewStatus={schemaHelpers.isReviewStatus}
+            isTerminalStatus={schemaHelpers.isTerminalStatus}
             onClose={() => setSelectedGroupId(null)}
             onPostMessage={handlePostMessage}
             onRefresh={handleRefresh}

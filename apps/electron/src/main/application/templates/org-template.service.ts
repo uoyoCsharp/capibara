@@ -6,7 +6,7 @@ import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.
 import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { Organization } from '@main/core/types/domain.types.js';
-import { DEFAULT_WORKFLOW_SCHEMA } from '../workflow/default-workflow-schema.js';
+import type { WorkflowSchema } from '@main/core/types/workflow-schema.types.js';
 
 export interface TemplateRoleDefinition {
   name: string;
@@ -58,6 +58,7 @@ export class OrgTemplateService {
     orgDescription: string,
     budgetLimit: number,
     workspacePath: string,
+    workflowSchema?: WorkflowSchema | null,
   ): Promise<Organization> {
     const template = this.getTemplateById(templateId);
     if (!template) {
@@ -83,12 +84,12 @@ export class OrgTemplateService {
       await this.createRoleFromDef(org.id, null, rootDef, commandToId);
     }
 
-    // Initialize default workflow schema
-    if (this.workflowEngine) {
+    // Apply workflow schema if provided
+    if (this.workflowEngine && workflowSchema) {
       try {
-        await this.workflowEngine.saveSchema(org.id, DEFAULT_WORKFLOW_SCHEMA);
+        await this.workflowEngine.saveSchema(org.id, workflowSchema);
       } catch (err) {
-        this.logger.error('Failed to create default schema for template org', { orgId: org.id, error: String(err) });
+        this.logger.error('Failed to apply workflow schema for template org', { orgId: org.id, error: String(err) });
       }
     }
 

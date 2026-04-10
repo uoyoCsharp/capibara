@@ -49,7 +49,7 @@ export function resolveScenario(ctx: PromptContext): PromptScenario {
   const isDecomposer = ctx.taskTypeDef?.canDecompose ?? false;
   if (isDecomposer) {
     const needsApproval = ctx.role.requiresHumanApproval === true;
-    const hasApproval = ctx.task.status === 'approved'
+    const hasApproval = ctx.isTaskTerminal === true
       || (ctx.discussionSummary?.voteStats?.APPROVE ?? 0) > 0;
     return (needsApproval && !hasApproval)
       ? 'propose_decomposition'

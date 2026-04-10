@@ -95,6 +95,7 @@ import { registerNarrativeHandlers } from './ipc-handlers/narrative.handlers.js'
 import { registerSettingsHandlers } from './ipc-handlers/settings.handlers.js';
 import { registerConversationHandlers } from './ipc-handlers/conversation.handlers.js';
 import { registerWorkflowSchemaHandlers } from './ipc-handlers/workflow-schema.handlers.js';
+import { WorkflowTemplateService } from './application/workflow/workflow-template.service.js';
 import { detectLocaleFromOS } from '@shared/locale/index.js';
 
 import type { IOrganizationRepository } from './core/interfaces/i-organization.repository.js';
@@ -205,6 +206,11 @@ export async function bootstrap(): Promise<void> {
   const templateService = new OrgTemplateService(orgRepo, roleRepo, skillRepo, logger, templatesDir);
   templateService.setWorkflowEngine(workflowEngine);
 
+  const workflowsDir = isDev
+    ? join(dirname(__dirname), '..', 'resources', 'workflows')
+    : join(process.resourcesPath, 'workflows');
+  const workflowTemplateService = new WorkflowTemplateService(logger, workflowsDir);
+
   const taskStateMachine = new TaskStateMachine(taskRepo, eventBus, logger);
   taskStateMachine.setWorkflowEngine(workflowEngine);
   const taskService = new TaskService(taskRepo, roleRepo, pendingWakeRepo, discussionRepo, eventBus, logger, taskStateMachine);
@@ -216,6 +222,7 @@ export async function bootstrap(): Promise<void> {
     config, logger, eventBus, discussionRepo, taskRepo, roleRepo,
     consensusDetector, taskStateMachine,
   );
+  discussionService.setWorkflowEngine(workflowEngine);
   try { discussionService.start(); } catch (err) {
     logger.error('Discussion service failed to start', { error: String(err) });
   }
@@ -267,6 +274,7 @@ export async function bootstrap(): Promise<void> {
   const narrativeEngine = new NarrativeEngine(
     narrativeRepo, orgRepo, taskRepo, runRepo, costRepo, discussionRepo, eventBus, logger,
   );
+  narrativeEngine.setWorkflowEngine(workflowEngine);
 
   // ─── Conversation System (Epic 11) ──────────────────────────
   const routingPolicyEngine = new RoutingPolicyEngine(roleRepo, runRepo, conversationWorkflowRepo, logger, skillRepo);
@@ -300,6 +308,8 @@ export async function bootstrap(): Promise<void> {
   mcpToolHandlers.setWorkflowEngine(workflowEngine);
   discussionService.setConversationDeps(conversationWorkflowRepo, conversationWorkflowService);
   executionEngine.setConversationWorkflowRepo(conversationWorkflowRepo);
+  executionEngine.setWorkflowEngine(workflowEngine);
+  executionEngine.setTaskService(taskService);
   executionContext.setConversationDeps(conversationWorkflowRepo, conversationContextBuilder);
   executionContext.setWorkflowEngine(workflowEngine);
 
@@ -360,14 +370,14 @@ export async function bootstrap(): Promise<void> {
 
   // ─── IPC Handlers ────────────────────────────────────────
   registerSnapshotHandlers(orgRepo, logger);
-  registerOrganizationHandlers(orgRepo, logger, workflowEngine);
+  registerOrganizationHandlers(orgRepo, logger, workflowEngine, workflowTemplateService);
   registerRoleHandlers(roleRepo, logger);
   registerSkillHandlers(skillRepo, logger);
-  registerTemplateHandlers(templateService, logger);
+  registerTemplateHandlers(templateService, workflowTemplateService, logger);
   registerTaskHandlers(taskService, logger);
   registerDiscussionHandlers(discussionService, logger);
   registerRunHandlers(runRepo, orgRepo, executionEngine, fileLogService, logger);
-  registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger);
+  registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger, workflowEngine);
   registerNarrativeHandlers(narrativeEngine, costRepo, orgRepo, logger);
   registerSettingsHandlers(settingsRepo, logger);
   registerConversationHandlers(

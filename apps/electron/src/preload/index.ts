@@ -87,6 +87,7 @@ const api: CapibaraApi = {
   saveSchema: (input) => ipcRenderer.invoke(IPC_CHANNELS.saveSchema, input),
   validateSchema: (input) => ipcRenderer.invoke(IPC_CHANNELS.validateSchema, input),
   schemaImpactAnalysis: (input) => ipcRenderer.invoke(IPC_CHANNELS.schemaImpactAnalysis, input),
+  getWorkflowTemplates: () => ipcRenderer.invoke(IPC_CHANNELS.getWorkflowTemplates),
 
   // Conversation
   getActiveConversations: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActiveConversations, orgId),

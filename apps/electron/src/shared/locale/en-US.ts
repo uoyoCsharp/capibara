@@ -157,6 +157,7 @@ export const enUS: LocaleMessages = {
     workspacePlaceholder: 'Select a folder...',
     customInstructionsLabel: 'Custom Instructions',
     customInstructionsPlaceholder: 'Optional instructions injected into all AI role prompts for this organization (e.g., coding conventions, domain context)...',
+    workflowLabel: 'Workflow',
   },
   orgSettings: {
     customInstructions: 'Custom Instructions',

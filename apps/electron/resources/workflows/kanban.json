@@ -1,0 +1,43 @@
+{
+  "id": "kanban",
+  "name": "Kanban",
+  "description": "Simplified Kanban board with To Do / In Progress / Done columns. Flat task structure, no review cycle. Best for small teams or rapid prototyping.",
+  "schema": {
+    "workItemTypes": [
+      { "name": "feature", "label": "Feature", "isLeaf": false, "allowedChildren": ["task", "bug"], "allowedAtRoot": true, "canDecompose": true, "hasDiscussionGroup": true },
+      { "name": "task", "label": "Task", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": true, "canDecompose": false, "hasDiscussionGroup": false },
+      { "name": "bug", "label": "Bug", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": true, "canDecompose": false, "hasDiscussionGroup": false }
+    ],
+    "statuses": [
+      { "name": "todo", "label": "To Do", "category": "initial" },
+      { "name": "in_progress", "label": "In Progress", "category": "active" },
+      { "name": "done", "label": "Done", "category": "terminal" },
+      { "name": "cancelled", "label": "Cancelled", "category": "terminal" }
+    ],
+    "transitions": [
+      { "from": "todo", "to": "in_progress", "trigger": "manual" },
+      { "from": "in_progress", "to": "done", "trigger": "manual" },
+      { "from": "in_progress", "to": "todo", "trigger": "manual" },
+      { "from": "todo", "to": "cancelled", "trigger": "system" },
+      { "from": "in_progress", "to": "cancelled", "trigger": "system" }
+    ],
+    "behaviorRules": [
+      {
+        "id": "kanban-propagate-parent",
+        "name": "Auto-complete parent when all children done",
+        "priority": 10,
+        "trigger": { "type": "on_all_children_terminal" },
+        "condition": { "type": "always" },
+        "action": { "type": "auto_transition", "targetStatus": "done" }
+      },
+      {
+        "id": "kanban-discussion-group",
+        "name": "Create discussion group on task creation",
+        "priority": 20,
+        "trigger": { "type": "on_task_created" },
+        "condition": { "type": "always" },
+        "action": { "type": "create_discussion_group" }
+      }
+    ]
+  }
+}

@@ -1,8 +1,9 @@
 import { existsSync, statSync, accessSync, constants } from 'node:fs';
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS, loadTemplateSchema } from '@shared/contracts.js';
-import type { DesktopResult, TemplateRecord } from '@shared/contracts.js';
+import type { DesktopResult, TemplateRecord, WorkflowTemplateRecord } from '@shared/contracts.js';
 import type { OrgTemplateService } from '@main/application/templates/org-template.service.js';
+import type { WorkflowTemplateService } from '@main/application/workflow/workflow-template.service.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 
 function ok<T>(data: T): DesktopResult<T> {
@@ -26,6 +27,7 @@ function validateWorkspacePath(path: string): string | null {
 
 export function registerTemplateHandlers(
   templateService: OrgTemplateService,
+  workflowTemplateService: WorkflowTemplateService,
   logger: ILogger,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getTemplates, async () => {
@@ -44,6 +46,22 @@ export function registerTemplateHandlers(
     }
   });
 
+  ipcMain.handle(IPC_CHANNELS.getWorkflowTemplates, async () => {
+    try {
+      const templates = workflowTemplateService.getTemplates();
+      const records: WorkflowTemplateRecord[] = templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        schema: t.schema as WorkflowTemplateRecord['schema'],
+      }));
+      return ok(records);
+    } catch (err) {
+      logger.error('Failed to get workflow templates', { error: String(err) });
+      return fail('INTERNAL', 'Failed to get workflow templates');
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.loadTemplate, async (_event, input: unknown) => {
     try {
       const parsed = loadTemplateSchema.safeParse(input);
@@ -54,12 +72,17 @@ export function registerTemplateHandlers(
       if (pathError) {
         return fail('INVALID_WORKSPACE_PATH', pathError);
       }
+
+      // Resolve workflow schema from selected template
+      const workflowSchema = workflowTemplateService.resolveSchema(parsed.data.workflowTemplateId);
+
       const org = await templateService.loadTemplate(
         parsed.data.templateId,
         parsed.data.orgName,
         parsed.data.orgDescription,
         parsed.data.budgetLimit,
         parsed.data.workspacePath,
+        workflowSchema,
       );
       return ok(org);
     } catch (err) {

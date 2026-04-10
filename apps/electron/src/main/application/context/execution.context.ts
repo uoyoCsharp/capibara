@@ -25,7 +25,7 @@ import { OrgContext } from './org.context.js';
 export class ExecutionContext {
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private conversationContextBuilder: ConversationContextBuilder | null = null;
-  private workflowEngine: IWorkflowEngine | null = null;
+  private workflowEngine!: IWorkflowEngine;
 
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -66,7 +66,11 @@ export class ExecutionContext {
     const hasChildren = children.length > 0;
     let childrenAwaitingReview: ReviewableChild[] = [];
     if (trigger === 'review_requested') {
-      const rawChildren = children.filter((c) => c.status === 'awaiting_review');
+      const reviewChecks = await Promise.all(children.map(async (c) => ({
+        child: c,
+        isReview: await this.workflowEngine.isReviewStatus(c.orgId, c.status),
+      })));
+      const rawChildren = reviewChecks.filter((r) => r.isReview).map((r) => r.child);
       const roleNameCache = new Map<string, string>();
       childrenAwaitingReview = await Promise.all(
         rawChildren.map((c) => this.buildReviewableChild(c, roleNameCache)),
@@ -100,12 +104,9 @@ export class ExecutionContext {
     }
 
     // Fetch workflow type definitions for schema-driven prompt construction
-    let taskTypeDef: PromptContext['taskTypeDef'];
-    let allItemTypes: PromptContext['allItemTypes'];
-    if (this.workflowEngine) {
-      taskTypeDef = await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type);
-      allItemTypes = await this.workflowEngine.getAllItemTypes(task.orgId);
-    }
+    const taskTypeDef = await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type);
+    const allItemTypes = await this.workflowEngine.getAllItemTypes(task.orgId);
+    const isTaskTerminal = await this.workflowEngine.isTerminalStatus(task.orgId, task.status);
 
     return {
       organization,
@@ -123,6 +124,7 @@ export class ExecutionContext {
       conversationWorkflow,
       taskTypeDef,
       allItemTypes,
+      isTaskTerminal,
     };
   }
 
@@ -134,9 +136,7 @@ export class ExecutionContext {
     const assigneeRoleName = await this.resolveRoleName(child.assigneeRoleId, roleNameCache);
 
     // Build deliverable based on task type (schema-driven)
-    const childTypeDef = this.workflowEngine
-      ? await this.workflowEngine.getItemTypeDefinition(child.orgId, child.type)
-      : null;
+    const childTypeDef = await this.workflowEngine.getItemTypeDefinition(child.orgId, child.type);
     const isDecomposer = childTypeDef?.canDecompose ?? false;
     let deliverable: DecompositionDeliverable | LeafDeliverable;
 
@@ -242,16 +242,12 @@ export class ExecutionContext {
 
   /** Walk up the task tree to find the nearest discussion group (schema-driven via hasDiscussionGroup). */
   private async findNearestDiscussionGroup(task: TaskNode): Promise<DiscussionGroup | null> {
-    const hasDiscussion = this.workflowEngine
-      ? (await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type))?.hasDiscussionGroup ?? false
-      : false;
+    const hasDiscussion = (await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type))?.hasDiscussionGroup ?? false;
     let currentId: string | null = hasDiscussion ? task.id : task.parentId;
     while (currentId) {
       const t = await this.taskRepo.findById(currentId);
       if (!t) return null;
-      const typeDef = this.workflowEngine
-        ? await this.workflowEngine.getItemTypeDefinition(t.orgId, t.type)
-        : null;
+      const typeDef = await this.workflowEngine.getItemTypeDefinition(t.orgId, t.type);
       if (typeDef?.hasDiscussionGroup) {
         const group = await this.discussionRepo.findGroupByTaskNodeId(t.id);
         if (group) return group;

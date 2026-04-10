@@ -132,6 +132,7 @@ export interface LocaleMessages {
     workspacePlaceholder: string;
     customInstructionsLabel: string;
     customInstructionsPlaceholder: string;
+    workflowLabel: string;
   };
   orgSettings: {
     customInstructions: string;

@@ -6,7 +6,7 @@ import type { IOrganizationRepository } from '@main/core/interfaces/i-organizati
 import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { Organization } from '@main/core/types/domain.types.js';
-import { DEFAULT_WORKFLOW_SCHEMA } from '@main/application/workflow/default-workflow-schema.js';
+import type { WorkflowTemplateService } from '@main/application/workflow/workflow-template.service.js';
 
 function ok<T>(data: T): DesktopResult<T> {
   return { ok: true, data };
@@ -30,7 +30,8 @@ function validateWorkspacePath(path: string): string | null {
 export function registerOrganizationHandlers(
   orgRepo: IOrganizationRepository,
   logger: ILogger,
-  workflowEngine?: IWorkflowEngine,
+  workflowEngine: IWorkflowEngine,
+  workflowTemplateService: WorkflowTemplateService,
 ): void {
   ipcMain.handle(IPC_CHANNELS.selectFolder, async () => {
     try {
@@ -104,16 +105,20 @@ export function registerOrganizationHandlers(
       if (pathError) {
         return fail('INVALID_WORKSPACE_PATH', pathError);
       }
+      const workflowSchema = workflowTemplateService.resolveSchema(parsed.data.workflowTemplateId);
+      if (!workflowSchema) {
+        return fail('NO_WORKFLOW_SCHEMA', 'Failed to resolve workflow schema');
+      }
+
       const org = await orgRepo.create(parsed.data);
 
-      // Initialize default workflow schema for new organization
-      if (workflowEngine) {
-        try {
-          await workflowEngine.saveSchema(org.id, DEFAULT_WORKFLOW_SCHEMA);
-          logger.info('Default workflow schema created for org', { orgId: org.id });
-        } catch (schemaErr) {
-          logger.error('Failed to create default schema for org', { orgId: org.id, error: String(schemaErr) });
-        }
+      try {
+        await workflowEngine.saveSchema(org.id, workflowSchema);
+        logger.info('Workflow schema applied for org', { orgId: org.id, templateId: parsed.data.workflowTemplateId ?? 'default' });
+      } catch (schemaErr) {
+        logger.error('Failed to apply workflow schema, deleting org', { orgId: org.id, error: String(schemaErr) });
+        await orgRepo.delete(org.id);
+        return fail('SCHEMA_APPLICATION_FAILED', 'Failed to apply workflow schema');
       }
 
       return ok(org);
@@ -164,3 +169,4 @@ export function registerOrganizationHandlers(
     }
   });
 }
+

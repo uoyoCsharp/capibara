@@ -94,7 +94,7 @@ export class RetryScheduler {
         this.eventBus.emit({
           type: 'wake:triggered',
           timestamp: new Date().toISOString(),
-          payload: { roleId: role.parentId, orgId, trigger: 'retry_failed' as WakeTrigger },
+          payload: { roleId: role.parentId, orgId, trigger: 'retry_failed' as WakeTrigger, taskNodeId },
         });
         return;
       }

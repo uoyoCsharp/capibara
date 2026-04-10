@@ -20,6 +20,7 @@ interface ApprovalPanelCardProps {
   voteStats: VoteStatsRecord;
   roles: RoleRecord[];
   messages: DiscussionMessageRecord[];
+  isTerminalStatus?: (status: string) => boolean;
   onApprove: () => void;
   onRevise: (feedback: string) => void;
   onDelegate: (targetRoleId: string) => void;
@@ -31,6 +32,7 @@ export function ApprovalPanelCard({
   voteStats,
   roles,
   messages,
+  isTerminalStatus,
   onApprove,
   onRevise,
   onDelegate,
@@ -42,7 +44,7 @@ export function ApprovalPanelCard({
 
   const assigneeRole = roles.find((r) => r.id === task.assigneeRoleId);
   const completedChildren = childTasks.filter(
-    (t) => t.status === 'approved' || t.status === 'done',
+    (t) => isTerminalStatus ? isTerminalStatus(t.status) : false,
   );
   const concerns = messages.filter((m) => m.voteTag === 'CONCERN');
   const revisions = messages.filter((m) => m.voteTag === 'REVISE');

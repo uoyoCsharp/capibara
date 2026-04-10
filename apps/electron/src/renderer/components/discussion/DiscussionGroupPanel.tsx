@@ -21,6 +21,8 @@ interface DiscussionGroupPanelProps {
   voteStats: VoteStatsRecord | null;
   roles: RoleRecord[];
   tasks: TaskRecord[];
+  isReviewStatus: (status: string) => boolean;
+  isTerminalStatus?: (status: string) => boolean;
   onClose: () => void;
   onPostMessage: (content: string, voteTag: VoteTag) => void;
   onRefresh: () => void;
@@ -32,6 +34,8 @@ export function DiscussionGroupPanel({
   voteStats,
   roles,
   tasks,
+  isReviewStatus,
+  isTerminalStatus,
   onClose,
   onPostMessage,
   onRefresh,
@@ -39,7 +43,8 @@ export function DiscussionGroupPanel({
   const task = tasks.find((t) => t.id === group.taskNodeId);
   const isArchived = group.status === 'archived';
   const assigneeRole = task?.assigneeRoleId ? roles.find((r) => r.id === task.assigneeRoleId) : null;
-  const needsHumanApproval = task?.status === 'awaiting_review' && assigneeRole?.requiresHumanApproval;
+  const inReview = task ? isReviewStatus(task.status) : false;
+  const needsHumanApproval = inReview && assigneeRole?.requiresHumanApproval;
   const childTasks = task ? tasks.filter((t) => t.parentId === task.id) : [];
 
   // Set up polling for real-time updates
@@ -95,6 +100,7 @@ export function DiscussionGroupPanel({
           voteStats={voteStats}
           roles={roles}
           messages={messages}
+          isTerminalStatus={isTerminalStatus}
           onApprove={() => onPostMessage('Human approved this task.', 'APPROVE')}
           onRevise={(feedback) => onPostMessage(feedback, 'REVISE')}
           onDelegate={(roleId) => onPostMessage(`Delegated to role ${roleId}`, 'DELEGATE')}

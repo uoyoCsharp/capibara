@@ -88,6 +88,7 @@ export const IPC_CHANNELS = {
   saveSchema: 'capibara:schema:save',
   validateSchema: 'capibara:schema:validate',
   schemaImpactAnalysis: 'capibara:schema:impact-analysis',
+  getWorkflowTemplates: 'capibara:schema:get-workflow-templates',
 
   // Conversation
   getActiveConversations: 'capibara:conversation:list-active',
@@ -134,6 +135,7 @@ export const createOrganizationSchema = z.object({
   customInstructions: z.string().max(5000).default(''),
   budgetLimit: z.number().min(0).default(50.0),
   orgTemplateId: z.string().nullable().default(null),
+  workflowTemplateId: z.string().nullable().default(null),
   workspacePath: z.string().min(1),
 });
 
@@ -207,6 +209,7 @@ export const loadTemplateSchema = z.object({
   orgDescription: z.string().max(500).default(''),
   budgetLimit: z.number().min(0).default(50.0),
   workspacePath: z.string().min(1),
+  workflowTemplateId: z.string().nullable().default(null),
 });
 
 export const createTaskSchema = z.object({
@@ -420,6 +423,7 @@ export interface CapibaraApi {
   saveSchema: (input: SaveSchemaInput) => Promise<DesktopResult<SchemaImpactReportRecord | null>>;
   validateSchema: (input: SaveSchemaInput) => Promise<DesktopResult<string[]>>;
   schemaImpactAnalysis: (input: SaveSchemaInput) => Promise<DesktopResult<SchemaImpactReportRecord | null>>;
+  getWorkflowTemplates: () => Promise<DesktopResult<WorkflowTemplateRecord[]>>;
 
   // Conversation
   getActiveConversations: (orgId: string) => Promise<DesktopResult<ConversationWorkflowRecord[]>>;
@@ -761,6 +765,13 @@ export interface WorkflowSchemaRecord {
 export interface SchemaImpactReportRecord {
   affectedTaskCount: number;
   details: Array<{ taskId: string; type: string; status: string }>;
+}
+
+export interface WorkflowTemplateRecord {
+  id: string;
+  name: string;
+  description: string;
+  schema: WorkflowSchemaRecord;
 }
 
 export interface ConversationAnalyticsRecord {

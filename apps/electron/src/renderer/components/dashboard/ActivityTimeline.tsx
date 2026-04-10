@@ -16,6 +16,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { RunRecord, TaskRecord, RoleRecord } from '@shared/contracts';
+import { useWorkflowSchema } from '../../hooks/useWorkflowSchema';
 
 declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi };
 
@@ -43,6 +44,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
   const t = useT();
+  const schemaHelpers = useWorkflowSchema(orgId);
 
   const roleName = useCallback(
     (id: string) => roles.find((r) => r.id === id)?.name ?? t.common.unknown,
@@ -93,7 +95,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
 
       // Task completion events
       for (const task of tasks) {
-        if (task.status === 'done' || task.status === 'approved') {
+        if (schemaHelpers.isTerminalStatus(task.status)) {
           timelineEvents.push({
             id: `task-done-${task.id}`,
             timestamp: task.updatedAt,
@@ -103,6 +105,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             taskId: task.id,
           });
         } else if (task.status === 'blocked') {
+          // Convention: 'blocked' status is shown as escalation
           timelineEvents.push({
             id: `task-blocked-${task.id}`,
             timestamp: task.updatedAt,
@@ -120,7 +123,7 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
     } finally {
       setLoading(false);
     }
-  }, [orgId, roles, tasks, roleName, taskTitle]);
+  }, [orgId, roles, tasks, roleName, taskTitle, schemaHelpers]);
 
   useEffect(() => {
     buildEvents();

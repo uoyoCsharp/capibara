@@ -12,7 +12,9 @@ import type { CapibaraConfig } from '@main/core/types/config.types.js';
 import type { Run, WakeTrigger } from '@main/core/types/domain.types.js';
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
 import { TERMINAL_RUN_STATUSES } from '@main/core/constants/run.constants.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
+import type { TaskService } from '../tasks/task.service.js';
 import {
   CONFIG_TOKEN,
   LOGGER_TOKEN,
@@ -35,6 +37,8 @@ import type { FileLogService } from '../../infrastructure/logging/file-log.servi
 export class ExecutionEngine {
   private jwtSecrets = new Map<string, string>();
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
+  private workflowEngine!: IWorkflowEngine;
+  private taskService!: TaskService;
 
   /** Maps runId → { orgName, taskId } for log file path resolution */
   private runLogCtx = new Map<string, { orgName: string; taskId: string }>();
@@ -75,6 +79,14 @@ export class ExecutionEngine {
 
   setConversationWorkflowRepo(repo: IConversationWorkflowRepository): void {
     this.conversationWorkflowRepo = repo;
+  }
+
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
+  }
+
+  setTaskService(service: TaskService): void {
+    this.taskService = service;
   }
 
   /** Returns the sessionId for an in-flight run (before DB persistence). */
@@ -155,13 +167,22 @@ export class ExecutionEngine {
     const { id: runId, roleId, taskNodeId, orgId, trigger } = run;
 
     try {
-      // ─── Transition task to in_progress ─────────────────────
+      // ─── Transition task to in_progress (if in initial or active-revision state) ───
       const task = await this.taskRepo.findById(taskNodeId);
-      if (task && (task.status === 'pending' || task.status === 'revision')) {
-        try {
-          await this.taskStateMachine.transition(taskNodeId, 'in_progress');
-        } catch {
-          // Task may already be in_progress from a previous attempt
+      if (task) {
+        const isTerminal = await this.workflowEngine.isTerminalStatus(orgId, task.status);
+        const isReview = await this.workflowEngine.isReviewStatus(orgId, task.status);
+        if (!isTerminal && !isReview) {
+          // Find the first active status to transition to
+          const allStatuses = await this.workflowEngine.getAllStatuses(orgId);
+          const firstActive = allStatuses.find((s) => s.category === 'active');
+          if (firstActive) {
+            try {
+              await this.taskStateMachine.transition(taskNodeId, firstActive.name);
+            } catch {
+              // Task may already be in this status from a previous attempt
+            }
+          }
         }
       }
 
@@ -292,18 +313,26 @@ export class ExecutionEngine {
           inputTokens: result.inputTokens, outputTokens: result.outputTokens,
         });
 
-        // Phase 1 advancement: if the run succeeded but the task is still in_progress
+        // Phase 1 advancement: if the run succeeded but the task is still in an active status
         // (e.g., requiresHumanApproval roles that post a plan without calling task_complete),
-        // advance the task to awaiting_review so the user sees it needs attention.
+        // advance the task to the first review status so the user sees it needs attention.
+        // Uses taskService.updateStatus() (not taskStateMachine directly) so that the
+        // review wake logic in TaskService fires and emits wake:triggered for the parent role.
         const postRunTask = await this.taskRepo.findById(taskNodeId);
-        if (postRunTask && postRunTask.status === 'in_progress') {
-          const role = await this.roleRepo.findById(roleId);
-          if (role?.requiresHumanApproval) {
-            try {
-              await this.taskStateMachine.transition(taskNodeId, 'awaiting_review');
-              this.logger.info('Task advanced to awaiting_review after Phase 1 run', { runId, taskNodeId });
-            } catch {
-              // Transition not allowed from current state — leave as-is
+        if (postRunTask) {
+          const isActive = await this.workflowEngine.isActiveStatus(orgId, postRunTask.status);
+          if (isActive) {
+            const role = await this.roleRepo.findById(roleId);
+            if (role?.requiresHumanApproval) {
+              const reviewStatus = await this.workflowEngine.getFirstReviewStatus(orgId);
+              if (reviewStatus) {
+                try {
+                  await this.taskService.updateStatus(taskNodeId, reviewStatus);
+                  this.logger.info('Task advanced to review status after Phase 1 run', { runId, taskNodeId, reviewStatus });
+                } catch {
+                  // Transition not allowed from current state — leave as-is
+                }
+              }
             }
           }
         }

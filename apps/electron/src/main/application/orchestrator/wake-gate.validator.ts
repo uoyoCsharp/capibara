@@ -113,7 +113,7 @@ export class WakeGateValidator {
       this.eventBus.emit({
         type: 'wake:triggered',
         timestamp: new Date().toISOString(),
-        payload: { roleId: role.parentId, orgId, trigger: 'retry_failed' as WakeTrigger },
+        payload: { roleId: role.parentId, orgId, trigger: 'retry_failed' as WakeTrigger, taskNodeId },
       });
     } else {
       this.logger.error('Escalation reached top-level role with no parent', {

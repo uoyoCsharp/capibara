@@ -157,6 +157,7 @@ export const zhCN: LocaleMessages = {
     workspacePlaceholder: '选择一个文件夹...',
     customInstructionsLabel: '自定义指令',
     customInstructionsPlaceholder: '为该组织所有 AI 角色注入的可选指令（例如编码规范、领域背景）...',
+    workflowLabel: '工作流',
   },
   orgSettings: {
     customInstructions: '自定义指令',

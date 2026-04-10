@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FolderOpen } from '@phosphor-icons/react';
+import type { WorkflowTemplateRecord } from '@shared/contracts';
 import {
   Dialog,
   DialogContent,
@@ -11,11 +12,12 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useT } from '../../hooks/useLocale';
 
 interface CreateOrgModalProps {
   onClose: () => void;
-  onCreate: (name: string, description: string, workspacePath: string, customInstructions: string) => void;
+  onCreate: (name: string, description: string, workspacePath: string, customInstructions: string, workflowTemplateId: string | null) => void;
 }
 
 export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
@@ -24,6 +26,20 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
   const [description, setDescription] = useState('');
   const [workspacePath, setWorkspacePath] = useState('');
   const [customInstructions, setCustomInstructions] = useState('');
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateRecord[]>([]);
+  const [workflowTemplateId, setWorkflowTemplateId] = useState<string>('default');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await window.capibara.getWorkflowTemplates();
+        if (result.ok && result.data.length > 0) {
+          setWorkflowTemplates(result.data);
+          setWorkflowTemplateId(result.data[0].id);
+        }
+      } catch { /* IPC may fail */ }
+    })();
+  }, []);
 
   const handleSelectFolder = async () => {
     const result = await window.capibara.selectFolder();
@@ -89,6 +105,34 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
               </Button>
             </div>
           </div>
+
+          {/* Workflow Template Selector */}
+          {workflowTemplates.length > 0 && (
+            <div>
+              <Label htmlFor="org-workflow" className="mb-1">
+                {t.createOrg.workflowLabel}
+              </Label>
+              <Select
+                value={workflowTemplateId}
+                onValueChange={setWorkflowTemplateId}
+              >
+                <SelectTrigger id="org-workflow">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {workflowTemplates.map((wt) => (
+                    <SelectItem key={wt.id} value={wt.id}>
+                      <div className="flex flex-col">
+                        <span>{wt.name}</span>
+                        <span className="text-xs text-muted-foreground">{wt.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="org-instructions" className="mb-1">
               {t.createOrg.customInstructionsLabel}
@@ -110,7 +154,7 @@ export function CreateOrgModal({ onClose, onCreate }: CreateOrgModalProps) {
             {t.common.cancel}
           </Button>
           <Button
-            onClick={() => onCreate(name.trim(), description.trim(), workspacePath, customInstructions.trim())}
+            onClick={() => onCreate(name.trim(), description.trim(), workspacePath, customInstructions.trim(), workflowTemplateId || null)}
             disabled={!name.trim() || !workspacePath}
           >
             {t.common.create}

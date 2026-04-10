@@ -130,6 +130,27 @@ export class WorkflowEngine implements IWorkflowEngine {
     return def?.category === 'review';
   }
 
+  async isActiveStatus(orgId: string, status: string): Promise<boolean> {
+    const schema = await this.loadSchema(orgId);
+    const def = schema.statuses.find((s) => s.name === status);
+    return def?.category === 'active';
+  }
+
+  async getFirstReviewStatus(orgId: string): Promise<string | null> {
+    const schema = await this.loadSchema(orgId);
+    const reviewStatus = schema.statuses.find((s) => s.category === 'review');
+    return reviewStatus?.name ?? null;
+  }
+
+  async findTransitionTargetByCategory(orgId: string, fromStatus: string, targetCategory: string): Promise<string | null> {
+    const schema = await this.loadSchema(orgId);
+    const categoryStatuses = new Set(
+      schema.statuses.filter((s) => s.category === targetCategory).map((s) => s.name),
+    );
+    const transition = schema.transitions.find((t) => t.from === fromStatus && categoryStatuses.has(t.to));
+    return transition?.to ?? null;
+  }
+
   // ─── Behavior Rule Evaluation ──────────────────────────────────────
 
   async evaluateBehaviors(

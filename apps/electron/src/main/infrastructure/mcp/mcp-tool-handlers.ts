@@ -34,7 +34,7 @@ export class McpToolHandlers {
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private conversationEventLogger: ConversationEventLogger | null = null;
   private executionEngine: ExecutionEngine | null = null;
-  private workflowEngine: IWorkflowEngine | null = null;
+  private workflowEngine!: IWorkflowEngine;
 
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -90,9 +90,7 @@ export class McpToolHandlers {
       return { success: false, error: `Task ${taskId} not found` };
     }
 
-    const isTerminal = this.workflowEngine
-      ? await this.workflowEngine.isTerminalStatus(currentTask.orgId, currentTask.status)
-      : false;
+    const isTerminal = await this.workflowEngine.isTerminalStatus(currentTask.orgId, currentTask.status);
     if (isTerminal) {
       this.logger.info('task_complete called but task already in terminal state, skipping transition', {
         taskId,
@@ -101,13 +99,19 @@ export class McpToolHandlers {
       return { success: true, data: { taskId, status: currentTask.status } };
     }
 
+    // Resolve the review status dynamically from the workflow schema
+    const reviewStatus = await this.workflowEngine.getFirstReviewStatus(currentTask.orgId);
+    if (!reviewStatus) {
+      return { success: false, error: 'No review status defined in workflow schema' };
+    }
+
     // Use TaskService to transition through the state machine.
     // This emits task:status-changed events and triggers auto-approval
     // for roles that don't require human approval.
-    await this.taskService.updateStatus(taskId, 'awaiting_review');
+    await this.taskService.updateStatus(taskId, reviewStatus);
 
     const task = await this.taskRepo.findById(taskId);
-    return { success: true, data: { taskId, status: task?.status ?? 'awaiting_review' } };
+    return { success: true, data: { taskId, status: task?.status ?? reviewStatus } };
   }
 
   private async taskCreateChild(args: Record<string, unknown>): Promise<McpToolCallResult> {
@@ -124,15 +128,13 @@ export class McpToolHandlers {
     const childType = (typeof args.type === 'string' ? args.type : null) ?? 'task';
 
     // Validate child type via WorkflowEngine (schema-driven)
-    if (this.workflowEngine) {
-      const parentTypeDef = await this.workflowEngine.getItemTypeDefinition(parentTask.orgId, parentTask.type);
-      if (parentTypeDef?.isLeaf || (parentTypeDef && parentTypeDef.allowedChildren.length === 0)) {
-        return { success: false, error: `Type "${parentTask.type}" does not allow child tasks` };
-      }
-      const allowedChildren = parentTypeDef?.allowedChildren ?? [];
-      if (allowedChildren.length > 0 && !allowedChildren.includes(childType)) {
-        return { success: false, error: `Invalid child type: "${childType}" under "${parentTask.type}". Allowed: ${allowedChildren.join(', ')}` };
-      }
+    const parentTypeDef = await this.workflowEngine.getItemTypeDefinition(parentTask.orgId, parentTask.type);
+    if (parentTypeDef?.isLeaf || (parentTypeDef && parentTypeDef.allowedChildren.length === 0)) {
+      return { success: false, error: `Type "${parentTask.type}" does not allow child tasks` };
+    }
+    const allowedChildren = parentTypeDef?.allowedChildren ?? [];
+    if (allowedChildren.length > 0 && !allowedChildren.includes(childType)) {
+      return { success: false, error: `Invalid child type: "${childType}" under "${parentTask.type}". Allowed: ${allowedChildren.join(', ')}` };
     }
 
     try {
@@ -248,9 +250,7 @@ export class McpToolHandlers {
       return { success: false, error: `Task ${taskId} not found` };
     }
 
-    const isReview = this.workflowEngine
-      ? await this.workflowEngine.isReviewStatus(task.orgId, task.status)
-      : task.status === 'awaiting_review';
+    const isReview = await this.workflowEngine.isReviewStatus(task.orgId, task.status);
     if (!isReview) {
       return { success: false, error: `Task ${taskId} is not in a review status (status: ${task.status})` };
     }
@@ -284,12 +284,20 @@ export class McpToolHandlers {
     }
 
     if (decision === 'approve') {
-      await this.taskService.updateStatus(taskId, 'approved');
-      this.logger.info('Task approved by AI reviewer', { taskId, reviewerRoleId });
-      return { success: true, data: { taskId, status: 'approved' } };
+      const approveTarget = await this.workflowEngine.findTransitionTargetByCategory(task.orgId, task.status, 'terminal');
+      if (!approveTarget) {
+        return { success: false, error: 'No terminal status transition available from current status' };
+      }
+      await this.taskService.updateStatus(taskId, approveTarget);
+      this.logger.info('Task approved by AI reviewer', { taskId, reviewerRoleId, targetStatus: approveTarget });
+      return { success: true, data: { taskId, status: approveTarget } };
     } else {
-      await this.taskService.updateStatus(taskId, 'revision');
-      this.logger.info('Task sent to revision by AI reviewer', { taskId, reviewerRoleId, feedback });
+      const revisionTarget = await this.workflowEngine.findTransitionTargetByCategory(task.orgId, task.status, 'active');
+      if (!revisionTarget) {
+        return { success: false, error: 'No active status transition available for revision' };
+      }
+      await this.taskService.updateStatus(taskId, revisionTarget);
+      this.logger.info('Task sent to revision by AI reviewer', { taskId, reviewerRoleId, feedback, targetStatus: revisionTarget });
 
       // Wake the original assignee to address the revision
       if (task.assigneeRoleId) {
@@ -300,14 +308,15 @@ export class McpToolHandlers {
             roleId: task.assigneeRoleId,
             orgId: task.orgId,
             trigger: 'review_revise' as const,
+            taskNodeId: task.id,
           },
         });
       } else {
         this.logger.warn('Task has no assignee to wake for revision', { taskId });
-        return { success: true, data: { taskId, status: 'revision', feedback, warning: 'No assignee to wake for revision' } };
+        return { success: true, data: { taskId, status: revisionTarget, feedback, warning: 'No assignee to wake for revision' } };
       }
 
-      return { success: true, data: { taskId, status: 'revision', feedback } };
+      return { success: true, data: { taskId, status: revisionTarget, feedback } };
     }
   }
 
@@ -315,16 +324,12 @@ export class McpToolHandlers {
   private async findNearestDiscussionGroup(taskId: string): Promise<{ id: string; currentRound: number } | null> {
     const task = await this.taskRepo.findById(taskId);
     if (!task) return null;
-    const taskTypeDef = this.workflowEngine
-      ? await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type)
-      : null;
+    const taskTypeDef = await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type);
     let currentId: string | null = taskTypeDef?.hasDiscussionGroup ? task.id : task.parentId;
     while (currentId) {
       const t = await this.taskRepo.findById(currentId);
       if (!t) return null;
-      const typeDef = this.workflowEngine
-        ? await this.workflowEngine.getItemTypeDefinition(t.orgId, t.type)
-        : null;
+      const typeDef = await this.workflowEngine.getItemTypeDefinition(t.orgId, t.type);
       if (typeDef?.hasDiscussionGroup) {
         const group = await this.discussionRepo.findGroupByTaskNodeId(t.id);
         if (group) return group;

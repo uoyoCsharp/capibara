@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TreeStructure, Users, FolderOpen } from '@phosphor-icons/react';
-import type { TemplateRecord, TemplateRoleDefinition } from '@shared/contracts';
+import type { TemplateRecord, TemplateRoleDefinition, WorkflowTemplateRecord } from '@shared/contracts';
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { cn } from '../../lib/utils';
 import { useT } from '../../hooks/useLocale';
 
@@ -44,7 +45,9 @@ function RolePreview({ role, depth }: { role: TemplateRoleDefinition; depth: num
 export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorModalProps) {
   const t = useT();
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [workflowTemplateId, setWorkflowTemplateId] = useState<string>('default');
   const [orgName, setOrgName] = useState('');
   const [orgDescription, setOrgDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -60,12 +63,19 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
   useEffect(() => {
     (async () => {
       try {
-        const result = await window.capibara.getTemplates();
-        if (result.ok) {
-          setTemplates(result.data);
-          if (result.data.length > 0) {
-            setSelectedId(result.data[0].id);
+        const [tmplRes, wfRes] = await Promise.all([
+          window.capibara.getTemplates(),
+          window.capibara.getWorkflowTemplates(),
+        ]);
+        if (tmplRes.ok) {
+          setTemplates(tmplRes.data);
+          if (tmplRes.data.length > 0) {
+            setSelectedId(tmplRes.data[0].id);
           }
+        }
+        if (wfRes.ok && wfRes.data.length > 0) {
+          setWorkflowTemplates(wfRes.data);
+          setWorkflowTemplateId(wfRes.data[0].id);
         }
       } catch {
         // IPC may fail
@@ -85,6 +95,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
         orgDescription: orgDescription.trim(),
         budgetLimit: 50.0,
         workspacePath,
+        workflowTemplateId: workflowTemplateId || null,
       });
       if (result.ok) {
         onLoaded();
@@ -145,7 +156,7 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
             </button>
           ))}
 
-          {/* Org naming */}
+          {/* Org naming + workflow */}
           {selectedTemplate && (
             <div className="space-y-4 pt-3">
               <div>
@@ -194,6 +205,33 @@ export function TemplateSelectorModal({ onClose, onLoaded }: TemplateSelectorMod
                   </Button>
                 </div>
               </div>
+
+              {/* Workflow Template Selector */}
+              {workflowTemplates.length > 0 && (
+                <div>
+                  <Label htmlFor="tmpl-workflow" className="mb-1">
+                    {t.createOrg.workflowLabel}
+                  </Label>
+                  <Select
+                    value={workflowTemplateId}
+                    onValueChange={setWorkflowTemplateId}
+                  >
+                    <SelectTrigger id="tmpl-workflow">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workflowTemplates.map((wt) => (
+                        <SelectItem key={wt.id} value={wt.id}>
+                          <div className="flex flex-col">
+                            <span>{wt.name}</span>
+                            <span className="text-xs text-muted-foreground">{wt.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -116,7 +116,7 @@ export function OrganizationPage() {
     } catch { toast.error(t.organization.failedToLoadTemplate); }
   };
 
-  const handleCreateBlankOrg = async (name: string, description: string, workspacePath: string, customInstructions: string) => {
+  const handleCreateBlankOrg = async (name: string, description: string, workspacePath: string, customInstructions: string, workflowTemplateId: string | null) => {
     try {
       const result = await window.capibara.createOrganization({
         name,
@@ -124,6 +124,7 @@ export function OrganizationPage() {
         customInstructions,
         budgetLimit: 50.0,
         orgTemplateId: null,
+        workflowTemplateId,
         workspacePath,
       });
       if (result.ok) {

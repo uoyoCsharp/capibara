@@ -22,7 +22,7 @@ import { TaskStateMachine } from '../state-machine/task.state-machine.js';
 
 @injectable()
 export class TaskService {
-  private workflowEngine: IWorkflowEngine | null = null;
+  private workflowEngine!: IWorkflowEngine;
 
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -79,28 +79,24 @@ export class TaskService {
       }
       depth = parent.depth + 1;
 
-      if (this.workflowEngine) {
-        const valid = await this.workflowEngine.validateType(input.orgId, input.type, parent.type);
-        if (!valid) {
-          const parentDef = await this.workflowEngine.getItemTypeDefinition(input.orgId, parent.type);
-          const allowed = parentDef?.allowedChildren ?? [];
-          throw new InvalidTypeError(
-            input.type,
-            `Cannot create under "${parent.type}". Allowed: ${allowed.length ? allowed.join(', ') : 'none (leaf node)'}`,
-          );
-        }
+      const valid = await this.workflowEngine.validateType(input.orgId, input.type, parent.type);
+      if (!valid) {
+        const parentDef = await this.workflowEngine.getItemTypeDefinition(input.orgId, parent.type);
+        const allowed = parentDef?.allowedChildren ?? [];
+        throw new InvalidTypeError(
+          input.type,
+          `Cannot create under "${parent.type}". Allowed: ${allowed.length ? allowed.join(', ') : 'none (leaf node)'}`,
+        );
       }
     } else {
       // Root-level task validation
-      if (this.workflowEngine) {
-        const valid = await this.workflowEngine.validateType(input.orgId, input.type, null);
-        if (!valid) {
-          const rootTypes = await this.workflowEngine.getRootTypes(input.orgId);
-          throw new InvalidTypeError(
-            input.type,
-            `Root-level tasks must be of type: ${rootTypes.map((t) => t.name).join(', ')}`,
-          );
-        }
+      const valid = await this.workflowEngine.validateType(input.orgId, input.type, null);
+      if (!valid) {
+        const rootTypes = await this.workflowEngine.getRootTypes(input.orgId);
+        throw new InvalidTypeError(
+          input.type,
+          `Root-level tasks must be of type: ${rootTypes.map((t) => t.name).join(', ')}`,
+        );
       }
     }
 
@@ -124,21 +120,19 @@ export class TaskService {
     });
 
     // Evaluate on_task_created behavior rules
-    if (this.workflowEngine) {
-      const context = await this.buildBehaviorContext(task);
-      const actions = await this.workflowEngine.evaluateBehaviors(
-        task.orgId,
-        { type: 'on_task_created' },
-        context,
-      );
-      for (const action of actions) {
-        try {
-          await this.executeAction(action, task);
-        } catch (err) {
-          this.logger.error('on_task_created behavior action failed', { taskId: task.id, action: action.type, error: String(err) });
-        }
-        if (action.type === 'skip_propagation') break;
+    const behaviorContext = await this.buildBehaviorContext(task);
+    const behaviorActions = await this.workflowEngine.evaluateBehaviors(
+      task.orgId,
+      { type: 'on_task_created' },
+      behaviorContext,
+    );
+    for (const action of behaviorActions) {
+      try {
+        await this.executeAction(action, task);
+      } catch (err) {
+        this.logger.error('on_task_created behavior action failed', { taskId: task.id, action: action.type, error: String(err) });
       }
+      if (action.type === 'skip_propagation') break;
     }
 
     return task;
@@ -151,7 +145,7 @@ export class TaskService {
     if (!task) return;
 
     // When task moves to a review-category status, determine review strategy
-    if (this.workflowEngine && await this.workflowEngine.isReviewStatus(task.orgId, status)) {
+    if (await this.workflowEngine.isReviewStatus(task.orgId, status)) {
       const assigneeRole = task.assigneeRoleId
         ? await this.roleRepo.findById(task.assigneeRoleId)
         : null;
@@ -179,6 +173,7 @@ export class TaskService {
               roleId: parentTask.assigneeRoleId,
               orgId: task.orgId,
               trigger: 'review_requested' as const,
+              taskNodeId: parentTask.id,
             },
           });
           return;
@@ -201,9 +196,7 @@ export class TaskService {
     }
 
     // Evaluate behavior rules for the new status
-    if (this.workflowEngine) {
-      await this.evaluateAndExecuteBehaviors(task, status, new Set<string>());
-    }
+    await this.evaluateAndExecuteBehaviors(task, status, new Set<string>());
   }
 
   async delete(taskId: string): Promise<void> {
@@ -231,8 +224,6 @@ export class TaskService {
   }
 
   private async evaluateAndExecuteBehaviors(task: TaskNode, currentStatus: string, visitedStatuses?: Set<string>): Promise<void> {
-    if (!this.workflowEngine) return;
-
     // Cycle protection: prevent infinite auto_transition loops
     const visited = visitedStatuses ?? new Set<string>();
     if (visited.has(currentStatus)) {
@@ -270,7 +261,7 @@ export class TaskService {
   private static readonly MAX_PROPAGATION_DEPTH = 20;
 
   private async checkAutoPropagate(task: TaskNode, depth = 0, visitedStatuses?: Set<string>): Promise<void> {
-    if (!task.parentId || !this.workflowEngine) return;
+    if (!task.parentId) return;
     if (depth >= TaskService.MAX_PROPAGATION_DEPTH) {
       this.logger.warn('checkAutoPropagate depth limit reached', { taskId: task.id, depth });
       return;
@@ -278,7 +269,7 @@ export class TaskService {
 
     const siblings = await this.taskRepo.findByParentId(task.parentId);
     const allTerminal = await Promise.all(
-      siblings.map((s) => this.workflowEngine!.isTerminalStatus(task.orgId, s.status)),
+      siblings.map((s) => this.workflowEngine.isTerminalStatus(task.orgId, s.status)),
     );
 
     if (!allTerminal.every(Boolean)) return;
@@ -343,6 +334,7 @@ export class TaskService {
               roleId: task.assigneeRoleId,
               orgId: task.orgId,
               trigger: action.trigger,
+              taskNodeId: task.id,
             },
           });
         }
@@ -359,6 +351,7 @@ export class TaskService {
                 roleId: parentTask.assigneeRoleId,
                 orgId: task.orgId,
                 trigger: action.trigger,
+                taskNodeId: task.id,
               },
             });
           }

@@ -50,6 +50,8 @@ export interface PromptContext {
   taskTypeDef?: WorkItemTypeDefinition | null;
   /** All item types defined in the schema (for dynamic hierarchy descriptions) */
   allItemTypes?: WorkItemTypeDefinition[];
+  /** Whether the task's current status is a terminal status (schema-driven) */
+  isTaskTerminal?: boolean;
 }
 
 export interface DiscussionSummary {

@@ -17,6 +17,7 @@ import {
   TASK_REPO_TOKEN,
   ROLE_REPO_TOKEN,
 } from '@main/core/tokens.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ConsensusDetector } from '../consensus/consensus.detector.js';
 import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
 
@@ -32,6 +33,7 @@ export class DiscussionService {
   // reviseCounts now persisted in discussion_groups.revise_count (Bug 3 / Risk 9)
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private conversationWorkflowService: IConversationWorkflowService | null = null;
+  private workflowEngine!: IWorkflowEngine;
 
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
@@ -50,6 +52,10 @@ export class DiscussionService {
   ): void {
     this.conversationWorkflowRepo = repo;
     this.conversationWorkflowService = service;
+  }
+
+  setWorkflowEngine(engine: IWorkflowEngine): void {
+    this.workflowEngine = engine;
   }
 
   /** Subscribe to domain events for auto-creation, consensus evaluation, and run summaries. */
@@ -119,8 +125,9 @@ export class DiscussionService {
     };
 
     try {
-      // Always create for epic/story (decomposition-level tasks)
-      let shouldCreate = type === 'epic' || type === 'story';
+      // Create for task types that have discussion groups (schema-driven)
+      const typeDef = await this.workflowEngine.getItemTypeDefinition(orgId, type);
+      let shouldCreate = typeDef?.hasDiscussionGroup ?? false;
 
       // Also create for any task type if the assigned role requires human approval
       if (!shouldCreate) {
@@ -235,7 +242,8 @@ export class DiscussionService {
       const task = await this.taskRepo.findById(currentId);
       if (!task) return null;
 
-      if (task.type === 'story' || task.type === 'epic') {
+      const typeDef = await this.workflowEngine.getItemTypeDefinition(task.orgId, task.type);
+      if (typeDef?.hasDiscussionGroup) {
         const group = await this.discussionRepo.findGroupByTaskNodeId(task.id);
         if (group) return group;
       }
@@ -269,7 +277,9 @@ export class DiscussionService {
         if (task && task.assigneeRoleId) {
           const role = await this.roleRepo.findById(task.assigneeRoleId);
           if (role?.requiresHumanApproval) {
-            if (task.status === 'in_progress') {
+            const isReview = await this.workflowEngine.isReviewStatus(task.orgId, task.status);
+            const isActive = await this.workflowEngine.isActiveStatus(task.orgId, task.status);
+            if (isActive) {
               // Phase 1 approval: decomposition plan approved, wake agent for Phase 2
               this.logger.info('Decomposition plan approved by human, waking agent for Phase 2', {
                 taskId: task.id,
@@ -282,15 +292,19 @@ export class DiscussionService {
                   roleId: task.assigneeRoleId,
                   orgId: group.orgId,
                   trigger: 'review_approve' as const,
+                  taskNodeId: task.id,
                 },
               });
               return;
             }
-            if (task.status === 'awaiting_review') {
+            if (isReview) {
               // Final approval: task_complete was called, approve the task
-              await this.taskStateMachine.transition(task.id, 'approved');
-              await this.discussionRepo.resetReviseCount(group.id);
-              this.logger.info('Task approved by human', { taskId: task.id });
+              const approveTarget = await this.workflowEngine.findTransitionTargetByCategory(task.orgId, task.status, 'terminal');
+              if (approveTarget) {
+                await this.taskStateMachine.transition(task.id, approveTarget);
+                await this.discussionRepo.resetReviseCount(group.id);
+                this.logger.info('Task approved by human', { taskId: task.id, targetStatus: approveTarget });
+              }
               return;
             }
           }
@@ -302,32 +316,38 @@ export class DiscussionService {
         const task = await this.taskRepo.findById(group.taskNodeId);
         if (!task) return;
 
-        // Risk 12 fix: skip if task is already in revision state
-        if (task.status === 'revision') {
-          this.logger.debug('Human REVISE skipped: task already in revision', { taskId: task.id });
+        const isReviewForRevise = await this.workflowEngine.isReviewStatus(task.orgId, task.status);
+        const isActiveForRevise = await this.workflowEngine.isActiveStatus(task.orgId, task.status);
+
+        // Risk 12 fix: skip if task is already in an active (non-review) state — already being revised
+        if (isActiveForRevise) {
+          if (task.assigneeRoleId) {
+            // Phase 1 revision or re-revision: wake agent to re-propose
+            this.logger.info('Human REVISE on active task, waking agent', {
+              taskId: task.id,
+              status: task.status,
+            });
+            this.eventBus.emit({
+              type: 'wake:triggered',
+              timestamp: new Date().toISOString(),
+              payload: {
+                roleId: task.assigneeRoleId,
+                orgId: group.orgId,
+                trigger: 'review_revise' as const,
+                taskNodeId: task.id,
+              },
+            });
+          }
           return;
         }
 
-        if (task.status === 'in_progress' && task.assigneeRoleId) {
-          // Phase 1 revision: decomposition plan rejected, wake agent to re-propose
-          this.logger.info('Decomposition plan revised by human, waking agent to re-propose', {
-            taskId: task.id,
-          });
-          this.eventBus.emit({
-            type: 'wake:triggered',
-            timestamp: new Date().toISOString(),
-            payload: {
-              roleId: task.assigneeRoleId,
-              orgId: group.orgId,
-              trigger: 'review_revise' as const,
-            },
-          });
+        if (isReviewForRevise) {
+          // Task is in review status — normal revision handling
+          const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
+          const feedback = latestMsg[0]?.content ?? '';
+          await this.handleRevision(group, feedback, true);
           return;
         }
-        const latestMsg = await this.discussionRepo.findRecentMessages(groupId, 1);
-        const feedback = latestMsg[0]?.content ?? '';
-        await this.handleRevision(group, feedback, true);
-        return;
       }
 
       // If a human directly votes DELEGATE, trigger delegation immediately
@@ -375,8 +395,9 @@ export class DiscussionService {
     const task = await this.taskRepo.findById(group.taskNodeId);
     if (!task) return;
 
-    // Skip if the task is already approved or in a terminal state
-    if (task.status === 'approved' || task.status === 'done' || task.status === 'cancelled') {
+    // Skip if the task is already in a terminal state
+    const isTerminal = await this.workflowEngine.isTerminalStatus(task.orgId, task.status);
+    if (isTerminal) {
       this.logger.debug('handleApproved skipped: task already in terminal state', {
         taskId: task.id,
         status: task.status,
@@ -387,7 +408,8 @@ export class DiscussionService {
     // Check if the reviewer role requires human approval
     if (task.assigneeRoleId) {
       const role = await this.roleRepo.findById(task.assigneeRoleId);
-      if (role?.requiresHumanApproval && task.status === 'awaiting_review') {
+      const isReview = await this.workflowEngine.isReviewStatus(task.orgId, task.status);
+      if (role?.requiresHumanApproval && isReview) {
         this.logger.info('Consensus reached but human approval required', {
           taskId: task.id,
           roleId: role.id,
@@ -408,9 +430,12 @@ export class DiscussionService {
       }
     }
 
-    await this.taskStateMachine.transition(task.id, 'approved');
-    await this.discussionRepo.resetReviseCount(group.id);
-    this.logger.info('Task approved via consensus', { taskId: task.id });
+    const approveTarget = await this.workflowEngine.findTransitionTargetByCategory(task.orgId, task.status, 'terminal');
+    if (approveTarget) {
+      await this.taskStateMachine.transition(task.id, approveTarget);
+      await this.discussionRepo.resetReviseCount(group.id);
+      this.logger.info('Task approved via consensus', { taskId: task.id, targetStatus: approveTarget });
+    }
   }
 
   private async handleRevision(group: DiscussionGroup, feedback: string, isHuman = false): Promise<void> {
@@ -438,14 +463,19 @@ export class DiscussionService {
           this.eventBus.emit({
             type: 'wake:triggered',
             timestamp: new Date().toISOString(),
-            payload: { roleId: role.parentId, orgId: group.orgId, trigger: 'retry_failed' as const },
+            payload: { roleId: role.parentId, orgId: group.orgId, trigger: 'retry_failed' as const, taskNodeId: task.id },
           });
         }
       }
       return;
     }
 
-    await this.taskStateMachine.transition(task.id, 'revision');
+    const revisionTarget = await this.workflowEngine.findTransitionTargetByCategory(task.orgId, task.status, 'active');
+    if (!revisionTarget) {
+      this.logger.error('No active status transition target found for revision', { taskId: task.id, status: task.status });
+      return;
+    }
+    await this.taskStateMachine.transition(task.id, revisionTarget);
     // Bug 3 fix: increment round so next votes start fresh
     await this.discussionRepo.incrementRound(group.id);
     this.logger.info('Task sent to revision', { taskId: task.id, round: count });
@@ -459,6 +489,7 @@ export class DiscussionService {
           roleId: task.assigneeRoleId,
           orgId: group.orgId,
           trigger: 'review_revise' as const,
+          taskNodeId: task.id,
         },
       });
     }
@@ -468,7 +499,12 @@ export class DiscussionService {
     const task = await this.taskRepo.findById(group.taskNodeId);
     if (!task) return;
 
-    await this.taskStateMachine.transition(task.id, 'blocked');
+    // Find 'blocked' or equivalent status from schema transitions
+    const allStatuses = await this.workflowEngine.getAllStatuses(task.orgId);
+    const blockedStatus = allStatuses.find((s) => s.name === 'blocked');
+    if (blockedStatus) {
+      await this.taskStateMachine.transition(task.id, blockedStatus.name);
+    }
     this.logger.info('Task blocked due to delegation', { taskId: task.id, targetRoleId });
 
     this.eventBus.emit({
@@ -478,6 +514,7 @@ export class DiscussionService {
         roleId: targetRoleId,
         orgId: group.orgId,
         trigger: 'review_delegate' as const,
+        taskNodeId: task.id,
       },
     });
   }
@@ -534,6 +571,7 @@ export class DiscussionService {
         roleId: role.parentId,
         orgId: group.orgId,
         trigger: 'dispute_detected' as const,
+        taskNodeId: task.id,
       },
     });
   }

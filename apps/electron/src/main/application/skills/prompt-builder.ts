@@ -467,7 +467,7 @@ export class PromptBuilder implements IPromptBuilder {
     }
 
     // phase === 'execute'
-    const hasApproval = ctx.task.status === 'approved'
+    const hasApproval = ctx.isTaskTerminal === true
       || (ctx.discussionSummary?.voteStats?.APPROVE ?? 0) > 0;
     const approvalNote = hasApproval
       ? 'Your decomposition plan has been approved. Now create the child tasks.'

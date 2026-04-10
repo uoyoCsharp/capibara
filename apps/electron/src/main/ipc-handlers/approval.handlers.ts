@@ -5,6 +5,7 @@ import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js
 import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js';
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { OrgOrchestrator } from '@main/application/orchestrator/org.orchestrator.js';
 
 function ok<T>(data: T): DesktopResult<T> {
@@ -21,6 +22,7 @@ export function registerApprovalHandlers(
   discussionRepo: IDiscussionRepository,
   orchestrator: OrgOrchestrator,
   logger: ILogger,
+  workflowEngine: IWorkflowEngine,
 ): void {
   // Apply approval preset to all roles in an org
   ipcMain.handle(IPC_CHANNELS.applyApprovalPreset, async (_event, input: unknown) => {
@@ -65,7 +67,11 @@ export function registerApprovalHandlers(
       }
 
       const tasks = await taskRepo.findByOrgId(orgId);
-      const awaitingTasks = tasks.filter((t) => t.status === 'awaiting_review');
+      const reviewChecks = await Promise.all(tasks.map(async (t) => ({
+        task: t,
+        isReview: await workflowEngine.isReviewStatus(t.orgId, t.status),
+      })));
+      const awaitingTasks = reviewChecks.filter((r) => r.isReview).map((r) => r.task);
 
       // Bug 1 fix: also include tasks without discussion groups (non-epic/story with requiresHumanApproval)
       const results: PendingApprovalRecord[] = [];
