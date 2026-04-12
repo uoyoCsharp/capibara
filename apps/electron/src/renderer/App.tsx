@@ -9,7 +9,11 @@ import { SkillsPage } from './components/skills/SkillsPage';
 import { ExecutionPage } from './components/execution/ExecutionPage';
 import { DiscussionPage } from './components/discussion/DiscussionPage';
 import { ConversationPage } from './components/conversations/ConversationPage';
+import { InboxPage } from './components/inbox/InboxPage';
+import { TeamPage } from './components/team/TeamPage';
+import { SettingsPage } from './components/settings/SettingsPage';
 import { ToastContainer } from './components/shared/ToastContainer';
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { toast } from './store/toast.store';
 
 export function App() {
@@ -23,9 +27,27 @@ export function App() {
 function AppContent() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
-  const { currentOrgId, isLoading } = useCapibaraSnapshot();
+  const { organizations, currentOrgId, isLoading, refresh } = useCapibaraSnapshot();
   const t = useT();
+
+  // Determine whether to show onboarding
+  useEffect(() => {
+    if (isLoading) return;
+    if (organizations.length > 0) {
+      setShowOnboarding(false);
+      return;
+    }
+    // No orgs — check if onboarding was already completed (user deleted all orgs)
+    window.capibara.getSetting('onboardingCompleted').then((res) => {
+      if (res.ok && res.data === 'true') {
+        setShowOnboarding(false);
+      } else {
+        setShowOnboarding(true);
+      }
+    });
+  }, [isLoading, organizations.length]);
 
   // Run completion toast notifications
   useEffect(() => {
@@ -50,7 +72,7 @@ function AppContent() {
           `${t.conversations.humanReplyNotification}: ${event.askingRoleName || 'AI'} ${t.conversations.humanReplyNotificationBody}`,
           {
             duration: 10000,
-            action: { label: t.conversations.goToConversations, onClick: () => setActiveSection('conversations') },
+            action: { label: t.conversations.goToConversations, onClick: () => setActiveSection('inbox') },
           },
         );
       }
@@ -59,7 +81,7 @@ function AppContent() {
     return unsub;
   }, [t, setActiveSection]);
 
-  if (isLoading) {
+  if (isLoading || showOnboarding === null) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background">
         <div className="text-center">
@@ -70,10 +92,25 @@ function AppContent() {
     );
   }
 
+  if (showOnboarding) {
+    return (
+      <OnboardingWizard onComplete={() => { setShowOnboarding(false); refresh(); }} />
+    );
+  }
+
   const renderPage = () => {
     switch (activeSection) {
       case 'dashboard':
-        return <DashboardPage orgId={currentOrgId} />;
+        return <DashboardPage orgId={currentOrgId} onNavigate={setActiveSection} />;
+      case 'tasks':
+        return <ExecutionPage />;
+      case 'inbox':
+        return <InboxPage onNavigate={setActiveSection} />;
+      case 'team':
+        return <TeamPage orgId={currentOrgId} />;
+      case 'settings':
+        return <SettingsPage />;
+      // Legacy routes — kept for backward compatibility
       case 'organization':
         return <OrganizationPage />;
       case 'skills':
@@ -85,7 +122,7 @@ function AppContent() {
       case 'conversations':
         return <ConversationPage />;
       default:
-        return <DashboardPage orgId={currentOrgId} />;
+        return <DashboardPage orgId={currentOrgId} onNavigate={setActiveSection} />;
     }
   };
 

@@ -42,6 +42,7 @@ export type DomainEventType =
   | 'conversation:timed-out'
   | 'conversation:resolved'
   | 'conversation:cancelled'
+  | 'discussion-summary:updated'
   | 'schema:updated'
   | 'behavior:executed';
 

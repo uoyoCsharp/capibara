@@ -82,9 +82,13 @@ export function registerNarrativeHandlers(
       const entries = await costRepo.findByOrgId(orgId);
       const budgetLimit = org?.budgetLimit ?? 50;
       const totalTokensM = totalTokens / 1_000_000;
+      // Blended rate estimate — should be moved to org-level config if per-model pricing is needed
+      const ESTIMATED_USD_PER_MILLION_TOKENS = 3;
+      const totalCostUsd = Math.round(totalTokensM * ESTIMATED_USD_PER_MILLION_TOKENS * 100) / 100;
       return ok({
         orgId,
         totalTokens,
+        totalCostUsd,
         budgetLimit,
         budgetPercent: budgetLimit > 0 ? Math.round((totalTokensM / budgetLimit) * 100) : 0,
         entries: entries.map((e) => ({

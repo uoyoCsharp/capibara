@@ -8,11 +8,24 @@ export interface LocaleMessages {
   };
   sections: {
     dashboard: string;
+    tasks: string;
+    inbox: string;
+    team: string;
+    settings: string;
+    // Legacy (kept during migration)
     organization: string;
     execution: string;
     discussion: string;
     skills: string;
     conversations: string;
+  };
+  workspace: {
+    switchWorkspace: string;
+    workspaceSettings: string;
+    createNewSpace: string;
+    userPreferences: string;
+    logOut: string;
+    active: string;
   };
   status: {
     active: string;
@@ -95,8 +108,10 @@ export interface LocaleMessages {
     activeOrganizations: string;
     tasksInProgress: string;
     budgetUsed: string;
+    budgetEstimatedUsd: string;
     projectNarrative: string;
     noActiveProject: string;
+    blockedConversations: string;
   };
   organization: {
     title: string;
@@ -429,5 +444,74 @@ export interface LocaleMessages {
     humanReplyNotification: string;
     humanReplyNotificationBody: string;
     goToConversations: string;
+  };
+  onboarding: {
+    welcomeTitle: string;
+    welcomeSubtitle: string;
+    healthCheck: string;
+    healthCheckDesc: string;
+    checking: string;
+    nodejs: string;
+    claudeCli: string;
+    network: string;
+    installed: string;
+    notInstalled: string;
+    connected: string;
+    disconnected: string;
+    installCommand: string;
+    copied: string;
+    retryCheck: string;
+    continueAnyway: string;
+    continueNext: string;
+    allPassed: string;
+    namingTitle: string;
+    namingSubtitle: string;
+    spaceName: string;
+    spaceNamePlaceholder: string;
+    chooseTemplate: string;
+    recommended: string;
+    agents: string;
+    complexity: string;
+    letsGo: string;
+    creating: string;
+  };
+  discussionPanel: {
+    autoSummary: string;
+    noSummary: string;
+    replyWillWake: string;
+    markResolved: string;
+    markResolvedConfirm: string;
+    markResolvedMessage: string;
+    resolved: string;
+    agentPaused: string;
+    waitingFor: string;
+    triggered: string;
+    selectVoteTag: string;
+  };
+  inbox: {
+    title: string;
+    subtitle: string;
+    needsYourReply: string;
+    agentDiscussions: string;
+    noBlockedConversations: string;
+    noMonitoringConversations: string;
+    noActiveConversations: string;
+    askingAgent: string;
+    waitingForYou: string;
+    waitingForAgent: string;
+    waitingSinceLabel: string;
+    goToTask: string;
+  };
+  teamPage: {
+    title: string;
+    subtitle: string;
+    noOrgSelected: string;
+    noOrgHint: string;
+    addAgent: string;
+    reportsTo: string;
+    humanApprovalBadge: string;
+    noRoles: string;
+    noRolesHint: string;
+    rolesCount: string;
   };
 }

@@ -81,4 +81,17 @@ export function registerDiscussionHandlers(
       return fail('INTERNAL', 'Failed to post discussion message');
     }
   });
+
+  ipcMain.handle(IPC_CHANNELS.getDiscussionSummary, async (_event, groupId: unknown) => {
+    try {
+      if (typeof groupId !== 'string' || !groupId) {
+        return fail('VALIDATION_ERROR', 'groupId must be a non-empty string');
+      }
+      const group = await discussionService.findGroupById(groupId);
+      return ok(group?.summary ?? null);
+    } catch (err) {
+      logger.error('Failed to get discussion summary', { error: String(err) });
+      return fail('INTERNAL', 'Failed to get discussion summary');
+    }
+  });
 }

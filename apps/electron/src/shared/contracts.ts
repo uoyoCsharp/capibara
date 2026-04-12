@@ -52,6 +52,7 @@ export const IPC_CHANNELS = {
   getDiscussionMessages: 'capibara:discussion:get-messages',
   getDiscussionVoteStats: 'capibara:discussion:get-vote-stats',
   postDiscussionMessage: 'capibara:discussion:post-message',
+  getDiscussionSummary: 'capibara:discussion:get-summary',
 
   // Narrative
   getNarrative: 'capibara:narrative:get',
@@ -90,10 +91,15 @@ export const IPC_CHANNELS = {
   schemaImpactAnalysis: 'capibara:schema:impact-analysis',
   getWorkflowTemplates: 'capibara:schema:get-workflow-templates',
 
+  // System
+  checkSystemDeps: 'capibara:system:check-deps',
+
   // Conversation
   getActiveConversations: 'capibara:conversation:list-active',
+  getGroupedConversations: 'capibara:conversation:list-grouped',
   getConversationHistory: 'capibara:conversation:get-history',
   cancelConversation: 'capibara:conversation:cancel',
+  resolveConversation: 'capibara:conversation:resolve',
   getConversationMetrics: 'capibara:conversation:get-metrics',
   getConversationEvents: 'capibara:conversation:get-events',
   getConversationAnalytics: 'capibara:conversation:get-analytics',
@@ -128,7 +134,8 @@ export type DesktopEvent =
   | { type: 'conversation:cancelled'; orgId: string; workflowId: string }
   | { type: 'conversation:timed-out'; orgId: string; workflowId: string }
   | { type: 'conversation:escalated'; orgId: string; workflowId: string }
-  | { type: 'conversation:reply-posted'; orgId: string; workflowId: string };
+  | { type: 'conversation:reply-posted'; orgId: string; workflowId: string }
+  | { type: 'discussion-summary:updated'; groupId: string; summary: string };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -271,6 +278,10 @@ export const cancelConversationSchema = z.object({
   workflowId: z.string().min(1),
 });
 
+export const resolveConversationSchema = z.object({
+  conversationWorkflowId: z.string().min(1),
+});
+
 export const replyToConversationSchema = z.object({
   workflowId: z.string().min(1),
   content: z.string().min(1).max(50000),
@@ -326,6 +337,7 @@ export const saveSchemaSchema = z.object({
 export type SaveSchemaInput = z.infer<typeof saveSchemaSchema>;
 
 export type CancelConversationInput = z.infer<typeof cancelConversationSchema>;
+export type ResolveConversationInput = z.infer<typeof resolveConversationSchema>;
 export type ReplyToConversationInput = z.infer<typeof replyToConversationSchema>;
 
 export type UpdateSettingInput = z.infer<typeof updateSettingSchema>;
@@ -345,9 +357,23 @@ export type PostDiscussionMessageInput = z.infer<typeof postDiscussionMessageSch
 export type ApplyApprovalPresetInput = z.infer<typeof applyApprovalPresetSchema>;
 export type StartRunInput = z.infer<typeof startRunSchema>;
 
+// ─── System Check Types ─────────────────────────────────────────────
+export interface DepCheckItem {
+  ok: boolean;
+  version: string | null;
+}
+export interface SystemCheckResult {
+  nodejs: DepCheckItem;
+  claudeCli: DepCheckItem;
+  network: DepCheckItem;
+}
+
 // ─── Capibara API (exposed via contextBridge) ───────────────────────
 export interface CapibaraApi {
   loadSnapshot: () => Promise<DesktopResult<AppSnapshot>>;
+
+  // System
+  checkSystemDeps: () => Promise<DesktopResult<SystemCheckResult>>;
 
   // Dialogs
   selectFolder: () => Promise<DesktopResult<string | null>>;
@@ -411,6 +437,7 @@ export interface CapibaraApi {
   getDiscussionMessages: (groupId: string) => Promise<DesktopResult<DiscussionMessageRecord[]>>;
   getDiscussionVoteStats: (groupId: string) => Promise<DesktopResult<VoteStatsRecord>>;
   postDiscussionMessage: (input: PostDiscussionMessageInput) => Promise<DesktopResult<DiscussionMessageRecord>>;
+  getDiscussionSummary: (groupId: string) => Promise<DesktopResult<string | null>>;
 
   // Runs
   getRunsByOrgId: (orgId: string) => Promise<DesktopResult<RunRecord[]>>;
@@ -435,8 +462,10 @@ export interface CapibaraApi {
 
   // Conversation
   getActiveConversations: (orgId: string) => Promise<DesktopResult<ConversationWorkflowRecord[]>>;
+  getGroupedConversations: (orgId: string) => Promise<DesktopResult<GroupedConversationsResult>>;
   getConversationHistory: (workflowId: string) => Promise<DesktopResult<DiscussionMessageRecord[]>>;
   cancelConversation: (input: CancelConversationInput) => Promise<DesktopResult<void>>;
+  resolveConversation: (input: ResolveConversationInput) => Promise<DesktopResult<void>>;
   getConversationMetrics: (orgId: string) => Promise<DesktopResult<ConversationMetricsRecord>>;
   getConversationEvents: (workflowId: string) => Promise<DesktopResult<ConversationEventRecord[]>>;
   getConversationAnalytics: (orgId: string, timeRange: ConversationTimeRange) => Promise<DesktopResult<ConversationAnalyticsRecord>>;
@@ -606,6 +635,7 @@ export interface NarrativeRecord {
 export interface CostSummaryRecord {
   orgId: string;
   totalTokens: number;
+  totalCostUsd: number;
   budgetLimit: number;
   budgetPercent: number;
   entries: CostEntryRecord[];
@@ -657,6 +687,11 @@ export interface AppSnapshot {
 // ─── Navigation ─────────────────────────────────────────────────────
 export type SectionId =
   | 'dashboard'
+  | 'tasks'
+  | 'inbox'
+  | 'team'
+  | 'settings'
+  // Legacy sections (retained for backward compatibility during migration)
   | 'organization'
   | 'skills'
   | 'execution'
@@ -714,6 +749,27 @@ export interface ConversationEventRecord {
   eventType: string;
   eventPayload: Record<string, unknown>;
   createdAt: string;
+}
+
+export interface ConversationInboxItem {
+  workflowId: string;
+  taskNodeId: string;
+  taskTitle: string;
+  discussionGroupId: string;
+  askingRoleId: string;
+  askingRoleName: string;
+  respondentRoleId: string | null;
+  respondentRoleName: string | null;
+  respondentType: 'ai' | 'human';
+  questionPreview: string;
+  waitingSince: string;
+  priority: number;
+  depth: number;
+}
+
+export interface GroupedConversationsResult {
+  blocked: ConversationInboxItem[];
+  monitoring: ConversationInboxItem[];
 }
 
 // ─── Conversation Analytics ────────────────────────────────────────

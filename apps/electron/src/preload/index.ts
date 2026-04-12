@@ -5,6 +5,9 @@ import type { CapibaraApi, DesktopEvent } from '@shared/contracts';
 const api: CapibaraApi = {
   loadSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.loadSnapshot),
 
+  // System
+  checkSystemDeps: () => ipcRenderer.invoke(IPC_CHANNELS.checkSystemDeps),
+
   // Dialogs
   selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.selectFolder),
 
@@ -64,6 +67,7 @@ const api: CapibaraApi = {
   getDiscussionMessages: (groupId) => ipcRenderer.invoke(IPC_CHANNELS.getDiscussionMessages, groupId),
   getDiscussionVoteStats: (groupId) => ipcRenderer.invoke(IPC_CHANNELS.getDiscussionVoteStats, groupId),
   postDiscussionMessage: (input) => ipcRenderer.invoke(IPC_CHANNELS.postDiscussionMessage, input),
+  getDiscussionSummary: (groupId) => ipcRenderer.invoke(IPC_CHANNELS.getDiscussionSummary, groupId),
 
   // Runs
   getRunsByOrgId: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getRunsByOrgId, orgId),
@@ -91,8 +95,10 @@ const api: CapibaraApi = {
 
   // Conversation
   getActiveConversations: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActiveConversations, orgId),
+  getGroupedConversations: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getGroupedConversations, orgId),
   getConversationHistory: (workflowId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationHistory, workflowId),
   cancelConversation: (input) => ipcRenderer.invoke(IPC_CHANNELS.cancelConversation, input),
+  resolveConversation: (input) => ipcRenderer.invoke(IPC_CHANNELS.resolveConversation, input),
   getConversationMetrics: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationMetrics, orgId),
   getConversationEvents: (workflowId) => ipcRenderer.invoke(IPC_CHANNELS.getConversationEvents, workflowId),
   getConversationAnalytics: (orgId, timeRange) => ipcRenderer.invoke(IPC_CHANNELS.getConversationAnalytics, orgId, timeRange),

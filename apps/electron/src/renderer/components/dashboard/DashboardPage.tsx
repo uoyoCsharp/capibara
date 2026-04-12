@@ -1,23 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowClockwise, Lightning, Cpu, ListChecks, ChartLineUp } from '@phosphor-icons/react';
+import { ArrowClockwise, Lightning, Cpu, ListChecks, ChartLineUp, Tray, UsersThree } from '@phosphor-icons/react';
 import { cn } from '../../lib/utils';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Progress } from '../ui/progress';
 import { useT } from '../../hooks/useLocale';
-import type { NarrativeRecord, CostSummaryRecord, CostEntryRecord, RoleRecord } from '@shared/contracts';
+import type { SectionId, NarrativeRecord, CostSummaryRecord, CostEntryRecord, RoleRecord } from '@shared/contracts';
 
 declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi; };
 
 interface DashboardPageProps {
   orgId: string | null;
+  onNavigate?: (section: SectionId) => void;
 }
 
-export function DashboardPage({ orgId }: DashboardPageProps) {
+export function DashboardPage({ orgId, onNavigate }: DashboardPageProps) {
   const [narrative, setNarrative] = useState<NarrativeRecord | null>(null);
   const [costSummary, setCostSummary] = useState<CostSummaryRecord | null>(null);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [activeTaskCount, setActiveTaskCount] = useState(0);
+  const [blockedCount, setBlockedCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const t = useT();
@@ -26,14 +29,22 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
     if (!orgId) return;
     setLoading(true);
     try {
-      const [narRes, costRes, rolesRes] = await Promise.all([
+      const [narRes, costRes, rolesRes, tasksRes, convoRes] = await Promise.all([
         window.capibara.getNarrative(orgId),
         window.capibara.getCostSummary(orgId),
         window.capibara.getRolesByOrgId(orgId),
+        window.capibara.getTasksByOrgId(orgId),
+        window.capibara.getGroupedConversations(orgId),
       ]);
       if (narRes.ok) setNarrative(narRes.data);
       if (costRes.ok) setCostSummary(costRes.data);
       if (rolesRes.ok) setRoles(rolesRes.data);
+      if (tasksRes.ok) {
+        setActiveTaskCount(tasksRes.data.filter((t) => t.status === 'in_progress' || t.status === 'blocked').length);
+      }
+      if (convoRes.ok) {
+        setBlockedCount(convoRes.data.blocked.length);
+      }
     } catch {
       toast.error(t.errors.failedToLoad);
     } finally {
@@ -119,6 +130,53 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
       {/* Budget bar */}
       {costSummary && <BudgetBar summary={costSummary} />}
 
+      {/* Stat cards */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <Card
+          className={cn(
+            'cursor-pointer transition-colors hover:ring-1 hover:ring-primary/30',
+            onNavigate && 'hover:shadow-md',
+          )}
+          onClick={() => onNavigate?.('tasks')}
+        >
+          <CardContent className="flex items-center gap-3 py-4">
+            <ListChecks size={24} className="text-primary flex-shrink-0" />
+            <div>
+              <p className="text-2xl font-bold text-foreground">{activeTaskCount}</p>
+              <p className="text-xs text-muted-foreground">{t.dashboard.tasksInProgress}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card
+          className={cn(
+            'cursor-pointer transition-colors hover:ring-1 hover:ring-destructive/30',
+            blockedCount > 0 && 'border-destructive/30',
+            onNavigate && 'hover:shadow-md',
+          )}
+          onClick={() => onNavigate?.('inbox')}
+        >
+          <CardContent className="flex items-center gap-3 py-4">
+            <Tray size={24} className={blockedCount > 0 ? 'text-destructive' : 'text-muted-foreground'} />
+            <div>
+              <p className={cn('text-2xl font-bold', blockedCount > 0 ? 'text-destructive' : 'text-foreground')}>{blockedCount}</p>
+              <p className="text-xs text-muted-foreground">{t.dashboard.blockedConversations}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card
+          className="cursor-pointer transition-colors hover:ring-1 hover:ring-primary/30 hover:shadow-md"
+          onClick={() => onNavigate?.('team')}
+        >
+          <CardContent className="flex items-center gap-3 py-4">
+            <UsersThree size={24} className="text-primary flex-shrink-0" />
+            <div>
+              <p className="text-2xl font-bold text-foreground">{roles.length}</p>
+              <p className="text-xs text-muted-foreground">{t.teamPage.rolesCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Narrative */}
       <Card className="mb-[var(--section-gap)]">
         <CardHeader className="pb-2">
@@ -135,7 +193,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
         <CardContent>
           {narrative ? (
             <div className="prose prose-sm max-w-none text-muted-foreground">
-              <NarrativeContent text={narrative.renderedText} />
+              <NarrativeContent text={narrative.renderedText} onNavigate={onNavigate} />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -155,7 +213,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 
 function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
   const t = useT();
-  const { totalTokens, budgetPercent } = summary;
+  const { totalTokens, totalCostUsd, budgetPercent } = summary;
   const totalTokensM = totalTokens / 1_000_000;
   const textColor =
     budgetPercent >= 95 ? 'text-destructive' :
@@ -169,9 +227,14 @@ function BudgetBar({ summary }: { summary: CostSummaryRecord; }) {
           <Cpu size={18} className="text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground">{t.dashboard.tokenUsage}</span>
         </div>
-        <span className={cn('text-sm font-semibold', textColor)}>
-          {totalTokensM.toFixed(4)}M tokens ({budgetPercent}%)
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {t.dashboard.budgetEstimatedUsd}: ${totalCostUsd.toFixed(2)}
+          </span>
+          <span className={cn('text-sm font-semibold', textColor)}>
+            {totalTokensM.toFixed(4)}M tokens ({budgetPercent}%)
+          </span>
+        </div>
       </div>
       <Progress
         value={Math.min(budgetPercent, 100)}
@@ -240,8 +303,26 @@ function CostBreakdown({ entries, roles }: { entries: CostEntryRecord[]; roles: 
   );
 }
 
-function NarrativeContent({ text }: { text: string; }) {
+function NarrativeContent({ text, onNavigate }: { text: string; onNavigate?: (section: SectionId) => void }) {
   const lines = text.split('\n');
+
+  // Map known section headers to navigation targets (longer keys first to avoid partial matches)
+  const sectionNav: [string, SectionId][] = [
+    ['blocked items', 'inbox'],
+    ['active work', 'tasks'],
+    ['execution', 'tasks'],
+    ['tasks', 'tasks'],
+    ['blocked', 'inbox'],
+  ];
+
+  const getNavTarget = (heading: string): SectionId | null => {
+    const lower = heading.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    for (const [key, target] of sectionNav) {
+      if (lower.includes(key)) return target;
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-1">
       {lines.map((line, i) => {
@@ -249,7 +330,20 @@ function NarrativeContent({ text }: { text: string; }) {
           return <h2 key={i} className="text-lg font-semibold text-foreground mt-4 mb-1">{line.slice(3)}</h2>;
         }
         if (line.startsWith('### ')) {
-          return <h3 key={i} className="text-base font-semibold text-foreground mt-3 mb-1">{line.slice(4)}</h3>;
+          const heading = line.slice(4);
+          const navTarget = getNavTarget(heading);
+          if (navTarget && onNavigate) {
+            return (
+              <h3
+                key={i}
+                className="text-base font-semibold text-primary mt-3 mb-1 cursor-pointer hover:underline inline-block"
+                onClick={() => onNavigate(navTarget)}
+              >
+                {heading} →
+              </h3>
+            );
+          }
+          return <h3 key={i} className="text-base font-semibold text-foreground mt-3 mb-1">{heading}</h3>;
         }
         if (line.startsWith('- ')) {
           return <li key={i} className="text-sm text-muted-foreground ml-4 list-disc">{renderBold(line.slice(2))}</li>;

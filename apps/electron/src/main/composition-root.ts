@@ -34,6 +34,7 @@ import {
   WORKFLOW_ENGINE_TOKEN,
   BEHAVIOR_ENGINE_TOKEN,
   WORKFLOW_SCHEMA_REPO_TOKEN,
+  SYSTEM_CHECK_SERVICE_TOKEN,
 } from './core/tokens.js';
 
 import { SqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.js';
@@ -95,6 +96,8 @@ import { registerNarrativeHandlers } from './ipc-handlers/narrative.handlers.js'
 import { registerSettingsHandlers } from './ipc-handlers/settings.handlers.js';
 import { registerConversationHandlers } from './ipc-handlers/conversation.handlers.js';
 import { registerWorkflowSchemaHandlers } from './ipc-handlers/workflow-schema.handlers.js';
+import { registerSystemHandlers } from './ipc-handlers/system.handlers.js';
+import { SystemCheckService } from './application/system/system-check.service.js';
 import { WorkflowTemplateService } from './application/workflow/workflow-template.service.js';
 import { detectLocaleFromOS } from '@shared/locale/index.js';
 
@@ -368,7 +371,12 @@ export async function bootstrap(): Promise<void> {
     logger.error('Skill seeder failed', { error: String(err) });
   }
 
+  // ─── System Check Service ────────────────────────────────
+  const systemCheckService = new SystemCheckService(logger);
+  container.register<SystemCheckService>(SYSTEM_CHECK_SERVICE_TOKEN, { useValue: systemCheckService });
+
   // ─── IPC Handlers ────────────────────────────────────────
+  registerSystemHandlers(systemCheckService, logger);
   registerSnapshotHandlers(orgRepo, logger);
   registerOrganizationHandlers(orgRepo, logger, workflowEngine, workflowTemplateService);
   registerRoleHandlers(roleRepo, logger);
@@ -382,7 +390,7 @@ export async function bootstrap(): Promise<void> {
   registerSettingsHandlers(settingsRepo, logger);
   registerConversationHandlers(
     conversationWorkflowRepo, discussionRepo, pendingWakeRepo,
-    eventBus, conversationEventLogger, logger, roleRepo, conversationWorkflowService,
+    eventBus, conversationEventLogger, logger, roleRepo, taskRepo, conversationWorkflowService,
   );
   registerWorkflowSchemaHandlers(workflowEngine, logger);
 

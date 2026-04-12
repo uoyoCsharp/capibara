@@ -1,12 +1,13 @@
 import { ipcMain } from 'electron';
-import { IPC_CHANNELS, cancelConversationSchema, replyToConversationSchema } from '@shared/contracts.js';
-import type { DesktopResult, ConversationWorkflowRecord, ConversationMetricsRecord, ConversationAnalyticsRecord, ConversationTimeRange } from '@shared/contracts.js';
+import { IPC_CHANNELS, cancelConversationSchema, resolveConversationSchema, replyToConversationSchema } from '@shared/contracts.js';
+import type { DesktopResult, ConversationWorkflowRecord, ConversationMetricsRecord, ConversationAnalyticsRecord, ConversationTimeRange, ConversationInboxItem, GroupedConversationsResult } from '@shared/contracts.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
 import type { IConversationWorkflowService } from '@main/core/interfaces/i-conversation-workflow.service.js';
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { IPendingWakeRepository } from '@main/core/interfaces/i-pending-wake.repository.js';
 import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js';
+import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js';
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ConversationEventLogger } from '@main/infrastructure/persistence/sqlite/conversation-event.logger.js';
 
@@ -49,6 +50,7 @@ export function registerConversationHandlers(
   eventLogger: ConversationEventLogger,
   logger: ILogger,
   roleRepo: IRoleRepository,
+  taskRepo: ITaskRepository,
   conversationService?: IConversationWorkflowService,
 ): void {
   // List active conversations for an org
@@ -63,6 +65,98 @@ export function registerConversationHandlers(
     } catch (err) {
       logger.error('Failed to get active conversations', { error: String(err) });
       return fail('INTERNAL', 'Failed to get active conversations');
+    }
+  });
+
+  // List grouped conversations for inbox (blocked vs monitoring)
+  ipcMain.handle(IPC_CHANNELS.getGroupedConversations, async (_event, orgId: unknown) => {
+    try {
+      if (typeof orgId !== 'string' || !orgId) {
+        return fail('VALIDATION_ERROR', 'orgId must be a non-empty string');
+      }
+
+      const workflows = await workflowRepo.findByOrgId(orgId);
+      const waiting = workflows.filter((wf) => wf.state === 'waiting_for_reply');
+
+      if (waiting.length === 0) {
+        return ok<GroupedConversationsResult>({ blocked: [], monitoring: [] });
+      }
+
+      // Batch-load roles and build lookup
+      const roles = await roleRepo.findByOrgId(orgId);
+      const roleMap = new Map(roles.map((r) => [r.id, r]));
+
+      // Batch-load tasks for the org and build lookup
+      const allTasks = await taskRepo.findByOrgId(orgId);
+      const taskMap = new Map(allTasks.map((t) => [t.id, t]));
+
+      // Batch-load messages for unique discussion groups that have questionMessageId
+      const groupIdsWithQuestion = [...new Set(
+        waiting.filter((wf) => wf.questionMessageId).map((wf) => wf.discussionGroupId),
+      )];
+      const messagesByGroup = new Map<string, Awaited<ReturnType<typeof discussionRepo.findMessagesByGroupId>>>();
+      await Promise.all(groupIdsWithQuestion.map(async (gid) => {
+        messagesByGroup.set(gid, await discussionRepo.findMessagesByGroupId(gid));
+      }));
+
+      const blocked: ConversationInboxItem[] = [];
+      const monitoring: ConversationInboxItem[] = [];
+
+      for (const wf of waiting) {
+        // Get task title from pre-loaded map
+        const task = taskMap.get(wf.taskNodeId);
+        const taskTitle = task?.title ?? 'Unknown Task';
+
+        // Get asking role name
+        const askingRole = roleMap.get(wf.askingRoleId);
+        const askingRoleName = askingRole?.name ?? 'Unknown';
+
+        // Get respondent role name
+        const respondentRole = wf.respondentRoleId ? roleMap.get(wf.respondentRoleId) : null;
+        const respondentRoleName = respondentRole?.name ?? null;
+
+        // Get last question message preview from pre-loaded messages
+        let questionPreview = '';
+        if (wf.questionMessageId) {
+          const messages = messagesByGroup.get(wf.discussionGroupId);
+          const questionMsg = messages?.find((m) => m.id === wf.questionMessageId);
+          if (questionMsg) {
+            questionPreview = questionMsg.content.slice(0, 200);
+          }
+        }
+
+        const item: ConversationInboxItem = {
+          workflowId: wf.id,
+          taskNodeId: wf.taskNodeId,
+          taskTitle,
+          discussionGroupId: wf.discussionGroupId,
+          askingRoleId: wf.askingRoleId,
+          askingRoleName,
+          respondentRoleId: wf.respondentRoleId,
+          respondentRoleName,
+          respondentType: wf.respondentType,
+          questionPreview,
+          waitingSince: wf.updatedAt,
+          priority: wf.priority,
+          depth: wf.depth,
+        };
+
+        // Blocked = respondent requires human approval (or respondentType is human)
+        if (wf.respondentType === 'human' || (respondentRole && respondentRole.requiresHumanApproval)) {
+          blocked.push(item);
+        } else {
+          monitoring.push(item);
+        }
+      }
+
+      // Sort blocked by priority desc, then waitingSince asc (oldest first)
+      blocked.sort((a, b) => b.priority - a.priority || a.waitingSince.localeCompare(b.waitingSince));
+      monitoring.sort((a, b) => b.priority - a.priority || a.waitingSince.localeCompare(b.waitingSince));
+
+      return ok<GroupedConversationsResult>({ blocked, monitoring });
+    } catch (err) {
+      logger.error('Failed to get grouped conversations', { error: String(err) });
+      return fail('INTERNAL', 'Failed to get grouped conversations');
     }
   });
 
@@ -131,6 +225,54 @@ export function registerConversationHandlers(
     } catch (err) {
       logger.error('Failed to cancel conversation', { error: String(err) });
       return fail('INTERNAL', 'Failed to cancel conversation');
+    }
+  });
+
+  // Resolve an active conversation (human forced termination)
+  ipcMain.handle(IPC_CHANNELS.resolveConversation, async (_event, input: unknown) => {
+    try {
+      const parsed = resolveConversationSchema.safeParse(input);
+      if (!parsed.success) {
+        return fail('VALIDATION_ERROR', parsed.error.message);
+      }
+      const { conversationWorkflowId } = parsed.data;
+      const workflow = await workflowRepo.findById(conversationWorkflowId);
+      if (!workflow) {
+        return fail('NOT_FOUND', `Conversation workflow ${conversationWorkflowId} not found`);
+      }
+      if (TERMINAL_STATES.has(workflow.state)) {
+        return fail('INVALID_STATE', `Conversation is already in terminal state '${workflow.state}'`);
+      }
+
+      // Transition to resolved
+      await workflowRepo.updateState(conversationWorkflowId, 'resolved', 'Resolved by human');
+
+      // Clean up all pending wakes associated with this conversation
+      if (workflow.respondentRoleId && workflow.taskNodeId) {
+        await pendingWakeRepo.consumeByRoleAndTask(workflow.respondentRoleId, workflow.taskNodeId);
+      }
+
+      // Log audit event
+      eventLogger.log(conversationWorkflowId, 'human_resolved', {
+        source: 'human',
+        previousState: workflow.state,
+      });
+
+      // Emit event
+      eventBus.emit({
+        type: 'conversation:resolved',
+        timestamp: new Date().toISOString(),
+        payload: {
+          workflowId: workflow.id,
+          orgId: workflow.orgId,
+        },
+      });
+
+      logger.info('Conversation resolved by human', { conversationWorkflowId });
+      return ok(undefined as void);
+    } catch (err) {
+      logger.error('Failed to resolve conversation', { error: String(err) });
+      return fail('INTERNAL', 'Failed to resolve conversation');
     }
   });
 

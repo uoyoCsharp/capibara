@@ -614,6 +614,12 @@ export class DiscussionService {
     const summary = lines.join('\n');
     await this.discussionRepo.updateGroupSummary(groupId, summary);
 
+    this.eventBus.emit({
+      type: 'discussion-summary:updated',
+      timestamp: new Date().toISOString(),
+      payload: { groupId, summary },
+    });
+
     return summary;
   }
 
@@ -624,6 +630,10 @@ export class DiscussionService {
 
   async findGroupByTaskNodeId(taskNodeId: string): Promise<DiscussionGroup | null> {
     return this.discussionRepo.findGroupByTaskNodeId(taskNodeId);
+  }
+
+  async findGroupById(groupId: string): Promise<DiscussionGroup | null> {
+    return this.discussionRepo.findGroupById(groupId);
   }
 
   async findMessagesByGroupId(groupId: string): Promise<DiscussionMessage[]> {

@@ -183,6 +183,14 @@ export class EventBroadcaster {
         };
         break;
 
+      case 'discussion-summary:updated':
+        desktopEvent = {
+          type: 'discussion-summary:updated',
+          groupId: payload.groupId,
+          summary: payload.summary,
+        };
+        break;
+
       default:
         return;
     }
