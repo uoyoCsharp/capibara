@@ -10,6 +10,7 @@ import type {
   CreateTaskInput,
   UpdateTaskStatusInput,
   RunStatus,
+  SectionId,
 } from '@shared/contracts';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { useWorkflowSchema } from '../../hooks/useWorkflowSchema';
@@ -140,7 +141,7 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
   );
 }
 
-export function ExecutionPage() {
+export function ExecutionPage({ onNavigate }: { onNavigate?: (section: SectionId) => void } = {}) {
   const t = useT();
   const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
@@ -499,6 +500,7 @@ export function ExecutionPage() {
                   onStatusChange={handleStatusChange}
                   roleNames={roleNames}
                   schema={schemaHelpers.schema}
+                  onNavigate={onNavigate}
                 />
               </CardContent>
             </Card>

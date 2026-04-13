@@ -155,11 +155,16 @@ export class PromptBuilder implements IPromptBuilder {
       lines.push(`- capibara_task_review: Review a child task. Use decision="approve" or "revise", reviewerRoleId="${ids.role}". Automatically posts to discussion.`);
     }
 
+    // capibara_plan_tasks — only for planning scenario
+    if (scenario === 'planning') {
+      lines.push(`- capibara_plan_tasks: Submit a structured task plan for user review. Call this when you have gathered enough information to propose a concrete plan.`);
+    }
+
     // capibara_conversation
     const showConversation: PromptScenario[] = [
       'conversation_resume', 'escalation_reply', 'revision', 'delegation_received',
       'escalation_failure', 'dispute_arbitration', 'propose_decomposition',
-      'execute_decomposition', 'execute_leaf',
+      'execute_decomposition', 'execute_leaf', 'planning',
     ];
     if (showConversation.includes(scenario)) {
       lines.push(`- capibara_conversation: Manage conversations with other roles or humans.`);
@@ -249,6 +254,9 @@ export class PromptBuilder implements IPromptBuilder {
         break;
       case 'execute_leaf':
         lines.push(this.instructLeaf(ids));
+        break;
+      case 'planning':
+        lines.push(this.instructPlanning(ctx, ids));
         break;
     }
 
@@ -492,6 +500,117 @@ export class PromptBuilder implements IPromptBuilder {
       .filter((t) => t.allowedChildren.length > 0)
       .map((t) => `${t.name}→${t.allowedChildren.join('|')}`)
       .join(', ');
+  }
+
+  private instructPlanning(ctx: PromptContext, ids: PromptIds): string {
+    const pc = ctx.planningContext;
+    const phase = pc?.phase ?? 'diverge';
+    const lines: string[] = [
+      '### Your role: AI Planning Agent',
+      'You are guiding a user through a conversational planning process to create a structured task plan.',
+      'Your goal is to understand what the user wants to build, help them think through the problem, and produce a concrete plan of tasks.',
+      '',
+      '**Process overview:** Phase A (Diverge) → Phase B (Focus) → Phase C (Structure)',
+      `**Current phase:** ${phase === 'diverge' ? 'A — Diverge' : phase === 'focus' ? 'B — Focus' : 'C — Structure'}`,
+    ];
+
+    // Phase-specific methodology injection (each under 2000 tokens)
+    switch (phase) {
+      case 'diverge':
+        lines.push(
+          '',
+          '**Phase A — Diverge (Brainstorming)** [ACTIVE]',
+          'Help the user explore and expand their idea using creative techniques:',
+          '',
+          '**SCAMPER Framework:**',
+          '- Substitute: What components could be replaced?',
+          '- Combine: What ideas/features could be merged?',
+          '- Adapt: What existing solutions could be adapted?',
+          '- Modify: What could be enlarged, reduced, or changed?',
+          '- Put to other uses: What else could this be used for?',
+          '- Eliminate: What could be removed to simplify?',
+          '- Reverse: What if we flipped the approach?',
+          '',
+          '**What-If Scenarios:** Challenge assumptions with "what if..." questions to uncover hidden requirements.',
+          '**First Principles:** Break the problem down to fundamental truths and reason up from there.',
+          '**Reversal Inversion:** Consider what the opposite approach would look like.',
+          '',
+          'Ask open-ended questions. Encourage the user to think broadly. Do NOT jump to solutions yet.',
+          'When the user has explored enough (2-3 rounds), naturally transition to Phase B.',
+        );
+        break;
+      case 'focus':
+        lines.push(
+          '',
+          '**Phase B — Focus (Product Brief)** [ACTIVE]',
+          'Narrow down to a concrete, actionable scope using the product-brief framework:',
+          '',
+          '**Problem:** What specific problem are we solving? Who experiences it? How severe is it?',
+          '**Solution:** What is the proposed approach? What makes it different from alternatives?',
+          '**Users:** Who are the primary and secondary target users? What are their key characteristics?',
+          '**Differentiators:** What unique value does this provide? Why would users choose this?',
+          '**Scope:** What is explicitly IN scope for this iteration? What is OUT of scope?',
+          '**Success Criteria:** How will we measure success? What metrics matter?',
+          '',
+          'Walk through each area with the user. Summarize the focused scope back for confirmation.',
+          'When scope is agreed (1-2 rounds), transition to Phase C.',
+        );
+        break;
+      case 'structure':
+        lines.push(
+          '',
+          '**Phase C — Structure (Task Decomposition)** [ACTIVE]',
+          'Decompose the agreed scope into a hierarchical task plan:',
+          '',
+          '**Epic decomposition rules:**',
+          '- Create epics for major workstreams (features, infrastructure, etc.)',
+          '- Break epics into stories with clear, testable acceptance criteria in BDD format:',
+          '  Given [context], When [action], Then [expected result]',
+          '- Stories should be independently deliverable where possible',
+          '',
+          '**Role assignment logic:**',
+          '- Match tasks to roles based on their skill descriptions',
+          '- Prefer specific roles over generic ones',
+          '- Leave unassigned if no role is a clear fit',
+          '',
+          '**JSON output:** When ready, call `capibara_plan_tasks` with:',
+          '```json',
+          '{ "summary": "...", "tasks": [{ "title": "...", "type": "epic|story|task", "description": "...", "assigneeRoleName": "RoleName|null", "children": [...] }] }',
+          '```',
+          '',
+          'Validate: max 50 tasks total, max 3 nesting levels.',
+        );
+        break;
+    }
+
+    lines.push(
+      '',
+      '**Guidelines:**',
+      '- The user can say "skip" at any time to jump directly to Phase C (Structure).',
+      '- Ask questions using `capibara_conversation` (action="ask", recipientTarget={type:"human"}).',
+      '- Keep each phase to 2-4 conversation rounds.',
+      `- Your task ID is "${ids.task}".`,
+    );
+
+    // Communication language instruction
+    if (pc?.communicationLanguage) {
+      const langName = pc.communicationLanguage.startsWith('zh') ? 'Chinese (中文)' : 'English';
+      lines.push(`- Converse with the user in ${langName}. Task titles and descriptions in the final plan should be in English regardless of conversation language.`);
+    }
+
+    // Add org roles context
+    if (pc?.orgRoles && pc.orgRoles.length > 0) {
+      lines.push('');
+      lines.push('**Available roles for task assignment:**');
+      for (const r of pc.orgRoles) {
+        const skills = r.skillDescriptions.length > 0
+          ? ` — Skills: ${r.skillDescriptions.join(', ')}`
+          : '';
+        lines.push(`- ${r.name} (roleId: ${r.id})${skills}`);
+      }
+    }
+
+    return lines.join('\n');
   }
 
   private instructLeaf(ids: PromptIds): string {

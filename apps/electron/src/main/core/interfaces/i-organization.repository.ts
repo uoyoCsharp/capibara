@@ -17,6 +17,7 @@ export interface UpdateOrganizationInput {
   status?: Organization['status'];
   budgetLimit?: number;
   workspacePath?: string;
+  planningRoleId?: string | null;
 }
 
 export interface IOrganizationRepository {

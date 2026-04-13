@@ -5,7 +5,7 @@ import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
-import type { PromptContext, DiscussionSummary, ReviewableChild, DecompositionDeliverable, LeafDeliverable } from '@main/core/interfaces/i-prompt-builder.js';
+import type { PromptContext, DiscussionSummary, ReviewableChild, DecompositionDeliverable, LeafDeliverable, PlanningPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
 import type { TaskNode, DiscussionGroup, Role, Skill, WakeTrigger } from '@main/core/types/domain.types.js';
 import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ConversationContextBuilder } from '../conversation/conversation-context.builder.js';
@@ -47,7 +47,12 @@ export class ExecutionContext {
     this.workflowEngine = engine;
   }
 
-  async buildPromptContext(roleId: string, taskId: string, trigger: WakeTrigger = 'task_assigned'): Promise<PromptContext> {
+  async buildPromptContext(
+    roleId: string,
+    taskId: string,
+    trigger: WakeTrigger = 'task_assigned',
+    planningContext?: PlanningPromptContext,
+  ): Promise<PromptContext> {
     const role = await this.roleRepo.findById(roleId);
     if (!role) throw new Error(`Role not found: ${roleId}`);
 
@@ -125,6 +130,7 @@ export class ExecutionContext {
       taskTypeDef,
       allItemTypes,
       isTaskTerminal,
+      planningContext,
     };
   }
 

@@ -18,6 +18,7 @@ interface RoleRow {
   can_delegate: number;
   requires_human_approval: number;
   consecutive_wake_count: number;
+  is_system_role: number;
   status: string;
   created_at: string;
   updated_at: string;
@@ -36,6 +37,7 @@ function rowToEntity(row: RoleRow): Role {
     canDelegate: row.can_delegate === 1,
     requiresHumanApproval: row.requires_human_approval === 1,
     consecutiveWakeCount: row.consecutive_wake_count ?? 0,
+    isSystemRole: (row.is_system_role ?? 0) === 1,
     status: row.status as RoleStatus,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -89,13 +91,15 @@ export class SqliteRoleRepository implements IRoleRepository {
 
     this.conn.getDb().prepare(`
       INSERT INTO roles (id, org_id, name, parent_id, persona, knowledge_base_refs, skill_ids,
-        can_approve, can_delegate, requires_human_approval, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+        can_approve, can_delegate, requires_human_approval, is_system_role, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `).run(
       id, input.orgId, input.name, input.parentId, input.persona,
       JSON.stringify(input.knowledgeBaseRefs), JSON.stringify(input.skillIds),
       input.canApprove ? 1 : 0, input.canDelegate ? 1 : 0,
-      input.requiresHumanApproval ? 1 : 0, now, now,
+      input.requiresHumanApproval ? 1 : 0,
+      input.isSystemRole ? 1 : 0,
+      now, now,
     );
 
     return (await this.findById(id))!;

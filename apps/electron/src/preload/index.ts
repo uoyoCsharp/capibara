@@ -93,6 +93,15 @@ const api: CapibaraApi = {
   schemaImpactAnalysis: (input) => ipcRenderer.invoke(IPC_CHANNELS.schemaImpactAnalysis, input),
   getWorkflowTemplates: () => ipcRenderer.invoke(IPC_CHANNELS.getWorkflowTemplates),
 
+  // Planning
+  startPlanningRun: (input) => ipcRenderer.invoke(IPC_CHANNELS.startPlanningRun, input),
+  getActivePlanningSession: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActivePlanningSession, orgId),
+  discardPlanningSession: (input) => ipcRenderer.invoke(IPC_CHANNELS.discardPlanningSession, input),
+  getPendingPlan: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getPendingPlan, orgId),
+  batchCreateTasks: (input) => ipcRenderer.invoke(IPC_CHANNELS.batchCreateTasks, input),
+  getAvailablePlanningRoles: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getAvailablePlanningRoles, orgId),
+  switchPlanningRole: (input) => ipcRenderer.invoke(IPC_CHANNELS.switchPlanningRole, input),
+
   // Conversation
   getActiveConversations: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActiveConversations, orgId),
   getGroupedConversations: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getGroupedConversations, orgId),

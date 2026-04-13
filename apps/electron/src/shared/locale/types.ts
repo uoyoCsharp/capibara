@@ -545,4 +545,35 @@ export interface LocaleMessages {
     noRolesHint: string;
     rolesCount: string;
   };
+  planning: {
+    startNewProject: string;
+    startNewProjectTooltip: string;
+    planningChat: string;
+    planningChatSubtitle: string;
+    inputPlaceholder: string;
+    inputPlaceholderThinking: string;
+    inputPlaceholderReply: string;
+    thinking: string;
+    thinkingElapsed: string;
+    cancelSession: string;
+    cancelConfirm: string;
+    cancelConfirmMessage: string;
+    phaseDiverge: string;
+    phaseFocus: string;
+    phaseStructure: string;
+    planReady: string;
+    planSummary: string;
+    createAllTasks: string;
+    creatingTasks: string;
+    startOver: string;
+    startOverConfirm: string;
+    startOverConfirmMessage: string;
+    tasksCreated: string;
+    failedToStartPlanning: string;
+    failedToCreateTasks: string;
+    resumeSession: string;
+    resumeSessionMessage: string;
+    discardAndStartOver: string;
+    emptyStateCta: string;
+  };
 }

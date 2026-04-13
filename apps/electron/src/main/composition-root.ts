@@ -97,6 +97,9 @@ import { registerSettingsHandlers } from './ipc-handlers/settings.handlers.js';
 import { registerConversationHandlers } from './ipc-handlers/conversation.handlers.js';
 import { registerWorkflowSchemaHandlers } from './ipc-handlers/workflow-schema.handlers.js';
 import { registerSystemHandlers } from './ipc-handlers/system.handlers.js';
+import { registerPlanningHandlers } from './ipc-handlers/planning.handlers.js';
+import { PlanningService } from './application/planning/planning.service.js';
+import { PendingPlanStore } from './application/planning/pending-plan.store.js';
 import { SystemCheckService } from './application/system/system-check.service.js';
 import { WorkflowTemplateService } from './application/workflow/workflow-template.service.js';
 import { detectLocaleFromOS } from '@shared/locale/index.js';
@@ -260,6 +263,13 @@ export async function bootstrap(): Promise<void> {
     logger.error('MCP IPC server failed to start', { error: String(err) });
   }
 
+  // ─── Planning Service ──────────────────────────────────────
+  const pendingPlanStore = new PendingPlanStore();
+  const planningService = new PlanningService(roleRepo, skillRepo, taskRepo, logger);
+  planningService.setExecutionEngine(executionEngine);
+  planningService.setTaskService(taskService);
+  planningService.setWorkflowEngine(workflowEngine);
+
   // ─── Orchestrator (Epic 7) ─────────────────────────────────
   const orchestrator = new OrgOrchestrator(
     config, logger, eventBus, taskRepo, roleRepo, runRepo,
@@ -309,10 +319,15 @@ export async function bootstrap(): Promise<void> {
   mcpToolHandlers.setConversationDeps(conversationWorkflowService, conversationWorkflowRepo, conversationEventLogger);
   mcpToolHandlers.setExecutionEngine(executionEngine);
   mcpToolHandlers.setWorkflowEngine(workflowEngine);
+  mcpToolHandlers.setPendingPlanStore(pendingPlanStore);
+  planningService.setConversationWorkflowRepo(conversationWorkflowRepo);
+  planningService.setOrgRepo(orgRepo);
+  planningService.setDiscussionRepo(discussionRepo);
   discussionService.setConversationDeps(conversationWorkflowRepo, conversationWorkflowService);
   executionEngine.setConversationWorkflowRepo(conversationWorkflowRepo);
   executionEngine.setWorkflowEngine(workflowEngine);
   executionEngine.setTaskService(taskService);
+  executionEngine.setSettingsRepo(settingsRepo);
   executionContext.setConversationDeps(conversationWorkflowRepo, conversationContextBuilder);
   executionContext.setWorkflowEngine(workflowEngine);
 
@@ -393,6 +408,7 @@ export async function bootstrap(): Promise<void> {
     eventBus, conversationEventLogger, logger, roleRepo, taskRepo, conversationWorkflowService,
   );
   registerWorkflowSchemaHandlers(workflowEngine, logger);
+  registerPlanningHandlers(planningService, taskService, roleRepo, workflowEngine, pendingPlanStore, logger);
 
   // ─── OS Locale Detection (first launch) ─────────────────
   try {

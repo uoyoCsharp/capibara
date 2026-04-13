@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { CaretRight, CaretDown, Plus, Trash, ListBullets, CircleNotch } from '@phosphor-icons/react';
-import type { TaskRecord, TaskStatus, TaskType, WorkflowSchemaRecord } from '@shared/contracts';
+import { CaretRight, CaretDown, Plus, Trash, ListBullets, CircleNotch, RocketLaunch } from '@phosphor-icons/react';
+import type { TaskRecord, TaskStatus, TaskType, WorkflowSchemaRecord, SectionId } from '@shared/contracts';
 import { cn } from '../../lib/utils';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { Button } from '../ui/button';
@@ -46,6 +46,7 @@ interface TaskTreeViewProps {
   onStatusChange: (id: string, status: TaskStatus) => void;
   roleNames: Map<string, string>;
   schema: WorkflowSchemaRecord | null;
+  onNavigate?: (section: SectionId) => void;
 }
 
 interface TreeNode {
@@ -286,10 +287,13 @@ export function TaskTreeView({
   onStatusChange,
   roleNames,
   schema,
+  onNavigate,
 }: TaskTreeViewProps) {
   const t = useT();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const tree = buildTree(tasks);
+  // Filter out system planning tasks ('plan' type) from the visible tree
+  const visibleTasks = tasks.filter((t) => t.type !== 'plan');
+  const tree = buildTree(visibleTasks);
 
   if (tree.length === 0) {
     return (
@@ -298,10 +302,18 @@ export function TaskTreeView({
         <p className="text-sm text-muted-foreground mb-4">
           {t.taskTree.emptyMessage}
         </p>
-        <Button onClick={() => onAddTask(null)}>
-          <Plus size={16} />
-          {t.taskTree.createTask}
-        </Button>
+        <div className="flex items-center justify-center gap-2">
+          <Button onClick={() => onAddTask(null)}>
+            <Plus size={16} />
+            {t.taskTree.createTask}
+          </Button>
+          {onNavigate && (
+            <Button variant="outline" onClick={() => onNavigate('planning')}>
+              <RocketLaunch size={16} />
+              {t.planning.emptyStateCta}
+            </Button>
+          )}
+        </div>
       </div>
     );
   }

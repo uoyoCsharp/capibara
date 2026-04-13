@@ -14,6 +14,8 @@ import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js
 import type { TaskService } from '@main/application/tasks/task.service.js';
 import type { ExecutionEngine } from '@main/application/execution/execution.engine.js';
 import type { ConversationEventLogger } from '@main/infrastructure/persistence/sqlite/conversation-event.logger.js';
+import type { PendingPlanStore } from '@main/application/planning/pending-plan.store.js';
+import type { PlanTaskNode } from '@shared/contracts.js';
 import {
   TASK_REPO_TOKEN,
   ROLE_REPO_TOKEN,
@@ -35,6 +37,7 @@ export class McpToolHandlers {
   private conversationEventLogger: ConversationEventLogger | null = null;
   private executionEngine: ExecutionEngine | null = null;
   private workflowEngine!: IWorkflowEngine;
+  private pendingPlanStore: PendingPlanStore | null = null;
 
   constructor(
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
@@ -64,6 +67,10 @@ export class McpToolHandlers {
     this.workflowEngine = engine;
   }
 
+  setPendingPlanStore(store: PendingPlanStore): void {
+    this.pendingPlanStore = store;
+  }
+
   registerAll(registry: McpToolRegistry): void {
     registry.register('capibara_task_complete', (args, runId) => this.taskComplete(args));
     registry.register('capibara_task_create_child', (args, runId) => this.taskCreateChild(args));
@@ -71,6 +78,7 @@ export class McpToolHandlers {
     registry.register('capibara_context', (args, runId) => this.context(args));
     registry.register('capibara_task_review', (args, runId) => this.taskReview(args));
     registry.register('capibara_conversation', (args, runId) => this.conversation(args, runId));
+    registry.register('capibara_plan_tasks', (args, runId) => this.planTasks(args, runId));
   }
 
   private async taskComplete(args: Record<string, unknown>): Promise<McpToolCallResult> {
@@ -337,6 +345,109 @@ export class McpToolHandlers {
       currentId = t.parentId;
     }
     return null;
+  }
+
+  private async planTasks(args: Record<string, unknown>, runId: string): Promise<McpToolCallResult> {
+    if (!this.pendingPlanStore) {
+      return { success: false, error: 'Planning system not initialized' };
+    }
+
+    const summary = typeof args.summary === 'string' ? args.summary : '';
+    const rawTasks = Array.isArray(args.tasks) ? args.tasks : [];
+
+    if (rawTasks.length === 0) {
+      return { success: false, error: 'tasks array is required and must not be empty' };
+    }
+
+    // Resolve orgId from run
+    const run = runId ? await this.runRepo.findById(runId) : null;
+    if (!run) {
+      return { success: false, error: 'Could not resolve organization from current run' };
+    }
+
+    // Validate and normalize the task tree
+    const MAX_TASKS = 50;
+    const MAX_DEPTH = 3;
+    let taskCount = 0;
+
+    const validateNode = (node: any, depth: number): PlanTaskNode | string => {
+      if (depth > MAX_DEPTH) {
+        return `Plan exceeds maximum nesting depth of ${MAX_DEPTH}`;
+      }
+      taskCount++;
+      if (taskCount > MAX_TASKS) {
+        return `Plan exceeds maximum of ${MAX_TASKS} tasks`;
+      }
+
+      const title = typeof node.title === 'string' ? node.title.trim() : '';
+      if (!title) return 'Each task must have a non-empty title';
+
+      const type = typeof node.type === 'string' ? node.type.trim() : '';
+      if (!type) return 'Each task must have a non-empty type';
+
+      const description = typeof node.description === 'string' ? node.description : '';
+      const assigneeRoleName = typeof node.assigneeRoleName === 'string' ? node.assigneeRoleName : null;
+      const children: PlanTaskNode[] = [];
+
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) {
+          const result = validateNode(child, depth + 1);
+          if (typeof result === 'string') return result;
+          children.push(result);
+        }
+      }
+
+      return { title, type, description, assigneeRoleName, children };
+    };
+
+    const validatedTasks: PlanTaskNode[] = [];
+    for (const rawNode of rawTasks) {
+      const result = validateNode(rawNode, 1);
+      if (typeof result === 'string') {
+        return { success: false, error: result };
+      }
+      validatedTasks.push(result);
+    }
+
+    // Validate task types against org schema
+    const validateTypes = async (nodes: PlanTaskNode[]): Promise<string | null> => {
+      for (const node of nodes) {
+        const typeDef = await this.workflowEngine.getItemTypeDefinition(run.orgId, node.type);
+        if (!typeDef) {
+          return `Invalid task type: "${node.type}"`;
+        }
+        if (node.children.length > 0) {
+          const childError = await validateTypes(node.children);
+          if (childError) return childError;
+        }
+      }
+      return null;
+    };
+
+    const typeError = await validateTypes(validatedTasks);
+    if (typeError) {
+      return { success: false, error: typeError };
+    }
+
+    // Store the plan
+    this.pendingPlanStore.set(run.orgId, {
+      summary,
+      tasks: validatedTasks,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Emit event for UI notification
+    this.eventBus.emit({
+      type: 'planning:plan-ready',
+      timestamp: new Date().toISOString(),
+      payload: { orgId: run.orgId, taskCount },
+    });
+
+    this.logger.info('Planning agent submitted task plan', {
+      runId, orgId: run.orgId, taskCount, summary: summary.slice(0, 100),
+    });
+
+    return { success: true, data: { taskCount } };
   }
 
   private async conversation(args: Record<string, unknown>, runId: string): Promise<McpToolCallResult> {

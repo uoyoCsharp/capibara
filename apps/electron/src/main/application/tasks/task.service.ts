@@ -18,6 +18,7 @@ import {
 } from '@main/core/tokens.js';
 import { NotFoundError, ValidationError } from '@main/core/errors/capibara.errors.js';
 import { InvalidTypeError } from '@main/core/errors/workflow.errors.js';
+import { SYSTEM_TASK_TYPES } from '@main/core/constants/planning.constants.js';
 import { TaskStateMachine } from '../state-machine/task.state-machine.js';
 
 @injectable()
@@ -71,6 +72,8 @@ export class TaskService {
     }
 
     // Calculate depth from parent and validate type hierarchy via WorkflowEngine
+    // System-reserved types (e.g., 'plan') bypass schema validation entirely.
+    const isSystemType = SYSTEM_TASK_TYPES.has(input.type);
     let depth = 0;
     if (input.parentId) {
       const parent = await this.taskRepo.findById(input.parentId);
@@ -79,24 +82,28 @@ export class TaskService {
       }
       depth = parent.depth + 1;
 
-      const valid = await this.workflowEngine.validateType(input.orgId, input.type, parent.type);
-      if (!valid) {
-        const parentDef = await this.workflowEngine.getItemTypeDefinition(input.orgId, parent.type);
-        const allowed = parentDef?.allowedChildren ?? [];
-        throw new InvalidTypeError(
-          input.type,
-          `Cannot create under "${parent.type}". Allowed: ${allowed.length ? allowed.join(', ') : 'none (leaf node)'}`,
-        );
+      if (!isSystemType) {
+        const valid = await this.workflowEngine.validateType(input.orgId, input.type, parent.type);
+        if (!valid) {
+          const parentDef = await this.workflowEngine.getItemTypeDefinition(input.orgId, parent.type);
+          const allowed = parentDef?.allowedChildren ?? [];
+          throw new InvalidTypeError(
+            input.type,
+            `Cannot create under "${parent.type}". Allowed: ${allowed.length ? allowed.join(', ') : 'none (leaf node)'}`,
+          );
+        }
       }
     } else {
-      // Root-level task validation
-      const valid = await this.workflowEngine.validateType(input.orgId, input.type, null);
-      if (!valid) {
-        const rootTypes = await this.workflowEngine.getRootTypes(input.orgId);
-        throw new InvalidTypeError(
-          input.type,
-          `Root-level tasks must be of type: ${rootTypes.map((t) => t.name).join(', ')}`,
-        );
+      if (!isSystemType) {
+        // Root-level task validation
+        const valid = await this.workflowEngine.validateType(input.orgId, input.type, null);
+        if (!valid) {
+          const rootTypes = await this.workflowEngine.getRootTypes(input.orgId);
+          throw new InvalidTypeError(
+            input.type,
+            `Root-level tasks must be of type: ${rootTypes.map((t) => t.name).join(', ')}`,
+          );
+        }
       }
     }
 
@@ -119,20 +126,24 @@ export class TaskService {
       payload: { taskId: task.id, orgId: task.orgId, type: task.type, parentId: task.parentId },
     });
 
-    // Evaluate on_task_created behavior rules
-    const behaviorContext = await this.buildBehaviorContext(task);
-    const behaviorActions = await this.workflowEngine.evaluateBehaviors(
-      task.orgId,
-      { type: 'on_task_created' },
-      behaviorContext,
-    );
-    for (const action of behaviorActions) {
-      try {
-        await this.executeAction(action, task);
-      } catch (err) {
-        this.logger.error('on_task_created behavior action failed', { taskId: task.id, action: action.type, error: String(err) });
+    // Evaluate on_task_created behavior rules.
+    // System task types (e.g., 'plan') skip behavior rules — their lifecycle
+    // is managed explicitly by the calling service (e.g., PlanningService).
+    if (!isSystemType) {
+      const behaviorContext = await this.buildBehaviorContext(task);
+      const behaviorActions = await this.workflowEngine.evaluateBehaviors(
+        task.orgId,
+        { type: 'on_task_created' },
+        behaviorContext,
+      );
+      for (const action of behaviorActions) {
+        try {
+          await this.executeAction(action, task);
+        } catch (err) {
+          this.logger.error('on_task_created behavior action failed', { taskId: task.id, action: action.type, error: String(err) });
+        }
+        if (action.type === 'skip_propagation') break;
       }
-      if (action.type === 'skip_propagation') break;
     }
 
     return task;

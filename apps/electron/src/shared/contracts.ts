@@ -94,6 +94,15 @@ export const IPC_CHANNELS = {
   // System
   checkSystemDeps: 'capibara:system:check-deps',
 
+  // Planning
+  startPlanningRun: 'capibara:planning:start',
+  getActivePlanningSession: 'capibara:planning:get-active',
+  discardPlanningSession: 'capibara:planning:discard',
+  getPendingPlan: 'capibara:planning:get-pending-plan',
+  batchCreateTasks: 'capibara:planning:batch-create',
+  getAvailablePlanningRoles: 'capibara:planning:get-roles',
+  switchPlanningRole: 'capibara:planning:switch-role',
+
   // Conversation
   getActiveConversations: 'capibara:conversation:list-active',
   getGroupedConversations: 'capibara:conversation:list-grouped',
@@ -136,7 +145,8 @@ export type DesktopEvent =
   | { type: 'conversation:timed-out'; orgId: string; workflowId: string }
   | { type: 'conversation:escalated'; orgId: string; workflowId: string }
   | { type: 'conversation:reply-posted'; orgId: string; workflowId: string }
-  | { type: 'discussion-summary:updated'; groupId: string; summary: string };
+  | { type: 'discussion-summary:updated'; groupId: string; summary: string }
+  | { type: 'planning:plan-ready'; orgId: string; taskCount: number };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -287,6 +297,45 @@ export const replyToConversationSchema = z.object({
   workflowId: z.string().min(1),
   content: z.string().min(1).max(50000),
 });
+
+// ─── Planning Zod Schemas ────────────────────────────────────────────
+export const startPlanningRunSchema = z.object({
+  orgId: z.string().min(1),
+  initialMessage: z.string().min(1).max(10000),
+  roleId: z.string().min(1).optional(),
+});
+
+export const discardPlanningSessionSchema = z.object({
+  taskId: z.string().min(1),
+});
+
+export const switchPlanningRoleSchema = z.object({
+  taskId: z.string().min(1),
+  newRoleId: z.string().min(1),
+});
+
+const planTaskNodeSchema: z.ZodType<PlanTaskNode> = z.lazy(() =>
+  z.object({
+    title: z.string().min(1),
+    type: z.string().min(1),
+    description: z.string(),
+    assigneeRoleName: z.string().nullable(),
+    children: z.array(planTaskNodeSchema),
+  }),
+) as z.ZodType<PlanTaskNode>;
+
+export const batchCreateTasksSchema = z.object({
+  orgId: z.string().min(1),
+  plan: z.object({
+    summary: z.string(),
+    tasks: z.array(planTaskNodeSchema).min(1),
+  }),
+});
+
+export type StartPlanningRunInput = z.infer<typeof startPlanningRunSchema>;
+export type DiscardPlanningSessionInput = z.infer<typeof discardPlanningSessionSchema>;
+export type SwitchPlanningRoleInput = z.infer<typeof switchPlanningRoleSchema>;
+export type BatchCreateTasksInput = z.infer<typeof batchCreateTasksSchema>;
 
 // ─── Workflow Schema Zod Schemas ─────────────────────────────────────
 export const saveSchemaSchema = z.object({
@@ -461,6 +510,15 @@ export interface CapibaraApi {
   schemaImpactAnalysis: (input: SaveSchemaInput) => Promise<DesktopResult<SchemaImpactReportRecord | null>>;
   getWorkflowTemplates: () => Promise<DesktopResult<WorkflowTemplateRecord[]>>;
 
+  // Planning
+  startPlanningRun: (input: StartPlanningRunInput) => Promise<DesktopResult<StartPlanningRunResult>>;
+  getActivePlanningSession: (orgId: string) => Promise<DesktopResult<ActivePlanningSessionRecord | null>>;
+  discardPlanningSession: (input: DiscardPlanningSessionInput) => Promise<DesktopResult<void>>;
+  getPendingPlan: (orgId: string) => Promise<DesktopResult<PendingPlanRecord | null>>;
+  batchCreateTasks: (input: BatchCreateTasksInput) => Promise<DesktopResult<{ createdCount: number }>>;
+  getAvailablePlanningRoles: (orgId: string) => Promise<DesktopResult<PlanningRoleOption[]>>;
+  switchPlanningRole: (input: SwitchPlanningRoleInput) => Promise<DesktopResult<{ previousRoleId: string; newRoleId: string }>>;
+
   // Conversation
   getActiveConversations: (orgId: string) => Promise<DesktopResult<ConversationWorkflowRecord[]>>;
   getGroupedConversations: (orgId: string) => Promise<DesktopResult<GroupedConversationsResult>>;
@@ -494,6 +552,7 @@ export interface OrganizationRecord {
   status: OrgStatus;
   budgetLimit: number;
   orgTemplateId: string | null;
+  planningRoleId: string | null;
   workspacePath: string;
   createdAt: string;
   updatedAt: string;
@@ -511,9 +570,16 @@ export interface RoleRecord {
   canDelegate: boolean;
   requiresHumanApproval: boolean;
   consecutiveWakeCount: number;
+  isSystemRole: boolean;
   status: RoleStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PlanningRoleOption {
+  roleId: string;
+  roleName: string;
+  source: 'system' | 'template';
 }
 
 export interface SkillRecord {
@@ -686,6 +752,37 @@ export interface AppSnapshot {
   currentOrgId: string | null;
 }
 
+// ─── Planning Types ─────────────────────────────────────────────────
+export interface PlanTaskNode {
+  title: string;
+  type: string;
+  description: string;
+  assigneeRoleName: string | null;
+  children: PlanTaskNode[];
+}
+
+export interface PendingPlanRecord {
+  summary: string;
+  tasks: PlanTaskNode[];
+  createdAt: string;
+}
+
+export interface StartPlanningRunResult {
+  runId: string;
+  taskId: string;
+  roleId: string;
+}
+
+export interface ActivePlanningSessionRecord {
+  taskId: string;
+  taskTitle: string;
+  roleId: string;
+  roleName: string;
+  discussionGroupId: string | null;
+  workflowId: string | null;
+  workflowState: string | null;
+}
+
 // ─── Navigation ─────────────────────────────────────────────────────
 export type SectionId =
   | 'dashboard'
@@ -694,6 +791,7 @@ export type SectionId =
   | 'team'
   | 'settings'
   | 'workspace'
+  | 'planning'
   // Legacy sections (retained for backward compatibility during migration)
   | 'organization'
   | 'skills'

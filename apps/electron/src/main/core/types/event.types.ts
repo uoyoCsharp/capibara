@@ -44,7 +44,8 @@ export type DomainEventType =
   | 'conversation:cancelled'
   | 'discussion-summary:updated'
   | 'schema:updated'
-  | 'behavior:executed';
+  | 'behavior:executed'
+  | 'planning:plan-ready';
 
 export interface DomainEvent<T = unknown> {
   type: DomainEventType;

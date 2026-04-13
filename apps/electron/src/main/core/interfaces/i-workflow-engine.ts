@@ -23,6 +23,7 @@ export interface IWorkflowEngine {
   isReviewStatus(orgId: string, status: string): Promise<boolean>;
   isActiveStatus(orgId: string, status: string): Promise<boolean>;
   getFirstReviewStatus(orgId: string): Promise<string | null>;
+  getFirstTerminalStatus(orgId: string): Promise<string | null>;
   /** Find a transition target from the given status that leads to a status of the specified category */
   findTransitionTargetByCategory(orgId: string, fromStatus: string, targetCategory: string): Promise<string | null>;
 

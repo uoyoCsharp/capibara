@@ -7,6 +7,7 @@ import type { TaskStatus } from '@main/core/types/domain.types.js';
 import { TASK_REPO_TOKEN, EVENT_BUS_TOKEN, LOGGER_TOKEN } from '@main/core/tokens.js';
 import { NotFoundError } from '@main/core/errors/capibara.errors.js';
 import { InvalidTransitionError } from '@main/core/errors/workflow.errors.js';
+import { SYSTEM_TASK_TYPES } from '@main/core/constants/planning.constants.js';
 
 /**
  * Validates and executes task state transitions.
@@ -40,13 +41,17 @@ export class TaskStateMachine {
       throw new NotFoundError('TaskNode', taskId);
     }
 
-    if (!this.workflowEngine) {
-      throw new InvalidTransitionError(task.status, to);
-    }
+    // System task types (e.g., 'plan') bypass schema-driven transition validation.
+    // They use hardcoded statuses: in_progress → done.
+    if (!SYSTEM_TASK_TYPES.has(task.type)) {
+      if (!this.workflowEngine) {
+        throw new InvalidTransitionError(task.status, to);
+      }
 
-    const allowed = await this.workflowEngine.canTransition(task.orgId, task.status, to);
-    if (!allowed) {
-      throw new InvalidTransitionError(task.status, to);
+      const allowed = await this.workflowEngine.canTransition(task.orgId, task.status, to);
+      if (!allowed) {
+        throw new InvalidTransitionError(task.status, to);
+      }
     }
 
     await this.taskRepo.updateStatus(taskId, to);

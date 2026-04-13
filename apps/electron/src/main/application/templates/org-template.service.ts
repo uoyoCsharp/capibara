@@ -7,6 +7,7 @@ import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { Organization } from '@main/core/types/domain.types.js';
 import type { WorkflowSchema } from '@main/core/types/workflow-schema.types.js';
+import { SYSTEM_PLANNING_ROLE_NAME, SYSTEM_PLANNING_ROLE_PERSONA } from '@main/core/constants/planning.constants.js';
 
 export interface TemplateRoleDefinition {
   name: string;
@@ -23,6 +24,7 @@ export interface OrgTemplate {
   id: string;
   name: string;
   description: string;
+  planningRole?: { roleRef: string };
   rootRoles: TemplateRoleDefinition[];
 }
 
@@ -82,6 +84,35 @@ export class OrgTemplateService {
     // Recursively create roles
     for (const rootDef of template.rootRoles) {
       await this.createRoleFromDef(org.id, null, rootDef, commandToId);
+    }
+
+    // Inject system planning role
+    await this.roleRepo.create({
+      orgId: org.id,
+      name: SYSTEM_PLANNING_ROLE_NAME,
+      parentId: null,
+      persona: SYSTEM_PLANNING_ROLE_PERSONA,
+      knowledgeBaseRefs: [],
+      skillIds: [],
+      canApprove: false,
+      canDelegate: false,
+      requiresHumanApproval: false,
+      isSystemRole: true,
+    });
+
+    // Resolve template-configured planning role
+    if (template.planningRole?.roleRef) {
+      const allRoles = await this.roleRepo.findByOrgId(org.id);
+      const matched = allRoles.find(
+        (r) => r.name.toLowerCase() === template.planningRole!.roleRef.toLowerCase() && !r.isSystemRole,
+      );
+      if (matched) {
+        await this.orgRepo.update({ id: org.id, planningRoleId: matched.id });
+      } else {
+        this.logger.warn('Template planningRole.roleRef not found', {
+          roleRef: template.planningRole.roleRef, orgId: org.id,
+        });
+      }
     }
 
     // Apply workflow schema if provided

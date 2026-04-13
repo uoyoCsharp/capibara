@@ -10,6 +10,7 @@ export interface CreateRoleInput {
   canApprove: boolean;
   canDelegate: boolean;
   requiresHumanApproval: boolean;
+  isSystemRole?: boolean;
 }
 
 export interface UpdateRoleInput {

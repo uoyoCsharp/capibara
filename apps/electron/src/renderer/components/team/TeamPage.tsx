@@ -180,7 +180,9 @@ export function TeamPage({ orgId }: TeamPageProps) {
   };
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? null;
-  const tree = buildTree(roles);
+  // Filter out system roles (e.g., Plan Assistant) from the team view
+  const visibleRoles = roles.filter((r) => !r.isSystemRole);
+  const tree = buildTree(visibleRoles);
 
   // No org selected
   if (!orgId) {
@@ -209,9 +211,9 @@ export function TeamPage({ orgId }: TeamPageProps) {
           <h1 className="text-2xl font-semibold text-foreground">{t.teamPage.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t.teamPage.subtitle}
-            {roles.length > 0 && (
+            {visibleRoles.length > 0 && (
               <span className="ml-2 text-xs text-muted-foreground/70">
-                ({roles.length} {t.teamPage.rolesCount})
+                ({visibleRoles.length} {t.teamPage.rolesCount})
               </span>
             )}
           </p>
@@ -227,7 +229,7 @@ export function TeamPage({ orgId }: TeamPageProps) {
         <div className="flex flex-1 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
         </div>
-      ) : roles.length === 0 ? (
+      ) : visibleRoles.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <UsersThree size={48} className="mx-auto mb-4 text-muted-foreground/50" />

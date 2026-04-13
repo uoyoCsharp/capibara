@@ -24,10 +24,18 @@ export type PromptScenario =
   // ── Normal execution ────────────────────────────────────
   | 'propose_decomposition'      // epic/story + needsApproval + !hasApproval
   | 'execute_decomposition'      // epic/story + approved (including review_approve)
-  | 'execute_leaf';              // task/subtask/bug/chore/spike
+  | 'execute_leaf'               // task/subtask/bug/chore/spike
+
+  // ── Planning ────────────────────────────────────────────
+  | 'planning';                  // Conversational Task Planning agent
 
 export function resolveScenario(ctx: PromptContext): PromptScenario {
   const { trigger } = ctx;
+
+  // ── Planning mode (highest priority) ────────────────────
+  if (ctx.planningContext && trigger !== 'discussion_reply' && trigger !== 'conversation_escalation') {
+    return 'planning';
+  }
 
   // ── Conversation triggers (highest priority) ────────────
   if (trigger === 'discussion_reply')        return 'conversation_resume';

@@ -13,6 +13,7 @@ import { InboxPage } from './components/inbox/InboxPage';
 import { TeamPage } from './components/team/TeamPage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { WorkspacePage } from './components/workspace/WorkspacePage';
+import { PlanningChatPage } from './components/planning/PlanningChatPage';
 import { ToastContainer } from './components/shared/ToastContainer';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { toast } from './store/toast.store';
@@ -104,13 +105,15 @@ function AppContent() {
       case 'dashboard':
         return <DashboardPage orgId={currentOrgId} onNavigate={setActiveSection} />;
       case 'tasks':
-        return <ExecutionPage />;
+        return <ExecutionPage onNavigate={setActiveSection} />;
       case 'inbox':
         return <InboxPage onNavigate={setActiveSection} />;
       case 'team':
         return <TeamPage orgId={currentOrgId} />;
       case 'settings':
         return <SettingsPage />;
+      case 'planning':
+        return <PlanningChatPage onNavigate={setActiveSection} />;
       case 'workspace':
         return <WorkspacePage onDeleted={() => setActiveSection('dashboard')} />;
       // Legacy routes — kept for backward compatibility

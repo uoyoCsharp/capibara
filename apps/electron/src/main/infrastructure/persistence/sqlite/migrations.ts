@@ -279,6 +279,20 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    description: 'Add is_system_role to roles and planning_role_id to organizations',
+    up: (db) => {
+      const roleCols = db.prepare("PRAGMA table_info('roles')").all() as Array<{ name: string }>;
+      if (!roleCols.some((c) => c.name === 'is_system_role')) {
+        db.exec(`ALTER TABLE roles ADD COLUMN is_system_role INTEGER NOT NULL DEFAULT 0`);
+      }
+      const orgCols = db.prepare("PRAGMA table_info('organizations')").all() as Array<{ name: string }>;
+      if (!orgCols.some((c) => c.name === 'planning_role_id')) {
+        db.exec(`ALTER TABLE organizations ADD COLUMN planning_role_id TEXT DEFAULT NULL`);
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

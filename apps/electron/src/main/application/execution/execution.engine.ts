@@ -28,6 +28,8 @@ import {
   PROMPT_BUILDER_TOKEN,
 } from '@main/core/tokens.js';
 import { BudgetExceededError, ExecutionError } from '@main/core/errors/capibara.errors.js';
+import type { PlanningPromptContext, PlanningPhase } from '@main/core/interfaces/i-prompt-builder.js';
+import type { ISettingsRepository } from '@main/core/interfaces/i-settings.repository.js';
 import type { ExecutionContext } from '../context/execution.context.js';
 import type { McpConfigGenerator } from '../../infrastructure/mcp/mcp-config-generator.js';
 import type { McpIpcServer } from '../../infrastructure/mcp/mcp-ipc-server.js';
@@ -39,12 +41,19 @@ export class ExecutionEngine {
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private workflowEngine!: IWorkflowEngine;
   private taskService!: TaskService;
+  private settingsRepo: ISettingsRepository | null = null;
 
   /** Maps runId → { orgName, taskId } for log file path resolution */
   private runLogCtx = new Map<string, { orgName: string; taskId: string }>();
 
   /** Maps runId → sessionId for in-flight runs (before finish() persists to DB) */
   private runSessionIds = new Map<string, string>();
+
+  /** Maps runId → planning context for planning runs */
+  private runPlanningCtx = new Map<string, PlanningPromptContext>();
+
+  /** Maps taskId → planning context for persistence across conversation rounds */
+  private taskPlanningCtx = new Map<string, PlanningPromptContext>();
 
   constructor(
     @inject(CONFIG_TOKEN) private readonly config: CapibaraConfig,
@@ -89,9 +98,18 @@ export class ExecutionEngine {
     this.taskService = service;
   }
 
+  setSettingsRepo(repo: ISettingsRepository): void {
+    this.settingsRepo = repo;
+  }
+
   /** Returns the sessionId for an in-flight run (before DB persistence). */
   getRunSessionId(runId: string): string | null {
     return this.runSessionIds.get(runId) ?? null;
+  }
+
+  /** Attach planning context to be injected into the next run's prompt. */
+  setPlanningContext(runId: string, ctx: PlanningPromptContext): void {
+    this.runPlanningCtx.set(runId, ctx);
   }
 
   async startRun(
@@ -99,6 +117,7 @@ export class ExecutionEngine {
     taskNodeId: string,
     orgId: string,
     trigger: WakeTrigger,
+    planningContext?: PlanningPromptContext,
   ): Promise<Run> {
     // ─── Pre-Execution Gate Checks ─────────────────────────────
     const role = await this.roleRepo.findById(roleId);
@@ -136,6 +155,12 @@ export class ExecutionEngine {
       timestamp: new Date().toISOString(),
       payload: { runId: run.id, roleId, orgId, taskNodeId },
     });
+
+    // Store planning context if provided (both run-level and task-level for persistence)
+    if (planningContext) {
+      this.runPlanningCtx.set(run.id, planningContext);
+      this.taskPlanningCtx.set(taskNodeId, planningContext);
+    }
 
     // ─── Execute Asynchronously ────────────────────────────────
     void this.executeRun(run);
@@ -192,7 +217,18 @@ export class ExecutionEngine {
       this.runLogCtx.set(runId, { orgName, taskId: taskNodeId });
 
       // ─── Build Context and Prompt ──────────────────────────
-      const ctx = await this.executionContext.buildPromptContext(roleId, taskNodeId, trigger);
+      const planningCtx = this.runPlanningCtx.get(runId) ?? this.taskPlanningCtx.get(taskNodeId);
+      // Enrich planning context with phase detection and language preference
+      if (planningCtx) {
+        planningCtx.phase = await this.detectPlanningPhase(taskNodeId);
+        try {
+          const localeSetting = await this.settingsRepo?.get('locale');
+          if (localeSetting) planningCtx.communicationLanguage = localeSetting;
+        } catch (err) {
+          this.logger.warn('Failed to load locale setting for planning context', { runId, error: String(err) });
+        }
+      }
+      const ctx = await this.executionContext.buildPromptContext(roleId, taskNodeId, trigger, planningCtx);
       const systemPrompt = this.promptBuilder.build(ctx);
 
       // ─── Transition conversation workflow to 'resumed' ─────
@@ -448,8 +484,38 @@ export class ExecutionEngine {
     // Synchronous cleanup always runs regardless of above
     this.runLogCtx.delete(runId);
     this.runSessionIds.delete(runId);
+    this.runPlanningCtx.delete(runId);
     this.mcpIpcServer.revokeToken(runId);
     this.jwtSecrets.delete(runId);
+
+    // Clean up task-level planning context if the task reached terminal status
+    for (const [taskId, _ctx] of this.taskPlanningCtx) {
+      try {
+        const task = await this.taskRepo.findById(taskId);
+        if (!task || await this.workflowEngine?.isTerminalStatus(task.orgId, task.status)) {
+          this.taskPlanningCtx.delete(taskId);
+        }
+      } catch {
+        this.taskPlanningCtx.delete(taskId);
+      }
+    }
+  }
+
+  /**
+   * Detect the current BMAD planning phase based on the number of completed
+   * runs for a planning task. Conversation round count is a reliable proxy.
+   * Phase A (diverge): runs 0-1 (initial exploration)
+   * Phase B (focus): runs 2-3 (narrowing scope)
+   * Phase C (structure): runs 4+ (task decomposition)
+   */
+  private async detectPlanningPhase(taskNodeId: string): Promise<PlanningPhase> {
+    try {
+      const runs = await this.runRepo.findByTaskId(taskNodeId);
+      const completedRuns = runs.filter((r) => TERMINAL_RUN_STATUSES.has(r.status)).length;
+      if (completedRuns >= 4) return 'structure';
+      if (completedRuns >= 2) return 'focus';
+    } catch { /* default */ }
+    return 'diverge';
   }
 
   private generateRunToken(runId: string): string {

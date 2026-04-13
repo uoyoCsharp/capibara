@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowClockwise, Lightning, Cpu, ListChecks, ChartLineUp, Tray, UsersThree } from '@phosphor-icons/react';
+import { ArrowClockwise, Lightning, Cpu, ListChecks, ChartLineUp, Tray, UsersThree, RocketLaunch } from '@phosphor-icons/react';
 import { cn } from '../../lib/utils';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
@@ -123,6 +123,14 @@ export function DashboardPage({ orgId, onNavigate }: DashboardPageProps) {
           >
             <Lightning size={14} />
             {generating ? t.dashboard.generating : t.dashboard.generateReport}
+          </Button>
+          <Button
+            onClick={() => onNavigate?.('planning')}
+            disabled={!orgId}
+            title={!orgId ? t.planning.startNewProjectTooltip : undefined}
+          >
+            <RocketLaunch size={14} />
+            {t.planning.startNewProject}
           </Button>
         </div>
       </div>

@@ -142,6 +142,12 @@ export class WorkflowEngine implements IWorkflowEngine {
     return reviewStatus?.name ?? null;
   }
 
+  async getFirstTerminalStatus(orgId: string): Promise<string | null> {
+    const schema = await this.loadSchema(orgId);
+    const terminalStatus = schema.statuses.find((s) => s.category === 'terminal');
+    return terminalStatus?.name ?? null;
+  }
+
   async findTransitionTargetByCategory(orgId: string, fromStatus: string, targetCategory: string): Promise<string | null> {
     const schema = await this.loadSchema(orgId);
     const categoryStatuses = new Set(

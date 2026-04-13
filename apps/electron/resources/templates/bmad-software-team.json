@@ -2,6 +2,9 @@
   "id": "bmad-software-team",
   "name": "BMAD Software Team",
   "description": "A hierarchical software development team following the BMAD methodology. Each role dynamically loads its BMAD agent persona via skill invocation, ensuring rich personality-driven collaboration across analysis, planning, solutioning, and implementation phases.",
+  "planningRole": {
+    "roleRef": "Product Manager"
+  },
   "rootRoles": [
     {
       "name": "CTO",

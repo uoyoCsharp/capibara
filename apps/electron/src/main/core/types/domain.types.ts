@@ -68,6 +68,7 @@ export interface Organization {
   status: OrgStatus;
   budgetLimit: number;
   orgTemplateId: string | null;
+  planningRoleId: string | null;
   workspacePath: string;
   createdAt: string;
   updatedAt: string;
@@ -85,6 +86,7 @@ export interface Role {
   canDelegate: boolean;
   requiresHumanApproval: boolean;
   consecutiveWakeCount: number;
+  isSystemRole: boolean;
   status: RoleStatus;
   createdAt: string;
   updatedAt: string;

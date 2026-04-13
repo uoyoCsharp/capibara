@@ -18,6 +18,7 @@ interface OrgRow {
   status: string;
   budget_limit: number;
   org_template_id: string | null;
+  planning_role_id: string | null;
   workspace_path: string;
   created_at: string;
   updated_at: string;
@@ -32,6 +33,7 @@ function rowToEntity(row: OrgRow): Organization {
     status: row.status as Organization['status'],
     budgetLimit: row.budget_limit,
     orgTemplateId: row.org_template_id,
+    planningRoleId: row.planning_role_id ?? null,
     workspacePath: row.workspace_path,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -84,11 +86,12 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     const status = input.status ?? existing.status;
     const budgetLimit = input.budgetLimit ?? existing.budgetLimit;
     const workspacePath = input.workspacePath ?? existing.workspacePath;
+    const planningRoleId = input.planningRoleId !== undefined ? input.planningRoleId : existing.planningRoleId;
 
     this.conn.getDb().prepare(`
-      UPDATE organizations SET name = ?, description = ?, custom_instructions = ?, status = ?, budget_limit = ?, workspace_path = ?, updated_at = ?
+      UPDATE organizations SET name = ?, description = ?, custom_instructions = ?, status = ?, budget_limit = ?, workspace_path = ?, planning_role_id = ?, updated_at = ?
       WHERE id = ?
-    `).run(name, description, customInstructions, status, budgetLimit, workspacePath, now, input.id);
+    `).run(name, description, customInstructions, status, budgetLimit, workspacePath, planningRoleId, now, input.id);
 
     const org = await this.findById(input.id);
     return org!;
