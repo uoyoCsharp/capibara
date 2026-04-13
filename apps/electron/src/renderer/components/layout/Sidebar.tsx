@@ -99,14 +99,19 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
         )}
       </button>
 
-      {/* Workspace Label (non-collapsed only) */}
+      {/* Workspace Label (non-collapsed only) — clickable to navigate to workspace settings */}
       {!collapsed && currentOrg && (
-        <div className="px-5 py-2 border-b">
+        <button
+          type="button"
+          onClick={() => onNavigate('workspace')}
+          className="w-full px-5 py-2 border-b text-left hover:bg-sidebar-accent transition-colors"
+          title={t.workspacePage.title}
+        >
           <p className="text-[11px] font-medium uppercase text-muted-foreground/60 tracking-wider">
             Workspace
           </p>
           <p className="text-sm font-medium text-foreground truncate">{currentOrg.name}</p>
-        </div>
+        </button>
       )}
 
       {/* Navigation */}

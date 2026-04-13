@@ -324,14 +324,31 @@ export class ExecutionEngine {
           if (isActive) {
             const role = await this.roleRepo.findById(roleId);
             if (role?.requiresHumanApproval) {
-              const reviewStatus = await this.workflowEngine.getFirstReviewStatus(orgId);
-              if (reviewStatus) {
+              // Skip advancement if there's an active conversation (AI asked a question
+              // and is waiting for a reply). The task should stay in active status until
+              // the conversation resolves and the agent completes its work.
+              let hasActiveConversation = false;
+              if (this.conversationWorkflowRepo) {
                 try {
-                  await this.taskService.updateStatus(taskNodeId, reviewStatus);
-                  this.logger.info('Task advanced to review status after Phase 1 run', { runId, taskNodeId, reviewStatus });
+                  const activeConvo = await this.conversationWorkflowRepo.findActiveByRoleAndTask(roleId, taskNodeId);
+                  hasActiveConversation = activeConvo != null;
                 } catch {
-                  // Transition not allowed from current state — leave as-is
+                  // Fail-open: if lookup fails, proceed with advancement
                 }
+              }
+
+              if (!hasActiveConversation) {
+                const reviewStatus = await this.workflowEngine.getFirstReviewStatus(orgId);
+                if (reviewStatus) {
+                  try {
+                    await this.taskService.updateStatus(taskNodeId, reviewStatus);
+                    this.logger.info('Task advanced to review status after Phase 1 run', { runId, taskNodeId, reviewStatus });
+                  } catch {
+                    // Transition not allowed from current state — leave as-is
+                  }
+                }
+              } else {
+                this.logger.info('Skipping Phase 1 advancement — active conversation pending', { runId, taskNodeId });
               }
             }
           }

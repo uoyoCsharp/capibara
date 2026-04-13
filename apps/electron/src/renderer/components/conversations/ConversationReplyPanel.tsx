@@ -9,10 +9,11 @@ import { cn } from '../../lib/utils';
 
 interface ConversationReplyPanelProps {
   workflow: ConversationWorkflowRecord;
+  askingRoleName?: string;
   onReplied: () => void;
 }
 
-export function ConversationReplyPanel({ workflow, onReplied }: ConversationReplyPanelProps) {
+export function ConversationReplyPanel({ workflow, askingRoleName, onReplied }: ConversationReplyPanelProps) {
   const t = useT();
   const [replyContent, setReplyContent] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -78,7 +79,7 @@ export function ConversationReplyPanel({ workflow, onReplied }: ConversationRepl
           <h3 className="text-sm font-semibold">{t.conversations.needsHumanReply}</h3>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {t.conversations.questionFrom} {workflow.askingRoleId.slice(0, 8)}...
+          {t.conversations.questionFrom} {askingRoleName ?? workflow.askingRoleId.slice(0, 8) + '...'}
         </p>
       </div>
 

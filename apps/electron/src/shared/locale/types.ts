@@ -501,6 +501,37 @@ export interface LocaleMessages {
     waitingForAgent: string;
     waitingSinceLabel: string;
     goToTask: string;
+    recentlyResolved: string;
+    noResolvedConversations: string;
+    showHistory: string;
+    hideHistory: string;
+    resolvedAgo: string;
+    cancelledAgo: string;
+    timedOutAgo: string;
+  };
+  workspacePage: {
+    title: string;
+    subtitle: string;
+    noOrgSelected: string;
+    nameLabel: string;
+    namePlaceholder: string;
+    descriptionLabel: string;
+    descriptionPlaceholder: string;
+    customInstructionsLabel: string;
+    customInstructionsPlaceholder: string;
+    customInstructionsHint: string;
+    budgetLimitLabel: string;
+    budgetLimitHint: string;
+    workspacePathLabel: string;
+    workspacePathHint: string;
+    statusLabel: string;
+    saveChanges: string;
+    saved: string;
+    saveFailed: string;
+    dangerZone: string;
+    deleteDescription: string;
+    openFolder: string;
+    openFolderFailed: string;
   };
   teamPage: {
     title: string;

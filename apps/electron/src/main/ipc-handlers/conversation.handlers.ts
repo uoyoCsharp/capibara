@@ -53,6 +53,55 @@ export function registerConversationHandlers(
   taskRepo: ITaskRepository,
   conversationService?: IConversationWorkflowService,
 ): void {
+  // List resolved/terminal conversations for an org (for inbox history)
+  ipcMain.handle(IPC_CHANNELS.getResolvedConversations, async (_event, orgId: unknown) => {
+    try {
+      if (typeof orgId !== 'string' || !orgId) {
+        return fail('VALIDATION_ERROR', 'orgId must be a non-empty string');
+      }
+      const workflows = await workflowRepo.findByOrgId(orgId);
+      const resolved = workflows
+        .filter((wf) => TERMINAL_STATES.has(wf.state))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, 50);
+
+      if (resolved.length === 0) {
+        return ok<ConversationInboxItem[]>([]);
+      }
+
+      const roles = await roleRepo.findByOrgId(orgId);
+      const roleMap = new Map(roles.map((r) => [r.id, r]));
+      const allTasks = await taskRepo.findByOrgId(orgId);
+      const taskMap = new Map(allTasks.map((t) => [t.id, t]));
+
+      const items: ConversationInboxItem[] = resolved.map((wf) => {
+        const task = taskMap.get(wf.taskNodeId);
+        const askingRole = roleMap.get(wf.askingRoleId);
+        const respondentRole = wf.respondentRoleId ? roleMap.get(wf.respondentRoleId) : null;
+        return {
+          workflowId: wf.id,
+          taskNodeId: wf.taskNodeId,
+          taskTitle: task?.title ?? 'Unknown Task',
+          discussionGroupId: wf.discussionGroupId,
+          askingRoleId: wf.askingRoleId,
+          askingRoleName: askingRole?.name ?? 'Unknown',
+          respondentRoleId: wf.respondentRoleId,
+          respondentRoleName: respondentRole?.name ?? null,
+          respondentType: wf.respondentType,
+          questionPreview: '',
+          waitingSince: wf.updatedAt,
+          priority: wf.priority,
+          depth: wf.depth,
+        };
+      });
+
+      return ok(items);
+    } catch (err) {
+      logger.error('Failed to get resolved conversations', { error: String(err) });
+      return fail('INTERNAL', 'Failed to get resolved conversations');
+    }
+  });
+
   // List active conversations for an org
   ipcMain.handle(IPC_CHANNELS.getActiveConversations, async (_event, orgId: unknown) => {
     try {
@@ -542,41 +591,45 @@ export function registerConversationHandlers(
         inReplyToMessageId: workflow.questionMessageId,
       });
 
-      // Emit message event so discussion UI updates
-      eventBus.emit({
-        type: 'discussion:message-added',
-        timestamp: new Date().toISOString(),
-        payload: { groupId: workflow.discussionGroupId, messageId: msg.id },
-      });
-
-      // Use ConversationWorkflowService.handleReply if available (creates PendingWake + state transition)
+      // Handle reply via service (creates PendingWake + state transition + emits events).
+      // Must happen BEFORE emitting 'discussion:message-added' to avoid a race where
+      // DiscussionService.onMessageAdded also calls handleReply on the same workflow.
       if (conversationService) {
         await conversationService.handleReply(workflowId, msg.id);
       } else {
         // Fallback: manual state transition
         await workflowRepo.updateReply(workflowId, msg.id);
         await workflowRepo.updateState(workflowId, 'reply_received');
+
+        // Log audit event (service path logs internally)
+        eventLogger.log(workflowId, 'reply_posted', {
+          messageId: msg.id,
+          replierType: 'human',
+        });
+
+        // Emit conversation event for UI refresh (service path emits internally)
+        eventBus.emit({
+          type: 'conversation:reply-posted',
+          timestamp: new Date().toISOString(),
+          payload: {
+            workflowId: workflow.id,
+            orgId: workflow.orgId,
+            askingRoleId: workflow.askingRoleId,
+            messageId: msg.id,
+            replierRoleId: null,
+            replierType: 'human',
+            workflow: { ...workflow, state: 'reply_received', replyMessageId: msg.id },
+          },
+        });
       }
 
-      // Log audit event
-      eventLogger.log(workflowId, 'reply_posted', {
-        messageId: msg.id,
-        replierType: 'human',
-      });
-
-      // Emit conversation event for UI refresh
+      // Emit message event so discussion UI updates.
+      // This fires AFTER handleReply so DiscussionService.onMessageAdded will see
+      // the workflow already in 'reply_received' and skip the duplicate transition.
       eventBus.emit({
-        type: 'conversation:reply-posted',
+        type: 'discussion:message-added',
         timestamp: new Date().toISOString(),
-        payload: {
-          workflowId: workflow.id,
-          orgId: workflow.orgId,
-          askingRoleId: workflow.askingRoleId,
-          messageId: msg.id,
-          replierRoleId: null,
-          replierType: 'human',
-          workflow: { ...workflow, state: 'reply_received', replyMessageId: msg.id },
-        },
+        payload: { groupId: workflow.discussionGroupId, messageId: msg.id },
       });
 
       logger.info('Human reply posted to conversation', { workflowId, messageId: msg.id });

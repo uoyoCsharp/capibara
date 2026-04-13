@@ -177,8 +177,8 @@ export class SqliteConversationWorkflowRepository implements IConversationWorkfl
   async updateReply(id: string, replyMessageId: string): Promise<void> {
     const now = new Date().toISOString();
     this.conn.getDb()
-      .prepare('UPDATE conversation_workflows SET reply_message_id = ?, state = ?, updated_at = ? WHERE id = ?')
-      .run(replyMessageId, 'reply_received' satisfies ConversationWorkflowState, now, id);
+      .prepare('UPDATE conversation_workflows SET reply_message_id = ?, updated_at = ? WHERE id = ?')
+      .run(replyMessageId, now, id);
   }
 
   async updateRespondent(id: string, respondentRoleId: string, respondentType: 'ai' | 'human'): Promise<void> {

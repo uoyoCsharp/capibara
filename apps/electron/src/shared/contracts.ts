@@ -104,6 +104,7 @@ export const IPC_CHANNELS = {
   getConversationEvents: 'capibara:conversation:get-events',
   getConversationAnalytics: 'capibara:conversation:get-analytics',
   replyToConversation: 'capibara:conversation:reply',
+  getResolvedConversations: 'capibara:conversation:list-resolved',
 } as const;
 
 // ─── IPC Response Wrapper ───────────────────────────────────────────
@@ -470,6 +471,7 @@ export interface CapibaraApi {
   getConversationEvents: (workflowId: string) => Promise<DesktopResult<ConversationEventRecord[]>>;
   getConversationAnalytics: (orgId: string, timeRange: ConversationTimeRange) => Promise<DesktopResult<ConversationAnalyticsRecord>>;
   replyToConversation: (input: ReplyToConversationInput) => Promise<DesktopResult<void>>;
+  getResolvedConversations: (orgId: string) => Promise<DesktopResult<ConversationInboxItem[]>>;
 
   // Events subscription
   subscribe: (callback: (event: DesktopEvent) => void) => () => void;
@@ -691,6 +693,7 @@ export type SectionId =
   | 'inbox'
   | 'team'
   | 'settings'
+  | 'workspace'
   // Legacy sections (retained for backward compatibility during migration)
   | 'organization'
   | 'skills'

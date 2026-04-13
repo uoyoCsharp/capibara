@@ -593,6 +593,128 @@ describe('ExecutionEngine', () => {
   });
 
   // ═══════════════════════════════════════════════════════════
+  // Phase 1 Advancement — Conversation Awareness
+  // ═══════════════════════════════════════════════════════════
+
+  describe('Phase 1 advancement — conversation awareness', () => {
+    /**
+     * Helper: set up a succeeded run with an active task, requiresHumanApproval role,
+     * and a conversation workflow repo. Returns all mocks for assertion.
+     */
+    function setupConversationScenario(ctx: ReturnType<typeof createEngine>, activeConvo: any | null) {
+      const { executor, taskRepo, roleRepo, workflowEngine } = ctx;
+      (executor.execute as any).mockResolvedValue(createExecutorOutput({ status: 'succeeded' }));
+      (taskRepo.findById as any).mockResolvedValue(createTask({ status: 'in_progress' }));
+      (workflowEngine.isActiveStatus as any).mockResolvedValue(true);
+      (roleRepo.findById as any).mockResolvedValue(createRole({ requiresHumanApproval: true }));
+      (workflowEngine.getFirstReviewStatus as any).mockResolvedValue('awaiting_review');
+
+      const conversationWorkflowRepo = {
+        findById: vi.fn(),
+        findActiveByRoleAndTask: vi.fn().mockResolvedValue(activeConvo),
+        updateState: vi.fn().mockResolvedValue(undefined),
+        updateReply: vi.fn(),
+        create: vi.fn(),
+      };
+      ctx.engine.setConversationWorkflowRepo(conversationWorkflowRepo as any);
+
+      return { ...ctx, conversationWorkflowRepo };
+    }
+
+    it('should NOT advance to review when AI asked a question and conversation is still active', async () => {
+      const ctx = createEngine();
+      const activeConvo = { id: 'wf-1', state: 'waiting_for_reply', askingRoleId: ROLE, taskNodeId: TASK };
+      const { engine, runRepo, taskService } = setupConversationScenario(ctx, activeConvo);
+
+      await engine.startRun(ROLE, TASK, ORG, TRIGGER);
+      await vi.waitFor(() => {
+        expect(runRepo.finish).toHaveBeenCalled();
+      });
+
+      // Task should stay in_progress — not advanced to awaiting_review
+      expect(taskService.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('should advance to review when no active conversation exists (work is done)', async () => {
+      const ctx = createEngine();
+      const { engine, runRepo, taskService } = setupConversationScenario(ctx, null);
+
+      await engine.startRun(ROLE, TASK, ORG, TRIGGER);
+      await vi.waitFor(() => {
+        expect(runRepo.finish).toHaveBeenCalled();
+      });
+
+      expect(taskService.updateStatus).toHaveBeenCalledWith(TASK, 'awaiting_review');
+    });
+
+    it('should advance to review when conversation repo is not set (backward compat)', async () => {
+      const ctx = createEngine();
+      const { executor, taskRepo, roleRepo, workflowEngine, taskService, runRepo } = ctx;
+      (executor.execute as any).mockResolvedValue(createExecutorOutput({ status: 'succeeded' }));
+      (taskRepo.findById as any).mockResolvedValue(createTask({ status: 'in_progress' }));
+      (workflowEngine.isActiveStatus as any).mockResolvedValue(true);
+      (roleRepo.findById as any).mockResolvedValue(createRole({ requiresHumanApproval: true }));
+      (workflowEngine.getFirstReviewStatus as any).mockResolvedValue('awaiting_review');
+      // Do NOT set conversationWorkflowRepo — should still advance
+
+      await ctx.engine.startRun(ROLE, TASK, ORG, TRIGGER);
+      await vi.waitFor(() => {
+        expect(runRepo.finish).toHaveBeenCalled();
+      });
+
+      expect(taskService.updateStatus).toHaveBeenCalledWith(TASK, 'awaiting_review');
+    });
+
+    it('should NOT advance when conversation is in waiting_for_reply state (human has not replied)', async () => {
+      const ctx = createEngine();
+      const activeConvo = { id: 'wf-2', state: 'waiting_for_reply', askingRoleId: ROLE, taskNodeId: TASK };
+      const { engine, runRepo, taskService } = setupConversationScenario(ctx, activeConvo);
+
+      await engine.startRun(ROLE, TASK, ORG, TRIGGER);
+      await vi.waitFor(() => {
+        expect(runRepo.finish).toHaveBeenCalled();
+      });
+
+      expect(taskService.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('should NOT advance when conversation is in reply_received state (not yet resumed)', async () => {
+      const ctx = createEngine();
+      const activeConvo = { id: 'wf-3', state: 'reply_received', askingRoleId: ROLE, taskNodeId: TASK };
+      const { engine, runRepo, taskService } = setupConversationScenario(ctx, activeConvo);
+
+      await engine.startRun(ROLE, TASK, ORG, TRIGGER);
+      await vi.waitFor(() => {
+        expect(runRepo.finish).toHaveBeenCalled();
+      });
+
+      expect(taskService.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('should still advance if conversationWorkflowRepo.findActiveByRoleAndTask throws', async () => {
+      const ctx = createEngine();
+      const { engine, runRepo, taskService } = setupConversationScenario(ctx, null);
+      // Override to throw
+      const conversationWorkflowRepo = {
+        findById: vi.fn(),
+        findActiveByRoleAndTask: vi.fn().mockRejectedValue(new Error('DB error')),
+        updateState: vi.fn(),
+        updateReply: vi.fn(),
+        create: vi.fn(),
+      };
+      engine.setConversationWorkflowRepo(conversationWorkflowRepo as any);
+
+      await engine.startRun(ROLE, TASK, ORG, TRIGGER);
+      await vi.waitFor(() => {
+        expect(runRepo.finish).toHaveBeenCalled();
+      });
+
+      // On error, should fall through and advance (fail-open for backward compat)
+      expect(taskService.updateStatus).toHaveBeenCalledWith(TASK, 'awaiting_review');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════
   // Session ID Management
   // ═══════════════════════════════════════════════════════════
 
