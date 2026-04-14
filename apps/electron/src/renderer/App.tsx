@@ -1,14 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { SectionId, DesktopEvent } from '@shared/contracts';
 import { useCapibaraSnapshot } from './hooks/useCapibaraSnapshot';
 import { LocaleProvider, useT } from './hooks/useLocale';
 import { Sidebar } from './components/layout/Sidebar';
 import { DashboardPage } from './components/dashboard/DashboardPage';
-import { OrganizationPage } from './components/organization/OrganizationPage';
-import { SkillsPage } from './components/skills/SkillsPage';
 import { ExecutionPage } from './components/execution/ExecutionPage';
-import { DiscussionPage } from './components/discussion/DiscussionPage';
-import { ConversationPage } from './components/conversations/ConversationPage';
 import { InboxPage } from './components/inbox/InboxPage';
 import { TeamPage } from './components/team/TeamPage';
 import { SettingsPage } from './components/settings/SettingsPage';
@@ -30,11 +26,13 @@ function AppContent() {
   const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+  // Whether the current onboarding session is a first-time setup or a manual "create workspace"
+  const [isFirstTimeOnboarding, setIsFirstTimeOnboarding] = useState(true);
 
   const { organizations, currentOrgId, isLoading, refresh } = useCapibaraSnapshot();
   const t = useT();
 
-  // Determine whether to show onboarding
+  // Determine whether to show onboarding (first-time only)
   useEffect(() => {
     if (isLoading) return;
     if (organizations.length > 0) {
@@ -46,10 +44,17 @@ function AppContent() {
       if (res.ok && res.data === 'true') {
         setShowOnboarding(false);
       } else {
+        setIsFirstTimeOnboarding(true);
         setShowOnboarding(true);
       }
     });
   }, [isLoading, organizations.length]);
+
+  // Manual trigger: existing user wants to create a new workspace via onboarding flow
+  const handleCreateWorkspace = useCallback(() => {
+    setIsFirstTimeOnboarding(false);
+    setShowOnboarding(true);
+  }, []);
 
   // Run completion toast notifications
   useEffect(() => {
@@ -96,7 +101,11 @@ function AppContent() {
 
   if (showOnboarding) {
     return (
-      <OnboardingWizard onComplete={() => { setShowOnboarding(false); refresh(); }} />
+      <OnboardingWizard
+        onComplete={() => { setShowOnboarding(false); refresh(); }}
+        skipHealthCheck={!isFirstTimeOnboarding}
+        isFirstTime={isFirstTimeOnboarding}
+      />
     );
   }
 
@@ -116,17 +125,6 @@ function AppContent() {
         return <PlanningChatPage onNavigate={setActiveSection} />;
       case 'workspace':
         return <WorkspacePage onDeleted={() => setActiveSection('dashboard')} />;
-      // Legacy routes — kept for backward compatibility
-      case 'organization':
-        return <OrganizationPage />;
-      case 'skills':
-        return <SkillsPage />;
-      case 'execution':
-        return <ExecutionPage />;
-      case 'discussion':
-        return <DiscussionPage />;
-      case 'conversations':
-        return <ConversationPage />;
       default:
         return <DashboardPage orgId={currentOrgId} onNavigate={setActiveSection} />;
     }
@@ -139,6 +137,7 @@ function AppContent() {
         onNavigate={setActiveSection}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+        onCreateWorkspace={handleCreateWorkspace}
       />
       <main className="flex-1 overflow-auto">
         {renderPage()}

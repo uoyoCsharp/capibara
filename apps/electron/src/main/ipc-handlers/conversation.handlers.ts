@@ -62,11 +62,22 @@ export function registerConversationHandlers(
       const workflows = await workflowRepo.findByOrgId(orgId);
       const resolved = workflows
         .filter((wf) => TERMINAL_STATES.has(wf.state))
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-        .slice(0, 50);
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
       if (resolved.length === 0) {
         return ok<ConversationInboxItem[]>([]);
+      }
+
+      // Group by taskNodeId — keep the latest workflow as representative
+      const taskGroups = new Map<string, { latest: typeof resolved[0]; count: number }>();
+      for (const wf of resolved) {
+        const existing = taskGroups.get(wf.taskNodeId);
+        if (!existing) {
+          taskGroups.set(wf.taskNodeId, { latest: wf, count: 1 });
+        } else {
+          existing.count++;
+          // Already sorted by updatedAt desc, so the first one is the latest
+        }
       }
 
       const roles = await roleRepo.findByOrgId(orgId);
@@ -74,26 +85,30 @@ export function registerConversationHandlers(
       const allTasks = await taskRepo.findByOrgId(orgId);
       const taskMap = new Map(allTasks.map((t) => [t.id, t]));
 
-      const items: ConversationInboxItem[] = resolved.map((wf) => {
-        const task = taskMap.get(wf.taskNodeId);
-        const askingRole = roleMap.get(wf.askingRoleId);
-        const respondentRole = wf.respondentRoleId ? roleMap.get(wf.respondentRoleId) : null;
-        return {
-          workflowId: wf.id,
-          taskNodeId: wf.taskNodeId,
-          taskTitle: task?.title ?? 'Unknown Task',
-          discussionGroupId: wf.discussionGroupId,
-          askingRoleId: wf.askingRoleId,
-          askingRoleName: askingRole?.name ?? 'Unknown',
-          respondentRoleId: wf.respondentRoleId,
-          respondentRoleName: respondentRole?.name ?? null,
-          respondentType: wf.respondentType,
-          questionPreview: '',
-          waitingSince: wf.updatedAt,
-          priority: wf.priority,
-          depth: wf.depth,
-        };
-      });
+      const items: ConversationInboxItem[] = [...taskGroups.values()]
+        .sort((a, b) => b.latest.updatedAt.localeCompare(a.latest.updatedAt))
+        .slice(0, 50)
+        .map(({ latest: wf, count }) => {
+          const task = taskMap.get(wf.taskNodeId);
+          const askingRole = roleMap.get(wf.askingRoleId);
+          const respondentRole = wf.respondentRoleId ? roleMap.get(wf.respondentRoleId) : null;
+          return {
+            workflowId: wf.id,
+            taskNodeId: wf.taskNodeId,
+            taskTitle: task?.title ?? 'Unknown Task',
+            discussionGroupId: wf.discussionGroupId,
+            askingRoleId: wf.askingRoleId,
+            askingRoleName: askingRole?.name ?? 'Unknown',
+            respondentRoleId: wf.respondentRoleId,
+            respondentRoleName: respondentRole?.name ?? null,
+            respondentType: wf.respondentType,
+            questionPreview: '',
+            waitingSince: wf.updatedAt,
+            priority: wf.priority,
+            depth: wf.depth,
+            conversationCount: count,
+          };
+        });
 
       return ok(items);
     } catch (err) {

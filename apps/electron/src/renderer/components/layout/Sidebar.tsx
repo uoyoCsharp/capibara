@@ -28,6 +28,7 @@ interface SidebarProps {
   onNavigate: (section: SectionId) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onCreateWorkspace?: () => void;
 }
 
 const NAV_ITEM_DEFS: Array<{
@@ -42,7 +43,7 @@ const NAV_ITEM_DEFS: Array<{
   { id: 'settings', sectionKey: 'settings', icon: Gear },
 ];
 
-export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse, onCreateWorkspace }: SidebarProps) {
   const t = useT();
   const { organizations, currentOrgId } = useCapibaraSnapshot();
   const currentOrg = organizations.find((o) => o.id === currentOrgId);
@@ -81,38 +82,30 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
         collapsed ? 'w-16' : 'w-[var(--sidebar-width)]',
       )}
     >
-      {/* Logo — clickable to navigate to dashboard */}
+      {/* Logo + Workspace — merged header */}
       <button
         type="button"
-        onClick={() => onNavigate('dashboard')}
+        onClick={() => onNavigate(currentOrg ? 'workspace' : 'dashboard')}
         className={cn(
           'flex h-14 items-center gap-2.5 border-b hover:bg-sidebar-accent transition-colors',
           collapsed ? 'justify-center px-0' : 'px-5',
         )}
-        title="Go to Dashboard"
+        title={currentOrg ? t.workspacePage.title : 'Capibara'}
       >
         <img src={logoImg} alt="Capibara" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
         {!collapsed && (
-          <span className="text-base font-semibold text-foreground whitespace-nowrap">
-            Capibara
-          </span>
+          <div className="min-w-0">
+            {currentOrg ? (
+              <>
+                <p className="text-[11px] font-medium uppercase text-muted-foreground/60 tracking-wider leading-tight">Workspace</p>
+                <p className="text-sm font-semibold text-foreground truncate leading-tight">{currentOrg.name}</p>
+              </>
+            ) : (
+              <span className="text-base font-semibold text-foreground whitespace-nowrap">Capibara</span>
+            )}
+          </div>
         )}
       </button>
-
-      {/* Workspace Label (non-collapsed only) — clickable to navigate to workspace settings */}
-      {!collapsed && currentOrg && (
-        <button
-          type="button"
-          onClick={() => onNavigate('workspace')}
-          className="w-full px-5 py-2 border-b text-left hover:bg-sidebar-accent transition-colors"
-          title={t.workspacePage.title}
-        >
-          <p className="text-[11px] font-medium uppercase text-muted-foreground/60 tracking-wider">
-            Workspace
-          </p>
-          <p className="text-sm font-medium text-foreground truncate">{currentOrg.name}</p>
-        </button>
-      )}
 
       {/* Navigation */}
       <nav className={cn('flex-1 py-4 space-y-1.5', collapsed ? 'px-2' : 'px-3')}>
@@ -162,6 +155,7 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
           organizations={organizations}
           currentOrgId={currentOrgId}
           onNavigate={onNavigate}
+          onCreateWorkspace={onCreateWorkspace}
         />
       </div>
 
@@ -193,11 +187,13 @@ function AvatarPopover({
   organizations,
   currentOrgId,
   onNavigate,
+  onCreateWorkspace,
 }: {
   collapsed: boolean;
   organizations: OrganizationRecord[];
   currentOrgId: string | null;
   onNavigate: (section: SectionId) => void;
+  onCreateWorkspace?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -270,7 +266,7 @@ function AvatarPopover({
           ))}
           <button
             type="button"
-            onClick={() => { setOpen(false); onNavigate('organization'); }}
+            onClick={() => { setOpen(false); onCreateWorkspace?.(); }}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
           >
             <Plus size={14} /> {t.workspace.createNewSpace}

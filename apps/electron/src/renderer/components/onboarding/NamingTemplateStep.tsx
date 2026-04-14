@@ -15,6 +15,8 @@ import logoImg from '../../assets/logo.png';
 
 interface NamingTemplateStepProps {
   onComplete: () => void;
+  /** Whether this is a first-time onboarding (controls onboardingCompleted setting) */
+  isFirstTime?: boolean;
 }
 
 function countAgents(template: TemplateRecord): number {
@@ -26,7 +28,7 @@ function countAgents(template: TemplateRecord): number {
   return count;
 }
 
-export function NamingTemplateStep({ onComplete }: NamingTemplateStepProps) {
+export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTemplateStepProps) {
   const t = useT();
   const [name, setName] = useState('');
   const [workspace, setWorkspace] = useState('');
@@ -63,8 +65,14 @@ export function NamingTemplateStep({ onComplete }: NamingTemplateStepProps) {
         workflowTemplateId: null,
       });
       if (res.ok) {
-        // Mark onboarding complete
-        await window.capibara.updateSetting({ key: 'onboardingCompleted', value: 'true' });
+        if (isFirstTime) {
+          // Mark onboarding complete only on first-time setup
+          await window.capibara.updateSetting({ key: 'onboardingCompleted', value: 'true' });
+        }
+        // Switch to the newly created org
+        if (res.data?.id) {
+          await window.capibara.updateSetting({ key: 'currentOrgId', value: res.data.id });
+        }
         onComplete();
       }
     } finally {

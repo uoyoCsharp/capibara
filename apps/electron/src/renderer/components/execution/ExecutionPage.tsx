@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Plus, Play, Stop, ArrowClockwise, Lightning, Timer, Eye, EyeSlash } from '@phosphor-icons/react';
 import type {
-  OrganizationRecord,
   TaskRecord,
   RoleRecord,
   RunRecord,
@@ -12,6 +11,7 @@ import type {
   RunStatus,
   SectionId,
 } from '@shared/contracts';
+import { useCapibaraSnapshot } from '../../hooks/useCapibaraSnapshot';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { useWorkflowSchema } from '../../hooks/useWorkflowSchema';
 import { useT } from '../../hooks/useLocale';
@@ -25,7 +25,6 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Card, CardContent } from '../ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 const RUN_STATUS_COLORS: Record<RunStatus, string> = {
   queued: 'bg-yellow-500/10 text-yellow-600',
@@ -143,8 +142,7 @@ function RunCard({ run, isSelected, taskTitle, roleName, onSelect, onCancel }: R
 
 export function ExecutionPage({ onNavigate }: { onNavigate?: (section: SectionId) => void } = {}) {
   const t = useT();
-  const [organizations, setOrganizations] = useState<OrganizationRecord[]>([]);
-  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
+  const { currentOrgId, organizations } = useCapibaraSnapshot();
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -159,20 +157,6 @@ export function ExecutionPage({ onNavigate }: { onNavigate?: (section: SectionId
     parentType: TaskType | null;
   }>({ open: false, parentId: null, parentType: null });
   const schemaHelpers = useWorkflowSchema(currentOrgId);
-
-  const loadOrgs = useCallback(async () => {
-    try {
-      const result = await window.capibara.getOrganizations();
-      if (result.ok) {
-        setOrganizations(result.data);
-        if (result.data.length > 0) {
-          setCurrentOrgId((prev) => prev ?? result.data[0].id);
-        }
-      }
-    } catch {
-      toast.error(t.errors.failedToLoad);
-    }
-  }, []);
 
   const loadOrgData = useCallback(async (orgId: string | null) => {
     if (!orgId) {
@@ -212,11 +196,7 @@ export function ExecutionPage({ onNavigate }: { onNavigate?: (section: SectionId
   }, [currentOrgId]);
 
   useEffect(() => {
-    loadOrgs().finally(() => setIsLoading(false));
-  }, [loadOrgs]);
-
-  useEffect(() => {
-    loadOrgData(currentOrgId);
+    loadOrgData(currentOrgId).finally(() => setIsLoading(false));
   }, [currentOrgId, loadOrgData]);
 
   // Subscribe to real-time events
@@ -405,33 +385,10 @@ export function ExecutionPage({ onNavigate }: { onNavigate?: (section: SectionId
               {t.tasksExecution.subtitle}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Org selector */}
-            <Select
-              value={currentOrgId ?? ''}
-              onValueChange={(value) => {
-                setCurrentOrgId(value);
-                setSelectedTaskId(null);
-                setSelectedRunId(null);
-              }}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {organizations.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button onClick={() => handleAddTask(null)}>
-              <Plus size={16} />
-              {t.tasksExecution.newTask}
-            </Button>
-          </div>
+          <Button onClick={() => handleAddTask(null)}>
+            <Plus size={16} />
+            {t.tasksExecution.newTask}
+          </Button>
         </div>
 
         {/* Tab Bar */}

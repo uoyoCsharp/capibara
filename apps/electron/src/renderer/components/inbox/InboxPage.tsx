@@ -412,7 +412,14 @@ function HistoryRow({
     >
       <CheckCircle size={16} weight="fill" className="mt-0.5 shrink-0 text-muted-foreground" />
       <div className="flex-1 min-w-0 space-y-1">
-        <p className="text-sm font-medium text-foreground truncate">{item.taskTitle}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground truncate">{item.taskTitle}</p>
+          {(item.conversationCount ?? 0) > 1 && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+              {item.conversationCount} {t.inbox.conversations}
+            </Badge>
+          )}
+        </div>
         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
           <span>{item.askingRoleName} → {item.respondentType === 'human' ? 'You' : (item.respondentRoleName ?? '?')}</span>
           <span className="ml-auto flex items-center gap-1">

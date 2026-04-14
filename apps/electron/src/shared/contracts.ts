@@ -791,13 +791,7 @@ export type SectionId =
   | 'team'
   | 'settings'
   | 'workspace'
-  | 'planning'
-  // Legacy sections (retained for backward compatibility during migration)
-  | 'organization'
-  | 'skills'
-  | 'execution'
-  | 'discussion'
-  | 'conversations';
+  | 'planning';
 
 // ─── Conversation Records ──────────────────────────────────────────
 export type ConversationWorkflowState =
@@ -866,6 +860,8 @@ export interface ConversationInboxItem {
   waitingSince: string;
   priority: number;
   depth: number;
+  /** Number of resolved workflows aggregated under this task (history only) */
+  conversationCount?: number;
 }
 
 export interface GroupedConversationsResult {

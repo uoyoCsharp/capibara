@@ -3,14 +3,11 @@ import { Plus, TreeStructure, Trash, CaretDown, CaretRight, FloppyDisk, FolderOp
 import type {
   OrganizationRecord,
   RoleRecord,
-  TemplateRecord,
   CreateRoleInput,
   UpdateRoleInput,
 } from '@shared/contracts';
 import { OrgTreeView } from './OrgTreeView';
 import { RoleDrawer } from './RoleDrawer';
-import { TemplateSelectorModal } from './TemplateSelectorModal';
-import { CreateOrgModal } from './CreateOrgModal';
 import { DeleteOrgModal } from './DeleteOrgModal';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
@@ -30,8 +27,6 @@ export function OrganizationPage() {
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
-  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [showDeleteOrg, setShowDeleteOrg] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -102,43 +97,6 @@ export function OrganizationPage() {
         await loadRoles(currentOrgId);
       }
     } catch { toast.error(t.organization.failedToDeleteRole); }
-  };
-
-  const handleTemplateLoaded = async () => {
-    setShowTemplateSelector(false);
-    toast.success(t.organization.templateLoadedSuccessfully);
-    try {
-      await loadOrgs();
-      const result = await window.capibara.getOrganizations();
-      if (result.ok && result.data.length > 0) {
-        setCurrentOrgId(result.data[result.data.length - 1].id);
-      }
-    } catch { toast.error(t.organization.failedToLoadTemplate); }
-  };
-
-  const handleCreateBlankOrg = async (name: string, description: string, workspacePath: string, customInstructions: string, workflowTemplateId: string | null) => {
-    try {
-      const result = await window.capibara.createOrganization({
-        name,
-        description,
-        customInstructions,
-        budgetLimit: 50.0,
-        orgTemplateId: null,
-        workflowTemplateId,
-        workspacePath,
-      });
-      if (result.ok) {
-        setShowCreateOrg(false);
-        toast.success(t.organization.createdSuccessfully);
-        setCurrentOrgId(result.data.id);
-        await loadOrgs();
-      } else {
-        console.error('[CreateOrg] failed:', result.error);
-      }
-    } catch (err) {
-      console.error('[CreateOrg] IPC error:', err);
-      toast.error(t.organization.failedToCreateOrg);
-    }
   };
 
   const handleDeleteOrg = async () => {
@@ -257,17 +215,6 @@ export function OrganizationPage() {
                 </Button>
               </>
             )}
-            <Button onClick={() => setShowTemplateSelector(true)}>
-              <TreeStructure size={16} />
-              {t.organization.fromTemplate}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setShowCreateOrg(true)}
-            >
-              <Plus size={16} />
-              {t.organization.blankOrg}
-            </Button>
           </div>
         </div>
 
@@ -372,22 +319,6 @@ export function OrganizationPage() {
           onUpdate={handleUpdateRole}
           onDelete={handleDeleteRole}
           onClose={() => setSelectedRoleId(null)}
-        />
-      )}
-
-      {/* Template Selector Modal */}
-      {showTemplateSelector && (
-        <TemplateSelectorModal
-          onClose={() => setShowTemplateSelector(false)}
-          onLoaded={handleTemplateLoaded}
-        />
-      )}
-
-      {/* Create Blank Org Modal */}
-      {showCreateOrg && (
-        <CreateOrgModal
-          onClose={() => setShowCreateOrg(false)}
-          onCreate={handleCreateBlankOrg}
         />
       )}
 

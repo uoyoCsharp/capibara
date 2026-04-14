@@ -532,6 +532,7 @@ export const enUS: LocaleMessages = {
     resolvedAgo: 'Resolved',
     cancelledAgo: 'Cancelled',
     timedOutAgo: 'Timed out',
+    conversations: 'conversations',
   },
   workspacePage: {
     title: 'Workspace Settings',
