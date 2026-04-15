@@ -80,6 +80,22 @@ export interface DiscussionSummary {
   disputeSummary: string | null;
 }
 
+/** Context for session-based prompt construction (no task dependency). */
+export interface SessionPromptContext {
+  roleName: string;
+  rolePersona: string;
+  /** BMAD planning phase */
+  phase: PlanningPhase;
+  /** Organization roles for assignment guidance */
+  orgRoles: Array<{ id: string; name: string; skillDescriptions: string[] }>;
+  /** Communication language preference */
+  communicationLanguage?: string;
+  /** Organization custom instructions */
+  orgInstructions?: string;
+}
+
 export interface IPromptBuilder {
   build(context: PromptContext): string;
+  /** Build a prompt for session-based execution (no task context). */
+  buildForSession(context: SessionPromptContext): string;
 }

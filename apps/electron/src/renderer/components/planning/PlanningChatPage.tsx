@@ -5,12 +5,13 @@ import {
   ArrowDown,
   X,
   CaretUpDown,
+  FolderOpen,
 } from '@phosphor-icons/react';
 import type {
   SectionId,
   DesktopEvent,
-  ActivePlanningSessionRecord,
-  DiscussionMessageRecord,
+  SessionRecord,
+  SessionMessageRecord,
   PendingPlanRecord,
   PlanningRoleOption,
 } from '@shared/contracts';
@@ -26,6 +27,7 @@ import { Avatar, AvatarFallback } from '../ui/avatar';
 import { PhaseIndicator, type PlanningPhase } from './PhaseIndicator';
 import { TypingIndicator } from './TypingIndicator';
 import { PlanPreview } from './PlanPreview';
+import { useTypewriter } from '../../hooks/useTypewriter';
 
 declare const window: Window & { capibara: import('@shared/contracts').CapibaraApi };
 
@@ -43,6 +45,29 @@ interface ChatMessage {
 
 type PageView = 'welcome' | 'chat' | 'plan-preview';
 
+/** Format tool status for display (e.g. "tool:Skill" → "Using Skill...") */
+function formatToolStatus(status: string): string {
+  if (status.startsWith('tool:')) {
+    const toolName = status.slice(5);
+    // Prettify known tool names
+    const friendly: Record<string, string> = {
+      Skill: 'Loading skill...',
+      ToolSearch: 'Searching tools...',
+      Read: 'Reading file...',
+      Glob: 'Searching files...',
+      Grep: 'Searching code...',
+      Bash: 'Running command...',
+      Edit: 'Editing file...',
+      Write: 'Writing file...',
+      WebFetch: 'Fetching web content...',
+      mcp__capibara__capibara_plan_tasks: 'Generating plan...',
+      mcp__capibara__capibara_context: 'Loading context...',
+    };
+    return friendly[toolName] ?? `Using ${toolName}...`;
+  }
+  return status;
+}
+
 export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
   const { currentOrgId } = useCapibaraSnapshot();
   const t = useT();
@@ -55,11 +80,14 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [streamingText, setStreamingText] = useState('');
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
 
   // Session state
-  const [session, setSession] = useState<ActivePlanningSessionRecord | null>(null);
+  const [session, setSession] = useState<SessionRecord | null>(null);
   const [pendingPlan, setPendingPlan] = useState<PendingPlanRecord | null>(null);
   const [currentPhase, setCurrentPhase] = useState<PlanningPhase>('diverge');
+  const [roleName, setRoleName] = useState<string>('AI');
 
   // Role state
   const [planningRoles, setPlanningRoles] = useState<PlanningRoleOption[]>([]);
@@ -67,6 +95,9 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
 
   // Dialog state
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+
+  // Typewriter effect for streaming text
+  const displayedText = useTypewriter(streamingText, 4, 10);
 
   // Refs
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -83,7 +114,6 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
       if (res.ok) {
         setPlanningRoles(res.data);
         if (res.data.length > 0 && !selectedRoleId) {
-          // Default to template role if available, otherwise system role
           const template = res.data.find((r) => r.source === 'template');
           setSelectedRoleId(template?.roleId ?? res.data[0].roleId);
         }
@@ -91,12 +121,32 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
     }).catch(() => {});
   }, [currentOrgId]);
 
+  // ── Load session messages ──────────────────────────────────
+  const loadSessionMessages = useCallback(async (sessionId: string) => {
+    try {
+      const res = await window.capibara.getSessionMessages(sessionId);
+      if (res.ok) {
+        const currentRoleName = roleName;
+        const mapped: ChatMessage[] = res.data
+          .filter((m: SessionMessageRecord) => m.authorType !== 'system')
+          .map((m: SessionMessageRecord) => ({
+            id: m.id,
+            authorType: m.authorType === 'human' ? 'human' as const : 'ai' as const,
+            authorName: m.authorType === 'human' ? 'You' : currentRoleName,
+            content: m.content,
+            createdAt: m.createdAt,
+          }));
+        setMessages(mapped);
+      }
+    } catch { /* silent */ }
+  }, [roleName]);
+
   // ── Load active session on mount ──────────────────────────
   const loadSession = useCallback(async () => {
     if (!currentOrgId) return;
     try {
       const [sessionRes, planRes] = await Promise.all([
-        window.capibara.getActivePlanningSession(currentOrgId),
+        window.capibara.getActiveSession(currentOrgId, 'planning'),
         window.capibara.getPendingPlan(currentOrgId),
       ]);
 
@@ -109,72 +159,23 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
       if (sessionRes.ok && sessionRes.data) {
         setSession(sessionRes.data);
         setView('chat');
-        // Load conversation history
-        if (sessionRes.data.discussionGroupId) {
-          await loadMessages(sessionRes.data.discussionGroupId);
+        // Resolve role name
+        const roles = await window.capibara.getRolesByOrgId(currentOrgId);
+        if (roles.ok) {
+          const role = roles.data.find((r) => r.id === sessionRes.data!.roleId);
+          if (role) setRoleName(role.name);
         }
-        // Determine AI thinking state:
-        // - waiting_for_reply → AI done, user can reply
-        // - null → no active workflow (run may have finished or not started conversation)
-        // - other (reply_received, resumed) → AI is processing
-        if (sessionRes.data.workflowState === 'waiting_for_reply' || sessionRes.data.workflowState === null) {
-          setIsAiThinking(false);
-        } else {
-          setIsAiThinking(true);
-          setThinkingStartedAt(Date.now());
-        }
+        // Load messages
+        await loadSessionMessages(sessionRes.data.id);
       }
     } catch {
       // No active session — stay on welcome
     }
-  }, [currentOrgId]);
+  }, [currentOrgId, loadSessionMessages]);
 
   useEffect(() => {
     loadSession();
   }, [loadSession]);
-
-  // ── Load discussion messages ──────────────────────────────
-  const loadMessages = useCallback(async (groupId: string) => {
-    try {
-      const res = await window.capibara.getDiscussionMessages(groupId);
-      if (res.ok) {
-        const roleName = sessionRef.current?.roleName ?? 'Planning Agent';
-        const mapped: ChatMessage[] = res.data.map((m: DiscussionMessageRecord) => ({
-          id: m.id,
-          authorType: m.authorType === 'human' ? 'human' as const : 'ai' as const,
-          authorName: m.authorType === 'human' ? 'You' : roleName,
-          content: m.content,
-          createdAt: m.createdAt,
-        }));
-        setMessages(mapped);
-      }
-    } catch { /* silent */ }
-  }, []);
-
-  const reloadSession = useCallback(async () => {
-    if (!currentOrgId) return;
-    try {
-      const res = await window.capibara.getActivePlanningSession(currentOrgId);
-      if (res.ok && res.data) {
-        setSession(res.data);
-        if (res.data.discussionGroupId) {
-          await loadMessages(res.data.discussionGroupId);
-        }
-        if (res.data.workflowState === 'waiting_for_reply') {
-          setIsAiThinking(false);
-          setThinkingStartedAt(null);
-        }
-      } else if (res.ok && !res.data) {
-        // Session ended (e.g., task reached terminal status)
-        setIsAiThinking(false);
-        setThinkingStartedAt(null);
-      }
-    } catch {
-      // On error, reset thinking state to avoid indefinite spinner
-      setIsAiThinking(false);
-      setThinkingStartedAt(null);
-    }
-  }, [currentOrgId, loadMessages]);
 
   const loadPendingPlan = useCallback(async () => {
     if (!currentOrgId) return;
@@ -192,60 +193,83 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
     if (!currentOrgId) return;
     const unsub = window.capibara.subscribe((event: DesktopEvent) => {
       const s = sessionRef.current;
-      // New message in discussion
-      if (event.type === 'discussion:message-added' && s?.discussionGroupId) {
-        if (event.groupId === s.discussionGroupId) {
-          loadMessages(s.discussionGroupId);
-        }
+
+      // Session message added — reload messages
+      if (event.type === 'session:message-added' && s && event.sessionId === s.id) {
+        loadSessionMessages(s.id);
       }
-      // Run completed — AI done thinking
-      if (event.type === 'run:completed' && s) {
+
+      // Tool status update — show what the AI is doing
+      if (event.type === 'run:status' && s) {
+        setToolStatus(event.status);
+      }
+
+      // Streaming assistant text — clear tool status when real text arrives
+      if (event.type === 'run:assistant-text' && s) {
+        setToolStatus(null);
+        setStreamingText((prev) => prev + event.text);
+      }
+
+      // Session run completed — AI done thinking
+      if (event.type === 'session:run-completed' && s && event.sessionId === s.id) {
         setIsAiThinking(false);
         setThinkingStartedAt(null);
+        setStreamingText('');
+        setToolStatus(null);
         if (event.status === 'failed') {
           toast.error(t.runs.failed);
         } else if (event.status === 'cancelled') {
           toast.info(t.runs.cancelled);
         }
-        // Reload session to get updated workflow state
-        reloadSession();
+        // Reload messages for final state
+        loadSessionMessages(s.id);
       }
-      // Run started — AI thinking
-      if (event.type === 'run:changed' && s) {
-        // Reload to detect if AI is thinking
-        reloadSession();
+
+      // Session completed or cancelled externally
+      if (event.type === 'session:completed' && s && event.sessionId === s.id) {
+        setIsAiThinking(false);
+        setThinkingStartedAt(null);
       }
+      if (event.type === 'session:cancelled' && s && event.sessionId === s.id) {
+        setIsAiThinking(false);
+        setThinkingStartedAt(null);
+        setSession(null);
+        setMessages([]);
+        setView('welcome');
+      }
+
       // Plan ready
       if (event.type === 'planning:plan-ready' && event.orgId === currentOrgId) {
         loadPendingPlan();
       }
-      // Conversation events
-      if (
-        (event.type === 'conversation:question-posted' || event.type === 'conversation:reply-posted') &&
-        event.orgId === currentOrgId
-      ) {
-        reloadSession();
-      }
     });
     return unsub;
-  }, [currentOrgId, t, loadMessages, reloadSession, loadPendingPlan]);
+  }, [currentOrgId, t, loadSessionMessages, loadPendingPlan]);
 
-  // ── Elapsed timer ─────────────────────────────────────────
+  // ── Elapsed timer + thinking timeout safety net ──────────
+  const THINKING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
   useEffect(() => {
     if (!isAiThinking || !thinkingStartedAt) {
       setElapsedSeconds(0);
       return;
     }
     const interval = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - thinkingStartedAt) / 1000));
+      const elapsed = Date.now() - thinkingStartedAt;
+      setElapsedSeconds(Math.floor(elapsed / 1000));
+      if (elapsed > THINKING_TIMEOUT_MS) {
+        setIsAiThinking(false);
+        setThinkingStartedAt(null);
+        setStreamingText('');
+        toast.error(t.runs.failed);
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isAiThinking, thinkingStartedAt]);
+  }, [isAiThinking, thinkingStartedAt, t]);
 
   // ── Auto-scroll ───────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isAiThinking]);
+  }, [messages, isAiThinking, displayedText]);
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
@@ -259,8 +283,6 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
   };
 
   // ── Phase detection based on conversation round count ─────
-  // Mirrors backend detectPlanningPhase heuristic (run count based).
-  // AI messages count as conversation rounds.
   useEffect(() => {
     const aiMessageCount = messages.filter((m) => m.authorType === 'ai').length;
     if (aiMessageCount >= 4) {
@@ -277,16 +299,24 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
     if (!currentOrgId || !inputValue.trim()) return;
     setIsSending(true);
     try {
-      const res = await window.capibara.startPlanningRun({
+      const res = await window.capibara.startSession({
         orgId: currentOrgId,
+        type: 'planning',
+        roleId: selectedRoleId ?? '',
         initialMessage: inputValue.trim(),
-        ...(selectedRoleId ? { roleId: selectedRoleId } : {}),
       });
       if (!res.ok) {
         toast.error(`${t.planning.failedToStartPlanning}: ${res.error.message}`);
         return;
       }
-      // Add user message to chat
+      setSession(res.data);
+      // Resolve role name
+      const roles = await window.capibara.getRolesByOrgId(currentOrgId);
+      if (roles.ok) {
+        const role = roles.data.find((r) => r.id === res.data.roleId);
+        if (role) setRoleName(role.name);
+      }
+      // Add user message to chat immediately
       setMessages([{
         id: `user-${Date.now()}`,
         authorType: 'human',
@@ -298,8 +328,7 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
       setView('chat');
       setIsAiThinking(true);
       setThinkingStartedAt(Date.now());
-      // Reload session to get the full session data
-      setTimeout(() => { reloadSession().catch(() => {}); }, 1000);
+      setStreamingText('');
     } catch {
       toast.error(t.planning.failedToStartPlanning);
     } finally {
@@ -309,15 +338,15 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
 
   // ── Send reply ────────────────────────────────────────────
   const handleSendReply = async () => {
-    if (!session?.workflowId || !inputValue.trim()) return;
+    if (!session || !inputValue.trim()) return;
     setIsSending(true);
     try {
-      const res = await window.capibara.replyToConversation({
-        workflowId: session.workflowId,
-        content: inputValue.trim(),
+      const res = await window.capibara.sendSessionMessage({
+        sessionId: session.id,
+        message: inputValue.trim(),
       });
       if (!res.ok) {
-        toast.error(t.conversations.replyFailed);
+        toast.error(t.session.failedToSend);
         return;
       }
       // Add user message immediately
@@ -331,8 +360,9 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
       setInputValue('');
       setIsAiThinking(true);
       setThinkingStartedAt(Date.now());
+      setStreamingText('');
     } catch {
-      toast.error(t.conversations.replyFailed);
+      toast.error(t.session.failedToSend);
     } finally {
       setIsSending(false);
     }
@@ -357,12 +387,19 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
 
   // ── Switch planning role ────────────────────────────────
   const handleSwitchRole = async (newRoleId: string) => {
-    if (!session?.taskId || isAiThinking) return;
+    if (!session || isAiThinking) return;
     try {
-      const res = await window.capibara.switchPlanningRole({ taskId: session.taskId, newRoleId });
+      const res = await window.capibara.switchSessionRole({ sessionId: session.id, newRoleId });
       if (res.ok) {
         setSelectedRoleId(newRoleId);
-        await reloadSession();
+        // Update role name
+        const roles = await window.capibara.getRolesByOrgId(currentOrgId!);
+        if (roles.ok) {
+          const role = roles.data.find((r) => r.id === newRoleId);
+          if (role) setRoleName(role.name);
+        }
+        // Update session state
+        setSession((prev) => prev ? { ...prev, roleId: newRoleId } : prev);
       } else {
         toast.error(res.error.message);
       }
@@ -373,9 +410,9 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
 
   // ── Start over (discard plan and return to welcome) ──────
   const handleStartOver = async () => {
-    if (session?.taskId) {
+    if (session) {
       try {
-        await window.capibara.discardPlanningSession({ taskId: session.taskId });
+        await window.capibara.cancelSession({ sessionId: session.id });
       } catch { /* best effort */ }
     }
     setSession(null);
@@ -388,10 +425,10 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
 
   // ── Cancel session ────────────────────────────────────────
   const handleCancelSession = async () => {
-    if (!session?.taskId) return;
+    if (!session) return;
     setShowCancelDialog(false);
     try {
-      await window.capibara.discardPlanningSession({ taskId: session.taskId });
+      await window.capibara.cancelSession({ sessionId: session.id });
       setSession(null);
       setMessages([]);
       setView('welcome');
@@ -399,7 +436,7 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
       setCurrentPhase('diverge');
       onNavigate?.('dashboard');
     } catch {
-      toast.error(t.errors.failedToUpdate);
+      toast.error(t.session.failedToCancel);
     }
   };
 
@@ -443,6 +480,19 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
           <p className="text-xs text-muted-foreground">{t.planning.planningChatSubtitle}</p>
         </div>
         <div className="flex items-center gap-2">
+          {view === 'chat' && session && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                window.capibara.openSessionLogFolder(session.id).catch(() => {});
+              }}
+              className="text-muted-foreground"
+              title={t.tasksExecution.openLogFolder}
+            >
+              <FolderOpen size={14} />
+            </Button>
+          )}
           {view === 'chat' && (
             <Button
               variant="ghost"
@@ -509,17 +559,36 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
               <div className="flex items-start gap-3">
                 <Avatar className="w-7 h-7 shrink-0">
                   <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
-                    {(session?.roleName ?? 'AI').charAt(0).toUpperCase()}
+                    {roleName.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex items-center gap-2 py-2">
-                  <TypingIndicator />
-                  {elapsedSeconds >= 30 && (
-                    <span className="text-xs text-muted-foreground">
-                      {t.planning.thinkingElapsed.replace('{seconds}', String(elapsedSeconds))}
-                    </span>
-                  )}
-                </div>
+                {displayedText ? (
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <span className="text-sm font-medium text-foreground">{roleName}</span>
+                      <span className="text-xs text-muted-foreground">{t.planning.streaming}</span>
+                    </div>
+                    <div className="rounded-lg px-3 py-2 max-w-[85%] bg-muted text-foreground">
+                      <MarkdownContent content={displayedText} className="text-sm break-words" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1 py-2">
+                    <div className="flex items-center gap-2">
+                      <TypingIndicator />
+                      {elapsedSeconds >= 30 && (
+                        <span className="text-xs text-muted-foreground">
+                          {t.planning.thinkingElapsed.replace('{seconds}', String(elapsedSeconds))}
+                        </span>
+                      )}
+                    </div>
+                    {toolStatus && (
+                      <span className="text-xs text-muted-foreground/70 pl-1 animate-pulse">
+                        {formatToolStatus(toolStatus)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             <div ref={bottomRef} />

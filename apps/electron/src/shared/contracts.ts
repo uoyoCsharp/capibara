@@ -94,6 +94,15 @@ export const IPC_CHANNELS = {
   // System
   checkSystemDeps: 'capibara:system:check-deps',
 
+  // Session
+  openSessionLogFolder: 'capibara:session:open-log-folder',
+  startSession: 'capibara:session:start',
+  sendSessionMessage: 'capibara:session:send-message',
+  getActiveSession: 'capibara:session:get-active',
+  getSessionMessages: 'capibara:session:get-messages',
+  cancelSession: 'capibara:session:cancel',
+  switchSessionRole: 'capibara:session:switch-role',
+
   // Planning
   startPlanningRun: 'capibara:planning:start',
   getActivePlanningSession: 'capibara:planning:get-active',
@@ -132,8 +141,10 @@ export type DesktopEvent =
   | { type: 'discussion:message-added'; groupId: string }
   | { type: 'run:changed'; orgId: string }
   | { type: 'run:log'; runId: string; stream: 'stdout' | 'stderr'; chunk: string }
+  | { type: 'run:assistant-text'; runId: string; text: string }
+  | { type: 'run:status'; runId: string; status: string }
   | { type: 'run:output'; runId: string; chunk: string }
-  | { type: 'run:completed'; runId: string; orgId: string; taskNodeId: string; roleId: string; status: 'succeeded' | 'failed' | 'cancelled'; tokenCount: number }
+  | { type: 'run:completed'; runId: string; orgId: string; taskNodeId: string | null; roleId: string; status: 'succeeded' | 'failed' | 'cancelled'; tokenCount: number }
   | { type: 'notification'; title: string; body: string }
   | { type: 'approval:required'; taskId: string; taskTitle: string; orgId: string; roleId: string; roleName: string; groupId: string }
   | { type: 'budget:roles-paused'; orgId: string; totalTokens: number; budgetLimit: number }
@@ -146,7 +157,11 @@ export type DesktopEvent =
   | { type: 'conversation:escalated'; orgId: string; workflowId: string }
   | { type: 'conversation:reply-posted'; orgId: string; workflowId: string }
   | { type: 'discussion-summary:updated'; groupId: string; summary: string }
-  | { type: 'planning:plan-ready'; orgId: string; taskCount: number };
+  | { type: 'planning:plan-ready'; orgId: string; taskCount: number }
+  | { type: 'session:message-added'; sessionId: string; authorType: 'human' | 'ai' | 'system' }
+  | { type: 'session:run-completed'; sessionId: string; status: string }
+  | { type: 'session:completed'; sessionId: string; orgId: string }
+  | { type: 'session:cancelled'; sessionId: string; orgId: string };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -298,6 +313,33 @@ export const replyToConversationSchema = z.object({
   content: z.string().min(1).max(50000),
 });
 
+// ─── Session Zod Schemas ─────────────────────────────────────────────
+export const startSessionSchema = z.object({
+  orgId: z.string().min(1),
+  type: z.enum(['planning', 'adhoc']),
+  roleId: z.string().min(1),
+  initialMessage: z.string().min(1).max(10000),
+});
+
+export const sendSessionMessageSchema = z.object({
+  sessionId: z.string().min(1),
+  message: z.string().min(1).max(10000),
+});
+
+export const cancelSessionSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export const switchSessionRoleSchema = z.object({
+  sessionId: z.string().min(1),
+  newRoleId: z.string().min(1),
+});
+
+export type StartSessionInput = z.infer<typeof startSessionSchema>;
+export type SendSessionMessageInput = z.infer<typeof sendSessionMessageSchema>;
+export type CancelSessionInput = z.infer<typeof cancelSessionSchema>;
+export type SwitchSessionRoleInput = z.infer<typeof switchSessionRoleSchema>;
+
 // ─── Planning Zod Schemas ────────────────────────────────────────────
 export const startPlanningRunSchema = z.object({
   orgId: z.string().min(1),
@@ -306,11 +348,12 @@ export const startPlanningRunSchema = z.object({
 });
 
 export const discardPlanningSessionSchema = z.object({
-  taskId: z.string().min(1),
+  /** Accepts either a sessionId or legacy taskId */
+  id: z.string().min(1),
 });
 
 export const switchPlanningRoleSchema = z.object({
-  taskId: z.string().min(1),
+  sessionId: z.string().min(1),
   newRoleId: z.string().min(1),
 });
 
@@ -510,6 +553,15 @@ export interface CapibaraApi {
   schemaImpactAnalysis: (input: SaveSchemaInput) => Promise<DesktopResult<SchemaImpactReportRecord | null>>;
   getWorkflowTemplates: () => Promise<DesktopResult<WorkflowTemplateRecord[]>>;
 
+  // Session
+  openSessionLogFolder: (sessionId: string) => Promise<DesktopResult<void>>;
+  startSession: (input: StartSessionInput) => Promise<DesktopResult<SessionRecord>>;
+  sendSessionMessage: (input: SendSessionMessageInput) => Promise<DesktopResult<{ status: string; sessionId: string }>>;
+  getActiveSession: (orgId: string, type: SessionType) => Promise<DesktopResult<SessionRecord | null>>;
+  getSessionMessages: (sessionId: string) => Promise<DesktopResult<SessionMessageRecord[]>>;
+  cancelSession: (input: CancelSessionInput) => Promise<DesktopResult<void>>;
+  switchSessionRole: (input: SwitchSessionRoleInput) => Promise<DesktopResult<void>>;
+
   // Planning
   startPlanningRun: (input: StartPlanningRunInput) => Promise<DesktopResult<StartPlanningRunResult>>;
   getActivePlanningSession: (orgId: string) => Promise<DesktopResult<ActivePlanningSessionRecord | null>>;
@@ -664,7 +716,7 @@ export interface VoteStatsRecord {
 export interface RunRecord {
   id: string;
   orgId: string;
-  taskNodeId: string;
+  taskNodeId: string | null;
   roleId: string;
   status: RunStatus;
   trigger: WakeTrigger;
@@ -768,19 +820,40 @@ export interface PendingPlanRecord {
 }
 
 export interface StartPlanningRunResult {
-  runId: string;
-  taskId: string;
+  sessionId: string;
   roleId: string;
 }
 
 export interface ActivePlanningSessionRecord {
-  taskId: string;
-  taskTitle: string;
+  sessionId: string | null;
+  taskId: string | null;
   roleId: string;
   roleName: string;
-  discussionGroupId: string | null;
-  workflowId: string | null;
-  workflowState: string | null;
+}
+
+// ─── Session Record Types ────────────────────────────────────────────
+export type SessionType = 'planning' | 'adhoc';
+export type SessionStatus = 'active' | 'completed' | 'cancelled';
+export type SessionMessageAuthorType = 'human' | 'ai' | 'system';
+
+export interface SessionRecord {
+  id: string;
+  orgId: string;
+  roleId: string;
+  type: SessionType;
+  status: SessionStatus;
+  cliSessionId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SessionMessageRecord {
+  id: string;
+  sessionId: string;
+  authorType: SessionMessageAuthorType;
+  content: string;
+  createdAt: string;
 }
 
 // ─── Navigation ─────────────────────────────────────────────────────

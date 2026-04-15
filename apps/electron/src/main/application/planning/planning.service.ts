@@ -2,21 +2,22 @@ import { injectable, inject } from 'tsyringe';
 import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js';
 import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.js';
 import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js';
-import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
+import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
-import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
-import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
 import type { PlanningPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
 import type { PlanningRoleOption } from '@shared/contracts.js';
-import type { Role, TaskNode } from '@main/core/types/domain.types.js';
-import type { ExecutionEngine } from '../execution/execution.engine.js';
-import type { TaskService } from '../tasks/task.service.js';
+import type { Role } from '@main/core/types/domain.types.js';
+import type { SessionService } from '../session/session.service.js';
+import type { SessionRunCoordinator } from '../session/session-run.coordinator.js';
 import {
   ROLE_REPO_TOKEN,
   SKILL_REPO_TOKEN,
   TASK_REPO_TOKEN,
+  ORGANIZATION_REPO_TOKEN,
   LOGGER_TOKEN,
+  SESSION_SERVICE_TOKEN,
+  SESSION_RUN_COORDINATOR_TOKEN,
 } from '@main/core/tokens.js';
 import { ValidationError } from '@main/core/errors/capibara.errors.js';
 import { PLANNING_TASK_TYPE } from '@main/core/constants/planning.constants.js';
@@ -29,59 +30,36 @@ const PM_SKILL_COMMANDS = [
 ];
 
 export interface StartPlanningResult {
-  runId: string;
-  taskId: string;
+  sessionId: string;
   roleId: string;
 }
 
 export interface ActivePlanningSession {
-  taskId: string;
-  taskTitle: string;
+  /** Session-based planning uses sessionId; legacy task-based uses taskId */
+  sessionId: string | null;
+  taskId: string | null;
   roleId: string;
   roleName: string;
-  discussionGroupId: string | null;
-  workflowId: string | null;
-  workflowState: string | null;
 }
 
 @injectable()
 export class PlanningService {
-  private executionEngine!: ExecutionEngine;
-  private taskService!: TaskService;
+  /** Legacy support — set only for backward compat with task-based planning detection */
   private workflowEngine!: IWorkflowEngine;
-  private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
-  private orgRepo: IOrganizationRepository | null = null;
-  private discussionRepo: IDiscussionRepository | null = null;
 
   constructor(
     @inject(ROLE_REPO_TOKEN) private readonly roleRepo: IRoleRepository,
     @inject(SKILL_REPO_TOKEN) private readonly skillRepo: ISkillRepository,
     @inject(TASK_REPO_TOKEN) private readonly taskRepo: ITaskRepository,
+    @inject(ORGANIZATION_REPO_TOKEN) private readonly orgRepo: IOrganizationRepository,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
+    @inject(SESSION_SERVICE_TOKEN) private readonly sessionService: SessionService,
+    @inject(SESSION_RUN_COORDINATOR_TOKEN) private readonly sessionRunCoordinator: SessionRunCoordinator,
   ) {}
 
-  setExecutionEngine(engine: ExecutionEngine): void {
-    this.executionEngine = engine;
-  }
-
-  setTaskService(service: TaskService): void {
-    this.taskService = service;
-  }
-
+  /** Retained for legacy task-based planning session detection */
   setWorkflowEngine(engine: IWorkflowEngine): void {
     this.workflowEngine = engine;
-  }
-
-  setConversationWorkflowRepo(repo: IConversationWorkflowRepository): void {
-    this.conversationWorkflowRepo = repo;
-  }
-
-  setOrgRepo(repo: IOrganizationRepository): void {
-    this.orgRepo = repo;
-  }
-
-  setDiscussionRepo(repo: IDiscussionRepository): void {
-    this.discussionRepo = repo;
   }
 
   /**
@@ -161,13 +139,15 @@ export class PlanningService {
   }
 
   /**
-   * Start a planning run: create a planning task, select the agent, and trigger execution.
+   * Start a planning session: create a Session, select the agent, and trigger first execution.
+   * No Task or ConversationWorkflow is created.
    */
   async startPlanningRun(orgId: string, initialMessage: string, roleId?: string): Promise<StartPlanningResult> {
     // Prevent concurrent planning sessions for the same org
     const existing = await this.getActivePlanningSession(orgId);
     if (existing) {
-      throw new ValidationError(`A planning session is already active for this organization (task: ${existing.taskId}).`);
+      const ref = existing.sessionId ?? existing.taskId ?? 'unknown';
+      throw new ValidationError(`A planning session is already active for this organization (${ref}).`);
     }
 
     // Use explicit roleId if provided, otherwise auto-select
@@ -178,74 +158,60 @@ export class PlanningService {
         })
       : await this.selectPlanningRole(orgId);
 
-    // Create a planning task using the system-reserved 'plan' type
-    const titlePreview = initialMessage.length > 50
-      ? initialMessage.slice(0, 50) + '...'
-      : initialMessage;
-    const task = await this.taskService.create({
-      orgId,
-      parentId: null,
-      type: PLANNING_TASK_TYPE,
-      title: `Planning: ${titlePreview}`,
-      description: `Planning session initiated by user.\n\nUser's initial message:\n${initialMessage}`,
-      assigneeRoleId: role.id,
+    // Create session + store initial message
+    const session = await this.sessionService.startSession(orgId, 'planning', role.id, initialMessage);
+
+    this.logger.info('Planning session created', { sessionId: session.id, roleId: role.id, orgId });
+
+    // Fire first execution in background (skip user message — already stored by startSession)
+    this.sessionRunCoordinator.executeInSession(session.id, initialMessage, true).catch((err) => {
+      this.logger.error('Planning session first execution failed', { sessionId: session.id, error: String(err) });
     });
 
-    this.logger.info('Planning task created', { taskId: task.id, roleId: role.id, orgId });
-
-    // Start the run
-    const run = await this.executionEngine.startRun(
-      role.id,
-      task.id,
-      orgId,
-      'task_assigned',
-    );
-
     return {
-      runId: run.id,
-      taskId: task.id,
+      sessionId: session.id,
       roleId: role.id,
     };
   }
 
   /**
-   * Detect an active (incomplete) planning session for an organization.
-   * Looks for planning tasks with active conversation workflows.
+   * Detect an active planning session for an organization.
+   * Checks session-based first, then falls back to legacy task-based detection.
    */
   async getActivePlanningSession(orgId: string): Promise<ActivePlanningSession | null> {
-    if (!this.conversationWorkflowRepo) return null;
+    // 1. Check for active session-based planning
+    const session = await this.sessionService.getActiveSession(orgId, 'planning');
+    if (session) {
+      const role = await this.roleRepo.findById(session.roleId);
+      return {
+        sessionId: session.id,
+        taskId: null,
+        roleId: session.roleId,
+        roleName: role?.name ?? 'Unknown',
+      };
+    }
 
-    // Find planning tasks by type ('plan') or legacy title prefix ('Project Planning:')
+    // 2. Legacy fallback: check for task-based planning sessions
     const tasks = await this.taskRepo.findByOrgId(orgId);
     const planningTasks = tasks.filter(
       (t) => (t.type === PLANNING_TASK_TYPE || t.title.startsWith('Project Planning:')) && t.parentId === null,
     );
 
     for (const task of planningTasks) {
-      // Plan tasks use hardcoded 'done'; legacy epic tasks use schema-driven terminal check
       if (task.type === PLANNING_TASK_TYPE) {
         if (task.status === 'done') continue;
-      } else {
+      } else if (this.workflowEngine) {
         const isTerminal = await this.workflowEngine.isTerminalStatus(orgId, task.status);
         if (isTerminal) continue;
       }
 
-      // Check for active conversation workflow
       if (task.assigneeRoleId) {
-        const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(
-          task.assigneeRoleId, task.id,
-        );
-
         const role = await this.roleRepo.findById(task.assigneeRoleId);
-
         return {
+          sessionId: null,
           taskId: task.id,
-          taskTitle: task.title,
           roleId: task.assigneeRoleId,
           roleName: role?.name ?? 'Unknown',
-          discussionGroupId: workflow?.discussionGroupId ?? null,
-          workflowId: workflow?.id ?? null,
-          workflowState: workflow?.state ?? null,
         };
       }
     }
@@ -254,43 +220,34 @@ export class PlanningService {
   }
 
   /**
-   * Discard an active planning session: cancel workflows and transition task to terminal.
+   * Discard an active planning session.
+   * Handles both session-based and legacy task-based sessions.
    */
-  async discardPlanningSession(taskId: string): Promise<void> {
-    const task = await this.taskRepo.findById(taskId);
-    if (!task) return;
-
-    // Cancel any active conversation workflow
-    if (task.assigneeRoleId && this.conversationWorkflowRepo) {
-      try {
-        const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(
-          task.assigneeRoleId, task.id,
-        );
-        if (workflow) {
-          await this.conversationWorkflowRepo.updateState(workflow.id, 'cancelled');
-        }
-      } catch (err) {
-        this.logger.warn('Failed to cancel conversation workflow during planning discard', {
-          taskId, error: String(err),
-        });
-      }
+  async discardPlanningSession(sessionOrTaskId: string): Promise<void> {
+    // Try session-based cancel first
+    const session = await this.sessionService.getSession(sessionOrTaskId);
+    if (session) {
+      await this.sessionService.cancelSession(sessionOrTaskId);
+      this.logger.info('Planning session discarded (session-based)', { sessionId: sessionOrTaskId });
+      return;
     }
 
-    // Move plan task to terminal status.
-    // Plan tasks use hardcoded 'done' status (bypasses schema validation).
+    // Legacy fallback: task-based discard
+    const task = await this.taskRepo.findById(sessionOrTaskId);
+    if (!task) return;
+
+    // Move plan task to terminal status
     try {
-      await this.taskService.updateStatus(taskId, 'done');
+      await this.taskRepo.updateStatus(sessionOrTaskId, 'done');
     } catch {
       // May fail if already terminal — best-effort
     }
 
-    this.logger.info('Planning session discarded', { taskId });
+    this.logger.info('Planning session discarded (legacy task-based)', { taskId: sessionOrTaskId });
   }
 
   /**
    * Get available planning roles for an organization.
-   * Returns the system planning role (always present) and
-   * the template-configured planning role (if any).
    */
   async getAvailablePlanningRoles(orgId: string): Promise<PlanningRoleOption[]> {
     const roles = await this.roleRepo.findByOrgId(orgId);
@@ -303,13 +260,11 @@ export class PlanningService {
     }
 
     // Template-configured planning role
-    if (this.orgRepo) {
-      const org = await this.orgRepo.findById(orgId);
-      if (org?.planningRoleId) {
-        const templateRole = roles.find((r) => r.id === org.planningRoleId && r.status === 'active');
-        if (templateRole) {
-          options.push({ roleId: templateRole.id, roleName: templateRole.name, source: 'template' });
-        }
+    const org = await this.orgRepo.findById(orgId);
+    if (org?.planningRoleId) {
+      const templateRole = roles.find((r) => r.id === org.planningRoleId && r.status === 'active');
+      if (templateRole) {
+        options.push({ roleId: templateRole.id, roleName: templateRole.name, source: 'template' });
       }
     }
 
@@ -325,52 +280,23 @@ export class PlanningService {
   }
 
   /**
-   * Switch the planning role for an active planning session.
-   * Only allowed when conversation workflow is in waiting_for_reply state.
+   * Switch the planning role for an active session.
    */
-  async switchPlanningRole(taskId: string, newRoleId: string): Promise<{ previousRoleId: string; newRoleId: string }> {
-    const task = await this.taskRepo.findById(taskId);
-    if (!task) throw new ValidationError('Planning task not found');
-    if (task.type !== PLANNING_TASK_TYPE) throw new ValidationError('Task is not a planning session');
+  async switchPlanningRole(sessionId: string, newRoleId: string): Promise<{ previousRoleId: string; newRoleId: string }> {
+    const session = await this.sessionService.getSession(sessionId);
+    if (!session) throw new ValidationError('Planning session not found');
+    if (session.status !== 'active') throw new ValidationError('Planning session is not active');
 
-    const previousRoleId = task.assigneeRoleId;
-    if (!previousRoleId) throw new ValidationError('Planning task has no assignee');
+    const previousRoleId = session.roleId;
     if (previousRoleId === newRoleId) return { previousRoleId, newRoleId };
 
     // Verify new role exists
     const newRole = await this.roleRepo.findById(newRoleId);
     if (!newRole) throw new ValidationError('Target role not found');
 
-    // Verify conversation is in waiting_for_reply
-    if (this.conversationWorkflowRepo && previousRoleId) {
-      const workflow = await this.conversationWorkflowRepo.findActiveByRoleAndTask(previousRoleId, taskId);
-      if (workflow && workflow.state !== 'waiting_for_reply') {
-        throw new ValidationError('Can only switch roles when AI is waiting for your reply');
-      }
-    }
+    await this.sessionService.switchRole(sessionId, newRoleId);
 
-    // Update task assignee
-    await this.taskRepo.updateAssignee(taskId, newRoleId);
-
-    // Post system message to discussion group
-    if (this.discussionRepo) {
-      try {
-        const group = await this.discussionRepo.findGroupByTaskNodeId(taskId);
-        if (group) {
-          await this.discussionRepo.postMessage({
-            groupId: group.id,
-            authorRoleId: null,
-            authorType: 'system',
-            content: `Planning role switched to ${newRole.name}`,
-            voteTag: null,
-          });
-        }
-      } catch (err) {
-        this.logger.warn('Failed to post role switch system message', { taskId, error: String(err) });
-      }
-    }
-
-    this.logger.info('Planning role switched', { taskId, from: previousRoleId, to: newRoleId });
+    this.logger.info('Planning role switched', { sessionId, from: previousRoleId, to: newRoleId });
     return { previousRoleId, newRoleId };
   }
 }

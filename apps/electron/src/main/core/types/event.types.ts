@@ -15,6 +15,8 @@ export type DomainEventType =
   | 'run:failed'
   | 'run:cancelled'
   | 'run:log'
+  | 'run:assistant-text'
+  | 'run:status'
   | 'run:timed-out'
   | 'org:created'
   | 'org:updated'
@@ -45,7 +47,13 @@ export type DomainEventType =
   | 'discussion-summary:updated'
   | 'schema:updated'
   | 'behavior:executed'
-  | 'planning:plan-ready';
+  | 'planning:plan-ready'
+  // Session events
+  | 'session:created'
+  | 'session:message-added'
+  | 'session:run-completed'
+  | 'session:completed'
+  | 'session:cancelled';
 
 export interface DomainEvent<T = unknown> {
   type: DomainEventType;

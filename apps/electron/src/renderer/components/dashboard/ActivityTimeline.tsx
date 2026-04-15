@@ -76,9 +76,9 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             timestamp: run.finishedAt ?? run.createdAt,
             type: 'run_succeeded',
             title: t.activity.runSucceeded,
-            description: `${roleName(run.roleId)} completed work on "${taskTitle(run.taskNodeId)}"`,
+            description: `${roleName(run.roleId)} completed work on "${taskTitle(run.taskNodeId ?? '')}"`,
             roleId: run.roleId,
-            taskId: run.taskNodeId,
+            taskId: run.taskNodeId ?? undefined,
           });
         } else if (run.status === 'failed') {
           timelineEvents.push({
@@ -86,9 +86,9 @@ export function ActivityTimeline({ orgId, roles, tasks }: ActivityTimelineProps)
             timestamp: run.finishedAt ?? run.createdAt,
             type: 'run_failed',
             title: t.activity.runFailed,
-            description: `${roleName(run.roleId)} failed on "${taskTitle(run.taskNodeId)}"`,
+            description: `${roleName(run.roleId)} failed on "${taskTitle(run.taskNodeId ?? '')}"`,
             roleId: run.roleId,
-            taskId: run.taskNodeId,
+            taskId: run.taskNodeId ?? undefined,
           });
         }
       }

@@ -30,6 +30,8 @@ export class EventBroadcaster {
     this.eventBus.on('run:failed', forward);
     this.eventBus.on('run:cancelled', forward);
     this.eventBus.on('run:log', forward);
+    this.eventBus.on('run:assistant-text', forward);
+    this.eventBus.on('run:status', forward);
 
     // Discussion events
     this.eventBus.on('discussion:group-created', forward);
@@ -44,6 +46,12 @@ export class EventBroadcaster {
     this.eventBus.on('conversation:reply-posted', forward);
     this.eventBus.on('conversation:resolved', forward);
     this.eventBus.on('conversation:cancelled', forward);
+
+    // Session events (session:created not forwarded — frontend knows when it starts a session)
+    this.eventBus.on('session:message-added', forward);
+    this.eventBus.on('session:run-completed', forward);
+    this.eventBus.on('session:completed', forward);
+    this.eventBus.on('session:cancelled', forward);
 
     this.logger.info('EventBroadcaster started — forwarding domain events to renderer');
   }
@@ -108,6 +116,22 @@ export class EventBroadcaster {
           runId: payload.runId,
           stream: payload.stream,
           chunk: payload.chunk,
+        };
+        break;
+
+      case 'run:assistant-text':
+        desktopEvent = {
+          type: 'run:assistant-text',
+          runId: payload.runId,
+          text: payload.text,
+        };
+        break;
+
+      case 'run:status':
+        desktopEvent = {
+          type: 'run:status',
+          runId: payload.runId,
+          status: payload.status,
         };
         break;
 
@@ -188,6 +212,39 @@ export class EventBroadcaster {
           type: 'discussion-summary:updated',
           groupId: payload.groupId,
           summary: payload.summary,
+        };
+        break;
+
+      // Session events
+      case 'session:message-added':
+        desktopEvent = {
+          type: 'session:message-added',
+          sessionId: payload.sessionId,
+          authorType: payload.authorType,
+        };
+        break;
+
+      case 'session:run-completed':
+        desktopEvent = {
+          type: 'session:run-completed',
+          sessionId: payload.sessionId,
+          status: payload.status,
+        };
+        break;
+
+      case 'session:completed':
+        desktopEvent = {
+          type: 'session:completed',
+          sessionId: payload.sessionId,
+          orgId: payload.orgId,
+        };
+        break;
+
+      case 'session:cancelled':
+        desktopEvent = {
+          type: 'session:cancelled',
+          sessionId: payload.sessionId,
+          orgId: payload.orgId,
         };
         break;
 

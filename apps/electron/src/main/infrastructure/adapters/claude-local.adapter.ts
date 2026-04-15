@@ -92,18 +92,45 @@ export class ClaudeLocalAdapter implements ICliAdapter {
     const timeoutMs = ctx.cliConfig.timeoutMs ?? 0;
     const graceMs = DEFAULT_GRACE_MS;
 
+    const t0 = Date.now();
+    console.log(`[claude-cli] [${ctx.runId.slice(0, 8)}] Starting CLI execution`, {
+      command,
+      cwd: ctx.projectDir,
+      sessionId: ctx.sessionId ?? null,
+      retry: isRetryAfterSessionError,
+      promptLength: ctx.prompt.length,
+      args: args.filter(a => !a.startsWith('--mcp-config')).join(' '),
+    });
+
     // Pre-flight: verify command exists in PATH
     await ensureCommandResolvable(command, ctx.projectDir, env);
+    console.log(`[claude-cli] [${ctx.runId.slice(0, 8)}] Command resolved in ${Date.now() - t0}ms`);
 
     // Spawn via shared process runner (handles StringDecoder, chcp 65001, GBK, etc.)
+    let firstStdoutReceived = false;
+    const wrappedOnLog = (stream: 'stdout' | 'stderr', chunk: string) => {
+      if (stream === 'stdout' && !firstStdoutReceived) {
+        firstStdoutReceived = true;
+        console.log(`[claude-cli] [${ctx.runId.slice(0, 8)}] First stdout received at +${Date.now() - t0}ms (${chunk.length} bytes)`);
+      }
+      ctx.onLog(stream, chunk);
+    };
+
     const proc = await runChildProcess(ctx.runId, command, args, {
       cwd: ctx.projectDir,
       env,
       stdin: ctx.prompt,
       timeoutMs,
       graceMs,
-      onLog: ctx.onLog,
+      onLog: wrappedOnLog,
       childTracker: this.childTracker,
+    });
+
+    console.log(`[claude-cli] [${ctx.runId.slice(0, 8)}] CLI exited in ${Date.now() - t0}ms`, {
+      exitCode: proc.exitCode,
+      stdoutLength: proc.stdout.length,
+      stderrLength: proc.stderr.length,
+      timedOut: proc.timedOut,
     });
 
     return this.processResult(ctx, proc, isRetryAfterSessionError, timeoutMs);

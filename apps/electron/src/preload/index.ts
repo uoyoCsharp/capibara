@@ -93,6 +93,15 @@ const api: CapibaraApi = {
   schemaImpactAnalysis: (input) => ipcRenderer.invoke(IPC_CHANNELS.schemaImpactAnalysis, input),
   getWorkflowTemplates: () => ipcRenderer.invoke(IPC_CHANNELS.getWorkflowTemplates),
 
+  // Session
+  openSessionLogFolder: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.openSessionLogFolder, sessionId),
+  startSession: (input) => ipcRenderer.invoke(IPC_CHANNELS.startSession, input),
+  sendSessionMessage: (input) => ipcRenderer.invoke(IPC_CHANNELS.sendSessionMessage, input),
+  getActiveSession: (orgId, type) => ipcRenderer.invoke(IPC_CHANNELS.getActiveSession, orgId, type),
+  getSessionMessages: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.getSessionMessages, sessionId),
+  cancelSession: (input) => ipcRenderer.invoke(IPC_CHANNELS.cancelSession, input),
+  switchSessionRole: (input) => ipcRenderer.invoke(IPC_CHANNELS.switchSessionRole, input),
+
   // Planning
   startPlanningRun: (input) => ipcRenderer.invoke(IPC_CHANNELS.startPlanningRun, input),
   getActivePlanningSession: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActivePlanningSession, orgId),

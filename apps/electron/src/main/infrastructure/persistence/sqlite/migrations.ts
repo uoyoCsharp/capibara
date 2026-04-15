@@ -293,6 +293,91 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 5,
+    description: 'Add sessions and session_messages tables',
+    up: (db) => {
+      db.exec(`
+        -- ═══════════════════════════════════════════════
+        -- 14. Sessions (human-AI conversations)
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK(type IN ('planning', 'adhoc')),
+          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'cancelled')),
+          cli_session_id TEXT,
+          metadata TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_sessions_org_status ON sessions(org_id, status);
+        CREATE INDEX idx_sessions_org_type ON sessions(org_id, type, status);
+
+        -- Enforce at most one active session per org+type at DB level
+        CREATE UNIQUE INDEX idx_sessions_unique_active
+          ON sessions(org_id, type) WHERE status = 'active';
+
+        -- ═══════════════════════════════════════════════
+        -- 15. Session Messages
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE IF NOT EXISTS session_messages (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          author_type TEXT NOT NULL CHECK(author_type IN ('human', 'ai', 'system')),
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_session_messages_session ON session_messages(session_id, created_at);
+      `);
+    },
+  },
+  {
+    version: 6,
+    description: 'Make runs.task_node_id nullable and add session reference',
+    up: (db) => {
+      // SQLite does not support ALTER COLUMN, so recreate the table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS runs_new (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          task_node_id TEXT REFERENCES task_nodes(id) ON DELETE CASCADE,
+          role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
+          trigger TEXT NOT NULL,
+          started_at TEXT,
+          finished_at TEXT,
+          cost_usd REAL NOT NULL DEFAULT 0,
+          token_count INTEGER NOT NULL DEFAULT 0,
+          session_id TEXT,
+          run_session_id TEXT REFERENCES sessions(id),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        INSERT INTO runs_new (id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, token_count, session_id, created_at)
+          SELECT id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd, token_count, session_id, created_at FROM runs;
+
+        DROP TABLE runs;
+        ALTER TABLE runs_new RENAME TO runs;
+      `);
+    },
+  },
+  {
+    version: 7,
+    description: 'Close legacy planning tasks now that sessions handle planning',
+    up: (db) => {
+      // Mark all non-terminal 'plan' type tasks as 'done' so they don't
+      // block new session-based planning. Safe: plan tasks used a hardcoded
+      // 'done' terminal status, not schema-driven.
+      db.exec(`
+        UPDATE task_nodes SET status = 'done', updated_at = datetime('now')
+        WHERE type = 'plan' AND status != 'done';
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

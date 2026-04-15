@@ -12,7 +12,7 @@ import type { RecipientTarget } from '@main/core/types/conversation.types.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { TaskService } from '@main/application/tasks/task.service.js';
-import type { ExecutionEngine } from '@main/application/execution/execution.engine.js';
+import type { RunEngine } from '@main/application/execution/run.engine.js';
 import type { ConversationEventLogger } from '@main/infrastructure/persistence/sqlite/conversation-event.logger.js';
 import type { PendingPlanStore } from '@main/application/planning/pending-plan.store.js';
 import type { PlanTaskNode } from '@shared/contracts.js';
@@ -35,7 +35,7 @@ export class McpToolHandlers {
   private conversationService: IConversationWorkflowService | null = null;
   private conversationWorkflowRepo: IConversationWorkflowRepository | null = null;
   private conversationEventLogger: ConversationEventLogger | null = null;
-  private executionEngine: ExecutionEngine | null = null;
+  private runEngine: RunEngine | null = null;
   private workflowEngine!: IWorkflowEngine;
   private pendingPlanStore: PendingPlanStore | null = null;
 
@@ -59,8 +59,8 @@ export class McpToolHandlers {
     this.conversationEventLogger = eventLogger ?? null;
   }
 
-  setExecutionEngine(engine: ExecutionEngine): void {
-    this.executionEngine = engine;
+  setRunEngine(engine: RunEngine): void {
+    this.runEngine = engine;
   }
 
   setWorkflowEngine(engine: IWorkflowEngine): void {
@@ -506,10 +506,10 @@ export class McpToolHandlers {
     const run = runId ? await this.runRepo.findById(runId) : null;
     const resolvedRoleId = run?.roleId ?? task.assigneeRoleId ?? '';
     // Prefer in-memory sessionId (run still in-flight) over DB value
-    if (!this.executionEngine) {
-      this.logger.warn('executionEngine not set, sessionId resolution will fall back to DB', { runId });
+    if (!this.runEngine) {
+      this.logger.warn('runEngine not set, sessionId resolution will fall back to DB', { runId });
     }
-    const resolvedSessionId = this.executionEngine?.getRunSessionId(runId) ?? run?.sessionId ?? null;
+    const resolvedSessionId = this.runEngine?.getRunSessionId(runId) ?? run?.sessionId ?? null;
 
     const workflow = await this.conversationService.createWorkflow({
       orgId: task.orgId,

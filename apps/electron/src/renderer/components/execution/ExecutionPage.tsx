@@ -233,7 +233,7 @@ export function ExecutionPage({ onNavigate }: { onNavigate?: (section: SectionId
   const runningTaskIds = useMemo(() => {
     const ids = new Set<string>();
     for (const run of runs) {
-      if (run.status === 'running' || run.status === 'queued') {
+      if ((run.status === 'running' || run.status === 'queued') && run.taskNodeId) {
         ids.add(run.taskNodeId);
       }
     }
@@ -492,7 +492,7 @@ export function ExecutionPage({ onNavigate }: { onNavigate?: (section: SectionId
                   key={run.id}
                   run={run}
                   isSelected={selectedRunId === run.id}
-                  taskTitle={taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)}
+                  taskTitle={run.taskNodeId ? (taskTitles.get(run.taskNodeId) ?? run.taskNodeId.slice(0, 8)) : 'Session run'}
                   roleName={roleNames.get(run.roleId) ?? t.common.unknown}
                   onSelect={() => setSelectedRunId(run.id === selectedRunId ? null : run.id)}
                   onCancel={(runId) => void handleCancelRun(runId)}

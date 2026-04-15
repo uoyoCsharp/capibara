@@ -20,7 +20,7 @@ import {
   PENDING_WAKE_REPO_TOKEN,
   COST_ENTRY_REPO_TOKEN,
 } from '@main/core/tokens.js';
-import type { ExecutionEngine } from '../execution/execution.engine.js';
+import type { TaskRunCoordinator } from '../execution/task-run.coordinator.js';
 import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
 import { WakeGateValidator } from './wake-gate.validator.js';
 import { RetryScheduler } from './retry.scheduler.js';
@@ -46,7 +46,7 @@ interface WakeTarget {
 export class OrgOrchestrator {
   // Risk 8: per-org event serialization queue
   private orgQueues = new Map<string, Promise<void>>();
-  private executionEngine!: ExecutionEngine;
+  private taskRunCoordinator!: TaskRunCoordinator;
   private workflowEngine!: IWorkflowEngine;
 
   private readonly gateValidator: WakeGateValidator;
@@ -70,9 +70,9 @@ export class OrgOrchestrator {
     this.budgetGuard = new BudgetGuard(logger, roleRepo);
   }
 
-  /** Inject ExecutionEngine after construction to break circular dependency. */
-  setExecutionEngine(engine: ExecutionEngine): void {
-    this.executionEngine = engine;
+  /** Inject TaskRunCoordinator after construction to break circular dependency. */
+  setTaskRunCoordinator(coordinator: TaskRunCoordinator): void {
+    this.taskRunCoordinator = coordinator;
   }
 
   /** Inject WorkflowEngine after construction. */
@@ -456,7 +456,7 @@ export class OrgOrchestrator {
     this.logger.info('Waking role', { roleId, trigger, taskNodeId });
 
     try {
-      await this.executionEngine.startRun(roleId, taskNodeId, orgId, trigger);
+      await this.taskRunCoordinator.executeForTask(roleId, taskNodeId, orgId, trigger);
       return true;
     } catch (err) {
       this.logger.error('Failed to start run for wake', {

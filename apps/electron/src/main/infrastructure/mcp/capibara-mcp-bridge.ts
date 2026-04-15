@@ -20,6 +20,12 @@ function getArg(name: string): string {
 const runId = getArg('run-id');
 const token = getArg('token');
 const port = parseInt(getArg('port'), 10);
+const VALID_CONTEXTS = ['session:planning', 'session:adhoc', 'task:execution'];
+const rawContext = getArg('context') || 'task:execution';
+const mcpContext = VALID_CONTEXTS.includes(rawContext) ? rawContext : 'task:execution';
+if (rawContext && !VALID_CONTEXTS.includes(rawContext)) {
+  process.stderr.write(`WARNING: Unknown MCP context "${rawContext}", falling back to task:execution\n`);
+}
 
 if (!runId || !token || !port) {
   process.stderr.write('Missing required args: --run-id, --token, --port\n');
@@ -27,9 +33,12 @@ if (!runId || !token || !port) {
 }
 
 // ─── MCP Tool Definitions ──────────────────────────────────────────
-const TOOLS = [
+// Each tool has a `contexts` array specifying which execution contexts it's available in.
+// Tools are filtered by the `--context` CLI arg before being exposed to Claude.
+const ALL_TOOLS = [
   {
     name: 'capibara_task_complete',
+    contexts: ['task:execution'],
     description: 'Mark your assigned task as completed and submit results for review.',
     inputSchema: {
       type: 'object',
@@ -43,6 +52,7 @@ const TOOLS = [
   },
   {
     name: 'capibara_task_create_child',
+    contexts: ['task:execution'],
     description: 'Create a child task under a parent task. Type hierarchy: epic→story|spike, story→task|bug|chore|spike, task→subtask.',
     inputSchema: {
       type: 'object',
@@ -58,6 +68,7 @@ const TOOLS = [
   },
   {
     name: 'capibara_discussion_post',
+    contexts: ['task:execution'],
     description: 'Post a message or vote to a discussion group. Do NOT use this for task reviews — capibara_task_review posts automatically.',
     inputSchema: {
       type: 'object',
@@ -72,6 +83,7 @@ const TOOLS = [
   },
   {
     name: 'capibara_context',
+    contexts: ['session:planning', 'session:adhoc', 'task:execution'],
     description: 'Query context information. Use query="task" with a task ID, query="org_tree" with an org ID, or query="discussion_summary" with a discussion group ID.',
     inputSchema: {
       type: 'object',
@@ -84,6 +96,7 @@ const TOOLS = [
   },
   {
     name: 'capibara_task_review',
+    contexts: ['task:execution'],
     description: 'Review a child task as a parent role. Approve or request revision with feedback. Automatically posts review feedback to the discussion group — do NOT call capibara_discussion_post separately.',
     inputSchema: {
       type: 'object',
@@ -98,6 +111,7 @@ const TOOLS = [
   },
   {
     name: 'capibara_conversation',
+    contexts: ['task:execution'],
     description: 'Manage conversation workflows. Use action="ask" to post a question and wait for a reply, or action="resolve" to mark a conversation as resolved.',
     inputSchema: {
       type: 'object',
@@ -119,7 +133,39 @@ const TOOLS = [
       required: ['action', 'taskId'],
     },
   },
+  {
+    name: 'capibara_plan_tasks',
+    contexts: ['session:planning'],
+    description: 'Submit a structured task plan for user review. The plan will be presented to the user for approval before any tasks are created.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        summary: { type: 'string', description: 'Brief summary of the plan' },
+        tasks: {
+          type: 'array',
+          description: 'Array of task nodes forming the plan tree',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Task title' },
+              type: { type: 'string', description: 'Task type (e.g., epic, story, task)' },
+              description: { type: 'string', description: 'Task description' },
+              assigneeRoleName: { type: 'string', description: 'Name of role to assign to (optional)' },
+              children: { type: 'array', description: 'Child tasks (recursive)' },
+            },
+            required: ['title', 'type', 'description'],
+          },
+        },
+      },
+      required: ['summary', 'tasks'],
+    },
+  },
 ];
+
+// Filter tools based on execution context
+const TOOLS = ALL_TOOLS
+  .filter((t) => t.contexts.includes(mcpContext))
+  .map(({ contexts: _contexts, ...tool }) => tool);
 
 // ─── HTTP Client to Main Process ────────────────────────────────────
 function callMainProcess(toolName: string, toolArgs: Record<string, unknown>): Promise<unknown> {

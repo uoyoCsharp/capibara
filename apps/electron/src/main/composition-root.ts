@@ -20,7 +20,12 @@ import {
   PROMPT_BUILDER_TOKEN,
   EXECUTOR_TOKEN,
   DISCUSSION_SERVICE_TOKEN,
-  EXECUTION_ENGINE_TOKEN,
+  RUN_ENGINE_TOKEN,
+  SESSION_REPO_TOKEN,
+  SESSION_MESSAGE_REPO_TOKEN,
+  SESSION_SERVICE_TOKEN,
+  SESSION_RUN_COORDINATOR_TOKEN,
+  TASK_RUN_COORDINATOR_TOKEN,
   MCP_IPC_SERVER_TOKEN,
   EVENT_DIGESTER_TOKEN,
   ORG_ORCHESTRATOR_TOKEN,
@@ -66,7 +71,12 @@ import { ConsensusDetector } from './application/consensus/consensus.detector.js
 import { DiscussionService } from './application/discussion/discussion.service.js';
 import { ExecutionContext } from './application/context/execution.context.js';
 import { OrgContext } from './application/context/org.context.js';
-import { ExecutionEngine } from './application/execution/execution.engine.js';
+import { RunEngine } from './application/execution/run.engine.js';
+import { TaskRunCoordinator } from './application/execution/task-run.coordinator.js';
+import { SessionRunCoordinator } from './application/session/session-run.coordinator.js';
+import { SessionService } from './application/session/session.service.js';
+import { SqliteSessionRepository } from './infrastructure/persistence/sqlite/sqlite-session.repository.js';
+import { SqliteSessionMessageRepository } from './infrastructure/persistence/sqlite/sqlite-session-message.repository.js';
 import { OrgOrchestrator } from './application/orchestrator/org.orchestrator.js';
 import { EventDigester } from './application/progress/event.digester.js';
 import { NarrativeEngine } from './application/progress/narrative.engine.js';
@@ -97,6 +107,7 @@ import { registerSettingsHandlers } from './ipc-handlers/settings.handlers.js';
 import { registerConversationHandlers } from './ipc-handlers/conversation.handlers.js';
 import { registerWorkflowSchemaHandlers } from './ipc-handlers/workflow-schema.handlers.js';
 import { registerSystemHandlers } from './ipc-handlers/system.handlers.js';
+import { registerSessionHandlers } from './ipc-handlers/session.handlers.js';
 import { registerPlanningHandlers } from './ipc-handlers/planning.handlers.js';
 import { PlanningService } from './application/planning/planning.service.js';
 import { PendingPlanStore } from './application/planning/pending-plan.store.js';
@@ -236,7 +247,14 @@ export async function bootstrap(): Promise<void> {
   // ─── File Log Service ───────────────────────────────────
   const fileLogService = new FileLogService(config.logging.logDir, logger);
 
-  // ─── Execution Engine & MCP ──────────────────────────────
+  // ─── Session Repositories ────────────────────────────────
+  const sessionRepo = new SqliteSessionRepository(sqliteConn);
+  container.register(SESSION_REPO_TOKEN, { useValue: sessionRepo });
+
+  const sessionMessageRepo = new SqliteSessionMessageRepository(sqliteConn);
+  container.register(SESSION_MESSAGE_REPO_TOKEN, { useValue: sessionMessageRepo });
+
+  // ─── RunEngine & MCP ───────────────────────────────────
   const orgContext = new OrgContext(orgRepo, roleRepo, taskRepo, logger);
   const executionContext = new ExecutionContext(taskRepo, roleRepo, skillRepo, discussionRepo, orgContext);
 
@@ -249,11 +267,27 @@ export async function bootstrap(): Promise<void> {
   const mcpIpcServer = new McpIpcServer(logger, mcpToolRegistry);
   container.register<McpIpcServer>(MCP_IPC_SERVER_TOKEN, { useValue: mcpIpcServer });
 
-  const executionEngine = new ExecutionEngine(
-    config, logger, eventBus, orgRepo, runRepo, roleRepo, taskRepo, costRepo,
-    executor, promptBuilder, executionContext, mcpConfigGen, mcpIpcServer,
-    fileLogService, taskStateMachine,
+  const runEngine = new RunEngine(
+    config, logger, eventBus, orgRepo, runRepo, costRepo,
+    executor, mcpConfigGen, mcpIpcServer, fileLogService,
   );
+  container.register(RUN_ENGINE_TOKEN, { useValue: runEngine });
+
+  // ─── Coordinators & Session Service ─────────────────────
+  const taskRunCoordinator = new TaskRunCoordinator(
+    runEngine, logger, eventBus, roleRepo, taskRepo, runRepo, orgRepo,
+    promptBuilder, settingsRepo, executionContext, taskStateMachine, taskService,
+  );
+  container.register(TASK_RUN_COORDINATOR_TOKEN, { useValue: taskRunCoordinator });
+
+  const sessionService = new SessionService(sessionRepo, sessionMessageRepo, eventBus, logger);
+  container.register(SESSION_SERVICE_TOKEN, { useValue: sessionService });
+
+  const sessionRunCoordinator = new SessionRunCoordinator(
+    runEngine, sessionRepo, sessionMessageRepo, roleRepo, orgRepo, skillRepo,
+    promptBuilder, settingsRepo, eventBus, logger,
+  );
+  container.register(SESSION_RUN_COORDINATOR_TOKEN, { useValue: sessionRunCoordinator });
 
   // Start MCP IPC server and configure the config generator with its port
   try {
@@ -265,17 +299,17 @@ export async function bootstrap(): Promise<void> {
 
   // ─── Planning Service ──────────────────────────────────────
   const pendingPlanStore = new PendingPlanStore();
-  const planningService = new PlanningService(roleRepo, skillRepo, taskRepo, logger);
-  planningService.setExecutionEngine(executionEngine);
-  planningService.setTaskService(taskService);
-  planningService.setWorkflowEngine(workflowEngine);
+  const planningService = new PlanningService(
+    roleRepo, skillRepo, taskRepo, orgRepo, logger,
+    sessionService, sessionRunCoordinator,
+  );
 
   // ─── Orchestrator (Epic 7) ─────────────────────────────────
   const orchestrator = new OrgOrchestrator(
     config, logger, eventBus, taskRepo, roleRepo, runRepo,
     pendingWakeRepo, costRepo,
   );
-  orchestrator.setExecutionEngine(executionEngine);
+  orchestrator.setTaskRunCoordinator(taskRunCoordinator);
   orchestrator.setTaskStateMachine(taskStateMachine);
   orchestrator.setWorkflowEngine(workflowEngine);
   try { orchestrator.start(); } catch (err) {
@@ -317,17 +351,13 @@ export async function bootstrap(): Promise<void> {
 
   // Wire conversation deps into existing services
   mcpToolHandlers.setConversationDeps(conversationWorkflowService, conversationWorkflowRepo, conversationEventLogger);
-  mcpToolHandlers.setExecutionEngine(executionEngine);
+  mcpToolHandlers.setRunEngine(runEngine);
   mcpToolHandlers.setWorkflowEngine(workflowEngine);
   mcpToolHandlers.setPendingPlanStore(pendingPlanStore);
-  planningService.setConversationWorkflowRepo(conversationWorkflowRepo);
-  planningService.setOrgRepo(orgRepo);
-  planningService.setDiscussionRepo(discussionRepo);
+  planningService.setWorkflowEngine(workflowEngine);
   discussionService.setConversationDeps(conversationWorkflowRepo, conversationWorkflowService);
-  executionEngine.setConversationWorkflowRepo(conversationWorkflowRepo);
-  executionEngine.setWorkflowEngine(workflowEngine);
-  executionEngine.setTaskService(taskService);
-  executionEngine.setSettingsRepo(settingsRepo);
+  taskRunCoordinator.setWorkflowEngine(workflowEngine);
+  taskRunCoordinator.setConversationWorkflowRepo(conversationWorkflowRepo);
   executionContext.setConversationDeps(conversationWorkflowRepo, conversationContextBuilder);
   executionContext.setWorkflowEngine(workflowEngine);
 
@@ -399,7 +429,7 @@ export async function bootstrap(): Promise<void> {
   registerTemplateHandlers(templateService, workflowTemplateService, logger);
   registerTaskHandlers(taskService, logger);
   registerDiscussionHandlers(discussionService, logger);
-  registerRunHandlers(runRepo, orgRepo, executionEngine, fileLogService, logger);
+  registerRunHandlers(runRepo, orgRepo, taskRunCoordinator, runEngine, fileLogService, logger);
   registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger, workflowEngine);
   registerNarrativeHandlers(narrativeEngine, costRepo, orgRepo, logger);
   registerSettingsHandlers(settingsRepo, logger);
@@ -408,6 +438,7 @@ export async function bootstrap(): Promise<void> {
     eventBus, conversationEventLogger, logger, roleRepo, taskRepo, conversationWorkflowService,
   );
   registerWorkflowSchemaHandlers(workflowEngine, logger);
+  registerSessionHandlers(sessionService, sessionRunCoordinator, orgRepo, fileLogService, logger);
   registerPlanningHandlers(planningService, taskService, roleRepo, workflowEngine, pendingPlanStore, logger);
 
   // ─── OS Locale Detection (first launch) ─────────────────

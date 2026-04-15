@@ -1,5 +1,5 @@
 import { injectable } from 'tsyringe';
-import type { IPromptBuilder, PromptContext } from '@main/core/interfaces/i-prompt-builder.js';
+import type { IPromptBuilder, PromptContext, SessionPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
 import { resolveScenario, type PromptScenario } from './prompt-scenario.js';
 
 interface PromptIds {
@@ -16,6 +16,136 @@ interface PromptIds {
  */
 @injectable()
 export class PromptBuilder implements IPromptBuilder {
+
+  buildForSession(context: SessionPromptContext): string {
+    return [
+      this.buildSessionIdentity(context),
+      this.buildSessionOrgInstructions(context),
+      this.buildSessionPlanningMode(context),
+      this.buildSessionOrgRoles(context),
+      this.buildSessionTools(),
+      this.buildSessionLanguage(context),
+    ].filter(Boolean).join('\n\n');
+  }
+
+  private buildSessionIdentity(ctx: SessionPromptContext): string {
+    return `You are ${ctx.roleName}. ${ctx.rolePersona}`;
+  }
+
+  private buildSessionOrgInstructions(ctx: SessionPromptContext): string {
+    if (!ctx.orgInstructions?.trim()) return '';
+    return `## Organization Instructions\n${ctx.orgInstructions}`;
+  }
+
+  private buildSessionPlanningMode(ctx: SessionPromptContext): string {
+    const phase = ctx.phase;
+    const lines: string[] = [
+      '## Planning Mode',
+      'You are in a planning conversation with a user. Your goal is to help them define their project and create a structured task plan.',
+      '',
+      '**Process overview:** Phase A (Diverge) → Phase B (Focus) → Phase C (Structure)',
+      `**Current phase:** ${phase === 'diverge' ? 'A — Diverge' : phase === 'focus' ? 'B — Focus' : 'C — Structure'}`,
+    ];
+
+    switch (phase) {
+      case 'diverge':
+        lines.push(
+          '',
+          '**Phase A — Diverge (Brainstorming)** [ACTIVE]',
+          'Help the user explore and expand their idea using creative techniques:',
+          '',
+          '**SCAMPER Framework:**',
+          '- Substitute: What components could be replaced?',
+          '- Combine: What ideas/features could be merged?',
+          '- Adapt: What existing solutions could be adapted?',
+          '- Modify: What could be enlarged, reduced, or changed?',
+          '- Put to other uses: What else could this be used for?',
+          '- Eliminate: What could be removed to simplify?',
+          '- Reverse: What if we flipped the approach?',
+          '',
+          '**What-If Scenarios:** Challenge assumptions with "what if..." questions.',
+          '**First Principles:** Break the problem down to fundamental truths.',
+          '**Reversal Inversion:** Consider the opposite approach.',
+          '',
+          'Ask open-ended questions. Encourage broad thinking. Do NOT jump to solutions yet.',
+          'When the user has explored enough (2-3 rounds), naturally transition to Phase B.',
+        );
+        break;
+      case 'focus':
+        lines.push(
+          '',
+          '**Phase B — Focus (Product Brief)** [ACTIVE]',
+          'Narrow down to a concrete, actionable scope:',
+          '',
+          '**Problem:** What specific problem are we solving?',
+          '**Solution:** What is the proposed approach?',
+          '**Users:** Who are the target users?',
+          '**Differentiators:** What unique value does this provide?',
+          '**Scope:** What is IN scope? What is OUT?',
+          '**Success Criteria:** How will we measure success?',
+          '',
+          'Walk through each area. Summarize the focused scope for confirmation.',
+          'When scope is agreed (1-2 rounds), transition to Phase C.',
+        );
+        break;
+      case 'structure':
+        lines.push(
+          '',
+          '**Phase C — Structure (Task Decomposition)** [ACTIVE]',
+          'Decompose the agreed scope into a hierarchical task plan:',
+          '',
+          '**Epic decomposition rules:**',
+          '- Create epics for major workstreams',
+          '- Break epics into stories with BDD acceptance criteria:',
+          '  Given [context], When [action], Then [expected result]',
+          '- Stories should be independently deliverable',
+          '',
+          '**Role assignment:** Match tasks to roles based on their skills.',
+          '',
+          '**Output:** When ready, call `capibara_plan_tasks` with:',
+          '```json',
+          '{ "summary": "...", "tasks": [{ "title": "...", "type": "epic|story|task", "description": "...", "assigneeRoleName": "RoleName|null", "children": [...] }] }',
+          '```',
+          'Validate: max 50 tasks total, max 3 nesting levels.',
+        );
+        break;
+    }
+
+    lines.push(
+      '',
+      '**Guidelines:**',
+      '- The user can say "skip" at any time to jump directly to Phase C.',
+      '- Keep each phase to 2-4 conversation rounds.',
+    );
+
+    return lines.join('\n');
+  }
+
+  private buildSessionOrgRoles(ctx: SessionPromptContext): string {
+    if (!ctx.orgRoles || ctx.orgRoles.length === 0) return '';
+    const lines: string[] = ['## Available Roles for Task Assignment'];
+    for (const r of ctx.orgRoles) {
+      const skills = r.skillDescriptions.length > 0
+        ? ` — Skills: ${r.skillDescriptions.join(', ')}`
+        : '';
+      lines.push(`- ${r.name} (roleId: ${r.id})${skills}`);
+    }
+    return lines.join('\n');
+  }
+
+  private buildSessionTools(): string {
+    return [
+      '## Available System Tools',
+      '- capibara_plan_tasks: Submit a structured task plan for user review',
+      '- capibara_context: Query organization structure and task information',
+    ].join('\n');
+  }
+
+  private buildSessionLanguage(ctx: SessionPromptContext): string {
+    if (!ctx.communicationLanguage) return '';
+    const langName = ctx.communicationLanguage.startsWith('zh') ? 'Chinese (中文)' : 'English';
+    return `## Communication Language\nRespond in ${langName}. Task titles and descriptions in the final plan should be in English regardless of conversation language.`;
+  }
 
   build(context: PromptContext): string {
     const scenario = resolveScenario(context);

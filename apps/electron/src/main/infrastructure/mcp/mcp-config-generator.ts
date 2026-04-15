@@ -32,17 +32,21 @@ export class McpConfigGenerator {
     return join(dirname(__dirname), 'main', 'capibara-mcp-bridge.js');
   }
 
-  generate(runId: string, bridgePath: string, token: string): string {
+  generate(runId: string, bridgePath: string, token: string, mcpContext?: string): string {
+    const args = [
+      bridgePath,
+      `--run-id=${runId}`,
+      `--token=${token}`,
+      `--port=${this.port}`,
+    ];
+    if (mcpContext) {
+      args.push(`--context=${mcpContext}`);
+    }
     const config = {
       mcpServers: {
         capibara: {
           command: 'node',
-          args: [
-            bridgePath,
-            `--run-id=${runId}`,
-            `--token=${token}`,
-            `--port=${this.port}`,
-          ],
+          args,
         },
       },
     };

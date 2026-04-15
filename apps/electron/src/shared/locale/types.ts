@@ -545,6 +545,20 @@ export interface LocaleMessages {
     noRolesHint: string;
     rolesCount: string;
   };
+  session: {
+    starting: string;
+    thinking: string;
+    cancelled: string;
+    completed: string;
+    switchRole: string;
+    noActive: string;
+    sendMessage: string;
+    cancelConfirm: string;
+    cancelConfirmMessage: string;
+    failedToStart: string;
+    failedToSend: string;
+    failedToCancel: string;
+  };
   planning: {
     startNewProject: string;
     startNewProjectTooltip: string;
@@ -555,6 +569,7 @@ export interface LocaleMessages {
     inputPlaceholderReply: string;
     thinking: string;
     thinkingElapsed: string;
+    streaming: string;
     cancelSession: string;
     cancelConfirm: string;
     cancelConfirmMessage: string;

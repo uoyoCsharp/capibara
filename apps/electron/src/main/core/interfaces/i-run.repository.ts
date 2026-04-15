@@ -2,7 +2,7 @@ import type { Run, RunStatus, WakeTrigger } from '../types/domain.types.js';
 
 export interface CreateRunInput {
   orgId: string;
-  taskNodeId: string;
+  taskNodeId: string | null;
   roleId: string;
   trigger: WakeTrigger;
 }

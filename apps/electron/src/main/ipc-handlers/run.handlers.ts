@@ -4,7 +4,8 @@ import type { DesktopResult } from '@shared/contracts.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
 import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
-import type { ExecutionEngine } from '../application/execution/execution.engine.js';
+import type { TaskRunCoordinator } from '../application/execution/task-run.coordinator.js';
+import type { RunEngine } from '../application/execution/run.engine.js';
 import type { FileLogService } from '../infrastructure/logging/file-log.service.js';
 
 function ok<T>(data: T): DesktopResult<T> {
@@ -18,7 +19,8 @@ function fail<T>(code: string, message: string): DesktopResult<T> {
 export function registerRunHandlers(
   runRepo: IRunRepository,
   orgRepo: IOrganizationRepository,
-  executionEngine: ExecutionEngine,
+  taskRunCoordinator: TaskRunCoordinator,
+  runEngine: RunEngine,
   fileLogService: FileLogService,
   logger: ILogger,
 ): void {
@@ -74,11 +76,12 @@ export function registerRunHandlers(
       const org = await orgRepo.findById(run.orgId);
       const orgName = org?.name ?? run.orgId;
 
+      const contextId = run.taskNodeId ?? run.id; // session runs use runId as fallback
       if (mode === 'parsed') {
-        const entries = await fileLogService.readParsed(orgName, run.taskNodeId, runId, { offset, limit });
+        const entries = await fileLogService.readParsed(orgName, contextId, runId, { offset, limit });
         return ok({ entries, rawLines: [] });
       } else {
-        const rawLines = await fileLogService.readRaw(orgName, run.taskNodeId, runId, { offset, limit });
+        const rawLines = await fileLogService.readRaw(orgName, contextId, runId, { offset, limit });
         return ok({ entries: [], rawLines });
       }
     } catch (err) {
@@ -97,7 +100,7 @@ export function registerRunHandlers(
 
       const org = await orgRepo.findById(run.orgId);
       const orgName = org?.name ?? run.orgId;
-      const logDir = fileLogService.getLogDir(orgName, run.taskNodeId);
+      const logDir = fileLogService.getLogDir(orgName, run.taskNodeId ?? run.id);
 
       await shell.openPath(logDir);
       return ok(undefined as void);
@@ -113,7 +116,7 @@ export function registerRunHandlers(
       if (!parsed.success) {
         return fail('VALIDATION_ERROR', parsed.error.message);
       }
-      const run = await executionEngine.startRun(
+      const run = await taskRunCoordinator.executeForTask(
         parsed.data.roleId,
         parsed.data.taskNodeId,
         parsed.data.orgId,
@@ -132,7 +135,7 @@ export function registerRunHandlers(
       if (typeof id !== 'string' || !id) {
         return fail('VALIDATION_ERROR', 'id must be a non-empty string');
       }
-      await executionEngine.cancelRun(id);
+      await runEngine.cancelRun(id);
       return ok(undefined as void);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

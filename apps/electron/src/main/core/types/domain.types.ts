@@ -142,7 +142,7 @@ export interface DiscussionMessage {
 export interface Run {
   id: string;
   orgId: string;
-  taskNodeId: string;
+  taskNodeId: string | null;
   roleId: string;
   status: RunStatus;
   trigger: WakeTrigger;

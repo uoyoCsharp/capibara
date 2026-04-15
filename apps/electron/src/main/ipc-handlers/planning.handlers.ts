@@ -30,7 +30,9 @@ export function registerPlanningHandlers(
   pendingPlanStore: PendingPlanStore,
   logger: ILogger,
 ): void {
+  // DEPRECATED: Use capibara:session:start instead. Retained for backward compatibility.
   ipcMain.handle(IPC_CHANNELS.startPlanningRun, async (_event, input: unknown) => {
+    logger.warn('[DEPRECATED] capibara:planning:start called — use capibara:session:start instead');
     try {
       const parsed = startPlanningRunSchema.safeParse(input);
       if (!parsed.success) {
@@ -49,7 +51,9 @@ export function registerPlanningHandlers(
     }
   });
 
+  // DEPRECATED: Use capibara:session:get-active instead. Retained for backward compatibility.
   ipcMain.handle(IPC_CHANNELS.getActivePlanningSession, async (_event, orgId: unknown) => {
+    logger.warn('[DEPRECATED] capibara:planning:get-active called — use capibara:session:get-active instead');
     try {
       if (typeof orgId !== 'string' || !orgId) {
         return fail('VALIDATION_ERROR', 'orgId must be a non-empty string');
@@ -62,13 +66,15 @@ export function registerPlanningHandlers(
     }
   });
 
+  // DEPRECATED: Use capibara:session:cancel instead. Retained for backward compatibility.
   ipcMain.handle(IPC_CHANNELS.discardPlanningSession, async (_event, input: unknown) => {
+    logger.warn('[DEPRECATED] capibara:planning:discard called — use capibara:session:cancel instead');
     try {
       const parsed = discardPlanningSessionSchema.safeParse(input);
       if (!parsed.success) {
         return fail('VALIDATION_ERROR', parsed.error.message);
       }
-      await planningService.discardPlanningSession(parsed.data.taskId);
+      await planningService.discardPlanningSession(parsed.data.id);
       return ok(undefined as void);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -171,10 +177,13 @@ export function registerPlanningHandlers(
       // Clear pending plan after successful creation
       pendingPlanStore.remove(orgId);
 
-      // Also discard the planning task if found
+      // Also discard the planning session if found
       const session = await planningService.getActivePlanningSession(orgId);
       if (session) {
-        await planningService.discardPlanningSession(session.taskId);
+        const discardId = session.sessionId ?? session.taskId;
+        if (discardId) {
+          await planningService.discardPlanningSession(discardId);
+        }
       }
 
       return ok({ createdCount: createdIds.length });
@@ -198,13 +207,15 @@ export function registerPlanningHandlers(
     }
   });
 
+  // DEPRECATED: Use capibara:session:switch-role instead. Retained for backward compatibility.
   ipcMain.handle(IPC_CHANNELS.switchPlanningRole, async (_event, input: unknown) => {
+    logger.warn('[DEPRECATED] capibara:planning:switch-role called — use capibara:session:switch-role instead');
     try {
       const parsed = switchPlanningRoleSchema.safeParse(input);
       if (!parsed.success) {
         return fail('VALIDATION_ERROR', parsed.error.message);
       }
-      const result = await planningService.switchPlanningRole(parsed.data.taskId, parsed.data.newRoleId);
+      const result = await planningService.switchPlanningRole(parsed.data.sessionId, parsed.data.newRoleId);
       return ok(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
