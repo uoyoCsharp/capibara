@@ -6,7 +6,7 @@ import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js
 import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
 import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.js';
 import type { ISettingsRepository } from '@main/core/interfaces/i-settings.repository.js';
-import type { IPromptBuilder, PlanningPhase, SessionPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
+import type { IPromptBuilder, SessionPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { Session, SessionType } from '@main/core/types/session.types.js';
@@ -93,7 +93,7 @@ export class SessionRunCoordinator {
     // 2. Build prompt
     const promptCtx = await this.buildSessionPromptContext(session);
     const prompt = this.promptBuilder.buildForSession(promptCtx);
-    console.log(`[session-coordinator] [${sessionId.slice(0, 8)}] Prompt built at +${Date.now() - sessionT0}ms (${prompt.length} chars, phase: ${promptCtx.phase})`);
+    console.log(`[session-coordinator] [${sessionId.slice(0, 8)}] Prompt built at +${Date.now() - sessionT0}ms (${prompt.length} chars)`);
 
     // 3. Resolve org name for context label
     const org = await this.orgRepo.findById(session.orgId);
@@ -109,6 +109,7 @@ export class SessionRunCoordinator {
       contextLabel,
       sessionId: session.cliSessionId ?? undefined,
       mcpContext: this.getMcpContext(session.type),
+      userMessage,
     });
 
     // 5. Store AI response + update session
@@ -178,17 +179,6 @@ export class SessionRunCoordinator {
     const roleName = role?.name ?? 'AI Assistant';
     const rolePersona = role?.persona ?? '';
 
-    // Detect phase from AI message count since last role switch
-    const messages = await this.messageRepo.findBySessionId(session.id);
-    const lastSwitchIdx = messages.findLastIndex(
-      (m) => m.authorType === 'system' && m.content.startsWith('__role_switched:'),
-    );
-    const relevantMessages = lastSwitchIdx >= 0 ? messages.slice(lastSwitchIdx + 1) : messages;
-    const aiMessageCount = relevantMessages.filter((m) => m.authorType === 'ai').length;
-    const phase: PlanningPhase =
-      aiMessageCount >= 4 ? 'structure' :
-      aiMessageCount >= 2 ? 'focus' : 'diverge';
-
     // Build org roles context
     const orgRoles = await this.buildOrgRolesContext(session.orgId);
 
@@ -205,7 +195,6 @@ export class SessionRunCoordinator {
     return {
       roleName,
       rolePersona,
-      phase,
       orgRoles,
       communicationLanguage,
       orgInstructions,

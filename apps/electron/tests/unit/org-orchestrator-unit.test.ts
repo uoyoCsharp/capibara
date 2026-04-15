@@ -113,8 +113,8 @@ function createOrchestrator() {
     config, logger, eventBus, taskRepo, roleRepo, runRepo, pendingWakeRepo, costRepo,
   );
 
-  const executionEngine = { startRun: vi.fn().mockResolvedValue({ id: 'run-1' }) };
-  orch.setExecutionEngine(executionEngine);
+  const taskRunCoordinator = { executeForTask: vi.fn().mockResolvedValue({ id: 'run-1' }) };
+  orch.setTaskRunCoordinator(taskRunCoordinator);
 
   const workflowEngine = {
     isTerminalStatus: vi.fn().mockResolvedValue(false),
@@ -135,7 +135,7 @@ function createOrchestrator() {
   return {
     orch, config, logger, eventBus,
     taskRepo, roleRepo, runRepo, pendingWakeRepo, costRepo,
-    executionEngine, workflowEngine,
+    executionEngine: taskRunCoordinator, workflowEngine,
   };
 }
 
@@ -600,7 +600,7 @@ describe('OrgOrchestrator', () => {
         createEvent('run:succeeded', { roleId: 'role-1', orgId: 'org-1', taskNodeId: 'task-1' }),
       );
       expect(pendingWakeRepo.consume).toHaveBeenCalledWith('pw-1');
-      expect(executionEngine.startRun).toHaveBeenCalledWith('role-2', 'task-2', 'org-1', 'task_assigned');
+      expect(executionEngine.executeForTask).toHaveBeenCalledWith('role-2', 'task-2', 'org-1', 'task_assigned');
     });
   });
 
@@ -818,7 +818,7 @@ describe('OrgOrchestrator', () => {
       const result = await orch.wakeRoleIfPossible('role-1', 'org-1', 'task-1', 'task_assigned');
 
       expect(result).toBe(true);
-      expect(executionEngine.startRun).toHaveBeenCalledWith('role-1', 'task-1', 'org-1', 'task_assigned');
+      expect(executionEngine.executeForTask).toHaveBeenCalledWith('role-1', 'task-1', 'org-1', 'task_assigned');
     });
 
     it('should return false when gate check fails', async () => {
@@ -828,7 +828,7 @@ describe('OrgOrchestrator', () => {
       const result = await orch.wakeRoleIfPossible('role-1', 'org-1', 'task-1', 'task_assigned');
 
       expect(result).toBe(false);
-      expect(executionEngine.startRun).not.toHaveBeenCalled();
+      expect(executionEngine.executeForTask).not.toHaveBeenCalled();
     });
 
     it('should increment wake count before starting run', async () => {
@@ -843,11 +843,11 @@ describe('OrgOrchestrator', () => {
       expect(incrementSpy).toHaveBeenCalledWith('role-1', 3);
     });
 
-    it('should return false and log error when executionEngine.startRun throws', async () => {
+    it('should return false and log error when executionEngine.executeForTask throws', async () => {
       const { orch, executionEngine, logger } = createOrchestrator();
       vi.spyOn((orch as any).gateValidator, 'check').mockResolvedValue({ allowed: true, role: createRole() });
       vi.spyOn((orch as any).gateValidator, 'incrementWakeCount').mockResolvedValue(undefined);
-      (executionEngine.startRun as any).mockRejectedValue(new Error('boom'));
+      (executionEngine.executeForTask as any).mockRejectedValue(new Error('boom'));
 
       const result = await orch.wakeRoleIfPossible('role-1', 'org-1', 'task-1', 'task_assigned');
 
@@ -970,7 +970,7 @@ describe('OrgOrchestrator', () => {
       );
 
       expect(pendingWakeRepo.consume).toHaveBeenCalledWith('pw-1');
-      expect(executionEngine.startRun).toHaveBeenCalledWith('role-2', 'task-2', 'org-1', 'task_assigned');
+      expect(executionEngine.executeForTask).toHaveBeenCalledWith('role-2', 'task-2', 'org-1', 'task_assigned');
     });
 
     it('should consume wake and skip when no eligible task (null taskNodeId, no active tasks)', async () => {
@@ -988,7 +988,7 @@ describe('OrgOrchestrator', () => {
       );
 
       expect(pendingWakeRepo.consume).toHaveBeenCalledWith('pw-1');
-      expect(executionEngine.startRun).not.toHaveBeenCalled();
+      expect(executionEngine.executeForTask).not.toHaveBeenCalled();
     });
 
     it('should stop processing after first successful run start', async () => {
@@ -1006,7 +1006,7 @@ describe('OrgOrchestrator', () => {
         createEvent('run:succeeded', { roleId: 'role-1', orgId: 'org-1', taskNodeId: 'task-1' }),
       );
 
-      expect(executionEngine.startRun).toHaveBeenCalledTimes(1);
+      expect(executionEngine.executeForTask).toHaveBeenCalledTimes(1);
       expect(pendingWakeRepo.consume).toHaveBeenCalledTimes(1);
     });
 
@@ -1032,8 +1032,8 @@ describe('OrgOrchestrator', () => {
       );
 
       expect(pendingWakeRepo.consume).toHaveBeenCalledTimes(2);
-      expect(executionEngine.startRun).toHaveBeenCalledTimes(1);
-      expect(executionEngine.startRun).toHaveBeenCalledWith('role-3', 'task-3', 'org-1', 'task_assigned');
+      expect(executionEngine.executeForTask).toHaveBeenCalledTimes(1);
+      expect(executionEngine.executeForTask).toHaveBeenCalledWith('role-3', 'task-3', 'org-1', 'task_assigned');
     });
 
     it('should resolve taskNodeId from findByAssignee when pending wake has no taskNodeId', async () => {
@@ -1055,7 +1055,7 @@ describe('OrgOrchestrator', () => {
         createEvent('run:succeeded', { roleId: 'role-1', orgId: 'org-1', taskNodeId: 'task-1' }),
       );
 
-      expect(executionEngine.startRun).toHaveBeenCalledWith('role-2', 'found-task', 'org-1', 'task_assigned');
+      expect(executionEngine.executeForTask).toHaveBeenCalledWith('role-2', 'found-task', 'org-1', 'task_assigned');
     });
   });
 
@@ -1242,13 +1242,13 @@ describe('OrgOrchestrator', () => {
       expect((orch as any).workflowEngine).toBe(newEngine);
     });
 
-    it('should store ExecutionEngine reference via setExecutionEngine', () => {
+    it('should store TaskRunCoordinator reference via setTaskRunCoordinator', () => {
       const { orch } = createOrchestrator();
-      const newEngine = { startRun: vi.fn() } as any;
+      const newCoordinator = { executeForTask: vi.fn() } as any;
 
-      orch.setExecutionEngine(newEngine);
+      orch.setTaskRunCoordinator(newCoordinator);
 
-      expect((orch as any).executionEngine).toBe(newEngine);
+      expect((orch as any).taskRunCoordinator).toBe(newCoordinator);
     });
   });
 });

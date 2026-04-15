@@ -122,7 +122,7 @@ export class RunEngine implements IRunEngine {
   }
 
   async execute(params: RunExecutionParams): Promise<RunResult> {
-    const { roleId, orgId, prompt, contextId, contextLabel, taskNodeId, sessionId, mcpContext: mcpCtx, trigger } = params;
+    const { roleId, orgId, prompt, contextId, contextLabel, taskNodeId, sessionId, mcpContext: mcpCtx, trigger, userMessage } = params;
     const execT0 = Date.now();
     console.log(`[run-engine] Starting execute`, { contextId: contextId.slice(0, 8), roleId: roleId.slice(0, 8), mcpContext: mcpCtx ?? 'none', promptLength: prompt.length });
 
@@ -208,13 +208,17 @@ export class RunEngine implements IRunEngine {
       console.log(`[run-engine] [${runId.slice(0, 8)}] Dispatching to executor at +${Date.now() - execT0}ms`);
       this.logger.info('Dispatching run to worker', { runId, executor: this.config.cli.defaultExecutor, projectDir });
 
+      // When resuming with a user message, send that as stdin instead of the system prompt.
+      // The system prompt is already in the CLI session context from the first run.
+      const stdinContent = (resumeSessionId && userMessage) ? userMessage : prompt;
+
       const result = await this.executor.execute({
         runId,
         roleId,
         orgId,
         taskNodeId: taskNodeId ?? contextId, // executor uses this as context key, not DB FK
         trigger: trigger ?? 'session',
-        prompt,
+        prompt: stdinContent,
         mcpConfigPath,
         projectDir,
         executor: this.config.cli.defaultExecutor,

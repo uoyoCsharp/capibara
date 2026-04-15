@@ -14,7 +14,6 @@ import type { Run, WakeTrigger } from '@main/core/types/domain.types.js';
 import type { TaskStateMachine } from '../state-machine/task.state-machine.js';
 import type { TaskService } from '../tasks/task.service.js';
 import type { ExecutionContext } from '../context/execution.context.js';
-import { TERMINAL_RUN_STATUSES } from '@main/core/constants/run.constants.js';
 import {
   LOGGER_TOKEN,
   EVENT_BUS_TOKEN,
@@ -26,7 +25,6 @@ import {
   RUN_ENGINE_TOKEN,
   SETTINGS_REPO_TOKEN,
 } from '@main/core/tokens.js';
-import type { PlanningPhase } from '@main/core/interfaces/i-prompt-builder.js';
 
 /**
  * Orchestrates AI runs within a Task context. Handles all the pre/post-run
@@ -140,7 +138,6 @@ export class TaskRunCoordinator {
     // ─── Build Planning Context (if applicable) ─────────────
     const runPlanningCtx = planningContext ?? this.taskPlanningCtx.get(taskNodeId);
     if (runPlanningCtx) {
-      runPlanningCtx.phase = await this.detectPlanningPhase(taskNodeId);
       try {
         const localeSetting = await this.settingsRepo.get('locale');
         if (localeSetting) runPlanningCtx.communicationLanguage = localeSetting;
@@ -229,16 +226,6 @@ export class TaskRunCoordinator {
         // Transition not allowed from current state — leave as-is
       }
     }
-  }
-
-  private async detectPlanningPhase(taskNodeId: string): Promise<PlanningPhase> {
-    try {
-      const runs = await this.runRepo.findByTaskId(taskNodeId);
-      const completedRuns = runs.filter((r) => TERMINAL_RUN_STATUSES.has(r.status)).length;
-      if (completedRuns >= 4) return 'structure';
-      if (completedRuns >= 2) return 'focus';
-    } catch { /* default */ }
-    return 'diverge';
   }
 
   private async cleanupTaskPlanningCtx(): Promise<void> {

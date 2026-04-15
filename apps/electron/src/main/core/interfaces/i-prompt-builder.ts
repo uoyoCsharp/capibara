@@ -56,17 +56,12 @@ export interface PromptContext {
   planningContext?: PlanningPromptContext;
 }
 
-/** BMAD methodology phase for Conversational Task Planning. */
-export type PlanningPhase = 'diverge' | 'focus' | 'structure';
-
 /** Context specific to Conversational Task Planning runs. */
 export interface PlanningPromptContext {
   /** All roles in the organization with their names and skill descriptions */
   orgRoles: Array<{ id: string; name: string; skillDescriptions: string[] }>;
   /** The user's initial message that started the planning session */
   initialMessage?: string;
-  /** Current BMAD methodology phase (detected from conversation history) */
-  phase?: PlanningPhase;
   /** The user's communication language preference (e.g., 'zh-CN', 'en-US') */
   communicationLanguage?: string;
 }
@@ -84,8 +79,6 @@ export interface DiscussionSummary {
 export interface SessionPromptContext {
   roleName: string;
   rolePersona: string;
-  /** BMAD planning phase */
-  phase: PlanningPhase;
   /** Organization roles for assignment guidance */
   orgRoles: Array<{ id: string; name: string; skillDescriptions: string[] }>;
   /** Communication language preference */

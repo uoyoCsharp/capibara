@@ -61,7 +61,7 @@ import { EmitteryEventBus } from './infrastructure/observability/emittery-event-
 import { PinoLogger } from './infrastructure/observability/pino-logger.js';
 import { UtilityProcessExecutor } from './infrastructure/executors/utility-process.executor.js';
 import { WorkerService } from './infrastructure/executors/worker-service.js';
-import { PromptBuilder } from './application/skills/prompt-builder.js';
+import { PromptBuilder } from './application/prompt/prompt-builder.js';
 import { SkillSeeder } from './application/skills/skill-seeder.js';
 import { OrgTemplateService } from './application/templates/org-template.service.js';
 import { TaskStateMachine } from './application/state-machine/task.state-machine.js';

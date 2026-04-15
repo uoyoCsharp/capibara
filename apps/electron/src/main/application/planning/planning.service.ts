@@ -7,7 +7,6 @@ import type { ILogger } from '@main/core/interfaces/i-logger.js';
 import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { PlanningPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
 import type { PlanningRoleOption } from '@shared/contracts.js';
-import type { Role } from '@main/core/types/domain.types.js';
 import type { SessionService } from '../session/session.service.js';
 import type { SessionRunCoordinator } from '../session/session-run.coordinator.js';
 import {
@@ -21,13 +20,6 @@ import {
 } from '@main/core/tokens.js';
 import { ValidationError } from '@main/core/errors/capibara.errors.js';
 import { PLANNING_TASK_TYPE } from '@main/core/constants/planning.constants.js';
-
-/** PM-related skill commands that identify a Planning Agent role. */
-const PM_SKILL_COMMANDS = [
-  '/bmad-create-prd',
-  '/bmad-product-brief',
-  '/bmad-create-epics-and-stories',
-];
 
 export interface StartPlanningResult {
   sessionId: string;
@@ -63,51 +55,14 @@ export class PlanningService {
   }
 
   /**
-   * Select the best Planning Agent role from the organization.
-   * Priority: role with PM-related skills > root role (parentId=null) > error.
+   * Find the system planning role for the organization.
+   * Planning always uses the system role (isSystemRole=true).
    */
-  async selectPlanningRole(orgId: string): Promise<Role> {
+  private async getSystemPlanningRole(orgId: string): Promise<{ id: string; name: string }> {
     const roles = await this.roleRepo.findByOrgId(orgId);
-    if (roles.length === 0) {
-      throw new ValidationError('Organization has no roles. At least one role is required for planning.');
-    }
-
-    // Check each role's skills for PM-related commands
-    for (const role of roles) {
-      if (role.status !== 'active') continue;
-      if (role.skillIds.length === 0) continue;
-
-      const skills = await Promise.all(
-        role.skillIds.map((id) => this.skillRepo.findById(id)),
-      );
-      const hasPmSkill = skills.some(
-        (s) => s && PM_SKILL_COMMANDS.includes(s.command),
-      );
-      if (hasPmSkill) {
-        this.logger.info('Selected PM role for planning', { roleId: role.id, roleName: role.name });
-        return role;
-      }
-    }
-
-    // Fallback: root role (parentId = null)
-    const rootRole = roles.find((r) => r.parentId === null && r.status === 'active');
-    if (rootRole) {
-      this.logger.info('No PM role found, falling back to root role for planning', {
-        roleId: rootRole.id, roleName: rootRole.name,
-      });
-      return rootRole;
-    }
-
-    // Last resort: first active role
-    const firstActive = roles.find((r) => r.status === 'active');
-    if (firstActive) {
-      this.logger.warn('No PM or root role found, using first active role for planning', {
-        roleId: firstActive.id, roleName: firstActive.name,
-      });
-      return firstActive;
-    }
-
-    throw new ValidationError('No active roles found in organization.');
+    const systemRole = roles.find((r) => r.isSystemRole && r.status === 'active');
+    if (systemRole) return systemRole;
+    throw new ValidationError('No system planning role found. Organization may need to be re-initialized.');
   }
 
   /**
@@ -139,8 +94,8 @@ export class PlanningService {
   }
 
   /**
-   * Start a planning session: create a Session, select the agent, and trigger first execution.
-   * No Task or ConversationWorkflow is created.
+   * Start a planning session: create a Session using the system planning role,
+   * and trigger first execution. No Task or ConversationWorkflow is created.
    */
   async startPlanningRun(orgId: string, initialMessage: string, roleId?: string): Promise<StartPlanningResult> {
     // Prevent concurrent planning sessions for the same org
@@ -150,18 +105,19 @@ export class PlanningService {
       throw new ValidationError(`A planning session is already active for this organization (${ref}).`);
     }
 
-    // Use explicit roleId if provided, otherwise auto-select
-    const role = roleId
-      ? await this.roleRepo.findById(roleId).then((r) => {
-          if (!r) throw new ValidationError(`Planning role not found: ${roleId}`);
-          return r;
-        })
-      : await this.selectPlanningRole(orgId);
+    // Use explicit roleId if provided, otherwise use the system planning role
+    const resolvedRoleId = roleId
+      ?? (await this.getSystemPlanningRole(orgId)).id;
+
+    if (roleId) {
+      const role = await this.roleRepo.findById(roleId);
+      if (!role) throw new ValidationError(`Planning role not found: ${roleId}`);
+    }
 
     // Create session + store initial message
-    const session = await this.sessionService.startSession(orgId, 'planning', role.id, initialMessage);
+    const session = await this.sessionService.startSession(orgId, 'planning', resolvedRoleId, initialMessage);
 
-    this.logger.info('Planning session created', { sessionId: session.id, roleId: role.id, orgId });
+    this.logger.info('Planning session created', { sessionId: session.id, roleId: resolvedRoleId, orgId });
 
     // Fire first execution in background (skip user message — already stored by startSession)
     this.sessionRunCoordinator.executeInSession(session.id, initialMessage, true).catch((err) => {
@@ -170,7 +126,7 @@ export class PlanningService {
 
     return {
       sessionId: session.id,
-      roleId: role.id,
+      roleId: resolvedRoleId,
     };
   }
 
@@ -248,6 +204,7 @@ export class PlanningService {
 
   /**
    * Get available planning roles for an organization.
+   * Returns the system role plus any template-configured planning role.
    */
   async getAvailablePlanningRoles(orgId: string): Promise<PlanningRoleOption[]> {
     const roles = await this.roleRepo.findByOrgId(orgId);
@@ -266,14 +223,6 @@ export class PlanningService {
       if (templateRole) {
         options.push({ roleId: templateRole.id, roleName: templateRole.name, source: 'template' });
       }
-    }
-
-    // Fallback: if no roles found (e.g., old org without system role), use selectPlanningRole
-    if (options.length === 0) {
-      try {
-        const fallback = await this.selectPlanningRole(orgId);
-        options.push({ roleId: fallback.id, roleName: fallback.name, source: 'template' });
-      } catch { /* no roles at all */ }
     }
 
     return options;

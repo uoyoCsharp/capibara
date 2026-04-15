@@ -20,6 +20,8 @@ export interface RunExecutionParams {
   mcpContext?: McpExecutionContext;
   /** Wake trigger — only for task-based runs */
   trigger?: string;
+  /** User message for resumed sessions. When set with sessionId, this is sent as stdin instead of prompt. */
+  userMessage?: string;
 }
 
 // ─── Run Execution Result ──────────────────────────────────────────
