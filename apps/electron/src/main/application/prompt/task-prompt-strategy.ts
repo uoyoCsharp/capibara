@@ -207,13 +207,14 @@ export class TaskPromptStrategy {
 
     // capibara_task_complete
     const showComplete: PromptScenario[] = ['revision', 'execute_decomposition', 'execute_leaf'];
-    if (showComplete.includes(scenario)) {
+    const isDecomposerResume = scenario === 'conversation_resume' && (ctx.taskTypeDef?.canDecompose ?? false);
+    if (showComplete.includes(scenario) || isDecomposerResume) {
       lines.push('- capibara_task_complete');
     }
 
     // capibara_task_create_child
     const showCreateChild: PromptScenario[] = ['escalation_failure', 'execute_decomposition', 'execute_leaf'];
-    if (showCreateChild.includes(scenario)) {
+    if (showCreateChild.includes(scenario) || isDecomposerResume) {
       lines.push('- capibara_task_create_child (see "Work Item Type Schema" above for allowed types)');
     }
 
@@ -328,7 +329,7 @@ export class TaskPromptStrategy {
 
     switch (scenario) {
       case 'conversation_resume':
-        lines.push(this.instructConversationResume());
+        lines.push(this.instructConversationResume(ctx));
         break;
       case 'escalation_reply':
         lines.push(this.instructEscalationReply());
@@ -375,7 +376,23 @@ export class TaskPromptStrategy {
   // ── Instruction sub-methods ─────────────────────────────
   // OPT-02: IDs removed from inline instructions — tools resolve IDs from bindings section
 
-  private instructConversationResume(): string {
+  private instructConversationResume(ctx: PromptContext): string {
+    const isDecomposer = ctx.taskTypeDef?.canDecompose ?? false;
+
+    if (isDecomposer) {
+      return [
+        '### Conversation Resume — Decomposition',
+        'You were decomposing this task and asked a subordinate role for input. A reply has been received.',
+        '',
+        '1. Review the Conversation Context above.',
+        '2. Incorporate the reply into your decomposition plan.',
+        '3. If you need to consult another role, use capibara_conversation (action="ask") with recipientTarget={type:"role", roleId:"<roleId>"}.',
+        '4. When you have enough information, create all child tasks using capibara_task_create_child.',
+        '5. After creating all child tasks, call capibara_task_complete with a summary.',
+        '6. Use capibara_conversation (action="resolve") to close any open conversations.',
+      ].join('\n');
+    }
+
     return [
       '### Conversation Resume',
       'You were previously working on this task and asked a question. A reply has been received.',
@@ -561,14 +578,29 @@ export class TaskPromptStrategy {
     const childLabel = allowedChildren.length > 0 ? allowedChildren.join('/') + 's' : 'tasks';
     const ChildLabel = childLabel.charAt(0).toUpperCase() + childLabel.slice(1);
 
+    // Subordinate consultation hint (shared by both phases)
+    const consultHint = ctx.subordinates.length > 0
+      ? [
+        '',
+        '**Consulting subordinates**: If you are unsure about the scope or details of a specific area, '
+          + 'use capibara_conversation (action="ask", recipientTarget={type:"role", roleId:"<subordinateRoleId>"}) '
+          + 'to ask the domain expert. You will be re-activated with their reply to continue your work. Examples:',
+        '  - Ask a frontend developer how to best split UI tasks',
+        '  - Ask a backend developer about API implementation specifics',
+        '  - Ask a product manager about requirement priorities',
+        'You are the sole decision-maker — subordinates provide input, they do not decompose tasks themselves.',
+      ]
+      : [];
+
     if (phase === 'propose') {
       return [
         `### Your role: Propose a decomposition plan for this ${parentLabel}`,
         'Your work requires human approval BEFORE creating child tasks.',
         `1. Analyze the ${parentLabel.toLowerCase()} requirements thoroughly.`,
         '2. If the requirements are incomplete, vague, or contain contradictions, use capibara_conversation (action="ask") to clarify with your supervisor BEFORE proposing a plan.',
-        `3. Design a decomposition plan with 2-7 ${childLabel}. If you feel you need more, the granularity is likely too fine — group related work into fewer, larger items.`,
+        `3. Design a decomposition plan. Aim for the minimum number of ${childLabel} that fully covers the scope. Each leaf task should be directly executable by a single role without further breakdown.`,
         `4. Each child should represent a meaningful, independently deliverable unit of work.`,
+        ...consultHint,
         '',
         'Present your plan in this format:',
         '',
@@ -595,10 +627,12 @@ export class TaskPromptStrategy {
       `### Your role: Decompose this ${parentLabel} into ${ChildLabel}`,
       approvalNote,
       `1. Review the ${parentLabel.toLowerCase()} requirements. If any aspect is unclear or ambiguous, use capibara_conversation (action="ask") to ask your supervisor before decomposing.`,
-      `2. Create 2-7 child tasks using capibara_task_create_child. Refer to the "Work Item Type Schema" above for allowed child types.`,
+      `2. Create child tasks using capibara_task_create_child that are directly executable — each child should be completable by a single role without further decomposition. Refer to the "Work Item Type Schema" above for allowed child types. If needed, create a two-level structure (e.g., Stories containing Tasks).`,
       `3. Assign each child to the most appropriate subordinate role using their role ID.`,
       `4. Each child should represent a meaningful, independently deliverable unit of work.`,
       `5. ${ChildLabel} will be executed sequentially in the order you create them.`,
+      ...consultHint,
+      '',
       `6. After creating all ${childLabel}, call capibara_task_complete with a summary of the decomposition plan.`,
     ].filter(Boolean).join('\n');
   }
