@@ -96,6 +96,19 @@ export function registerPlanningHandlers(
     }
   });
 
+  ipcMain.handle(IPC_CHANNELS.clearPendingPlan, async (_event, orgId: unknown) => {
+    try {
+      if (typeof orgId !== 'string' || !orgId) {
+        return fail('VALIDATION_ERROR', 'orgId must be a non-empty string');
+      }
+      pendingPlanStore.remove(orgId);
+      return ok(undefined as void);
+    } catch (err) {
+      logger.error('Failed to clear pending plan', { error: String(err) });
+      return fail('INTERNAL', 'Failed to clear pending plan');
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.batchCreateTasks, async (_event, input: unknown) => {
     try {
       const parsed = batchCreateTasksSchema.safeParse(input);

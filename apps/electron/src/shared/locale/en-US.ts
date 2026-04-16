@@ -584,6 +584,16 @@ export const enUS: LocaleMessages = {
     failedToSend: 'Failed to send message',
     failedToCancel: 'Failed to cancel session',
   },
+  executionControl: {
+    pauseAll: 'Pause All',
+    resumeAll: 'Resume All',
+    paused: 'Paused',
+    running: 'Running',
+    pauseConfirm: 'Pause Execution',
+    pauseConfirmMessage: 'This will stop all active AI runs and prevent new ones from starting. Continue?',
+    pausedToast: 'Execution paused — all runs stopped',
+    resumedToast: 'Execution resumed',
+  },
   planning: {
     startNewProject: 'Start New Project',
     startNewProjectTooltip: 'Select or create a workspace first',
@@ -615,5 +625,7 @@ export const enUS: LocaleMessages = {
     resumeSessionMessage: 'You have an incomplete planning session. Would you like to continue?',
     discardAndStartOver: 'Discard and Start Over',
     emptyStateCta: 'Describe what you want to build and let AI plan it for you',
+    refinePlan: 'Refine Plan',
+    viewPlan: 'View Plan',
   },
 };

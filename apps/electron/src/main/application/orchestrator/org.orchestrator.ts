@@ -49,6 +49,9 @@ export class OrgOrchestrator {
   private taskRunCoordinator!: TaskRunCoordinator;
   private workflowEngine!: IWorkflowEngine;
 
+  /** Global execution pause flag. When true, no new runs will be dispatched. */
+  private _paused = false;
+
   private readonly gateValidator: WakeGateValidator;
   private readonly retryScheduler: RetryScheduler;
   private readonly budgetGuard: BudgetGuard;
@@ -83,6 +86,20 @@ export class OrgOrchestrator {
   /** Inject TaskStateMachine after construction. */
   setTaskStateMachine(sm: TaskStateMachine): void {
     this.retryScheduler.setTaskStateMachine(sm);
+  }
+
+  get paused(): boolean {
+    return this._paused;
+  }
+
+  pause(): void {
+    this._paused = true;
+    this.logger.info('OrgOrchestrator paused — new runs will be blocked');
+  }
+
+  resume(): void {
+    this._paused = false;
+    this.logger.info('OrgOrchestrator resumed — runs can proceed');
   }
 
   start(): void {
@@ -175,16 +192,16 @@ export class OrgOrchestrator {
             }
           }
 
-          // Sequential sibling gate: only wake if it's the first non-terminal sibling
+          // Sequential sibling gate: only wake if it's the first non-terminal sibling.
+          // Tasks in review status (e.g. awaiting_review) block subsequent siblings.
           const siblings = await this.taskRepo.findByParentId(task.parentId);
           const siblingChecks = await Promise.all(
             siblings.map(async (s) => ({
               sibling: s,
               isTerminal: await this.workflowEngine.isTerminalStatus(s.orgId, s.status),
-              isReview: await this.workflowEngine.isReviewStatus(s.orgId, s.status),
             })),
           );
-          const firstPending = siblingChecks.find((sc) => !sc.isTerminal && !sc.isReview)?.sibling;
+          const firstPending = siblingChecks.find((sc) => !sc.isTerminal)?.sibling;
           if (firstPending && firstPending.id !== task.id) {
             this.logger.debug('Wake skipped: not the first pending sibling', {
               taskId: task.id,
@@ -447,6 +464,29 @@ export class OrgOrchestrator {
     taskNodeId: string,
     trigger: WakeTrigger,
   ): Promise<boolean> {
+    if (this._paused) {
+      this.logger.debug('Wake blocked: execution is globally paused', { roleId, taskNodeId });
+      return false;
+    }
+
+    // Review-sibling gate: if this task has a sibling in review status,
+    // block the wake to preserve sequential execution discipline.
+    const task = await this.taskRepo.findById(taskNodeId);
+    if (task?.parentId) {
+      const siblings = await this.taskRepo.findByParentId(task.parentId);
+      for (const sibling of siblings) {
+        if (sibling.id !== taskNodeId) {
+          const isReview = await this.workflowEngine.isReviewStatus(sibling.orgId, sibling.status);
+          if (isReview) {
+            this.logger.debug('Wake blocked: sibling in review', {
+              taskNodeId, siblingId: sibling.id, siblingStatus: sibling.status,
+            });
+            return false;
+          }
+        }
+      }
+    }
+
     const gate = await this.gateValidator.check(roleId, orgId, taskNodeId, trigger);
     if (!gate.allowed) return false;
 

@@ -70,6 +70,11 @@ export const IPC_CHANNELS = {
   // Budget
   resumeOrgRoles: 'capibara:budget:resume-roles',
 
+  // Execution Control
+  pauseExecution: 'capibara:execution:pause',
+  resumeExecution: 'capibara:execution:resume',
+  getExecutionState: 'capibara:execution:get-state',
+
   // Runs
   getRunsByOrgId: 'capibara:run:get-by-org',
   getRun: 'capibara:run:get',
@@ -108,6 +113,7 @@ export const IPC_CHANNELS = {
   getActivePlanningSession: 'capibara:planning:get-active',
   discardPlanningSession: 'capibara:planning:discard',
   getPendingPlan: 'capibara:planning:get-pending-plan',
+  clearPendingPlan: 'capibara:planning:clear-pending-plan',
   batchCreateTasks: 'capibara:planning:batch-create',
   getAvailablePlanningRoles: 'capibara:planning:get-roles',
   switchPlanningRole: 'capibara:planning:switch-role',
@@ -161,7 +167,9 @@ export type DesktopEvent =
   | { type: 'session:message-added'; sessionId: string; authorType: 'human' | 'ai' | 'system' }
   | { type: 'session:run-completed'; sessionId: string; status: string }
   | { type: 'session:completed'; sessionId: string; orgId: string }
-  | { type: 'session:cancelled'; sessionId: string; orgId: string };
+  | { type: 'session:cancelled'; sessionId: string; orgId: string }
+  | { type: 'execution:paused'; cancelledRunCount: number }
+  | { type: 'execution:resumed' };
 
 // ─── Zod Schemas for IPC Payload Validation ─────────────────────────
 export const createOrganizationSchema = z.object({
@@ -532,6 +540,11 @@ export interface CapibaraApi {
   postDiscussionMessage: (input: PostDiscussionMessageInput) => Promise<DesktopResult<DiscussionMessageRecord>>;
   getDiscussionSummary: (groupId: string) => Promise<DesktopResult<string | null>>;
 
+  // Execution Control
+  pauseExecution: () => Promise<DesktopResult<{ cancelledRunCount: number }>>;
+  resumeExecution: () => Promise<DesktopResult<void>>;
+  getExecutionState: () => Promise<DesktopResult<ExecutionStateRecord>>;
+
   // Runs
   getRunsByOrgId: (orgId: string) => Promise<DesktopResult<RunRecord[]>>;
   getRun: (id: string) => Promise<DesktopResult<RunRecord | null>>;
@@ -567,6 +580,7 @@ export interface CapibaraApi {
   getActivePlanningSession: (orgId: string) => Promise<DesktopResult<ActivePlanningSessionRecord | null>>;
   discardPlanningSession: (input: DiscardPlanningSessionInput) => Promise<DesktopResult<void>>;
   getPendingPlan: (orgId: string) => Promise<DesktopResult<PendingPlanRecord | null>>;
+  clearPendingPlan: (orgId: string) => Promise<DesktopResult<void>>;
   batchCreateTasks: (input: BatchCreateTasksInput) => Promise<DesktopResult<{ createdCount: number }>>;
   getAvailablePlanningRoles: (orgId: string) => Promise<DesktopResult<PlanningRoleOption[]>>;
   switchPlanningRole: (input: SwitchPlanningRoleInput) => Promise<DesktopResult<{ previousRoleId: string; newRoleId: string }>>;
@@ -854,6 +868,12 @@ export interface SessionMessageRecord {
   authorType: SessionMessageAuthorType;
   content: string;
   createdAt: string;
+}
+
+// ─── Execution State ─────────────────────────────────────────────────
+export interface ExecutionStateRecord {
+  paused: boolean;
+  activeRunCount: number;
 }
 
 // ─── Navigation ─────────────────────────────────────────────────────

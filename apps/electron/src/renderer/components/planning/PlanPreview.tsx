@@ -45,6 +45,7 @@ interface PlanPreviewProps {
   onPlanChange: (plan: PendingPlanRecord) => void;
   onConfirm: () => void;
   onStartOver: () => void;
+  onRefinePlan: () => void;
   onNavigate?: (section: SectionId) => void;
 }
 
@@ -66,7 +67,7 @@ function countTotal(nodes: PlanTaskNode[]): number {
   return nodes.reduce((sum, n) => sum + 1 + countTotal(n.children), 0);
 }
 
-export function PlanPreview({ plan, onPlanChange, onConfirm, onStartOver, onNavigate }: PlanPreviewProps) {
+export function PlanPreview({ plan, onPlanChange, onConfirm, onStartOver, onRefinePlan, onNavigate }: PlanPreviewProps) {
   const t = useT();
   const { currentOrgId } = useCapibaraSnapshot();
   const [isCreating, setIsCreating] = useState(false);
@@ -165,19 +166,27 @@ export function PlanPreview({ plan, onPlanChange, onConfirm, onStartOver, onNavi
           >
             {t.planning.startOver}
           </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={isCreating || plan.tasks.length === 0}
-          >
-            {isCreating ? (
-              <>
-                <CircleNotch size={14} className="animate-spin mr-1" />
-                {t.planning.creatingTasks}
-              </>
-            ) : (
-              t.planning.createAllTasks
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={onRefinePlan}
+            >
+              {t.planning.refinePlan}
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={isCreating || plan.tasks.length === 0}
+            >
+              {isCreating ? (
+                <>
+                  <CircleNotch size={14} className="animate-spin mr-1" />
+                  {t.planning.creatingTasks}
+                </>
+              ) : (
+                t.planning.createAllTasks
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 

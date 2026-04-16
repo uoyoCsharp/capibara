@@ -10,6 +10,8 @@ import {
   SignOut,
   Check,
   CaretUpDown,
+  Pause,
+  Play,
 } from '@phosphor-icons/react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { SectionId, OrganizationRecord } from '@shared/contracts';
@@ -146,6 +148,12 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
           );
         })}
       </nav>
+
+      {/* Execution Control */}
+      <Separator />
+      <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
+        <ExecutionControlButton collapsed={collapsed} />
+      </div>
 
       {/* Footer: Avatar Popover with Workspace Switcher */}
       <Separator />
@@ -285,5 +293,88 @@ function AvatarPopover({
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Global Execution Control Button ─────────────────────────── */
+
+function ExecutionControlButton({ collapsed }: { collapsed: boolean }) {
+  const t = useT();
+  const [paused, setPaused] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const calledRef = useRef(false);
+
+  useEffect(() => {
+    if (!calledRef.current) {
+      calledRef.current = true;
+      window.capibara.getExecutionState().then((res) => {
+        if (res.ok) setPaused(res.data.paused);
+      });
+    }
+
+    const unsub = window.capibara.subscribe((event) => {
+      if (event.type === 'execution:paused') setPaused(true);
+      if (event.type === 'execution:resumed') setPaused(false);
+    });
+    return unsub;
+  }, []);
+
+  const handleToggle = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      if (paused) {
+        const res = await window.capibara.resumeExecution();
+        if (res.ok) {
+          setPaused(false);
+          toast.success(t.executionControl.resumedToast);
+        }
+      } else {
+        const res = await window.capibara.pauseExecution();
+        if (res.ok) {
+          setPaused(true);
+          toast.success(t.executionControl.pausedToast);
+        }
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const label = paused ? t.executionControl.resumeAll : t.executionControl.pauseAll;
+  const statusLabel = paused ? t.executionControl.paused : t.executionControl.running;
+
+  return (
+    <Button
+      variant={paused ? 'outline' : 'ghost'}
+      size="sm"
+      onClick={handleToggle}
+      disabled={loading}
+      title={collapsed ? label : undefined}
+      className={cn(
+        'w-full text-xs',
+        collapsed ? 'justify-center px-0' : 'justify-start gap-2',
+        paused && 'border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10',
+      )}
+    >
+      {paused ? (
+        <Play size={16} weight="fill" className="shrink-0" />
+      ) : (
+        <Pause size={16} className="shrink-0" />
+      )}
+      {!collapsed && (
+        <span className="flex items-center gap-1.5">
+          {label}
+          {paused && (
+            <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+          )}
+        </span>
+      )}
+      {collapsed && paused && (
+        <span className="absolute top-1 right-1 flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+      )}
+    </Button>
   );
 }

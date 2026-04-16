@@ -6,6 +6,7 @@ import {
   X,
   CaretUpDown,
   FolderOpen,
+  TreeStructure,
 } from '@phosphor-icons/react';
 import type {
   SectionId,
@@ -150,15 +151,9 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
         window.capibara.getPendingPlan(currentOrgId),
       ]);
 
-      if (planRes.ok && planRes.data) {
-        setPendingPlan(planRes.data);
-        setView('plan-preview');
-        return;
-      }
-
+      // Always restore session state so "Refine Plan" can return to chat
       if (sessionRes.ok && sessionRes.data) {
         setSession(sessionRes.data);
-        setView('chat');
         // Resolve role name
         const roles = await window.capibara.getRolesByOrgId(currentOrgId);
         if (roles.ok) {
@@ -167,6 +162,13 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
         }
         // Load messages
         await loadSessionMessages(sessionRes.data.id);
+      }
+
+      if (planRes.ok && planRes.data) {
+        setPendingPlan(planRes.data);
+        setView('plan-preview');
+      } else if (sessionRes.ok && sessionRes.data) {
+        setView('chat');
       }
     } catch {
       // No active session — stay on welcome
@@ -223,6 +225,10 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
         }
         // Reload messages for final state
         loadSessionMessages(s.id);
+        // Check if a plan was produced during this run (fallback for plan-ready event)
+        if (event.status === 'succeeded') {
+          loadPendingPlan();
+        }
       }
 
       // Session completed or cancelled externally
@@ -361,6 +367,11 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
       setIsAiThinking(true);
       setThinkingStartedAt(Date.now());
       setStreamingText('');
+      // Clear stale plan — a new run may produce a fresh one
+      if (pendingPlan && currentOrgId) {
+        setPendingPlan(null);
+        window.capibara.clearPendingPlan(currentOrgId).catch(() => {});
+      }
     } catch {
       toast.error(t.session.failedToSend);
     } finally {
@@ -405,6 +416,18 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
       }
     } catch {
       toast.error(t.errors.failedToUpdate);
+    }
+  };
+
+  // ── Refine plan (keep plan in memory, return to chat) ────
+  const handleRefinePlan = () => {
+    setView('chat');
+  };
+
+  // ── View pending plan from chat ─────────────────────────
+  const handleViewPlan = () => {
+    if (pendingPlan) {
+      setView('plan-preview');
     }
   };
 
@@ -465,6 +488,7 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
         onPlanChange={setPendingPlan}
         onConfirm={() => {/* handled inside PlanPreview */}}
         onStartOver={handleStartOver}
+        onRefinePlan={handleRefinePlan}
         onNavigate={onNavigate}
       />
     );
@@ -480,6 +504,16 @@ export function PlanningChatPage({ onNavigate }: PlanningChatPageProps) {
           <p className="text-xs text-muted-foreground">{t.planning.planningChatSubtitle}</p>
         </div>
         <div className="flex items-center gap-2">
+          {view === 'chat' && pendingPlan && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleViewPlan}
+            >
+              <TreeStructure size={14} className="mr-1" />
+              {t.planning.viewPlan}
+            </Button>
+          )}
           {view === 'chat' && session && (
             <Button
               variant="ghost"

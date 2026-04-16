@@ -429,7 +429,7 @@ export async function bootstrap(): Promise<void> {
   registerTemplateHandlers(templateService, workflowTemplateService, logger);
   registerTaskHandlers(taskService, logger);
   registerDiscussionHandlers(discussionService, logger);
-  registerRunHandlers(runRepo, orgRepo, taskRunCoordinator, runEngine, fileLogService, logger);
+  registerRunHandlers(runRepo, orgRepo, taskRunCoordinator, runEngine, fileLogService, logger, orchestrator, workerService);
   registerApprovalHandlers(roleRepo, taskRepo, discussionRepo, orchestrator, logger, workflowEngine);
   registerNarrativeHandlers(narrativeEngine, costRepo, orgRepo, logger);
   registerSettingsHandlers(settingsRepo, logger);

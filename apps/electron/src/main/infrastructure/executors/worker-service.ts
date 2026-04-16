@@ -86,6 +86,24 @@ export class WorkerService {
   }
 
   /**
+   * Cancel all in-flight runs. Returns the IDs of runs that were cancelled.
+   */
+  cancelAllRuns(): string[] {
+    const cancelled = [...this.activeRunIds];
+    for (const runId of cancelled) {
+      this.cancelRun(runId);
+    }
+    return cancelled;
+  }
+
+  /**
+   * Returns the number of currently active runs.
+   */
+  getActiveRunCount(): number {
+    return this.activeRunIds.size;
+  }
+
+  /**
    * Gracefully shut down the worker process.
    */
   destroy(): void {

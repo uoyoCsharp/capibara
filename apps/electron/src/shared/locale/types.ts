@@ -559,6 +559,16 @@ export interface LocaleMessages {
     failedToSend: string;
     failedToCancel: string;
   };
+  executionControl: {
+    pauseAll: string;
+    resumeAll: string;
+    paused: string;
+    running: string;
+    pauseConfirm: string;
+    pauseConfirmMessage: string;
+    pausedToast: string;
+    resumedToast: string;
+  };
   planning: {
     startNewProject: string;
     startNewProjectTooltip: string;
@@ -590,5 +600,7 @@ export interface LocaleMessages {
     resumeSessionMessage: string;
     discardAndStartOver: string;
     emptyStateCta: string;
+    refinePlan: string;
+    viewPlan: string;
   };
 }

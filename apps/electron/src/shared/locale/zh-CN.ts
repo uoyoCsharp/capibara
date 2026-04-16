@@ -584,6 +584,16 @@ export const zhCN: LocaleMessages = {
     failedToSend: '发送消息失败',
     failedToCancel: '取消会话失败',
   },
+  executionControl: {
+    pauseAll: '全部暂停',
+    resumeAll: '恢复执行',
+    paused: '已暂停',
+    running: '运行中',
+    pauseConfirm: '暂停执行',
+    pauseConfirmMessage: '这将停止所有正在运行的 AI 任务并阻止新任务启动。是否继续？',
+    pausedToast: '执行已暂停 — 所有运行已停止',
+    resumedToast: '执行已恢复',
+  },
   planning: {
     startNewProject: '创建新项目',
     startNewProjectTooltip: '请先选择或创建一个工作空间',
@@ -615,5 +625,7 @@ export const zhCN: LocaleMessages = {
     resumeSessionMessage: '你有一个未完成的规划会话。是否继续？',
     discardAndStartOver: '丢弃并重新开始',
     emptyStateCta: '描述你想构建的内容，让 AI 为你规划',
+    refinePlan: '优化计划',
+    viewPlan: '查看计划',
   },
 };

@@ -24,7 +24,7 @@ export function formatOrgRoles(
 export function formatLanguageInstruction(lang?: string): string {
   if (!lang) return '';
   const langName = lang.startsWith('zh') ? 'Chinese (中文)' : 'English';
-  return `Respond in ${langName}. Task titles and descriptions in the final plan should be in English regardless of conversation language.`;
+  return `Respond in ${langName}. All output including task titles, descriptions, and plans should also be in ${langName}.`;
 }
 
 /**

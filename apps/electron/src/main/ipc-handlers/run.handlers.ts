@@ -1,4 +1,4 @@
-import { ipcMain, shell } from 'electron';
+import { ipcMain, shell, BrowserWindow } from 'electron';
 import { IPC_CHANNELS, startRunSchema, getRunLogSchema } from '@shared/contracts.js';
 import type { DesktopResult } from '@shared/contracts.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
@@ -7,6 +7,8 @@ import type { IOrganizationRepository } from '@main/core/interfaces/i-organizati
 import type { TaskRunCoordinator } from '../application/execution/task-run.coordinator.js';
 import type { RunEngine } from '../application/execution/run.engine.js';
 import type { FileLogService } from '../infrastructure/logging/file-log.service.js';
+import type { OrgOrchestrator } from '../application/orchestrator/org.orchestrator.js';
+import type { WorkerService } from '../infrastructure/executors/worker-service.js';
 
 function ok<T>(data: T): DesktopResult<T> {
   return { ok: true, data };
@@ -23,6 +25,8 @@ export function registerRunHandlers(
   runEngine: RunEngine,
   fileLogService: FileLogService,
   logger: ILogger,
+  orchestrator: OrgOrchestrator,
+  workerService: WorkerService,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getRunsByOrgId, async (_event, orgId: unknown) => {
     try {
@@ -141,6 +145,58 @@ export function registerRunHandlers(
       const msg = err instanceof Error ? err.message : String(err);
       logger.error('Failed to cancel run', { error: msg });
       return fail('INTERNAL', msg);
+    }
+  });
+
+  // ─── Execution Control ─────────────────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.pauseExecution, async () => {
+    try {
+      orchestrator.pause();
+      const cancelledRunIds = workerService.cancelAllRuns();
+      logger.info('Execution paused globally', { cancelledRunCount: cancelledRunIds.length });
+      for (const win of BrowserWindow.getAllWindows()) {
+        try {
+          win.webContents.send(IPC_CHANNELS.rendererEvent, {
+            type: 'execution:paused',
+            cancelledRunCount: cancelledRunIds.length,
+          });
+        } catch { /* window may be destroyed */ }
+      }
+      return ok({ cancelledRunCount: cancelledRunIds.length });
+    } catch (err) {
+      logger.error('Failed to pause execution', { error: String(err) });
+      return fail('INTERNAL', 'Failed to pause execution');
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.resumeExecution, async () => {
+    try {
+      orchestrator.resume();
+      logger.info('Execution resumed globally');
+      for (const win of BrowserWindow.getAllWindows()) {
+        try {
+          win.webContents.send(IPC_CHANNELS.rendererEvent, {
+            type: 'execution:resumed',
+          });
+        } catch { /* window may be destroyed */ }
+      }
+      return ok(undefined as void);
+    } catch (err) {
+      logger.error('Failed to resume execution', { error: String(err) });
+      return fail('INTERNAL', 'Failed to resume execution');
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getExecutionState, async () => {
+    try {
+      return ok({
+        paused: orchestrator.paused,
+        activeRunCount: workerService.getActiveRunCount(),
+      });
+    } catch (err) {
+      logger.error('Failed to get execution state', { error: String(err) });
+      return fail('INTERNAL', 'Failed to get execution state');
     }
   });
 }

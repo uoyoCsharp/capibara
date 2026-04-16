@@ -69,6 +69,11 @@ const api: CapibaraApi = {
   postDiscussionMessage: (input) => ipcRenderer.invoke(IPC_CHANNELS.postDiscussionMessage, input),
   getDiscussionSummary: (groupId) => ipcRenderer.invoke(IPC_CHANNELS.getDiscussionSummary, groupId),
 
+  // Execution Control
+  pauseExecution: () => ipcRenderer.invoke(IPC_CHANNELS.pauseExecution),
+  resumeExecution: () => ipcRenderer.invoke(IPC_CHANNELS.resumeExecution),
+  getExecutionState: () => ipcRenderer.invoke(IPC_CHANNELS.getExecutionState),
+
   // Runs
   getRunsByOrgId: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getRunsByOrgId, orgId),
   getRun: (id) => ipcRenderer.invoke(IPC_CHANNELS.getRun, id),
@@ -107,6 +112,7 @@ const api: CapibaraApi = {
   getActivePlanningSession: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getActivePlanningSession, orgId),
   discardPlanningSession: (input) => ipcRenderer.invoke(IPC_CHANNELS.discardPlanningSession, input),
   getPendingPlan: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getPendingPlan, orgId),
+  clearPendingPlan: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.clearPendingPlan, orgId),
   batchCreateTasks: (input) => ipcRenderer.invoke(IPC_CHANNELS.batchCreateTasks, input),
   getAvailablePlanningRoles: (orgId) => ipcRenderer.invoke(IPC_CHANNELS.getAvailablePlanningRoles, orgId),
   switchPlanningRole: (input) => ipcRenderer.invoke(IPC_CHANNELS.switchPlanningRole, input),
