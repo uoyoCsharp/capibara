@@ -3,9 +3,9 @@ import type { ITaskRepository } from '@main/core/interfaces/i-task.repository.js
 import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js';
 import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.js';
 import type { IDiscussionRepository } from '@main/core/interfaces/i-discussion.repository.js';
-import type { IRunRepository } from '@main/core/interfaces/i-run.repository.js';
+import type { ISettingsRepository } from '@main/core/interfaces/i-settings.repository.js';
 import type { IConversationWorkflowRepository } from '@main/core/interfaces/i-conversation-workflow.repository.js';
-import type { PromptContext, DiscussionSummary, ReviewableChild, DecompositionDeliverable, LeafDeliverable, PlanningPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
+import type { PromptContext, DiscussionSummary, ReviewableChild, DecompositionDeliverable, LeafDeliverable, PlanningPromptContext, PriorWorkContext, SiblingTaskInfo } from '@main/core/interfaces/i-prompt-builder.js';
 import type { TaskNode, DiscussionGroup, Role, Skill, WakeTrigger } from '@main/core/types/domain.types.js';
 import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { ConversationContextBuilder } from '../conversation/conversation-context.builder.js';
@@ -14,7 +14,7 @@ import {
   ROLE_REPO_TOKEN,
   SKILL_REPO_TOKEN,
   DISCUSSION_REPO_TOKEN,
-  RUN_REPO_TOKEN,
+  SETTINGS_REPO_TOKEN,
 } from '@main/core/tokens.js';
 import { OrgContext } from './org.context.js';
 
@@ -32,6 +32,7 @@ export class ExecutionContext {
     @inject(ROLE_REPO_TOKEN) private readonly roleRepo: IRoleRepository,
     @inject(SKILL_REPO_TOKEN) private readonly skillRepo: ISkillRepository,
     @inject(DISCUSSION_REPO_TOKEN) private readonly discussionRepo: IDiscussionRepository,
+    @inject(SETTINGS_REPO_TOKEN) private readonly settingsRepo: ISettingsRepository,
     private readonly orgContext: OrgContext,
   ) {}
 
@@ -113,6 +114,27 @@ export class ExecutionContext {
     const allItemTypes = await this.workflowEngine.getAllItemTypes(task.orgId);
     const isTaskTerminal = await this.workflowEngine.isTerminalStatus(task.orgId, task.status);
 
+    // OPT-03: Build prior work context for revision scenarios
+    let priorWork: PriorWorkContext | undefined;
+    if (trigger === 'review_revise') {
+      priorWork = await this.buildPriorWorkContext(task, taskTypeDef);
+    }
+
+    // OPT-04: Build subordinate skill descriptions for decomposition/assignment
+    let subordinateSkills: Map<string, string[]> | undefined;
+    if (taskTypeDef?.canDecompose) {
+      subordinateSkills = await this.buildSubordinateSkills(subordinates);
+    }
+
+    // Resolve communication language preference
+    let communicationLanguage: string | undefined;
+    try {
+      communicationLanguage = await this.settingsRepo.get('locale') ?? undefined;
+    } catch { /* default */ }
+
+    // OPT-10: Build execution sequence context (sibling tasks + parent task info)
+    const { siblingTasks, parentTask: parentTaskInfo } = await this.buildExecutionSequence(task);
+
     return {
       organization,
       role,
@@ -131,6 +153,11 @@ export class ExecutionContext {
       allItemTypes,
       isTaskTerminal,
       planningContext,
+      priorWork,
+      subordinateSkills,
+      communicationLanguage,
+      siblingTasks,
+      parentTask: parentTaskInfo,
     };
   }
 
@@ -243,6 +270,116 @@ export class ExecutionContext {
       voteStats,
       latestReviseFeedback: latestReviseMsg?.content ?? null,
       disputeSummary: group.summary,
+    };
+  }
+
+  /**
+   * OPT-03: Build prior work context for revision scenarios.
+   * Extracts last run summary, artifact paths, and proposed plan from task/discussion data.
+   */
+  private async buildPriorWorkContext(
+    task: TaskNode,
+    taskTypeDef: import('@main/core/types/workflow-schema.types.js').WorkItemTypeDefinition | null | undefined,
+  ): Promise<PriorWorkContext> {
+    // Artifact paths from the task itself
+    const artifactPaths = task.artifactPaths ?? [];
+
+    // Last run summary from discussion messages
+    const lastRunSummary = await this.extractWorkSummary(task);
+
+    // For decomposer tasks: extract the proposed plan from discussion
+    let proposedPlan: string | null = null;
+    const isDecomposer = taskTypeDef?.canDecompose ?? false;
+    if (isDecomposer) {
+      const group = await this.findNearestDiscussionGroup(task);
+      if (group && task.assigneeRoleId) {
+        const messages = await this.discussionRepo.findRecentMessages(group.id, 10);
+        // Find the most recent non-vote message from the assignee (the proposed plan)
+        const planMsg = messages.find(
+          (m) => m.authorRoleId === task.assigneeRoleId && !m.voteTag,
+        );
+        if (planMsg) {
+          proposedPlan = planMsg.content;
+        }
+      }
+    }
+
+    return { lastRunSummary, artifactPaths, proposedPlan };
+  }
+
+  /**
+   * OPT-04: Build subordinate skill descriptions for decomposition assignment guidance.
+   */
+  private async buildSubordinateSkills(subordinates: Role[]): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>();
+    for (const sub of subordinates) {
+      if (sub.skillIds.length === 0) continue;
+      const descriptions: string[] = [];
+      for (const skillId of sub.skillIds) {
+        const skill = await this.skillRepo.findById(skillId);
+        if (skill) descriptions.push(skill.description);
+      }
+      if (descriptions.length > 0) {
+        result.set(sub.id, descriptions);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * OPT-10: Build execution sequence context — sibling tasks and parent task info.
+   * Only populated when the task has a parent (i.e., is part of a decomposition).
+   */
+  private async buildExecutionSequence(
+    task: TaskNode,
+  ): Promise<{ siblingTasks?: SiblingTaskInfo[]; parentTask?: PromptContext['parentTask'] }> {
+    if (!task.parentId) return {};
+
+    const parentTask = await this.taskRepo.findById(task.parentId);
+    if (!parentTask) return {};
+
+    const siblings = await this.taskRepo.findByParentId(task.parentId);
+    if (siblings.length <= 1) return {};
+
+    const roleNameCache = new Map<string, string>();
+    const MAX_SUMMARY_LENGTH = 300;
+
+    const siblingTasks: SiblingTaskInfo[] = await Promise.all(
+      siblings.map(async (s) => {
+        const isCurrent = s.id === task.id;
+        const assigneeRoleName = await this.resolveRoleName(s.assigneeRoleId, roleNameCache);
+
+        // Only extract work summaries for completed sibling tasks (not current)
+        let workSummary: string | null = null;
+        if (!isCurrent) {
+          const isTerminal = await this.workflowEngine.isTerminalStatus(s.orgId, s.status);
+          if (isTerminal) {
+            workSummary = await this.extractWorkSummary(s);
+            if (workSummary && workSummary.length > MAX_SUMMARY_LENGTH) {
+              workSummary = workSummary.slice(0, MAX_SUMMARY_LENGTH) + '...';
+            }
+          }
+        }
+
+        return {
+          id: s.id,
+          type: s.type,
+          title: s.title,
+          status: s.status,
+          assigneeRoleName,
+          workSummary,
+          isCurrent,
+        };
+      }),
+    );
+
+    return {
+      siblingTasks,
+      parentTask: {
+        title: parentTask.title,
+        type: parentTask.type,
+        status: parentTask.status,
+      },
     };
   }
 

@@ -54,6 +54,16 @@ export interface PromptContext {
   isTaskTerminal?: boolean;
   /** Planning mode context — present only for Conversational Task Planning runs */
   planningContext?: PlanningPromptContext;
+  /** Prior work context for revision scenarios (summary + artifacts from previous run) */
+  priorWork?: PriorWorkContext;
+  /** Subordinate skill descriptions keyed by roleId (for decomposition assignment guidance) */
+  subordinateSkills?: Map<string, string[]>;
+  /** Communication language preference (e.g., 'zh-CN', 'en-US') */
+  communicationLanguage?: string;
+  /** Execution sequence context: sibling tasks under the same parent (ordered by creation) */
+  siblingTasks?: SiblingTaskInfo[];
+  /** Parent task title and type (for execution sequence header) */
+  parentTask?: { title: string; type: TaskType; status: TaskStatus };
 }
 
 /** Context specific to Conversational Task Planning runs. */
@@ -64,6 +74,29 @@ export interface PlanningPromptContext {
   initialMessage?: string;
   /** The user's communication language preference (e.g., 'zh-CN', 'en-US') */
   communicationLanguage?: string;
+}
+
+/** Prior work context injected during revision scenarios. */
+export interface PriorWorkContext {
+  /** Summary text from the previous capibara_task_complete call */
+  lastRunSummary: string | null;
+  /** Artifact file paths produced in the previous run */
+  artifactPaths: string[];
+  /** For decomposer tasks: the proposed plan text (from discussion post) */
+  proposedPlan: string | null;
+}
+
+/** A sibling task in the execution sequence (for execution sequence context). */
+export interface SiblingTaskInfo {
+  id: string;
+  type: TaskType;
+  title: string;
+  status: TaskStatus;
+  assigneeRoleName: string | null;
+  /** Work summary from the last completed run (null if not yet executed) */
+  workSummary: string | null;
+  /** Whether this is the current task being executed */
+  isCurrent: boolean;
 }
 
 export interface DiscussionSummary {
@@ -85,6 +118,8 @@ export interface SessionPromptContext {
   communicationLanguage?: string;
   /** Organization custom instructions */
   orgInstructions?: string;
+  /** Work item type definitions from the organization's workflow schema */
+  itemTypes?: import('../types/workflow-schema.types.js').WorkItemTypeDefinition[];
 }
 
 export interface IPromptBuilder {

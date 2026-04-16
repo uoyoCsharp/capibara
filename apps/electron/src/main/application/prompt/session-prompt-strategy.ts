@@ -1,4 +1,5 @@
 import type { SessionPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
+import { formatOrgRoles, formatLanguageInstruction, formatTypeSchema } from './prompt-utils.js';
 
 export class SessionPromptStrategy {
 
@@ -6,7 +7,8 @@ export class SessionPromptStrategy {
     return [
       this.buildIdentity(context),
       this.buildOrgInstructions(context),
-      this.buildOrgRoles(context),
+      formatOrgRoles(context.orgRoles),
+      formatTypeSchema(context.itemTypes),
       this.buildTools(),
       this.buildLanguage(context),
     ].filter(Boolean).join('\n\n');
@@ -21,18 +23,6 @@ export class SessionPromptStrategy {
     return `## Organization Instructions\n${ctx.orgInstructions}`;
   }
 
-  private buildOrgRoles(ctx: SessionPromptContext): string {
-    if (!ctx.orgRoles || ctx.orgRoles.length === 0) return '';
-    const lines: string[] = ['## Available Roles for Task Assignment'];
-    for (const r of ctx.orgRoles) {
-      const skills = r.skillDescriptions.length > 0
-        ? ` — Skills: ${r.skillDescriptions.join(', ')}`
-        : '';
-      lines.push(`- ${r.name} (roleId: ${r.id})${skills}`);
-    }
-    return lines.join('\n');
-  }
-
   private buildTools(): string {
     return [
       '## Available System Tools',
@@ -42,8 +32,8 @@ export class SessionPromptStrategy {
   }
 
   private buildLanguage(ctx: SessionPromptContext): string {
-    if (!ctx.communicationLanguage) return '';
-    const langName = ctx.communicationLanguage.startsWith('zh') ? 'Chinese (中文)' : 'English';
-    return `## Communication Language\nRespond in ${langName}. Task titles and descriptions in the final plan should be in English regardless of conversation language.`;
+    const instruction = formatLanguageInstruction(ctx.communicationLanguage);
+    if (!instruction) return '';
+    return `## Communication Language\n${instruction}`;
   }
 }

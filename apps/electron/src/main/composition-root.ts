@@ -256,7 +256,7 @@ export async function bootstrap(): Promise<void> {
 
   // ─── RunEngine & MCP ───────────────────────────────────
   const orgContext = new OrgContext(orgRepo, roleRepo, taskRepo, logger);
-  const executionContext = new ExecutionContext(taskRepo, roleRepo, skillRepo, discussionRepo, orgContext);
+  const executionContext = new ExecutionContext(taskRepo, roleRepo, skillRepo, discussionRepo, settingsRepo, orgContext);
 
   const mcpConfigGen = new McpConfigGenerator(logger);
 
@@ -285,7 +285,7 @@ export async function bootstrap(): Promise<void> {
 
   const sessionRunCoordinator = new SessionRunCoordinator(
     runEngine, sessionRepo, sessionMessageRepo, roleRepo, orgRepo, skillRepo,
-    promptBuilder, settingsRepo, eventBus, logger,
+    promptBuilder, settingsRepo, workflowEngine, eventBus, logger,
   );
   container.register(SESSION_RUN_COORDINATOR_TOKEN, { useValue: sessionRunCoordinator });
 

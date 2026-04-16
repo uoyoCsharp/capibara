@@ -6,6 +6,7 @@ import type { IRoleRepository } from '@main/core/interfaces/i-role.repository.js
 import type { IOrganizationRepository } from '@main/core/interfaces/i-organization.repository.js';
 import type { ISkillRepository } from '@main/core/interfaces/i-skill.repository.js';
 import type { ISettingsRepository } from '@main/core/interfaces/i-settings.repository.js';
+import type { IWorkflowEngine } from '@main/core/interfaces/i-workflow-engine.js';
 import type { IPromptBuilder, SessionPromptContext } from '@main/core/interfaces/i-prompt-builder.js';
 import type { IEventBus } from '@main/core/interfaces/i-event-bus.js';
 import type { ILogger } from '@main/core/interfaces/i-logger.js';
@@ -20,6 +21,7 @@ import {
   SKILL_REPO_TOKEN,
   PROMPT_BUILDER_TOKEN,
   SETTINGS_REPO_TOKEN,
+  WORKFLOW_ENGINE_TOKEN,
   EVENT_BUS_TOKEN,
   LOGGER_TOKEN,
 } from '@main/core/tokens.js';
@@ -46,6 +48,7 @@ export class SessionRunCoordinator {
     @inject(SKILL_REPO_TOKEN) private readonly skillRepo: ISkillRepository,
     @inject(PROMPT_BUILDER_TOKEN) private readonly promptBuilder: IPromptBuilder,
     @inject(SETTINGS_REPO_TOKEN) private readonly settingsRepo: ISettingsRepository,
+    @inject(WORKFLOW_ENGINE_TOKEN) private readonly workflowEngine: IWorkflowEngine,
     @inject(EVENT_BUS_TOKEN) private readonly eventBus: IEventBus,
     @inject(LOGGER_TOKEN) private readonly logger: ILogger,
   ) {
@@ -192,12 +195,16 @@ export class SessionRunCoordinator {
     const org = await this.orgRepo.findById(session.orgId);
     const orgInstructions = org?.customInstructions?.trim() || undefined;
 
+    // Load workflow item types for type schema context
+    const itemTypes = await this.workflowEngine.getAllItemTypes(session.orgId);
+
     return {
       roleName,
       rolePersona,
       orgRoles,
       communicationLanguage,
       orgInstructions,
+      itemTypes,
     };
   }
 
