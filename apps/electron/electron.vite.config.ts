@@ -16,9 +16,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve('src/main/index.ts'),
-          'capibara-mcp-bridge': resolve('src/main/infrastructure/mcp/capibara-mcp-bridge.ts'),
-          'capibara-worker': resolve('src/main/infrastructure/executors/worker.ts'),
+          index: resolve('src/core/index.ts'),
+          'capibara-worker': resolve('src/core/modules/execution/workers/worker.ts'),
         },
       },
     },
@@ -34,7 +33,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve('src/preload/index.ts'),
+          index: resolve('src/core/preload/index.ts'),
         },
         output: {
           format: 'cjs',
@@ -49,6 +48,7 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared'),
         '@renderer': resolve('src/renderer'),
+        '@core': resolve('src/core'),
       },
     },
     plugins: [react(), tailwindcss()],

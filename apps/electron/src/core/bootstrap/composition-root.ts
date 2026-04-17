@@ -44,7 +44,7 @@ export async function bootstrap(): Promise<void> {
   const pendingPlanStore = new PendingPlanStore();
 
   const resourcesDir = join(app.getAppPath(), 'resources');
-  const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.js');
+  const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.mjs');
 
   const execution = registerExecutionModule(sqliteConn, eventBus, logger, config, workerPath);
 
