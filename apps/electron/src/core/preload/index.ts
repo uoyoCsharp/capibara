@@ -81,6 +81,15 @@ const api = {
   // System
   getSystemHealth: () => ipcRenderer.invoke('capibara:system:health'),
 
+  // Scheduler (execution control)
+  getExecutionState: () => ipcRenderer.invoke('capibara:scheduler:get-state'),
+  pauseExecution: () => ipcRenderer.invoke('capibara:scheduler:pause'),
+  resumeExecution: () => ipcRenderer.invoke('capibara:scheduler:resume'),
+
+  // Dialogs
+  selectFolder: () => ipcRenderer.invoke('capibara:dialog:select-folder'),
+  openFolder: (path: string) => ipcRenderer.invoke('capibara:shell:open-folder', path),
+
   // Event subscription
   subscribe: (callback: (event: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);
