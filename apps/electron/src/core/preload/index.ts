@@ -80,6 +80,7 @@ const api = {
 
   // System
   getSystemHealth: () => ipcRenderer.invoke('capibara:system:health'),
+  checkSystemDeps: () => ipcRenderer.invoke('capibara:system:check-deps'),
 
   // Scheduler (execution control)
   getExecutionState: () => ipcRenderer.invoke('capibara:scheduler:get-state'),

@@ -8,8 +8,12 @@ import {
   Check,
   CircleNotch,
 } from '@phosphor-icons/react';
-import type { SystemCheckResult, DepCheckItem } from '@shared/contracts';
-import { useT } from '../../hooks/useLocale';
+import { useT } from '../../hooks-v2/use-locale';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const api = () => window.capibara as any;
+interface DepCheckItem { ok: boolean; version: string | null }
+interface SystemCheckResult { nodejs: DepCheckItem; claudeCli: DepCheckItem; network: DepCheckItem }
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import logoImg from '../../assets/logo.png';
@@ -29,7 +33,7 @@ export function HealthCheckStep({ onContinue }: HealthCheckStepProps) {
   const runCheck = useCallback(async () => {
     setState('checking');
     try {
-      const res = await window.capibara.checkSystemDeps();
+      const res = await api().checkSystemDeps();
       if (res.ok) {
         setResult(res.data);
       } else {

@@ -6,8 +6,11 @@ import {
   UsersThree,
   CircleNotch,
 } from '@phosphor-icons/react';
-import type { TemplateRecord } from '@shared/contracts';
-import { useT } from '../../hooks/useLocale';
+import { useT } from '../../hooks-v2/use-locale';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const api = () => window.capibara as any;
+type TemplateRecord = { id: string; name: string; description: string; rootRoles: Array<{ children: TemplateRecord['rootRoles'] }> };
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
@@ -37,8 +40,8 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    window.capibara.getTemplates().then((res) => {
-      if (res.ok) {
+    api().getTemplates().then((res: { ok: boolean; data?: TemplateRecord[] }) => {
+      if (res.ok && res.data) {
         setTemplates(res.data);
         if (res.data.length > 0) setSelectedId(res.data[0].id);
       }
@@ -46,7 +49,7 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
   }, []);
 
   const handleBrowse = useCallback(async () => {
-    const res = await window.capibara.selectFolder();
+    const res = await api().selectFolder();
     if (res.ok && res.data) setWorkspace(res.data);
   }, []);
 
@@ -56,22 +59,15 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
     if (!canSubmit || !selectedId) return;
     setCreating(true);
     try {
-      const res = await window.capibara.loadTemplate({
-        templateId: selectedId,
-        orgName: name.trim(),
-        orgDescription: '',
-        budgetLimit: 50,
-        workspacePath: workspace,
-        workflowTemplateId: null,
-      });
+      const res = await api().loadTemplate(selectedId, name.trim(), workspace);
       if (res.ok) {
         if (isFirstTime) {
           // Mark onboarding complete only on first-time setup
-          await window.capibara.updateSetting({ key: 'onboardingCompleted', value: 'true' });
+          await api().setSetting('onboardingCompleted', 'true');
         }
         // Switch to the newly created org
         if (res.data?.id) {
-          await window.capibara.updateSetting({ key: 'currentOrgId', value: res.data.id });
+          await api().setSetting('currentOrgId', res.data.id);
         }
         onComplete();
       }
