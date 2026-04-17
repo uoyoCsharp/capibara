@@ -5,7 +5,7 @@ import { LocaleProvider, useT } from './hooks/useLocale';
 import { Sidebar } from './components/layout/Sidebar';
 import { DashboardPage } from './components/dashboard/DashboardPage';
 import { ExecutionPage } from './components/execution/ExecutionPage';
-import { InboxPage } from './components/inbox/InboxPage';
+import { InboxPage } from './components-v2/inbox/InboxPage';
 import { TeamPage } from './components/team/TeamPage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { WorkspacePage } from './components/workspace/WorkspacePage';
@@ -116,7 +116,7 @@ function AppContent() {
       case 'tasks':
         return <ExecutionPage onNavigate={setActiveSection} />;
       case 'inbox':
-        return <InboxPage onNavigate={setActiveSection} />;
+        return <InboxPage orgId={currentOrgId} />;
       case 'team':
         return <TeamPage orgId={currentOrgId} />;
       case 'settings':
