@@ -1,0 +1,80 @@
+import { injectable } from 'tsyringe';
+import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
+import type { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
+import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
+import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { WakeReason } from '@core/modules/execution/types/execution.types';
+
+@injectable()
+export class RunCoordinator {
+  constructor(
+    private readonly runEngine: IRunEngine,
+    private readonly promptBuilder: PromptBuilder,
+    private readonly convRepo: IConversationRepository,
+    private readonly conversationService: ConversationService,
+    private readonly logger: ILogger,
+  ) {}
+
+  async executeForTask(
+    taskId: string,
+    roleId: string,
+    orgId: string,
+    wakeReason: WakeReason,
+    locale: string,
+  ): Promise<{ runId: string; status: string }> {
+    const prompt = this.promptBuilder.buildForTask(taskId, roleId, locale);
+    if (!prompt) {
+      this.logger.error('Failed to build prompt for task', { taskId, roleId });
+      return { runId: '', status: 'failed' };
+    }
+
+    const result = await this.runEngine.execute({
+      roleId,
+      orgId,
+      prompt,
+      contextId: taskId,
+      contextLabel: orgId,
+      taskId,
+      wakeReason,
+    });
+
+    return { runId: result.runId, status: result.status };
+  }
+
+  async executeForConversation(
+    conversationId: string,
+    roleId: string,
+    orgId: string,
+    locale: string,
+  ): Promise<{ runId: string; status: string }> {
+    const conv = this.convRepo.findById(conversationId);
+    if (!conv) {
+      this.logger.error('Conversation not found', { conversationId });
+      return { runId: '', status: 'failed' };
+    }
+
+    const prompt = this.promptBuilder.buildForConversation(conversationId, roleId, locale);
+    if (!prompt) {
+      this.logger.error('Failed to build prompt for conversation', { conversationId, roleId });
+      return { runId: '', status: 'failed' };
+    }
+
+    const result = await this.runEngine.execute({
+      roleId,
+      orgId,
+      prompt,
+      contextId: conversationId,
+      contextLabel: orgId,
+      conversationId,
+      wakeReason: 'conversation_reply',
+      sessionId: conv.externalSessionId ?? undefined,
+    });
+
+    if (result.sessionId && !conv.externalSessionId) {
+      this.conversationService.updateExternalSessionId(conversationId, result.sessionId);
+    }
+
+    return { runId: result.runId, status: result.status };
+  }
+}
