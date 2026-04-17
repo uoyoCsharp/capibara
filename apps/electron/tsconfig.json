@@ -19,7 +19,8 @@
       "@shared/*": ["src/shared/*"],
       "@main/*": ["src/main/*"],
       "@renderer/*": ["src/renderer/*"],
-      "@preload/*": ["src/preload/*"]
+      "@preload/*": ["src/preload/*"],
+      "@core/*": ["src/core/*"]
     },
     "types": ["node"]
   },

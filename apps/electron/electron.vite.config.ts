@@ -10,6 +10,7 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared'),
         '@main': resolve('src/main'),
+        '@core': resolve('src/core'),
       },
     },
     build: {
@@ -27,6 +28,7 @@ export default defineConfig({
     resolve: {
       alias: {
         '@shared': resolve('src/shared'),
+        '@core': resolve('src/core'),
       },
     },
     build: {

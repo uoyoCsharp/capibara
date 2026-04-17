@@ -19,3 +19,23 @@
 **Scope:**
 - Add `isCreating` state to CreateOrgModal to prevent double-submit during async creation
 - Consistent with TemplateSelectorModal which already has this guard
+
+## Phase 1 Review Deferred Items (2026-04-17)
+
+### Add Missing DB Indexes on High-Frequency Query Columns
+- `runs` table: indexes on `org_id`, `task_id`, `conversation_id`, `role_id`
+- `tasks` table: indexes on `org_id`, `assignee_role_id`
+- Evaluate during Phase 2-5 when query patterns are concrete
+
+### Config Schema Strictness
+- Add `.strict()` to Zod schema to reject unknown config keys (typo protection)
+- Resolve relative paths in `sqlitePath`/`logDir`/`projectDir` to absolute
+- Log warning on malformed JSON config files instead of silent fallback
+
+### ValidatedConfig vs CapibaraConfig Type Drift
+- Consider removing manual `CapibaraConfig` interface and using Zod-inferred `ValidatedConfig` as canonical type
+- Or add compile-time assignability check
+
+### EventBus Error Handling
+- Route handler errors through ILogger instead of console.error
+- Consider whether critical event handlers should surface errors to callers
