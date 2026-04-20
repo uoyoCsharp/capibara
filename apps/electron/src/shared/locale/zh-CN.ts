@@ -532,7 +532,6 @@ export const zhCN: LocaleMessages = {
     resolvedAgo: '已解决',
     cancelledAgo: '已取消',
     timedOutAgo: '已超时',
-    conversations: '条对话',
   },
   workspacePage: {
     title: '工作空间设置',

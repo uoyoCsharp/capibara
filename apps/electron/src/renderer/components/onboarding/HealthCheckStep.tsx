@@ -8,7 +8,7 @@ import {
   Check,
   CircleNotch,
 } from '@phosphor-icons/react';
-import { useT } from '../../hooks-v2/use-locale';
+import { useT } from '../../hooks/use-locale';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const api = () => window.capibara as any;

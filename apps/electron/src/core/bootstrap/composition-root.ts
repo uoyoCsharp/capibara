@@ -44,7 +44,7 @@ export async function bootstrap(): Promise<void> {
   const pendingPlanStore = new PendingPlanStore();
 
   const resourcesDir = join(app.getAppPath(), 'resources');
-  const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.mjs');
+  const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.js');
 
   const execution = registerExecutionModule(sqliteConn, eventBus, logger, config, workerPath);
 
@@ -69,12 +69,12 @@ export async function bootstrap(): Promise<void> {
     sqliteConn, eventBus, logger, config,
     workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
     org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository,
-    execution as unknown as import('@core/modules/execution/interfaces/i-run.repository').IRunRepository,
-    execution as unknown as import('@core/modules/execution/interfaces/i-run-engine').IRunEngine,
+    execution.runRepo,
+    execution.runEngine,
     conversation.conversationService as unknown as import('@core/modules/conversation/interfaces/i-conversation.repository').IConversationRepository,
     conversation.conversationService,
     prompt.promptBuilder,
-    execution as unknown as import('@core/modules/execution/services/cost-tracker').CostTracker,
+    execution.costTracker,
   );
 
   const planning = registerPlanningModule(
@@ -87,20 +87,28 @@ export async function bootstrap(): Promise<void> {
   registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService);
   registerConversationHandlers(conversation.conversationService);
   registerExecutionHandlers(
-    execution as unknown as import('@core/modules/execution/interfaces/i-run.repository').IRunRepository,
-    execution as unknown as import('@core/modules/execution/interfaces/i-run-engine').IRunEngine,
-    execution as unknown as import('@core/modules/execution/services/cost-tracker').CostTracker,
+    execution.runRepo,
+    execution.runEngine,
+    execution.costTracker,
   );
   registerPlanningHandlers(planning.planningService);
   registerSystemHandlers(sqliteConn);
 
-  workerService = execution as unknown as { start: () => void; stop: () => void } as unknown as WorkerService;
+  workerService = execution.workerService;
   orchestrator = orchestratorModule.orchestrator;
   eventBroadcaster = notification.eventBroadcaster;
 
   org.skillSeeder.seedAll();
   org.orgTemplateService.loadTemplatesFromDisk();
   workflow.processTemplateService.loadTemplatesFromDisk();
+
+  org.orgTemplateService.setProcessSchemaProvider({
+    saveSchema: (orgId, schema) => workflow.processEngine.saveSchema(orgId, schema as Parameters<typeof workflow.processEngine.saveSchema>[1]),
+    getDefaultSchema: () => {
+      const defaultTpl = workflow.processTemplateService.getTemplates().find((t) => t.id === 'default');
+      return defaultTpl?.schema ?? null;
+    },
+  });
 
   orchestrator.start();
   eventBroadcaster.start();

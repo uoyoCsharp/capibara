@@ -7,9 +7,15 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { Organization, OrgTemplate, TemplateRoleDefinition } from '../types/organization.types';
 import type { SkillService } from './skill.service';
 
+export interface ProcessSchemaProvider {
+  saveSchema(orgId: string, schema: unknown): void;
+  getDefaultSchema(): unknown | null;
+}
+
 @injectable()
 export class OrgTemplateService {
   private templates: OrgTemplate[] = [];
+  private processSchemaProvider: ProcessSchemaProvider | null = null;
 
   constructor(
     private readonly orgRepo: IOrganizationRepository,
@@ -18,6 +24,10 @@ export class OrgTemplateService {
     private readonly logger: ILogger,
     private readonly templatesDir: string,
   ) {}
+
+  setProcessSchemaProvider(provider: ProcessSchemaProvider): void {
+    this.processSchemaProvider = provider;
+  }
 
   loadTemplatesFromDisk(): OrgTemplate[] {
     if (!existsSync(this.templatesDir)) {
@@ -61,6 +71,13 @@ export class OrgTemplateService {
       orgTemplateId: template.id,
       workspacePath,
     });
+
+    if (this.processSchemaProvider) {
+      const defaultSchema = this.processSchemaProvider.getDefaultSchema();
+      if (defaultSchema) {
+        this.processSchemaProvider.saveSchema(org.id, defaultSchema);
+      }
+    }
 
     const roleNameToId = new Map<string, string>();
 

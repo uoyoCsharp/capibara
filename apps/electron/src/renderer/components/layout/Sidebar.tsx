@@ -6,24 +6,27 @@ import {
   Gear,
   CaretLeft,
   CaretRight,
-  Plus,
-  SignOut,
-  Check,
   CaretUpDown,
   Pause,
   Play,
+  Plus,
+  Check,
+  TreeStructure,
 } from '@phosphor-icons/react';
-import { useState, useRef, useEffect, useCallback } from 'react';
-import type { SectionId, OrganizationRecord } from '@shared/contracts';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { SectionId } from '@core/shared/types';
 import type { LocaleMessages } from '@shared/locale/types.js';
-import { useCapibaraSnapshot } from '../../hooks/useCapibaraSnapshot';
-import { useT } from '../../hooks/useLocale';
+import { useT } from '../../hooks/use-locale';
+import { useAppSnapshot } from '../../hooks/use-app-snapshot';
+import { useConversationStore } from '../../store/conversation.store';
 import { cn } from '../../lib/utils';
 import { toast } from '../../store/toast.store';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Avatar, AvatarFallback } from '../ui/avatar';
-import logoImg from '../../assets/logo.png';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const api = () => window.capibara as any;
 
 interface SidebarProps {
   activeSection: SectionId;
@@ -41,50 +44,29 @@ const NAV_ITEM_DEFS: Array<{
   { id: 'dashboard', sectionKey: 'dashboard', icon: House },
   { id: 'tasks', sectionKey: 'tasks', icon: ListChecks },
   { id: 'inbox', sectionKey: 'inbox', icon: Tray },
+  { id: 'planning', sectionKey: 'planning' as keyof LocaleMessages['sections'], icon: TreeStructure },
   { id: 'team', sectionKey: 'team', icon: UsersThree },
   { id: 'settings', sectionKey: 'settings', icon: Gear },
 ];
 
 export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse, onCreateWorkspace }: SidebarProps) {
   const t = useT();
-  const { organizations, currentOrgId } = useCapibaraSnapshot();
+  const { organizations, currentOrgId } = useAppSnapshot();
   const currentOrg = organizations.find((o) => o.id === currentOrgId);
-
-  // Inbox blocked count for badge
-  const [blockedCount, setBlockedCount] = useState(0);
-
-  const refreshBlockedCount = useCallback(async () => {
-    if (!currentOrgId) { setBlockedCount(0); return; }
-    try {
-      const res = await window.capibara.getGroupedConversations(currentOrgId);
-      if (res.ok) setBlockedCount(res.data.blocked.length);
-    } catch { /* silent */ }
-  }, [currentOrgId]);
+  const activeConversations = useConversationStore((s) => s.activeConversations);
+  const loadActive = useConversationStore((s) => s.loadActiveConversations);
 
   useEffect(() => {
-    refreshBlockedCount();
-    const interval = setInterval(refreshBlockedCount, 10_000);
-    const unsub = window.capibara.subscribe((event) => {
-      if (
-        event.type === 'conversation:question-posted' ||
-        event.type === 'conversation:resolved' ||
-        event.type === 'conversation:cancelled' ||
-        event.type === 'conversation:reply-posted'
-      ) {
-        refreshBlockedCount();
-      }
-    });
-    return () => { clearInterval(interval); unsub(); };
-  }, [refreshBlockedCount]);
+    if (currentOrgId) void loadActive(currentOrgId);
+  }, [currentOrgId, loadActive]);
+
+  const inboxCount = activeConversations.length;
 
   return (
-    <aside
-      className={cn(
-        'flex h-full flex-col border-r bg-sidebar-background transition-[width] duration-200 ease-in-out',
-        collapsed ? 'w-16' : 'w-[var(--sidebar-width)]',
-      )}
-    >
-      {/* Logo + Workspace — merged header */}
+    <aside className={cn(
+      'flex h-full flex-col border-r bg-sidebar-background transition-[width] duration-200',
+      collapsed ? 'w-16' : 'w-[var(--sidebar-width)]',
+    )}>
       <button
         type="button"
         onClick={() => onNavigate(currentOrg ? 'workspace' : 'dashboard')}
@@ -92,30 +74,24 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
           'flex h-14 items-center gap-2.5 border-b hover:bg-sidebar-accent transition-colors',
           collapsed ? 'justify-center px-0' : 'px-5',
         )}
-        title={currentOrg ? t.workspacePage.title : 'Capibara'}
+        title={currentOrg ? (t.workspacePage?.title ?? 'Workspace') : 'Capibara'}
       >
-        <img src={logoImg} alt="Capibara" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+        <div className="h-8 w-8 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">C</div>
         {!collapsed && (
           <div className="min-w-0">
-            {currentOrg ? (
-              <>
-                <p className="text-[11px] font-medium uppercase text-muted-foreground/60 tracking-wider leading-tight">Workspace</p>
-                <p className="text-sm font-semibold text-foreground truncate leading-tight">{currentOrg.name}</p>
-              </>
-            ) : (
-              <span className="text-base font-semibold text-foreground whitespace-nowrap">Capibara</span>
-            )}
+            <p className="text-[11px] font-medium uppercase text-muted-foreground/60 tracking-wider leading-tight">
+              {currentOrg ? 'Workspace' : 'Capibara'}
+            </p>
+            {currentOrg && <p className="text-sm font-semibold truncate leading-tight">{currentOrg.name}</p>}
           </div>
         )}
       </button>
 
-      {/* Navigation */}
       <nav className={cn('flex-1 py-4 space-y-1.5', collapsed ? 'px-2' : 'px-3')}>
         {NAV_ITEM_DEFS.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
-          const label = t.sections[item.sectionKey];
-
+          const label = (t.sections as Record<string, string>)?.[item.sectionKey] ?? item.sectionKey;
           return (
             <Button
               key={item.id}
@@ -125,23 +101,17 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
               className={cn(
                 'w-full h-10 relative',
                 collapsed ? 'justify-center px-0' : 'justify-start gap-3',
-                isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent',
               )}
             >
-              <Icon
-                size={20}
-                weight={isActive ? 'fill' : 'regular'}
-                className="shrink-0"
-              />
+              <Icon size={20} weight={isActive ? 'fill' : 'regular'} className="shrink-0" />
               {!collapsed && label}
-              {item.id === 'inbox' && blockedCount > 0 && !collapsed && (
+              {item.id === 'inbox' && inboxCount > 0 && !collapsed && (
                 <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
-                  {blockedCount}
+                  {inboxCount}
                 </span>
               )}
-              {item.id === 'inbox' && blockedCount > 0 && collapsed && (
+              {item.id === 'inbox' && inboxCount > 0 && collapsed && (
                 <span className="absolute top-1 right-1 flex h-2.5 w-2.5 rounded-full bg-destructive" />
               )}
             </Button>
@@ -149,13 +119,11 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
         })}
       </nav>
 
-      {/* Execution Control */}
       <Separator />
       <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
-        <ExecutionControlButton collapsed={collapsed} />
+        <SchedulerControlButton collapsed={collapsed} />
       </div>
 
-      {/* Footer: Avatar Popover with Workspace Switcher */}
       <Separator />
       <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
         <AvatarPopover
@@ -167,38 +135,28 @@ export function Sidebar({ activeSection, onNavigate, collapsed, onToggleCollapse
         />
       </div>
 
-      {/* Collapse toggle */}
       <Separator />
       <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
         <Button
           variant="ghost"
           size="sm"
           onClick={onToggleCollapse}
-          title={collapsed ? t.common.expand : t.common.collapse}
-          className={cn(
-            'w-full text-xs text-muted-foreground',
-            collapsed ? 'justify-center px-0' : 'justify-start gap-2',
-          )}
+          title={collapsed ? (t.common?.expand ?? 'Expand') : (t.common?.collapse ?? 'Collapse')}
+          className={cn('w-full text-xs text-muted-foreground', collapsed ? 'justify-center px-0' : 'justify-start gap-2')}
         >
           {collapsed ? <CaretRight size={16} /> : <CaretLeft size={16} />}
-          {!collapsed && t.common.collapse}
+          {!collapsed && (t.common?.collapse ?? 'Collapse')}
         </Button>
       </div>
     </aside>
   );
 }
 
-/* ── Avatar Popover with Workspace Switcher ────────────────────── */
-
 function AvatarPopover({
-  collapsed,
-  organizations,
-  currentOrgId,
-  onNavigate,
-  onCreateWorkspace,
+  collapsed, organizations, currentOrgId, onNavigate, onCreateWorkspace,
 }: {
   collapsed: boolean;
-  organizations: OrganizationRecord[];
+  organizations: Array<{ id: string; name: string }>;
   currentOrgId: string | null;
   onNavigate: (section: SectionId) => void;
   onCreateWorkspace?: () => void;
@@ -207,7 +165,6 @@ function AvatarPopover({
   const ref = useRef<HTMLDivElement>(null);
   const t = useT();
 
-  // Close on click outside
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
@@ -220,11 +177,8 @@ function AvatarPopover({
   const handleSwitchOrg = async (orgId: string) => {
     if (orgId === currentOrgId) return;
     try {
-      await window.capibara.updateSetting({ key: 'currentOrgId', value: orgId });
-      // Snapshot refresh will be triggered by the event listener
-    } catch {
-      toast.error(t.errors.failedToUpdate);
-    }
+      await api().setSetting?.('currentOrgId', orgId);
+    } catch { /* silent */ }
     setOpen(false);
   };
 
@@ -254,9 +208,8 @@ function AvatarPopover({
 
       {open && (
         <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg border bg-popover p-1.5 shadow-lg z-50">
-          {/* Workspace list */}
           <p className="px-2 py-1 text-[11px] font-medium uppercase text-muted-foreground/60 tracking-wider">
-            {t.workspace.switchWorkspace}
+            {t.workspace?.switchWorkspace ?? 'Switch Workspace'}
           </p>
           {organizations.map((org) => (
             <button
@@ -277,18 +230,17 @@ function AvatarPopover({
             onClick={() => { setOpen(false); onCreateWorkspace?.(); }}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
           >
-            <Plus size={14} /> {t.workspace.createNewSpace}
+            <Plus size={14} /> {t.workspace?.createNewSpace ?? 'Create New Workspace'}
           </button>
 
           <Separator className="my-1.5" />
 
-          {/* User actions */}
           <button
             type="button"
             onClick={() => { setOpen(false); onNavigate('settings'); }}
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
           >
-            <Gear size={14} /> {t.workspace.userPreferences}
+            <Gear size={14} /> {t.workspace?.userPreferences ?? 'Settings'}
           </button>
         </div>
       )}
@@ -296,9 +248,7 @@ function AvatarPopover({
   );
 }
 
-/* ── Global Execution Control Button ─────────────────────────── */
-
-function ExecutionControlButton({ collapsed }: { collapsed: boolean }) {
+function SchedulerControlButton({ collapsed }: { collapsed: boolean }) {
   const t = useT();
   const [paused, setPaused] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -307,44 +257,37 @@ function ExecutionControlButton({ collapsed }: { collapsed: boolean }) {
   useEffect(() => {
     if (!calledRef.current) {
       calledRef.current = true;
-      window.capibara.getExecutionState().then((res) => {
-        if (res.ok) setPaused(res.data.paused);
-      });
+      api().getExecutionState?.().then((res: { ok: boolean; data?: { paused: boolean } }) => {
+        if (res?.ok) setPaused(res.data?.paused ?? false);
+      }).catch(() => {});
     }
 
-    const unsub = window.capibara.subscribe((event) => {
-      if (event.type === 'execution:paused') setPaused(true);
-      if (event.type === 'execution:resumed') setPaused(false);
+    if (typeof api()?.subscribe !== 'function') return;
+    const unsub = api().subscribe((event: { type: string }) => {
+      if (event.type === 'scheduler:paused') setPaused(true);
+      if (event.type === 'scheduler:resumed') setPaused(false);
     });
     return unsub;
   }, []);
 
-  const handleToggle = async () => {
+  const handleToggle = useCallback(async () => {
     if (loading) return;
     setLoading(true);
     try {
       if (paused) {
-        const res = await window.capibara.resumeExecution();
-        if (res.ok) {
-          setPaused(false);
-          toast.success(t.executionControl.resumedToast);
-        }
+        const res = await api().resumeExecution?.();
+        if (res?.ok) { setPaused(false); toast.success(t.executionControl?.resumedToast ?? 'Scheduler resumed'); }
       } else {
-        const res = await window.capibara.pauseExecution();
-        if (res.ok) {
-          setPaused(true);
-          toast.success(t.executionControl.pausedToast);
-        }
+        const res = await api().pauseExecution?.();
+        if (res?.ok) { setPaused(true); toast.success(t.executionControl?.pausedToast ?? 'Scheduler paused'); }
       }
-    } catch {
-      /* silent */
-    } finally {
-      setLoading(false);
-    }
-  };
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [paused, loading, t]);
 
-  const label = paused ? t.executionControl.resumeAll : t.executionControl.pauseAll;
-  const statusLabel = paused ? t.executionControl.paused : t.executionControl.running;
+  const label = paused
+    ? (t.executionControl?.resumeAll ?? 'Resume')
+    : (t.executionControl?.pauseAll ?? 'Pause');
 
   return (
     <Button
@@ -356,25 +299,12 @@ function ExecutionControlButton({ collapsed }: { collapsed: boolean }) {
       className={cn(
         'w-full text-xs',
         collapsed ? 'justify-center px-0' : 'justify-start gap-2',
-        paused && 'border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10',
+        paused && 'border-amber-500/50 text-amber-600',
       )}
     >
-      {paused ? (
-        <Play size={16} weight="fill" className="shrink-0" />
-      ) : (
-        <Pause size={16} className="shrink-0" />
-      )}
-      {!collapsed && (
-        <span className="flex items-center gap-1.5">
-          {label}
-          {paused && (
-            <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-          )}
-        </span>
-      )}
-      {collapsed && paused && (
-        <span className="absolute top-1 right-1 flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-      )}
+      {paused ? <Play size={16} weight="fill" className="shrink-0" /> : <Pause size={16} className="shrink-0" />}
+      {!collapsed && label}
+      {collapsed && paused && <span className="absolute top-1 right-1 flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />}
     </Button>
   );
 }

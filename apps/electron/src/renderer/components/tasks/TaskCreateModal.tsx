@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TaskType, RoleRecord, CreateTaskInput, WorkflowSchemaRecord } from '@shared/contracts';
+import type { RoleRecord } from '@core/shared/types';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -13,52 +13,59 @@ import {
   DialogFooter,
   DialogTitle,
 } from '../ui/dialog';
-import { useT } from '../../hooks/useLocale';
+import { useT } from '../../hooks/use-locale';
 
-type ItemTypeDef = WorkflowSchemaRecord['workItemTypes'][number];
+interface WorkItemType {
+  name: string;
+  label: string;
+}
 
 interface TaskCreateModalProps {
   orgId: string;
   parentId: string | null;
-  parentType: TaskType | null;
   roles: RoleRecord[];
-  /** Allowed types from the workflow schema (pre-filtered by parent) */
-  allowedTypes: ItemTypeDef[];
+  allowedTypes: WorkItemType[];
   onClose: () => void;
-  onSubmit: (input: CreateTaskInput) => void;
+  onSubmit: (input: {
+    orgId: string;
+    parentId: string | null;
+    type: string;
+    title: string;
+    description: string;
+    assigneeRoleId: string;
+  }) => void;
 }
 
 export function TaskCreateModal({
   orgId,
   parentId,
-  parentType,
   roles,
   allowedTypes,
   onClose,
   onSubmit,
 }: TaskCreateModalProps) {
   const t = useT();
-  const defaultType: TaskType = allowedTypes[0]?.name ?? '';
+  const defaultType = allowedTypes[0]?.name ?? '';
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState<TaskType>(defaultType);
+  const [type, setType] = useState(defaultType);
   const [assigneeRoleId, setAssigneeRoleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setError(t.taskCreate.titleRequired);
+      setError(t.taskCreate?.titleRequired ?? 'Title is required');
       return;
     }
     if (!assigneeRoleId) {
-      setError(t.taskCreate.assigneeRequired);
+      setError(t.taskCreate?.assigneeRequired ?? 'Assignee is required');
       return;
     }
     onSubmit({
       orgId,
       parentId,
-      type: type as CreateTaskInput['type'],
+      type,
       title: title.trim(),
       description: description.trim(),
       assigneeRoleId,
@@ -70,75 +77,69 @@ export function TaskCreateModal({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {parentId ? t.taskCreate.createChild : t.taskCreate.createNew}
+            {parentId
+              ? (t.taskCreate?.createChild ?? 'Create Sub-task')
+              : (t.taskCreate?.createNew ?? 'Create Task')}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Title */}
           <div className="space-y-2">
-            <Label>{t.taskCreate.titleLabel}</Label>
+            <Label>{t.taskCreate?.titleLabel ?? 'Title'}</Label>
             <Input
               type="text"
-              placeholder={t.taskCreate.titlePlaceholder}
+              placeholder={t.taskCreate?.titlePlaceholder ?? 'Task title...'}
               value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setError(null);
-              }}
+              onChange={(e) => { setTitle(e.target.value); setError(null); }}
               autoFocus
             />
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
 
           {/* Type */}
-          <div className="space-y-2">
-            <Label>{t.taskCreate.typeLabel}</Label>
-            <Select
-              value={type}
-              onValueChange={(value) => setType(value as TaskType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {allowedTypes.map((typeDef) => (
-                  <SelectItem key={typeDef.name} value={typeDef.name}>
-                    {typeDef.label} — {(t.taskTypeDesc as Record<string, string>)[typeDef.name] ?? typeDef.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {allowedTypes.length > 0 && (
+            <div className="space-y-2">
+              <Label>{t.taskCreate?.typeLabel ?? 'Type'}</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {allowedTypes.map((typeDef) => (
+                    <SelectItem key={typeDef.name} value={typeDef.name}>
+                      {typeDef.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Description */}
           <div className="space-y-2">
-            <Label>{t.taskCreate.descriptionLabel}</Label>
+            <Label>{t.taskCreate?.descriptionLabel ?? 'Description'}</Label>
             <Textarea
               rows={4}
-              placeholder={t.taskCreate.descriptionPlaceholder}
+              placeholder={t.taskCreate?.descriptionPlaceholder ?? 'Describe the task...'}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="resize-none"
             />
           </div>
 
-          {/* Assignee Role */}
+          {/* Assignee */}
           <div className="space-y-2">
             <Label>
-              {t.taskCreate.assigneeLabel}
+              {t.taskCreate?.assigneeLabel ?? 'Assignee'}
               <span className="text-destructive ml-0.5">*</span>
             </Label>
             <Select
               value={assigneeRoleId ?? ''}
-              onValueChange={(value) => {
-                setAssigneeRoleId(value || null);
-                setError(null);
-              }}
+              onValueChange={(value) => { setAssigneeRoleId(value || null); setError(null); }}
             >
               <SelectTrigger className={cn(!assigneeRoleId && error ? 'border-destructive' : '')}>
-                <SelectValue placeholder={t.taskCreate.assigneeLabel} />
+                <SelectValue placeholder={t.taskCreate?.assigneeLabel ?? 'Select assignee...'} />
               </SelectTrigger>
               <SelectContent>
                 {roles.map((role) => (
@@ -150,13 +151,12 @@ export function TaskCreateModal({
             </Select>
           </div>
 
-          {/* Actions */}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              {t.common.cancel}
+              {t.common?.cancel ?? 'Cancel'}
             </Button>
             <Button type="submit">
-              {t.taskCreate.createTask}
+              {t.taskCreate?.createTask ?? 'Create'}
             </Button>
           </DialogFooter>
         </form>

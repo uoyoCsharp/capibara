@@ -10,6 +10,8 @@ import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-con
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { CapibaraConfig } from '@core/config/config.types';
+import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
+import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
 import { SqliteRunRepository } from '@core/modules/execution/persistence/sqlite-run.repository';
 import { SqliteCostEntryRepository } from '@core/modules/execution/persistence/sqlite-cost-entry.repository';
 import { WorkerService } from '@core/modules/execution/workers/worker-service';
@@ -18,13 +20,20 @@ import { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import { FileLogService } from '@core/modules/execution/logging/file-log.service';
 import { RunEngine } from '@core/modules/execution/engines/run.engine';
 
+export interface ExecutionModule {
+  runRepo: IRunRepository;
+  runEngine: IRunEngine;
+  costTracker: CostTracker;
+  workerService: WorkerService;
+}
+
 export function registerExecutionModule(
   connection: ISqliteConnection,
   eventBus: IEventBus,
   logger: ILogger,
   config: CapibaraConfig,
   workerPath: string,
-): void {
+): ExecutionModule {
   const runRepo = new SqliteRunRepository(connection);
   const costEntryRepo = new SqliteCostEntryRepository(connection);
   const costTracker = new CostTracker(costEntryRepo);
@@ -38,4 +47,6 @@ export function registerExecutionModule(
   container.register(WORKER_SERVICE_TOKEN, { useValue: workerService });
   container.register(EXECUTOR_TOKEN, { useValue: executor });
   container.register(RUN_ENGINE_TOKEN, { useValue: runEngine });
+
+  return { runRepo, runEngine, costTracker, workerService };
 }

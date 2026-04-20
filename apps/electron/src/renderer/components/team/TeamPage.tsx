@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UsersThree, Plus, UserCircle, ShieldCheck, CaretRight } from '@phosphor-icons/react';
-import type { RoleRecord, CreateRoleInput, UpdateRoleInput } from '@shared/contracts';
-import { RoleDrawer } from '../organization/RoleDrawer';
+import type { RoleRecord } from '@core/shared/types';
+import { RoleDrawer } from './RoleDrawer';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { useT } from '../../hooks/useLocale';
+import { useT } from '../../hooks/use-locale';
 import { toast } from '../../store/toast.store';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const api = () => window.capibara as any;
 
 interface TeamPageProps {
   orgId: string | null;
@@ -78,13 +81,13 @@ function RoleCard({
               {node.role.requiresHumanApproval && (
                 <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
                   <ShieldCheck size={10} />
-                  {t.teamPage.humanApprovalBadge}
+                  {t.teamPage?.humanApprovalBadge ?? 'Human Approval'}
                 </Badge>
               )}
             </div>
             {parentName && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                {t.teamPage.reportsTo}: {parentName}
+                {t.teamPage?.reportsTo ?? 'Reports to'}: {parentName}
               </p>
             )}
             {node.role.persona && (
@@ -123,10 +126,10 @@ export function TeamPage({ orgId }: TeamPageProps) {
     if (!orgId) { setRoles([]); return; }
     setIsLoading(true);
     try {
-      const result = await window.capibara.getRolesByOrgId(orgId);
+      const result = await api().getRolesByOrgId(orgId);
       if (result.ok) setRoles(result.data);
     } catch {
-      toast.error(t.organization.failedToLoadRoles);
+      toast.error(t.organization?.failedToLoadRoles ?? 'Failed to load roles');
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +140,7 @@ export function TeamPage({ orgId }: TeamPageProps) {
   const handleAddRole = async (parentId: string | null) => {
     if (!orgId) return;
     try {
-      const input: CreateRoleInput = {
+      const input = {
         orgId,
         name: 'New Agent',
         parentId,
@@ -148,55 +151,53 @@ export function TeamPage({ orgId }: TeamPageProps) {
         canDelegate: false,
         requiresHumanApproval: false,
       };
-      const result = await window.capibara.createRole(input);
+      const result = await api().createRole(input);
       if (result.ok) {
         await loadRoles();
         setSelectedRoleId(result.data.id);
       }
     } catch {
-      toast.error(t.organization.failedToCreateRole);
+      toast.error(t.organization?.failedToCreateRole ?? 'Failed to create role');
     }
   };
 
-  const handleUpdateRole = async (input: UpdateRoleInput) => {
+  const handleUpdateRole = async (input: unknown) => {
     try {
-      const result = await window.capibara.updateRole(input);
+      const result = await api().updateRole(input);
       if (result.ok) await loadRoles();
     } catch {
-      toast.error(t.organization.failedToUpdateRole);
+      toast.error(t.organization?.failedToUpdateRole ?? 'Failed to update role');
     }
   };
 
   const handleDeleteRole = async (id: string) => {
     try {
-      const result = await window.capibara.deleteRole(id);
+      const result = await api().deleteRole(id);
       if (result.ok) {
         setSelectedRoleId(null);
         await loadRoles();
       }
     } catch {
-      toast.error(t.organization.failedToDeleteRole);
+      toast.error(t.organization?.failedToDeleteRole ?? 'Failed to delete role');
     }
   };
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? null;
-  // Filter out system roles (e.g., Plan Assistant) from the team view
   const visibleRoles = roles.filter((r) => !r.isSystemRole);
   const tree = buildTree(visibleRoles);
 
-  // No org selected
   if (!orgId) {
     return (
       <div className="flex h-full flex-col p-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-foreground">{t.teamPage.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t.teamPage.subtitle}</p>
+          <h1 className="text-2xl font-semibold text-foreground">{t.teamPage?.title ?? 'Team'}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t.teamPage?.subtitle ?? 'Manage your AI team hierarchy'}</p>
         </div>
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <UsersThree size={48} className="mx-auto mb-4 text-muted-foreground/50" />
-            <p className="text-lg font-medium text-muted-foreground">{t.teamPage.noOrgSelected}</p>
-            <p className="text-sm text-muted-foreground/70">{t.teamPage.noOrgHint}</p>
+            <p className="text-lg font-medium text-muted-foreground">{t.teamPage?.noOrgSelected ?? 'No workspace selected'}</p>
+            <p className="text-sm text-muted-foreground/70">{t.teamPage?.noOrgHint ?? 'Select a workspace to view the team'}</p>
           </div>
         </div>
       </div>
@@ -208,19 +209,19 @@ export function TeamPage({ orgId }: TeamPageProps) {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">{t.teamPage.title}</h1>
+          <h1 className="text-2xl font-semibold text-foreground">{t.teamPage?.title ?? 'Team'}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t.teamPage.subtitle}
+            {t.teamPage?.subtitle ?? 'Manage your AI team hierarchy'}
             {visibleRoles.length > 0 && (
               <span className="ml-2 text-xs text-muted-foreground/70">
-                ({visibleRoles.length} {t.teamPage.rolesCount})
+                ({visibleRoles.length} {t.teamPage?.rolesCount ?? 'roles'})
               </span>
             )}
           </p>
         </div>
         <Button size="sm" onClick={() => handleAddRole(null)}>
           <Plus size={14} />
-          {t.teamPage.addAgent}
+          {t.teamPage?.addAgent ?? 'Add Agent'}
         </Button>
       </div>
 
@@ -233,8 +234,8 @@ export function TeamPage({ orgId }: TeamPageProps) {
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
             <UsersThree size={48} className="mx-auto mb-4 text-muted-foreground/50" />
-            <p className="text-lg font-medium text-muted-foreground">{t.teamPage.noRoles}</p>
-            <p className="text-sm text-muted-foreground/70">{t.teamPage.noRolesHint}</p>
+            <p className="text-lg font-medium text-muted-foreground">{t.teamPage?.noRoles ?? 'No roles yet'}</p>
+            <p className="text-sm text-muted-foreground/70">{t.teamPage?.noRolesHint ?? 'Add roles to build your team'}</p>
           </div>
         </div>
       ) : (

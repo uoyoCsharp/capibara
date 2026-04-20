@@ -1,260 +1,132 @@
-import { useEffect, useState, useCallback } from 'react';
-import { MagnifyingGlass, Plus, Pencil, Trash, Funnel } from '@phosphor-icons/react';
-import type { SkillRecord, SkillCategory, SkillSource } from '@shared/contracts';
-import { cn } from '../../lib/utils';
-import { SkillFormModal } from './SkillFormModal';
-import { ConfirmDialog } from '../shared/ConfirmDialog';
-import { toast } from '../../store/toast.store';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Badge } from '../ui/badge';
-import { Card, CardContent } from '../ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Separator } from '../ui/separator';
-import { useT } from '../../hooks/useLocale';
-
-const CATEGORIES: SkillCategory[] = ['analysis', 'design', 'implementation', 'review', 'test', 'general'];
-
-const SOURCES: Array<{ value: SkillSource; label: string }> = [
-  { value: 'builtin', label: 'Built-in' },
-  { value: 'template', label: 'Template' },
-  { value: 'custom', label: 'Custom' },
-];
+import { useEffect, useState } from 'react';
+import { Lightning, Plus, MagnifyingGlass, Trash } from '@phosphor-icons/react';
+import { useOrganizationStore } from '../../store/organization.store';
+import type { SkillRecord } from '@core/shared/types';
 
 const CATEGORY_COLORS: Record<string, string> = {
   analysis: 'bg-blue-500/10 text-blue-600',
-  design: 'bg-primary/10 text-primary',
+  design: 'bg-purple-500/10 text-purple-600',
   implementation: 'bg-green-500/10 text-green-600',
   review: 'bg-yellow-500/10 text-yellow-600',
-  test: 'bg-destructive/10 text-destructive',
+  test: 'bg-red-500/10 text-red-600',
   general: 'bg-muted text-muted-foreground',
 };
 
 const SOURCE_COLORS: Record<string, string> = {
-  builtin: 'bg-green-500/10 text-green-600',
-  template: 'bg-blue-500/10 text-blue-600',
-  custom: 'bg-yellow-500/10 text-yellow-600',
+  builtin: 'bg-primary/10 text-primary',
+  template: 'bg-accent text-accent-foreground',
+  custom: 'bg-secondary text-secondary-foreground',
 };
 
 export function SkillsPage() {
-  const t = useT();
-  const [skills, setSkills] = useState<SkillRecord[]>([]);
+  const skills = useOrganizationStore((s) => s.skills);
+  const isLoading = useOrganizationStore((s) => s.isLoadingSkills);
+  const loadSkills = useOrganizationStore((s) => s.loadSkills);
+  const deleteSkill = useOrganizationStore((s) => s.deleteSkill);
+
   const [search, setSearch] = useState('');
-  const [filterCategory, setFilterCategory] = useState<SkillCategory | ''>('');
-  const [filterSource, setFilterSource] = useState<SkillSource | ''>('');
-  const [showForm, setShowForm] = useState(false);
-  const [editingSkill, setEditingSkill] = useState<SkillRecord | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [filterCategory, setFilterCategory] = useState('');
 
-  const loadSkills = useCallback(async (q: string, cat: SkillCategory | '', src: SkillSource | '') => {
-    try {
-      const result = await window.capibara.searchSkills({
-        query: q,
-        category: cat || null,
-        source: src || null,
-      });
-      if (result.ok) {
-        setSkills(result.data);
-      }
-    } catch {
-      toast.error(t.skills.failedToLoadSkills);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Initial load
   useEffect(() => {
-    loadSkills(search, filterCategory, filterSource);
-  }, [search, filterCategory, filterSource, loadSkills]);
+    void loadSkills();
+  }, [loadSkills]);
 
-  const handleDelete = async (id: string) => {
-    try {
-      const result = await window.capibara.deleteSkill(id);
-      if (result.ok) {
-        await loadSkills(search, filterCategory, filterSource);
-      }
-    } catch {
-      toast.error(t.skills.failedToDeleteSkill);
-    }
-  };
-
-  const handleSaved = async () => {
-    setShowForm(false);
-    setEditingSkill(null);
-    await loadSkills(search, filterCategory, filterSource);
-  };
+  const filtered = skills.filter((s) => {
+    if (search && !s.name.toLowerCase().includes(search.toLowerCase()) && !s.command.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterCategory && s.category !== filterCategory) return false;
+    return true;
+  });
 
   return (
-    <div className="p-[var(--page-padding)]">
-      <div className="flex items-center justify-between mb-[var(--section-gap)]">
+    <div className="p-[var(--page-padding)] space-y-[var(--section-gap)]">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground font-[family-name:var(--font-display)]">{t.skills.title}</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {t.skills.subtitle}
-          </p>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <Lightning size={28} weight="duotone" />
+            Skills & Knowledge
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">{skills.length} skills available</p>
         </div>
-        <Button
-          onClick={() => { setEditingSkill(null); setShowForm(true); }}
-        >
-          <Plus size={16} />
-          {t.skills.customSkill}
-        </Button>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+          <Plus size={16} weight="bold" />
+          Add Custom Skill
+        </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-[var(--section-gap)]">
-        <div className="flex-1 relative">
-          <MagnifyingGlass
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
             type="text"
-            className="pl-9"
-            placeholder={t.skills.searchPlaceholder}
+            placeholder="Search skills..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <div className="flex items-center gap-1.5">
-          <Funnel size={16} className="text-muted-foreground" />
-          <Select
-            value={filterCategory || '_all'}
-            onValueChange={(value) => setFilterCategory(value === '_all' ? '' : value as SkillCategory)}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder={t.skills.allCategories} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">{t.skills.allCategories}</SelectItem>
-              {CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>{t.skillCategories[c]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={filterSource || '_all'}
-            onValueChange={(value) => setFilterSource(value === '_all' ? '' : value as SkillSource)}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder={t.skills.allSources} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">{t.skills.allSources}</SelectItem>
-              {SOURCES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+        >
+          <option value="">All Categories</option>
+          <option value="analysis">Analysis</option>
+          <option value="design">Design</option>
+          <option value="implementation">Implementation</option>
+          <option value="review">Review</option>
+          <option value="test">Test</option>
+          <option value="general">General</option>
+        </select>
       </div>
 
-      {/* Skills Grid */}
       {isLoading ? (
-        <div className="text-center py-12">
-          <p className="text-sm text-muted-foreground">{t.skills.loadingSkills}</p>
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
-      ) : skills.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="p-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              {search || filterCategory || filterSource
-                ? t.skills.noMatchMessage
-                : t.skills.emptyMessage}
-            </p>
-          </CardContent>
-        </Card>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+          <Lightning size={48} weight="duotone" />
+          <p>{search || filterCategory ? 'No skills match your filters' : 'No skills available'}</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {skills.map((skill) => (
-            <Card
-              key={skill.id}
-              className="hover:border-l-primary hover:border-l-2 transition-colors"
-            >
-              <CardContent className="p-[var(--card-padding)]">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-semibold text-foreground truncate">
-                      {skill.name}
-                    </h3>
-                    <code className="text-xs text-primary font-mono">{skill.command}</code>
-                  </div>
-                  <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        'text-[10px] font-medium',
-                        SOURCE_COLORS[skill.source] ?? SOURCE_COLORS.custom,
-                      )}
-                    >
-                      {skill.source}
-                    </Badge>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        'text-[10px] font-medium',
-                        CATEGORY_COLORS[skill.category] ?? CATEGORY_COLORS.general,
-                      )}
-                    >
-                      {skill.category}
-                    </Badge>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground line-clamp-2 mb-4">
-                  {skill.description}
-                </p>
-                {skill.source === 'custom' && (
-                  <div className="flex items-center gap-2 pt-4 border-t border-border">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto py-1 px-2 text-xs text-muted-foreground"
-                      onClick={() => { setEditingSkill(skill); setShowForm(true); }}
-                    >
-                      <Pencil size={12} />
-                      {t.common.edit}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => setConfirmDeleteId(skill.id)}
-                    >
-                      <Trash size={12} />
-                      {t.common.delete}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((skill) => (
+            <SkillCard key={skill.id} skill={skill} onDelete={deleteSkill} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* Skill Form Modal */}
-      {showForm && (
-        <SkillFormModal
-          skill={editingSkill}
-          onClose={() => { setShowForm(false); setEditingSkill(null); }}
-          onSaved={handleSaved}
-        />
+function SkillCard({ skill, onDelete }: { skill: SkillRecord; onDelete: (id: string) => Promise<boolean> }) {
+  return (
+    <div className="p-4 rounded-lg border border-border hover:border-primary/30 transition-colors space-y-2">
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="font-medium">{skill.name}</h3>
+          <code className="text-xs text-muted-foreground">{skill.command}</code>
+        </div>
+        {skill.source === 'custom' && (
+          <button
+            onClick={() => void onDelete(skill.id)}
+            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+          >
+            <Trash size={16} />
+          </button>
+        )}
+      </div>
+      {skill.description && (
+        <p className="text-sm text-muted-foreground line-clamp-2">{skill.description}</p>
       )}
-
-      {/* Delete Confirmation */}
-      {confirmDeleteId && (
-        <ConfirmDialog
-          title={t.skills.deleteSkillTitle}
-          message={t.skills.deleteSkillMessage}
-          confirmLabel="Delete"
-          onConfirm={() => {
-            handleDelete(confirmDeleteId);
-            setConfirmDeleteId(null);
-          }}
-          onCancel={() => setConfirmDeleteId(null)}
-        />
-      )}
+      <div className="flex items-center gap-2">
+        <span className={`text-xs px-1.5 py-0.5 rounded ${CATEGORY_COLORS[skill.category] ?? CATEGORY_COLORS.general}`}>
+          {skill.category}
+        </span>
+        <span className={`text-xs px-1.5 py-0.5 rounded ${SOURCE_COLORS[skill.source] ?? SOURCE_COLORS.custom}`}>
+          {skill.source}
+        </span>
+      </div>
     </div>
   );
 }

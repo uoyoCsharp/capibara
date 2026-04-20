@@ -23,18 +23,18 @@
       { "name": "cancelled", "label": "Cancelled", "category": "terminal" }
     ],
     "transitions": [
-      { "from": "pending", "to": "in_progress", "trigger": "manual" },
-      { "from": "in_progress", "to": "awaiting_review", "trigger": "manual" },
-      { "from": "in_progress", "to": "blocked", "trigger": "system" },
-      { "from": "blocked", "to": "in_progress", "trigger": "manual" },
-      { "from": "awaiting_review", "to": "approved", "trigger": "manual" },
-      { "from": "awaiting_review", "to": "revision", "trigger": "manual" },
-      { "from": "revision", "to": "in_progress", "trigger": "manual" },
-      { "from": "revision", "to": "awaiting_review", "trigger": "manual" },
-      { "from": "approved", "to": "done", "trigger": "auto" },
-      { "from": "pending", "to": "cancelled", "trigger": "system" },
-      { "from": "in_progress", "to": "cancelled", "trigger": "system" },
-      { "from": "blocked", "to": "cancelled", "trigger": "system" }
+      { "from": "pending", "to": "in_progress", "mode": "manual" },
+      { "from": "in_progress", "to": "awaiting_review", "mode": "manual" },
+      { "from": "in_progress", "to": "blocked", "mode": "system" },
+      { "from": "blocked", "to": "in_progress", "mode": "manual" },
+      { "from": "awaiting_review", "to": "approved", "mode": "manual" },
+      { "from": "awaiting_review", "to": "revision", "mode": "manual" },
+      { "from": "revision", "to": "in_progress", "mode": "manual" },
+      { "from": "revision", "to": "awaiting_review", "mode": "manual" },
+      { "from": "approved", "to": "done", "mode": "auto" },
+      { "from": "pending", "to": "cancelled", "mode": "system" },
+      { "from": "in_progress", "to": "cancelled", "mode": "system" },
+      { "from": "blocked", "to": "cancelled", "mode": "system" }
     ],
     "behaviorRules": [
       {
