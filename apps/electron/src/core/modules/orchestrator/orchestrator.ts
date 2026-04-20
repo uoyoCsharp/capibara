@@ -43,7 +43,8 @@ export class Orchestrator {
   }
 
   private onTaskStatusChanged(event: DomainEvent<unknown>): void {
-    const { taskId, assigneeRoleId, orgId } = event.payload as Record<string, string>;
+    const { taskId, assigneeRoleId, orgId, from, to } = event.payload as Record<string, string>;
+    this.logger.info('Task status changed', { taskId, from, to, assigneeRoleId });
     if (!assigneeRoleId || this.pausedTasks.has(taskId)) return;
 
     this.tryWake(assigneeRoleId, orgId, 'task_assigned', taskId);
@@ -115,7 +116,10 @@ export class Orchestrator {
       return;
     }
 
-    this.runCoordinator.executeForTask(taskId!, roleId, orgId, reason as import('@core/modules/execution/types/execution.types').WakeReason, this.locale).catch((err) => {
+    this.logger.info('Waking agent for task', { taskId, roleId, reason });
+    this.runCoordinator.executeForTask(taskId!, roleId, orgId, reason as import('@core/modules/execution/types/execution.types').WakeReason, this.locale).then((result) => {
+      this.logger.info('Run completed', { taskId, roleId, runId: result.runId, status: result.status });
+    }).catch((err) => {
       this.logger.error('RunCoordinator failed for task', { taskId, roleId, error: String(err) });
     });
   }

@@ -31,6 +31,8 @@ export interface Run {
   finishedAt: string | null;
   costUsd: number;
   tokenCount: number;
+  summary: string | null;
+  errorMessage: string | null;
   createdAt: string;
 }
 
@@ -95,6 +97,7 @@ export interface RunExecutionParams {
   sessionId?: string;
   wakeReason?: WakeReason;
   userMessage?: string;
+  projectDir?: string;
 }
 
 export interface RunResult {

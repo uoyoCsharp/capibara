@@ -400,6 +400,20 @@ const migrations: Migration[] = [
       db.exec('DROP TABLE IF EXISTS session_messages');
     },
   },
+  {
+    version: 9,
+    description: 'Add summary and error_message to runs table',
+    up: (db) => {
+      const cols = db.pragma('table_info(runs)') as Array<{ name: string }>;
+      const colNames = new Set(cols.map((c) => c.name));
+      if (!colNames.has('summary')) {
+        db.exec('ALTER TABLE runs ADD COLUMN summary TEXT');
+      }
+      if (!colNames.has('error_message')) {
+        db.exec('ALTER TABLE runs ADD COLUMN error_message TEXT');
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

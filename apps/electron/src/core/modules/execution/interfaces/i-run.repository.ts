@@ -8,5 +8,5 @@ export interface IRunRepository {
   findActiveByOrgId(orgId: string): Run | null;
   create(input: CreateRunInput): Run;
   updateStatus(id: string, status: RunStatus): void;
-  finish(id: string, status: RunStatus, tokenCount?: number, costUsd?: number, sessionId?: string | null): void;
+  finish(id: string, status: RunStatus, tokenCount?: number, costUsd?: number, sessionId?: string | null, summary?: string | null, errorMessage?: string | null): void;
 }

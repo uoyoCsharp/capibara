@@ -16,6 +16,8 @@ interface RunRow {
   finished_at: string | null;
   cost_usd: number;
   token_count: number;
+  summary: string | null;
+  error_message: string | null;
   created_at: string;
 }
 
@@ -32,6 +34,8 @@ function toRun(row: RunRow): Run {
     finishedAt: row.finished_at,
     costUsd: row.cost_usd,
     tokenCount: row.token_count,
+    summary: row.summary,
+    errorMessage: row.error_message,
     createdAt: row.created_at,
   };
 }
@@ -98,14 +102,15 @@ export class SqliteRunRepository implements IRunRepository {
       .run(...Object.values(updates), id);
   }
 
-  finish(id: string, status: RunStatus, tokenCount?: number, costUsd?: number, sessionId?: string | null): void {
+  finish(id: string, status: RunStatus, tokenCount?: number, costUsd?: number, sessionId?: string | null, summary?: string | null, errorMessage?: string | null): void {
     const now = new Date().toISOString();
     this.connection.getDb()
       .prepare(`
         UPDATE runs
-        SET status = ?, finished_at = ?, token_count = COALESCE(?, token_count), cost_usd = COALESCE(?, cost_usd)
+        SET status = ?, finished_at = ?, token_count = COALESCE(?, token_count), cost_usd = COALESCE(?, cost_usd),
+            summary = COALESCE(?, summary), error_message = COALESCE(?, error_message)
         WHERE id = ?
       `)
-      .run(status, now, tokenCount ?? null, costUsd ?? null, id);
+      .run(status, now, tokenCount ?? null, costUsd ?? null, summary ?? null, errorMessage ?? null, id);
   }
 }

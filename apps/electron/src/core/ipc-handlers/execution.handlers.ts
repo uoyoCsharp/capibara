@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
 import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
 import type { CostTracker } from '@core/modules/execution/services/cost-tracker';
+import type { FileLogService } from '@core/modules/execution/logging/file-log.service';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }
@@ -10,6 +11,7 @@ export function registerExecutionHandlers(
   runRepo: IRunRepository,
   runEngine: IRunEngine,
   costTracker: CostTracker,
+  fileLogService?: FileLogService,
 ): void {
   ipcMain.handle('capibara:run:list', async (_ev, orgId: string) => {
     try { return ok(runRepo.findByOrgId(orgId)); }
@@ -36,5 +38,15 @@ export function registerExecutionHandlers(
   ipcMain.handle('capibara:cost:summary', async (_ev, orgId: string) => {
     try { return ok(costTracker.getBudgetUsage(orgId)); }
     catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  ipcMain.handle('capibara:run:logs', async (_ev, runId: string) => {
+    try {
+      const run = runRepo.findById(runId);
+      if (!run) return err('NOT_FOUND', `Run not found: ${runId}`);
+      if (!fileLogService) return ok([]);
+      const lines = await fileLogService.readRaw(run.orgId, run.taskId ?? run.conversationId ?? run.id, runId);
+      return ok(lines);
+    } catch (e) { return err('INTERNAL', String(e)); }
   });
 }

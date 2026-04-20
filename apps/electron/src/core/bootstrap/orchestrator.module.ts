@@ -10,6 +10,7 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { CapibaraConfig } from '@core/config/config.types';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
+import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
 import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
@@ -30,6 +31,7 @@ export function registerOrchestratorModule(
   config: CapibaraConfig,
   taskRepo: ITaskRepository,
   roleRepo: IRoleRepository,
+  orgRepo: IOrganizationRepository,
   runRepo: IRunRepository,
   runEngine: IRunEngine,
   convRepo: IConversationRepository,
@@ -41,7 +43,7 @@ export function registerOrchestratorModule(
   const wakeGateValidator = new WakeGateValidator(roleRepo, runRepo, costTracker, config, logger);
   const budgetGuard = new BudgetGuard(costTracker, config);
   const retryScheduler = new RetryScheduler(runRepo, pendingWakeRepo, config, logger);
-  const runCoordinator = new RunCoordinator(runEngine, promptBuilder, convRepo, conversationService, logger);
+  const runCoordinator = new RunCoordinator(runEngine, promptBuilder, convRepo, conversationService, orgRepo, logger);
   const orchestrator = new Orchestrator(eventBus, logger, taskRepo, roleRepo, convRepo, pendingWakeRepo, wakeGateValidator, retryScheduler, runCoordinator);
 
   container.register(PENDING_WAKE_REPO_TOKEN, { useValue: pendingWakeRepo });

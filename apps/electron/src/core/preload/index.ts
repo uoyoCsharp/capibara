@@ -59,6 +59,7 @@ const api = {
   getRunsByOrgId: (orgId: string) => ipcRenderer.invoke('capibara:run:list', orgId),
   getRun: (id: string) => ipcRenderer.invoke('capibara:run:get', id),
   getRunsByTaskId: (taskId: string) => ipcRenderer.invoke('capibara:run:by-task', taskId),
+  getRunLogs: (runId: string) => ipcRenderer.invoke('capibara:run:logs', runId),
   cancelRun: (runId: string) => ipcRenderer.invoke('capibara:run:cancel', runId),
 
   // Cost

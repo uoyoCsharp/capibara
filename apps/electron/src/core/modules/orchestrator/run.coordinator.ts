@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
 import type { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
+import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { WakeReason } from '@core/modules/execution/types/execution.types';
@@ -13,6 +14,7 @@ export class RunCoordinator {
     private readonly promptBuilder: PromptBuilder,
     private readonly convRepo: IConversationRepository,
     private readonly conversationService: ConversationService,
+    private readonly orgRepo: IOrganizationRepository,
     private readonly logger: ILogger,
   ) {}
 
@@ -29,6 +31,9 @@ export class RunCoordinator {
       return { runId: '', status: 'failed' };
     }
 
+    const org = this.orgRepo.findById(orgId);
+    const projectDir = org?.workspacePath || undefined;
+
     const result = await this.runEngine.execute({
       roleId,
       orgId,
@@ -37,6 +42,7 @@ export class RunCoordinator {
       contextLabel: orgId,
       taskId,
       wakeReason,
+      projectDir,
     });
 
     return { runId: result.runId, status: result.status };
@@ -60,6 +66,9 @@ export class RunCoordinator {
       return { runId: '', status: 'failed' };
     }
 
+    const org = this.orgRepo.findById(orgId);
+    const projectDir = org?.workspacePath || undefined;
+
     const result = await this.runEngine.execute({
       roleId,
       orgId,
@@ -69,6 +78,7 @@ export class RunCoordinator {
       conversationId,
       wakeReason: 'conversation_reply',
       sessionId: conv.externalSessionId ?? undefined,
+      projectDir,
     });
 
     if (result.sessionId && !conv.externalSessionId) {

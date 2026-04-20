@@ -27,6 +27,7 @@ export function registerOrganizationModule(
   skillService: SkillService;
   orgTemplateService: OrgTemplateService;
   skillSeeder: SkillSeeder;
+  orgRepo: SqliteOrganizationRepository;
 } {
   const orgRepo = new SqliteOrganizationRepository(connection);
   const roleRepo = new SqliteRoleRepository(connection);
@@ -42,5 +43,5 @@ export function registerOrganizationModule(
   container.register(ROLE_REPO_TOKEN, { useValue: roleRepo });
   container.register(SKILL_REPO_TOKEN, { useValue: skillRepo });
 
-  return { organizationService, roleService, skillService, orgTemplateService, skillSeeder };
+  return { organizationService, roleService, skillService, orgTemplateService, skillSeeder, orgRepo };
 }

@@ -100,6 +100,7 @@ async function executeJob(job: RunJob): Promise<{
       cwd: job.projectDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
+      shell: process.platform === 'win32',
     });
 
     proc.stdout?.on('data', (data: Buffer) => {

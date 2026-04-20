@@ -69,6 +69,7 @@ export async function bootstrap(): Promise<void> {
     sqliteConn, eventBus, logger, config,
     workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
     org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository,
+    org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
     execution.runRepo,
     execution.runEngine,
     conversation.conversationService as unknown as import('@core/modules/conversation/interfaces/i-conversation.repository').IConversationRepository,
@@ -90,6 +91,7 @@ export async function bootstrap(): Promise<void> {
     execution.runRepo,
     execution.runEngine,
     execution.costTracker,
+    execution.fileLogService,
   );
   registerPlanningHandlers(planning.planningService);
   registerSystemHandlers(sqliteConn);

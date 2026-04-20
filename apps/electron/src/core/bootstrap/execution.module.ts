@@ -25,6 +25,7 @@ export interface ExecutionModule {
   runEngine: IRunEngine;
   costTracker: CostTracker;
   workerService: WorkerService;
+  fileLogService: FileLogService;
 }
 
 export function registerExecutionModule(
@@ -48,5 +49,5 @@ export function registerExecutionModule(
   container.register(EXECUTOR_TOKEN, { useValue: executor });
   container.register(RUN_ENGINE_TOKEN, { useValue: runEngine });
 
-  return { runRepo, runEngine, costTracker, workerService };
+  return { runRepo, runEngine, costTracker, workerService, fileLogService };
 }

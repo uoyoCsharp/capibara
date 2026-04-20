@@ -82,6 +82,8 @@ export interface RunRecord {
   finishedAt: string | null;
   costUsd: number;
   tokenCount: number;
+  summary: string | null;
+  errorMessage: string | null;
   createdAt: string;
 }
 

@@ -17,9 +17,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from '../ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
+import { RunOutputPanel } from './RunOutputPanel';
 import { useT } from '../../hooks/use-locale';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,84 +69,97 @@ export function TaskDetailDrawer({
   return (
     <>
       <Sheet open onOpenChange={(open) => !open && onClose()}>
-        <SheetContent side="right" className="w-[420px] flex flex-col p-0 sm:max-w-[420px]">
+        <SheetContent side="right" className="w-[560px] flex flex-col p-0 sm:max-w-[560px]">
           <SheetHeader className="px-5 py-4 border-b border-border space-y-0">
             <SheetTitle className="text-base truncate">{task.title}</SheetTitle>
             <SheetDescription className="sr-only">Task details</SheetDescription>
           </SheetHeader>
 
-          <div className="flex-1 overflow-auto px-5 py-5 space-y-6">
-            {/* Status & Type */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className={statusColor}>
-                {statusLabel(task.status)}
-              </Badge>
-              <Badge variant="secondary">
-                {typeLabel(task.type)}
-              </Badge>
-            </div>
+          <div className="flex-1 overflow-auto px-5 py-5">
+            <Tabs defaultValue="details" className="space-y-4">
+              <TabsList className="w-full">
+                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+                <TabsTrigger value="output" className="flex-1">Run Output</TabsTrigger>
+              </TabsList>
 
-            {/* Assignee */}
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {t.taskDetail?.assignee ?? 'Assignee'}
-              </p>
-              <div className="flex items-center gap-2">
-                <UserCircle size={20} weight="fill" className="text-muted-foreground" />
-                <span className="text-sm">
-                  {assignee?.name ?? (t.taskDetail?.unassigned ?? 'Unassigned')}
-                </span>
-              </div>
-            </div>
-
-            {/* Description */}
-            {task.description && (
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {t.taskDetail?.description ?? 'Description'}
-                </p>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{task.description}</p>
-              </div>
-            )}
-
-            {/* Metadata */}
-            <div className="space-y-3">
-              <Separator />
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground">{t.taskDetail?.created ?? 'Created'}</p>
-                  <p className="text-foreground">{new Date(task.createdAt).toLocaleString()}</p>
+              <TabsContent value="details" className="space-y-6">
+                {/* Status & Type */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className={statusColor}>
+                    {statusLabel(task.status)}
+                  </Badge>
+                  <Badge variant="secondary">
+                    {typeLabel(task.type)}
+                  </Badge>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t.taskDetail?.updated ?? 'Updated'}</p>
-                  <p className="text-foreground">{new Date(task.updatedAt).toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
 
-            {/* Transitions */}
-            {transitions.length > 0 && !terminal && (
-              <div className="space-y-2">
-                <Separator />
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {t.taskDetail?.actions ?? 'Actions'}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {transitions.map((toStatus) => (
-                    <Button
-                      key={toStatus}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onTransition(task.id, toStatus)}
-                      className="gap-1.5"
-                    >
-                      <ArrowRight size={14} />
-                      {statusLabel(toStatus)}
-                    </Button>
-                  ))}
+                {/* Assignee */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {t.taskDetail?.assignee ?? 'Assignee'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <UserCircle size={20} weight="fill" className="text-muted-foreground" />
+                    <span className="text-sm">
+                      {assignee?.name ?? (t.taskDetail?.unassigned ?? 'Unassigned')}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
+
+                {/* Description */}
+                {task.description && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      {t.taskDetail?.description ?? 'Description'}
+                    </p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{task.description}</p>
+                  </div>
+                )}
+
+                {/* Metadata */}
+                <div className="space-y-3">
+                  <Separator />
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t.taskDetail?.created ?? 'Created'}</p>
+                      <p className="text-foreground">{new Date(task.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t.taskDetail?.updated ?? 'Updated'}</p>
+                      <p className="text-foreground">{new Date(task.updatedAt).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Transitions */}
+                {transitions.length > 0 && !terminal && (
+                  <div className="space-y-2">
+                    <Separator />
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      {t.taskDetail?.actions ?? 'Actions'}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {transitions.map((toStatus) => (
+                        <Button
+                          key={toStatus}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onTransition(task.id, toStatus)}
+                          className="gap-1.5"
+                        >
+                          <ArrowRight size={14} />
+                          {statusLabel(toStatus)}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="output">
+                <RunOutputPanel taskId={task.id} />
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Footer */}

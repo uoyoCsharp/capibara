@@ -67,6 +67,7 @@ export class RunEngine implements IRunEngine {
 
     this.runRepo.updateStatus(run.id, 'running');
     this.emitEvent('run:started', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
+    this.logger.info('Run started', { runId: run.id, orgId: params.orgId, roleId: params.roleId, projectDir: params.projectDir || this.config.cli.projectDir });
 
     try {
       const result = await this.executor.execute({
@@ -77,7 +78,7 @@ export class RunEngine implements IRunEngine {
         wakeReason: params.wakeReason ?? 'task_assigned',
         prompt: params.sessionId && params.userMessage ? params.userMessage : params.prompt,
         mcpConfigPath: '',
-        projectDir: this.config.cli.projectDir,
+        projectDir: params.projectDir || this.config.cli.projectDir,
         executor: this.config.cli.defaultExecutor,
         cliConfig: {
           model: this.config.cli.model,
@@ -90,7 +91,7 @@ export class RunEngine implements IRunEngine {
       });
 
       const tokenCount = result.inputTokens + result.outputTokens;
-      this.runRepo.finish(run.id, result.status, tokenCount, 0, result.sessionId);
+      this.runRepo.finish(run.id, result.status, tokenCount, 0, result.sessionId, result.summary, result.errorMessage);
 
       if (tokenCount > 0) {
         this.costTracker.recordCost(run.id, params.roleId, params.orgId, tokenCount, 0);
@@ -99,6 +100,7 @@ export class RunEngine implements IRunEngine {
       const eventType = result.status === 'succeeded' ? 'run:succeeded'
         : result.status === 'cancelled' ? 'run:cancelled'
         : 'run:failed';
+      this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount, exitCode: result.exitCode });
       this.emitEvent(eventType, { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
 
       this.cleanupRun(run.id);
