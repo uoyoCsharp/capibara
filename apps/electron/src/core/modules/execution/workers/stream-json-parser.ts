@@ -1,6 +1,7 @@
 export interface StreamJsonParserCallbacks {
   onText: (text: string) => void;
   onStatus: (status: string) => void;
+  onParseError?: (line: string, error: string) => void;
 }
 
 export class StreamJsonParser {
@@ -29,8 +30,8 @@ export class StreamJsonParser {
     try {
       const obj = JSON.parse(line) as Record<string, unknown>;
       this.processObject(obj);
-    } catch {
-      // Non-JSON line — ignore
+    } catch (e) {
+      this.callbacks.onParseError?.(line, e instanceof Error ? e.message : String(e));
     }
   }
 

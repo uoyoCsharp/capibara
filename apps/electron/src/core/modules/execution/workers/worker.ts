@@ -1,9 +1,22 @@
 import type { ParentMessage, ChildMessage, RunJob } from './worker-protocol';
 import type { RunStatus } from '../types/execution.types';
+import type { ICliAdapter, CliAdapterResult } from '@core/infrastructure/adapters/i-cli-adapter';
+import { ClaudeCliAdapter } from '@core/infrastructure/adapters/claude-cli.adapter';
 
 const activeByRole = new Map<string, string>();
 const queue: RunJob[] = [];
 const cancelledRuns = new Set<string>();
+
+const adapters = new Map<string, ICliAdapter>();
+adapters.set('claude-cli', new ClaudeCliAdapter());
+
+function getAdapter(executor: string): ICliAdapter {
+  const adapter = adapters.get(executor);
+  if (!adapter) {
+    throw new Error(`Unknown CLI adapter: ${executor}. Available: ${[...adapters.keys()].join(', ')}`);
+  }
+  return adapter;
+}
 
 function postMessage(msg: ChildMessage): void {
   process.parentPort?.postMessage(msg);
@@ -23,7 +36,7 @@ function startRun(job: RunJob): void {
         summary: result.summary,
         errorMessage: result.errorMessage,
         exitCode: result.exitCode,
-        signal: null,
+        signal: result.signal,
         model: result.model,
         sessionId: result.sessionId,
         inputTokens: result.inputTokens,
@@ -65,77 +78,22 @@ function maybeStartQueued(): void {
   }
 }
 
-async function executeJob(job: RunJob): Promise<{
-  status: RunStatus;
-  summary: string | null;
-  errorMessage: string | null;
-  exitCode: number | null;
-  model: string | null;
-  sessionId: string | null;
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens: number;
-}> {
-  const { spawn } = await import('node:child_process');
-  const { parseClaudeStreamJson } = await import('./claude-stream-parser');
+async function executeJob(job: RunJob): Promise<CliAdapterResult> {
+  const adapter = getAdapter(job.executor);
 
-  const args = [
-    '--output-format', 'stream-json',
-    '--verbose',
-    '-p', job.prompt,
-  ];
-
-  if (job.cliConfig?.model) args.push('--model', job.cliConfig.model);
-  if (job.cliConfig?.maxTurnsPerRun) args.push('--max-turns', String(job.cliConfig.maxTurnsPerRun));
-  if (job.cliConfig?.effort) args.push('--effort', job.cliConfig.effort);
-  if (job.mcpConfigPath) args.push('--mcp-config', job.mcpConfigPath);
-  if (job.sessionId) args.push('--resume', job.sessionId);
-  if (job.cliConfig?.extraArgs) args.push(...job.cliConfig.extraArgs);
-
-  return new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
-
-    const proc = spawn('claude', args, {
-      cwd: job.projectDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-      shell: process.platform === 'win32',
-    });
-
-    proc.stdout?.on('data', (data: Buffer) => {
-      const chunk = data.toString();
-      stdout += chunk;
-      postMessage({ type: 'run-log', runId: job.runId, stream: 'stdout', chunk });
-    });
-
-    proc.stderr?.on('data', (data: Buffer) => {
-      const chunk = data.toString();
-      stderr += chunk;
-      postMessage({ type: 'run-log', runId: job.runId, stream: 'stderr', chunk });
-    });
-
-    proc.on('error', (err) => reject(err));
-
-    proc.on('close', (code) => {
-      const parsed = parseClaudeStreamJson(stdout);
-      const status: RunStatus = code === 0 ? 'succeeded' : 'failed';
-      resolve({
-        status,
-        summary: parsed.summary,
-        errorMessage: parsed.errorMessage ?? (stderr.trim() || null),
-        exitCode: code,
-        model: parsed.model,
-        sessionId: parsed.sessionId,
-        inputTokens: parsed.inputTokens,
-        outputTokens: parsed.outputTokens,
-        cachedInputTokens: parsed.cachedInputTokens,
-      });
-    });
-
-    if (cancelledRuns.has(job.runId)) {
-      proc.kill('SIGTERM');
-    }
+  return adapter.execute({
+    runId: job.runId,
+    roleId: job.roleId,
+    orgId: job.orgId,
+    taskId: job.taskId,
+    prompt: job.prompt,
+    mcpConfigPath: job.mcpConfigPath,
+    projectDir: job.projectDir,
+    cliConfig: job.cliConfig,
+    sessionId: job.sessionId,
+    onLog: (stream, chunk) => {
+      postMessage({ type: 'run-log', runId: job.runId, stream, chunk });
+    },
   });
 }
 
@@ -170,6 +128,9 @@ process.parentPort?.on('message', (event: { data: ParentMessage }) => {
         outputTokens: 0,
         cachedInputTokens: 0,
       });
+    } else {
+      const adapter = adapters.get('claude-cli');
+      adapter?.abort(msg.runId);
     }
   }
 });

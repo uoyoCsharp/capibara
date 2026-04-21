@@ -62,7 +62,7 @@ export class RunEngine implements IRunEngine {
     this.fileLogService.writeInput(params.contextLabel, params.contextId, run.id, {
       wakeReason: params.wakeReason,
       roleId: params.roleId,
-      prompt: params.prompt.slice(0, 500),
+      prompt: params.prompt,
     });
 
     this.runRepo.updateStatus(run.id, 'running');
@@ -165,6 +165,9 @@ export class RunEngine implements IRunEngine {
           },
           onStatus: (status) => {
             this.emitEvent('run:status', { runId, status });
+          },
+          onParseError: (line, error) => {
+            this.logger.debug('Stream JSON parse error', { runId, line: line.slice(0, 200), error });
           },
         }));
       }

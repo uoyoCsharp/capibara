@@ -7,12 +7,13 @@ export class PinoLogger implements ILogger {
   private readonly logger: pino.Logger;
 
   constructor(level: string = 'info', parentLogger?: pino.Logger) {
+    const isDev = process.env.NODE_ENV !== 'production';
+    const effectiveLevel = isDev && level === 'info' ? 'debug' : level;
     this.logger = parentLogger ?? pino({
-      level,
-      transport:
-        process.env.NODE_ENV !== 'production'
-          ? { target: 'pino/file', options: { destination: 1 } }
-          : undefined,
+      level: effectiveLevel,
+      transport: isDev
+        ? { target: 'pino/file', options: { destination: 1 } }
+        : undefined,
     });
   }
 

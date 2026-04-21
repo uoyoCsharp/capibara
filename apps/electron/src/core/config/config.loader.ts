@@ -76,6 +76,11 @@ export function loadConfig(projectDir?: string): CapibaraConfig {
     });
   }
 
+  const envLogLevel = process.env.CAPIBARA_LOG_LEVEL || process.env.LOG_LEVEL;
+  if (envLogLevel) {
+    merged = deepMerge(merged, { logging: { level: envLogLevel } });
+  }
+
   const validated = configSchema.parse(merged);
   return validated as CapibaraConfig;
 }

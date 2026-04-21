@@ -1,11 +1,15 @@
-import { useEffect, useState, useRef } from 'react';
-import { CircleNotch, CheckCircle, XCircle, Clock, Terminal } from '@phosphor-icons/react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { CircleNotch, CheckCircle, XCircle, Clock, Terminal, FolderOpen } from '@phosphor-icons/react';
 import type { RunRecord } from '@core/shared/types';
 import { useRunLogs } from '../../hooks/use-run-logs';
 import { Badge } from '../ui/badge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const api = () => window.capibara as any;
+
+const MAX_DISPLAY_LINES = 500;
+const TRUNCATION_KEEP_HEAD = 50;
+const TRUNCATION_KEEP_TAIL = 400;
 
 interface RunOutputPanelProps {
   taskId: string;
@@ -49,6 +53,25 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries, historicLogs]);
+
+  const truncatedHistoricLogs = useMemo(() => {
+    if (historicLogs.length <= MAX_DISPLAY_LINES) {
+      return { head: historicLogs, tail: [], skipped: 0 };
+    }
+    return {
+      head: historicLogs.slice(0, TRUNCATION_KEEP_HEAD),
+      tail: historicLogs.slice(-TRUNCATION_KEEP_TAIL),
+      skipped: historicLogs.length - TRUNCATION_KEEP_HEAD - TRUNCATION_KEEP_TAIL,
+    };
+  }, [historicLogs]);
+
+  const handleOpenLogDir = useCallback(async () => {
+    if (!selectedRunId) return;
+    const res = await api().getRunLogDir(selectedRunId);
+    if (res.ok && res.data) {
+      await api().openFolder(res.data);
+    }
+  }, [selectedRunId]);
 
   if (runs.length === 0) {
     return (
@@ -139,10 +162,25 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
 
       {/* Log output */}
       <div className="space-y-1">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <Terminal size={12} />
-          Execution Log
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Terminal size={12} />
+            Execution Log
+            {!isRunning && historicLogs.length > MAX_DISPLAY_LINES && (
+              <span className="font-normal normal-case">({historicLogs.length} lines)</span>
+            )}
+          </p>
+          {selectedRunId && (
+            <button
+              onClick={handleOpenLogDir}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Open log directory"
+            >
+              <FolderOpen size={12} />
+              Open Logs
+            </button>
+          )}
+        </div>
         <div className="rounded-lg border border-border bg-zinc-950 p-3 max-h-[400px] overflow-auto font-mono text-xs">
           {loadingLogs && (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -150,12 +188,24 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
             </div>
           )}
 
-          {/* Historic logs (for completed runs) */}
-          {!isRunning && historicLogs.length > 0 && historicLogs.map((line, i) => (
-            <LogLine key={i} raw={line} />
-          ))}
+          {/* Historic logs (for completed runs) — truncated */}
+          {!isRunning && truncatedHistoricLogs.head.length > 0 && (
+            <>
+              {truncatedHistoricLogs.head.map((line, i) => (
+                <LogLine key={i} raw={line} />
+              ))}
+              {truncatedHistoricLogs.skipped > 0 && (
+                <div className="text-zinc-500 py-1 my-1 border-y border-zinc-800 text-center">
+                  ... {truncatedHistoricLogs.skipped} lines truncated — open log file for full output ...
+                </div>
+              )}
+              {truncatedHistoricLogs.tail.map((line, i) => (
+                <LogLine key={`tail-${i}`} raw={line} />
+              ))}
+            </>
+          )}
 
-          {/* Real-time logs (for running) */}
+          {/* Real-time logs (for running) — show latest entries */}
           {isRunning && entries.map((entry, i) => (
             <div key={i} className={entry.stream === 'stderr' ? 'text-red-400' : 'text-green-300'}>
               {entry.chunk}
@@ -193,6 +243,7 @@ function LogLine({ raw }: { raw: string }) {
     }
     return <div className="text-green-300 mb-0.5">{raw}</div>;
   } catch {
-    return <div className="text-green-300 mb-0.5">{raw}</div>;
+    const trimmed = raw.length > 2000 ? raw.slice(0, 2000) + '...[truncated]' : raw;
+    return <div className="text-green-300 mb-0.5">{trimmed}</div>;
   }
 }

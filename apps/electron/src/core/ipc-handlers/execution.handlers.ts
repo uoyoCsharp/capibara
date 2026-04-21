@@ -49,4 +49,14 @@ export function registerExecutionHandlers(
       return ok(lines);
     } catch (e) { return err('INTERNAL', String(e)); }
   });
+
+  ipcMain.handle('capibara:run:log-dir', async (_ev, runId: string) => {
+    try {
+      const run = runRepo.findById(runId);
+      if (!run) return err('NOT_FOUND', `Run not found: ${runId}`);
+      if (!fileLogService) return ok(null);
+      const dir = fileLogService.resolveLogDir(run.orgId, run.taskId ?? run.conversationId ?? run.id);
+      return ok(dir);
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
 }

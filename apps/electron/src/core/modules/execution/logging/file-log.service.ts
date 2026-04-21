@@ -59,7 +59,11 @@ export class FileLogService {
     return lines;
   }
 
+  resolveLogDir(contextLabel: string, contextId: string): string {
+    return join(this.logDir, sanitizeName(contextLabel), sanitizeName(contextId));
+  }
+
   private resolveLogPath(contextLabel: string, contextId: string, runId: string): string {
-    return join(this.logDir, sanitizeName(contextLabel), sanitizeName(contextId), `${runId}.jsonl`);
+    return join(this.resolveLogDir(contextLabel, contextId), `${runId}.jsonl`);
   }
 }

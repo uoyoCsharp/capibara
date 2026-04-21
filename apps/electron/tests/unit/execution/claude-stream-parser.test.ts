@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseClaudeStreamJson } from '@core/modules/execution/workers/claude-stream-parser';
+import { parseClaudeStreamJson } from '@core/infrastructure/adapters/claude-stream-parser';
 
 describe('parseClaudeStreamJson', () => {
   describe('system init parsing', () => {
