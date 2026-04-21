@@ -25,7 +25,7 @@ export class RunCoordinator {
     wakeReason: WakeReason,
     locale: string,
   ): Promise<{ runId: string; status: string }> {
-    const prompt = this.promptBuilder.buildForTask(taskId, roleId, locale);
+    const prompt = this.promptBuilder.buildForTask(taskId, roleId, locale, wakeReason);
     if (!prompt) {
       this.logger.error('Failed to build prompt for task', { taskId, roleId });
       return { runId: '', status: 'failed' };

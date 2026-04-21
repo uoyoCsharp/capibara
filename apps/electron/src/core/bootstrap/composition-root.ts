@@ -58,6 +58,8 @@ export async function bootstrap(): Promise<void> {
     org.skillService as unknown as import('@core/modules/organization/interfaces/i-skill.repository').ISkillRepository,
     conversation.conversationService as unknown as import('@core/modules/conversation/interfaces/i-conversation.repository').IConversationRepository,
     conversation.conversationContextBuilder,
+    workflow.processEngine,
+    org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
   );
 
   const mcp = registerMcpModule(

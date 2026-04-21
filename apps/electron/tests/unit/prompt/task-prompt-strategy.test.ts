@@ -2,23 +2,33 @@ import { describe, it, expect } from 'vitest';
 import { buildTaskPrompt } from '@core/modules/prompt/strategies/task-prompt.strategy';
 import type { PromptContext } from '@core/modules/prompt/types/prompt.types';
 
+const defaultTask: PromptContext['task'] = {
+  id: 'task-1',
+  type: 'task',
+  title: 'Implement auth',
+  description: 'Add authentication flow',
+  status: 'in_progress',
+  orgId: 'org-1',
+  hasChildren: false,
+  isDecomposable: false,
+  allowedChildTypes: [],
+  isTerminal: false,
+  parentChain: [],
+  siblings: [],
+};
+
+const defaultRole: PromptContext['role'] = {
+  id: 'role-1',
+  name: 'Backend Dev',
+  persona: 'Expert in Node.js and security',
+  knowledgeBaseRefs: [],
+};
+
 function createCtx(overrides?: Partial<PromptContext>): PromptContext {
   return {
-    task: {
-      id: 'task-1',
-      type: 'task',
-      title: 'Implement auth',
-      description: 'Add authentication flow',
-      status: 'in_progress',
-      parentChain: [],
-      siblings: [],
-    },
-    role: {
-      id: 'role-1',
-      name: 'Backend Dev',
-      persona: 'Expert in Node.js and security',
-      knowledgeBaseRefs: [],
-    },
+    wakeReason: 'task_assigned',
+    task: { ...defaultTask },
+    role: { ...defaultRole },
     skills: [],
     locale: 'en',
     ...overrides,
@@ -61,7 +71,7 @@ describe('buildTaskPrompt', () => {
   it('includes parent chain when present', () => {
     const ctx = createCtx({
       task: {
-        ...createCtx().task,
+        ...defaultTask,
         parentChain: [
           { id: 'p1', type: 'epic', title: 'Auth Epic', status: 'in_progress' },
           { id: 'p2', type: 'project', title: 'Security', status: 'active' },
@@ -82,10 +92,10 @@ describe('buildTaskPrompt', () => {
   it('includes siblings when present', () => {
     const ctx = createCtx({
       task: {
-        ...createCtx().task,
+        ...defaultTask,
         siblings: [
-          { id: 's1', type: 'task', title: 'Setup DB', status: 'done' },
-          { id: 's2', type: 'task', title: 'Write tests', status: 'todo' },
+          { id: 's1', type: 'task', title: 'Setup DB', status: 'done', assigneeRoleName: 'Dev', isCurrent: false },
+          { id: 's2', type: 'task', title: 'Write tests', status: 'todo', assigneeRoleName: 'QA', isCurrent: false },
         ],
       },
     });
@@ -103,7 +113,7 @@ describe('buildTaskPrompt', () => {
   it('includes knowledge base references when present', () => {
     const ctx = createCtx({
       role: {
-        ...createCtx().role,
+        ...defaultRole,
         knowledgeBaseRefs: ['docs/api.md', 'docs/security.md'],
       },
     });
@@ -121,5 +131,242 @@ describe('buildTaskPrompt', () => {
   it('separates sections with horizontal rules', () => {
     const result = buildTaskPrompt(createCtx());
     expect(result).toContain('---');
+  });
+});
+
+describe('buildTaskPrompt — new sections', () => {
+  it('includes System Context section', () => {
+    const result = buildTaskPrompt(createCtx());
+    expect(result).toContain('# System Context');
+    expect(result).toContain('Stateless runs');
+  });
+
+  it('includes ID bindings with correct values', () => {
+    const ctx = createCtx({
+      task: { ...defaultTask, orgId: 'org-1' },
+      role: { ...defaultRole, id: 'role-1' },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('# Your IDs');
+    expect(result).toContain('taskId:');
+    expect(result).toContain('roleId:');
+    expect(result).toContain('orgId:');
+    expect(result).toContain('org-1');
+  });
+
+  it('execute_leaf: includes capibara_task_complete instruction', () => {
+    const ctx = createCtx({
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: false },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('capibara_task_complete');
+    expect(result).not.toContain('capibara_task_create_child');
+  });
+
+  it('propose_decomposition: instructs to submit proposal via ask_question', () => {
+    const ctx = createCtx({
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: true },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('capibara_ask_question');
+    expect(result).not.toContain('capibara_task_create_child');
+  });
+
+  it('execute_decomposition: instructs to create children', () => {
+    const ctx = createCtx({
+      wakeReason: 'conversation_reply',
+      task: { ...defaultTask, isDecomposable: true },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('capibara_task_create_child');
+    expect(result).toContain('capibara_task_complete');
+  });
+
+  it('revision: instructs to address feedback', () => {
+    const ctx = createCtx({ wakeReason: 'review_revise' });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('# Instructions');
+    expect(result).toContain('revision');
+  });
+
+  it('tool guidance differs between leaf and decomposition', () => {
+    const leafResult = buildTaskPrompt(createCtx({
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: false },
+    }));
+    const decompResult = buildTaskPrompt(createCtx({
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: true },
+    }));
+    expect(leafResult).not.toContain('capibara_task_create_child');
+    expect(decompResult).toContain('capibara_ask_question');
+  });
+});
+
+describe('buildTaskPrompt — organization context', () => {
+  it('includes superior, subordinates with skills, and peers', () => {
+    const ctx = createCtx({
+      orgHierarchy: {
+        parentRole: { id: 'r-lead', name: 'Tech Lead' },
+        subordinates: [
+          { id: 'r-dev', name: 'Developer', skillDescriptions: ['code implementation'] },
+          { id: 'r-qa', name: 'QA', skillDescriptions: ['testing'] },
+        ],
+        peers: [{ id: 'r-design', name: 'Designer' }],
+      },
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: true },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('Tech Lead');
+    expect(result).toContain('Developer');
+    expect(result).toContain('code implementation');
+    expect(result).toContain('Designer');
+  });
+
+  it('handles top-level role with no superior', () => {
+    const ctx = createCtx({
+      orgHierarchy: { parentRole: null, subordinates: [], peers: [] },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('Your superior');
+  });
+
+  it('shows subordinate skills only in decomposition scenarios', () => {
+    const hierarchy = {
+      parentRole: null,
+      subordinates: [{ id: 'r-dev', name: 'Dev', skillDescriptions: ['coding'] }],
+      peers: [],
+    };
+    const leafCtx = createCtx({
+      orgHierarchy: hierarchy,
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: false },
+    });
+    const decompCtx = createCtx({
+      orgHierarchy: hierarchy,
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: true },
+    });
+    expect(buildTaskPrompt(leafCtx)).not.toContain('coding');
+    expect(buildTaskPrompt(decompCtx)).toContain('coding');
+  });
+
+  it('omits org context when orgHierarchy is undefined', () => {
+    const ctx = createCtx({ orgHierarchy: undefined });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Organization Context');
+  });
+});
+
+describe('buildTaskPrompt — organization instructions', () => {
+  it('includes custom instructions when present', () => {
+    const ctx = createCtx({
+      organization: { name: 'TestOrg', customInstructions: 'Always write tests first.' },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('# Organization Instructions');
+    expect(result).toContain('Always write tests first.');
+  });
+
+  it('omits section when customInstructions is empty', () => {
+    const ctx = createCtx({
+      organization: { name: 'TestOrg', customInstructions: '' },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Organization Instructions');
+  });
+
+  it('omits section when organization is undefined', () => {
+    const ctx = createCtx({ organization: undefined });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Organization Instructions');
+  });
+});
+
+describe('buildTaskPrompt — execution sequence', () => {
+  it('renders sibling table with current task highlighted', () => {
+    const ctx = createCtx({
+      wakeReason: 'task_assigned',
+      task: {
+        ...defaultTask,
+        parentChain: [{ id: 'p1', type: 'task', title: 'Backend API', status: 'in_progress' }],
+        siblings: [
+          { id: 's1', type: 'subtask', title: 'Setup scaffold', status: 'done', assigneeRoleName: 'Developer', isCurrent: false },
+          { id: 'task-1', type: 'subtask', title: 'Implement auth', status: 'in_progress', assigneeRoleName: 'Developer', isCurrent: true },
+          { id: 's3', type: 'subtask', title: 'Write tests', status: 'open', assigneeRoleName: 'QA', isCurrent: false },
+        ],
+      },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('# Execution Sequence');
+    expect(result).toContain('**2**');
+    expect(result).toContain('**Implement auth**');
+    expect(result).toContain('Setup scaffold');
+    expect(result).toContain('Write tests');
+  });
+
+  it('omits execution sequence for root task (no parent)', () => {
+    const ctx = createCtx({
+      task: { ...defaultTask, parentChain: [], siblings: [] },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Execution Sequence');
+  });
+});
+
+describe('buildTaskPrompt — type schema', () => {
+  it('renders type table in decomposition scenario', () => {
+    const ctx = createCtx({
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: true },
+      typeSchema: {
+        allTypes: [
+          { name: 'epic', label: 'Epic', isLeaf: false, canDecompose: true, allowedChildren: ['story', 'task'], allowedAtRoot: true },
+          { name: 'task', label: 'Task', isLeaf: true, canDecompose: false, allowedChildren: [], allowedAtRoot: true },
+        ],
+        currentTypeDef: { name: 'epic', label: 'Epic', isLeaf: false, canDecompose: true, allowedChildren: ['story', 'task'] },
+      },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('# Work Item Type Schema');
+    expect(result).toContain('Epic');
+    expect(result).toContain('story, task');
+  });
+
+  it('omits type schema in leaf execution scenario', () => {
+    const ctx = createCtx({
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: false },
+      typeSchema: {
+        allTypes: [{ name: 'task', label: 'Task', isLeaf: true, canDecompose: false, allowedChildren: [], allowedAtRoot: true }],
+        currentTypeDef: null,
+      },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Work Item Type Schema');
+  });
+});
+
+describe('buildTaskPrompt — communication language', () => {
+  it('renders Chinese instruction for zh-CN locale', () => {
+    const ctx = createCtx({ locale: 'zh-CN' });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('Chinese');
+    expect(result).toContain('中文');
+  });
+
+  it('omits language section for en-US locale', () => {
+    const ctx = createCtx({ locale: 'en-US' });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Communication Language');
+  });
+
+  it('omits language section for default en locale', () => {
+    const ctx = createCtx({ locale: 'en' });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Communication Language');
   });
 });

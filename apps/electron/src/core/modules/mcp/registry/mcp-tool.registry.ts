@@ -30,8 +30,23 @@ export class McpToolRegistry {
   async dispatch(toolName: string, params: Record<string, unknown>, runId: string): Promise<unknown> {
     const tool = this.tools.get(toolName);
     if (!tool) {
+      this.logger.error('MCP dispatch: unknown tool', { toolName, runId });
       throw new Error(`Unknown MCP tool: ${toolName}`);
     }
-    return tool.handler(params, runId);
+
+    this.logger.debug('MCP tool call started', { toolName, runId, params });
+    const start = Date.now();
+
+    try {
+      const result = await tool.handler(params, runId);
+      this.logger.debug('MCP tool call completed', { toolName, runId, durationMs: Date.now() - start });
+      return result;
+    } catch (err) {
+      this.logger.error('MCP tool call failed', {
+        toolName, runId, durationMs: Date.now() - start,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
   }
 }

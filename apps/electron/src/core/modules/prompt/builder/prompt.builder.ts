@@ -1,6 +1,6 @@
 import { injectable } from 'tsyringe';
 import type { RunContext } from '../context/run.context';
-import type { PromptContext, ConversationPromptContext } from '../types/prompt.types';
+import type { PromptContext, ConversationPromptContext, WakeReason } from '../types/prompt.types';
 import { buildTaskPrompt } from '../strategies/task-prompt.strategy';
 import { buildConversationPrompt } from '../strategies/conversation-prompt.strategy';
 
@@ -8,8 +8,8 @@ import { buildConversationPrompt } from '../strategies/conversation-prompt.strat
 export class PromptBuilder {
   constructor(private readonly runContext: RunContext) {}
 
-  buildForTask(taskId: string, roleId: string, locale: string): string | null {
-    const ctx = this.runContext.buildForTask(taskId, roleId, locale);
+  buildForTask(taskId: string, roleId: string, locale: string, wakeReason: WakeReason): string | null {
+    const ctx = this.runContext.buildForTask(taskId, roleId, locale, wakeReason);
     if (!ctx) return null;
     return buildTaskPrompt(ctx);
   }

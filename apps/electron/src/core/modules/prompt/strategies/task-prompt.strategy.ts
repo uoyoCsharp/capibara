@@ -1,6 +1,8 @@
 import type { PromptContext } from '../types/prompt.types';
+import { resolveScenario, type PromptScenario } from './scenario';
 
 export function buildTaskPrompt(ctx: PromptContext): string {
+  const scenario = resolveScenario(ctx);
   const sections: string[] = [];
 
   sections.push(`# Role\n\nYou are ${ctx.role.name}.\n\n${ctx.role.persona}`);
@@ -9,6 +11,12 @@ export function buildTaskPrompt(ctx: PromptContext): string {
     const skillLines = ctx.skills.map((s) => `- \`${s.command}\` — ${s.description}`).join('\n');
     sections.push(`# Available Skills\n\n${skillLines}`);
   }
+
+  const orgInstructions = buildOrgInstructions(ctx);
+  if (orgInstructions) sections.push(orgInstructions);
+
+  const orgContext = buildOrgContext(ctx, scenario);
+  if (orgContext) sections.push(orgContext);
 
   const parentInfo = ctx.task.parentChain.length > 0
     ? `\nParent chain: ${ctx.task.parentChain.map((p) => `${p.type}:${p.title} [${p.status}]`).join(' → ')}`
@@ -28,9 +36,190 @@ export function buildTaskPrompt(ctx: PromptContext): string {
     siblingInfo,
   );
 
+  const execSequence = buildExecutionSequence(ctx);
+  if (execSequence) sections.push(execSequence);
+
+  const typeSchemaSection = buildTypeSchema(ctx, scenario);
+  if (typeSchemaSection) sections.push(typeSchemaSection);
+
   if (ctx.role.knowledgeBaseRefs.length > 0) {
     sections.push(`# Knowledge Base References\n\n${ctx.role.knowledgeBaseRefs.join('\n')}`);
   }
 
-  return sections.join('\n\n---\n\n');
+  sections.push(buildSystemModel());
+  sections.push(buildIdBindings(ctx));
+  sections.push(buildToolGuidance(scenario));
+  sections.push(buildInstructions(ctx, scenario));
+
+  const language = buildLanguage(ctx);
+  if (language) sections.push(language);
+
+  return sections.filter(Boolean).join('\n\n---\n\n');
+}
+
+function buildSystemModel(): string {
+  return (
+    `# System Context\n\n` +
+    `You are an AI agent in an automated task execution system.\n` +
+    `- **Stateless runs**: Each activation is independent. You have no memory of previous runs — all context is in this prompt.\n` +
+    `- **Sequential execution**: Sibling tasks under the same parent execute one at a time, in order.\n` +
+    `- **Automatic review**: When you call capibara_task_complete, the system automatically notifies your supervisor.\n` +
+    `- **Parent propagation**: When all sibling tasks complete, the system automatically advances the parent task.\n` +
+    `- **Focus**: Work solely on YOUR current task. Do not attempt to coordinate sibling tasks.`
+  );
+}
+
+function buildIdBindings(ctx: PromptContext): string {
+  return (
+    `# Your IDs\n\n` +
+    `- taskId: \`${ctx.task.id}\`\n` +
+    `- roleId: \`${ctx.role.id}\`\n` +
+    `- orgId: \`${ctx.task.orgId}\`\n\n` +
+    `When calling tools, use these exact IDs.`
+  );
+}
+
+function buildToolGuidance(scenario: PromptScenario): string {
+  const tools: Record<PromptScenario, string[]> = {
+    propose_decomposition: ['capibara_ask_question', 'capibara_context'],
+    execute_decomposition: ['capibara_task_create_child', 'capibara_task_complete', 'capibara_context'],
+    execute_leaf: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
+    revision: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
+    review_approve: ['capibara_task_complete', 'capibara_context'],
+    task_completed: ['capibara_task_complete', 'capibara_context'],
+    conversation_reply: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
+    retry_failed: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
+  };
+
+  const toolDescriptions: Record<string, string> = {
+    capibara_task_complete: 'Mark the current task as complete',
+    capibara_task_create_child: 'Create a child task under the current task',
+    capibara_ask_question: 'Ask a question to your supervisor or a peer',
+    capibara_context: 'Query additional context about tasks, roles, or the organization',
+  };
+
+  const lines = tools[scenario].map((t) => `- \`${t}\` — ${toolDescriptions[t]}`).join('\n');
+  return `# Tool Guidance\n\n${lines}`;
+}
+
+function buildInstructions(_ctx: PromptContext, scenario: PromptScenario): string {
+  const instructions: Record<PromptScenario, string> = {
+    propose_decomposition:
+      'Analyze the task requirements and create a decomposition proposal. ' +
+      'Use `capibara_ask_question` to submit your proposal to your supervisor for review. ' +
+      'In the proposal, describe the sub-tasks you plan to create: their types, titles, assigned roles, and execution order. ' +
+      'Do NOT create child tasks yet — wait for approval.',
+    execute_decomposition:
+      'Your decomposition proposal has been approved. ' +
+      'Use `capibara_task_create_child` to create all planned child tasks. ' +
+      'Then call `capibara_task_complete` to mark this task as done.',
+    execute_leaf:
+      'Execute this task directly. ' +
+      'When finished, call `capibara_task_complete`. ' +
+      'If the description is unclear or missing details, use `capibara_ask_question` to clarify with your supervisor first.',
+    revision:
+      'Your previous work needs revision. ' +
+      'Review the latest feedback, address each point, and call `capibara_task_complete` when done. ' +
+      'If the feedback is unclear, use `capibara_ask_question` to clarify first.',
+    review_approve:
+      'Your previous work has been approved. ' +
+      'Continue with any remaining steps or call `capibara_task_complete` to finalize.',
+    task_completed:
+      'A child task has completed. ' +
+      'Check if there are other child tasks still pending, or if the parent task can now be completed.',
+    conversation_reply:
+      'You previously started a conversation and have received a reply. ' +
+      'Read the reply, then continue your work. ' +
+      'If you need more information, continue the conversation; otherwise, proceed with task execution.',
+    retry_failed:
+      'Your previous execution failed. ' +
+      'Review the error, simplify your approach or try a different strategy, and retry.',
+  };
+
+  return `# Instructions\n\n${instructions[scenario]}`;
+}
+
+function buildOrgInstructions(ctx: PromptContext): string | null {
+  if (!ctx.organization?.customInstructions) return null;
+  return `# Organization Instructions\n\n${ctx.organization.customInstructions}`;
+}
+
+function buildOrgContext(ctx: PromptContext, scenario: PromptScenario): string | null {
+  if (!ctx.orgHierarchy) return null;
+
+  const { parentRole, subordinates, peers } = ctx.orgHierarchy;
+  if (!parentRole && subordinates.length === 0 && peers.length === 0) return null;
+
+  const showSkills = scenario === 'propose_decomposition' || scenario === 'execute_decomposition';
+  const lines: string[] = [];
+
+  if (parentRole) {
+    lines.push(`- Your superior: ${parentRole.name} (roleId: ${parentRole.id})`);
+  }
+
+  if (subordinates.length > 0) {
+    lines.push('- Your subordinates:');
+    for (const sub of subordinates) {
+      const skills = showSkills && sub.skillDescriptions.length > 0
+        ? ` — Skills: ${sub.skillDescriptions.join(', ')}`
+        : '';
+      lines.push(`  - ${sub.name} (roleId: ${sub.id})${skills}`);
+    }
+  }
+
+  if (peers.length > 0) {
+    lines.push('- Your peers:');
+    for (const peer of peers) {
+      lines.push(`  - ${peer.name} (roleId: ${peer.id})`);
+    }
+  }
+
+  return `# Organization Context\n\n${lines.join('\n')}`;
+}
+
+function buildExecutionSequence(ctx: PromptContext): string | null {
+  if (ctx.task.parentChain.length === 0) return null;
+  if (ctx.task.siblings.length === 0) return null;
+
+  const parent = ctx.task.parentChain[0];
+  const allSiblings = ctx.task.siblings;
+  const currentIndex = allSiblings.findIndex((s) => s.isCurrent);
+
+  const header = `Parent: **${parent.title}** (${parent.type}, ${parent.status})\nYou are task **${currentIndex + 1} of ${allSiblings.length}**:`;
+
+  const tableHeader = '| # | Type | Title | Assigned To | Status |\n|---|------|-------|-------------|--------|';
+  const rows = allSiblings.map((s, i) => {
+    const num = i + 1;
+    if (s.isCurrent) {
+      return `| **${num}** | **${s.type}** | **${s.title}** | **${s.assigneeRoleName ?? '—'}** | **${s.status}** |`;
+    }
+    return `| ${num} | ${s.type} | ${s.title} | ${s.assigneeRoleName ?? '—'} | ${s.status} |`;
+  }).join('\n');
+
+  return `# Execution Sequence\n\n${header}\n\n${tableHeader}\n${rows}`;
+}
+
+function buildTypeSchema(ctx: PromptContext, scenario: PromptScenario): string | null {
+  if (scenario !== 'propose_decomposition' && scenario !== 'execute_decomposition') return null;
+  if (!ctx.typeSchema || ctx.typeSchema.allTypes.length === 0) return null;
+
+  const tableHeader = '| Type | Label | Leaf | Allowed Children |\n|------|-------|:----:|-----------------|';
+  const rows = ctx.typeSchema.allTypes.map((t) => {
+    const children = t.allowedChildren.length > 0 ? t.allowedChildren.join(', ') : '—';
+    return `| ${t.name} | ${t.label} | ${t.isLeaf ? 'Yes' : 'No'} | ${children} |`;
+  }).join('\n');
+
+  let currentInfo = '';
+  if (ctx.typeSchema.currentTypeDef) {
+    const def = ctx.typeSchema.currentTypeDef;
+    const childTypes = def.allowedChildren.length > 0 ? def.allowedChildren.join(', ') : 'none';
+    currentInfo = `\n\nYour current task type is **${def.label}** (\`${def.name}\`). You can decompose it into: ${childTypes}.`;
+  }
+
+  return `# Work Item Type Schema\n\n${tableHeader}\n${rows}${currentInfo}`;
+}
+
+function buildLanguage(ctx: PromptContext): string | null {
+  if (!ctx.locale.startsWith('zh')) return null;
+  return `# Communication Language\n\nRespond in Chinese (中文). All output including task titles, descriptions, and plans should also be in Chinese.`;
 }

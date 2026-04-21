@@ -130,3 +130,28 @@ describe('buildConversationPrompt', () => {
     expect(result).toContain('---');
   });
 });
+
+describe('buildConversationPrompt — decomposition revision', () => {
+  it('includes decomposition instructions when task is decomposable', () => {
+    const ctx = createCtx({
+      task: { id: 't-1', type: 'epic', title: 'Epic', description: '', status: 'in_progress', isDecomposable: true },
+    });
+    const result = buildConversationPrompt(ctx);
+    expect(result).toContain('# Instructions');
+    expect(result).toContain('decomposition proposal');
+  });
+
+  it('omits decomposition instructions for non-decomposable task', () => {
+    const ctx = createCtx({
+      task: { id: 't-1', type: 'task', title: 'Task', description: '', status: 'in_progress', isDecomposable: false },
+    });
+    const result = buildConversationPrompt(ctx);
+    expect(result).not.toContain('decomposition proposal');
+  });
+
+  it('omits decomposition instructions when no task', () => {
+    const ctx = createCtx({ task: null });
+    const result = buildConversationPrompt(ctx);
+    expect(result).not.toContain('# Instructions');
+  });
+});

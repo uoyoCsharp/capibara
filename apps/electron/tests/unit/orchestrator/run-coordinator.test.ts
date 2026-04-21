@@ -105,7 +105,7 @@ describe('RunCoordinator', () => {
   describe('executeForTask', () => {
     it('builds prompt, executes, and returns result', async () => {
       const result = await coordinator.executeForTask(TEST_TASK_ID, TEST_ROLE_ID, TEST_ORG_ID, 'task_assigned', 'en-US');
-      expect(promptBuilder.buildForTask).toHaveBeenCalledWith(TEST_TASK_ID, TEST_ROLE_ID, 'en-US');
+      expect(promptBuilder.buildForTask).toHaveBeenCalledWith(TEST_TASK_ID, TEST_ROLE_ID, 'en-US', 'task_assigned');
       expect(runEngine.execute).toHaveBeenCalledWith(expect.objectContaining({
         roleId: TEST_ROLE_ID,
         orgId: TEST_ORG_ID,

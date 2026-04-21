@@ -33,5 +33,14 @@ export function buildConversationPrompt(ctx: ConversationPromptContext): string 
     : 'Conversation';
   sections.push(`# Context\n\nThis is a ${typeLabel} (state: ${ctx.conversation.state}).`);
 
+  if (ctx.task?.isDecomposable) {
+    sections.push(
+      `# Instructions\n\n` +
+      `You previously submitted a decomposition proposal for this task. ` +
+      `The reviewer has requested changes. Review the feedback in the conversation history above ` +
+      `and submit a revised proposal in this conversation.`,
+    );
+  }
+
   return sections.join('\n\n---\n\n');
 }

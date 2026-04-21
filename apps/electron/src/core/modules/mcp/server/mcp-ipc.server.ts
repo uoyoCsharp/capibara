@@ -26,8 +26,10 @@ export class McpIpcServer {
 
   async handleToolCall(toolName: string, params: Record<string, unknown>, runId: string, token: string): Promise<unknown> {
     if (!this.validateToken(runId, token)) {
+      this.logger.warn('MCP token validation failed', { toolName, runId });
       throw new Error('Invalid MCP token');
     }
+    this.logger.debug('MCP IPC tool call dispatching', { toolName, runId });
     return this.toolRegistry.dispatch(toolName, params, runId);
   }
 

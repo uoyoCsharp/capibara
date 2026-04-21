@@ -5,12 +5,18 @@ import type { PromptContext, ConversationPromptContext } from '@core/modules/pro
 
 function createPromptContext(overrides?: Partial<PromptContext>): PromptContext {
   return {
+    wakeReason: 'task_assigned',
     task: {
       id: 'task-1',
       type: 'task',
       title: 'Build feature',
       description: 'Implement the feature',
       status: 'in_progress',
+      orgId: 'org-1',
+      hasChildren: false,
+      isDecomposable: false,
+      allowedChildTypes: [],
+      isTerminal: false,
       parentChain: [],
       siblings: [],
     },
@@ -63,20 +69,20 @@ describe('PromptBuilder', () => {
   describe('buildForTask', () => {
     it('returns null when RunContext returns null', () => {
       vi.mocked(runContext.buildForTask).mockReturnValue(null);
-      expect(builder.buildForTask('task-1', 'role-1', 'en')).toBeNull();
+      expect(builder.buildForTask('task-1', 'role-1', 'en', 'task_assigned')).toBeNull();
     });
 
     it('returns prompt string when context exists', () => {
-      const result = builder.buildForTask('task-1', 'role-1', 'en');
+      const result = builder.buildForTask('task-1', 'role-1', 'en', 'task_assigned');
       expect(result).not.toBeNull();
       expect(typeof result).toBe('string');
       expect(result).toContain('Developer');
       expect(result).toContain('Build feature');
     });
 
-    it('passes args to RunContext.buildForTask', () => {
-      builder.buildForTask('t-1', 'r-1', 'zh');
-      expect(runContext.buildForTask).toHaveBeenCalledWith('t-1', 'r-1', 'zh');
+    it('passes args to RunContext.buildForTask including wakeReason', () => {
+      builder.buildForTask('t-1', 'r-1', 'zh', 'review_revise');
+      expect(runContext.buildForTask).toHaveBeenCalledWith('t-1', 'r-1', 'zh', 'review_revise');
     });
   });
 
