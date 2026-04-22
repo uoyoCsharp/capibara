@@ -44,8 +44,9 @@ const EVENT_MAP: Array<{ domain: DomainEventType; map: (payload: Record<string, 
   { domain: 'run:assistant-text', map: (p) => ({ type: 'run:assistant-text', runId: p.runId as string, text: p.text as string }) },
   { domain: 'run:status', map: (p) => ({ type: 'run:status', runId: p.runId as string, status: p.status as string }) },
   { domain: 'conversation:created', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId as string }) },
+  { domain: 'conversation:message-added', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId as string }) },
   { domain: 'conversation:resolved', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId as string }) },
-  { domain: 'conversation:response-needed', map: (p) => ({ type: 'conversation:response-needed', orgId: p.orgId as string, conversationId: p.conversationId as string }) },
+  { domain: 'conversation:response-needed', map: (p) => p.roleId ? null : ({ type: 'conversation:response-needed', orgId: p.orgId as string, conversationId: p.conversationId as string }) },
   { domain: 'planning:plan-ready', map: (p) => ({ type: 'planning:plan-ready', orgId: p.orgId as string, taskCount: (p.taskCount as number) ?? 0 }) },
 ];
 

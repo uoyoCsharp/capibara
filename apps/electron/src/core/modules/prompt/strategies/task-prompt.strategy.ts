@@ -98,8 +98,8 @@ function buildToolGuidance(scenario: PromptScenario): string {
     capibara_context: 'Query additional context about tasks, roles, or the organization',
   };
 
-  const lines = tools[scenario].map((t) => `- \`${t}\` — ${toolDescriptions[t]}`).join('\n');
-  return `# Tool Guidance\n\n${lines}`;
+  const lines = tools[scenario].map((t) => `- \`mcp__capibara__${t}\` — ${toolDescriptions[t]}`).join('\n');
+  return `# Tool Guidance\n\nUse the following MCP tools (provided by the \`capibara\` server):\n\n${lines}`;
 }
 
 function buildInstructions(_ctx: PromptContext, scenario: PromptScenario): string {

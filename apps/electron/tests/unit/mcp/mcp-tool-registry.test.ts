@@ -75,5 +75,25 @@ describe('McpToolRegistry', () => {
     it('throws when tool not found', async () => {
       await expect(registry.dispatch('missing', {}, 'run-1')).rejects.toThrow('Unknown MCP tool: missing');
     });
+
+    it('logs debug on successful dispatch', async () => {
+      registry.register(createTool({ name: 'logged_tool' }));
+      await registry.dispatch('logged_tool', {}, 'run-1');
+      expect(logger.logs.some((l) => l.level === 'debug' && l.msg === 'MCP tool call started')).toBe(true);
+      expect(logger.logs.some((l) => l.level === 'debug' && l.msg === 'MCP tool call completed')).toBe(true);
+    });
+
+    it('logs error and rethrows when handler fails', async () => {
+      const handler = vi.fn().mockRejectedValue(new Error('handler error'));
+      registry.register(createTool({ name: 'err_tool', handler }));
+
+      await expect(registry.dispatch('err_tool', {}, 'run-1')).rejects.toThrow('handler error');
+      expect(logger.logs.some((l) => l.level === 'error' && l.msg === 'MCP tool call failed')).toBe(true);
+    });
+
+    it('logs error for unknown tool dispatch', async () => {
+      await expect(registry.dispatch('nope', {}, 'run-1')).rejects.toThrow();
+      expect(logger.logs.some((l) => l.level === 'error' && l.msg === 'MCP dispatch: unknown tool')).toBe(true);
+    });
   });
 });

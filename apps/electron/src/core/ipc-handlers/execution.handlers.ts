@@ -59,4 +59,25 @@ export function registerExecutionHandlers(
       return ok(dir);
     } catch (e) { return err('INTERNAL', String(e)); }
   });
+
+  ipcMain.handle('capibara:logs:stats', async () => {
+    try {
+      if (!fileLogService) return ok({ totalSizeMB: 0, fileCount: 0, oldestMonth: null, newestMonth: null });
+      return ok(fileLogService.getLogStats());
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  ipcMain.handle('capibara:logs:clear-all', async () => {
+    try {
+      if (!fileLogService) return ok({ deletedFiles: 0, freedMB: 0 });
+      return ok(fileLogService.clearAllLogs());
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  ipcMain.handle('capibara:logs:clear-before', async (_ev, cutoffMonth: string) => {
+    try {
+      if (!fileLogService) return ok({ deletedFiles: 0, freedMB: 0 });
+      return ok(fileLogService.clearBeforeMonth(cutoffMonth));
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
 }

@@ -63,6 +63,11 @@ const api = {
   getRunLogDir: (runId: string) => ipcRenderer.invoke('capibara:run:log-dir', runId),
   cancelRun: (runId: string) => ipcRenderer.invoke('capibara:run:cancel', runId),
 
+  // Logs
+  getLogStats: () => ipcRenderer.invoke('capibara:logs:stats'),
+  clearAllLogs: () => ipcRenderer.invoke('capibara:logs:clear-all'),
+  clearLogsBefore: (cutoffMonth: string) => ipcRenderer.invoke('capibara:logs:clear-before', cutoffMonth),
+
   // Cost
   getCostSummary: (orgId: string) => ipcRenderer.invoke('capibara:cost:summary', orgId),
 

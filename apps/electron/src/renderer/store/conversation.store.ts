@@ -11,6 +11,7 @@ interface ConversationState {
   currentOrgId: string | null;
   selectedConversationId: string | null;
   isLoading: boolean;
+  waitingAIConversationIds: Set<string>;
 
   setCurrentOrgId: (orgId: string | null) => void;
   setSelectedConversationId: (id: string | null) => void;
@@ -19,6 +20,8 @@ interface ConversationState {
   loadMessages: (conversationId: string) => Promise<void>;
   resolve: (id: string) => Promise<boolean>;
   cancel: (id: string) => Promise<boolean>;
+  markWaitingAI: (conversationId: string) => void;
+  clearWaitingAI: (conversationId: string) => void;
 }
 
 export const useConversationStore = create<ConversationState>((set, get) => ({
@@ -28,9 +31,21 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   currentOrgId: null,
   selectedConversationId: null,
   isLoading: false,
+  waitingAIConversationIds: new Set(),
 
   setCurrentOrgId: (orgId) => set({ currentOrgId: orgId }),
   setSelectedConversationId: (id) => set({ selectedConversationId: id }),
+
+  markWaitingAI: (conversationId) => set((s) => {
+    const ids = new Set(s.waitingAIConversationIds);
+    ids.add(conversationId);
+    return { waitingAIConversationIds: ids };
+  }),
+  clearWaitingAI: (conversationId) => set((s) => {
+    const ids = new Set(s.waitingAIConversationIds);
+    ids.delete(conversationId);
+    return { waitingAIConversationIds: ids };
+  }),
 
   loadConversations: async (orgId) => {
     set({ isLoading: true });

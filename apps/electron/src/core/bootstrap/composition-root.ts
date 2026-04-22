@@ -26,12 +26,16 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { WorkerService } from '@core/modules/execution/workers/worker-service';
 import type { Orchestrator } from '@core/modules/orchestrator/orchestrator';
 import type { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
+import type { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
+import type { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-generator';
 
 let logger: ILogger;
 let sqliteConn: SqliteConnection;
 let workerService: WorkerService;
 let orchestrator: Orchestrator;
 let eventBroadcaster: EventBroadcaster;
+let mcpIpcServer: McpIpcServer;
+let mcpConfigGen: McpConfigGenerator;
 
 export async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -46,11 +50,25 @@ export async function bootstrap(): Promise<void> {
   const resourcesDir = join(app.getAppPath(), 'resources');
   const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.js');
 
-  const execution = registerExecutionModule(sqliteConn, eventBus, logger, config, workerPath);
-
   const org = registerOrganizationModule(sqliteConn, eventBus, logger, join(resourcesDir, 'templates'));
   const workflow = registerWorkflowModule(sqliteConn, eventBus, logger, join(resourcesDir, 'workflows'));
   const conversation = registerConversationModule(sqliteConn, eventBus, logger, org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository);
+  workflow.taskService.setConversationRepository(conversation.conversationRepo);
+
+  const execution = registerExecutionModule(sqliteConn, eventBus, logger, config, workerPath);
+
+  const planning = registerPlanningModule(
+    conversation.conversationService, workflow.taskService, pendingPlanStore, eventBus, logger,
+  );
+
+  const mcp = registerMcpModule(
+    logger, workflow.taskService, workflow.taskStateMachine, workflow.processEngine,
+    conversation.conversationService, org.roleService, pendingPlanStore, planning.planningService,
+  );
+
+  const mcpPort = await mcp.mcpIpcServer.start();
+  const mcpConfigPath = mcp.mcpConfigGen.generate(mcpPort);
+  execution.runEngine.setMcpConfigPath(mcpConfigPath);
 
   const prompt = registerPromptModule(
     workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
@@ -60,11 +78,6 @@ export async function bootstrap(): Promise<void> {
     conversation.conversationContextBuilder,
     workflow.processEngine,
     org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
-  );
-
-  const mcp = registerMcpModule(
-    logger, workflow.taskService, workflow.taskStateMachine, workflow.processEngine,
-    conversation.conversationService, org.roleService, pendingPlanStore,
   );
 
   const orchestratorModule = registerOrchestratorModule(
@@ -78,10 +91,6 @@ export async function bootstrap(): Promise<void> {
     conversation.conversationService,
     prompt.promptBuilder,
     execution.costTracker,
-  );
-
-  const planning = registerPlanningModule(
-    conversation.conversationService, workflow.taskService, pendingPlanStore, eventBus, logger,
   );
 
   const notification = registerNotificationModule(eventBus, logger);
@@ -101,6 +110,8 @@ export async function bootstrap(): Promise<void> {
   workerService = execution.workerService;
   orchestrator = orchestratorModule.orchestrator;
   eventBroadcaster = notification.eventBroadcaster;
+  mcpIpcServer = mcp.mcpIpcServer;
+  mcpConfigGen = mcp.mcpConfigGen;
 
   org.skillSeeder.seedAll();
   org.orgTemplateService.loadTemplatesFromDisk();
@@ -122,6 +133,8 @@ export async function bootstrap(): Promise<void> {
 
 export async function shutdown(): Promise<void> {
   logger?.info('Shutting down Capibara core...');
+  mcpConfigGen?.cleanup();
+  mcpIpcServer?.stop();
   sqliteConn?.close();
 }
 

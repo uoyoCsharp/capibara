@@ -26,6 +26,7 @@ export function registerConversationModule(
   roleRepo: IRoleRepository,
 ): {
   conversationService: ConversationService;
+  conversationRepo: SqliteConversationRepository;
   inquiryEscalationService: InquiryEscalationService;
   conversationContextBuilder: ConversationContextBuilder;
 } {
@@ -44,5 +45,5 @@ export function registerConversationModule(
   container.register(INQUIRY_ESCALATION_SERVICE_TOKEN, { useValue: inquiryEscalationService });
   container.register(CONVERSATION_CONTEXT_BUILDER_TOKEN, { useValue: conversationContextBuilder });
 
-  return { conversationService, inquiryEscalationService, conversationContextBuilder };
+  return { conversationService, conversationRepo: convRepo, inquiryEscalationService, conversationContextBuilder };
 }

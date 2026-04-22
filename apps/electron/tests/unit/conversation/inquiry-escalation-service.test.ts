@@ -120,10 +120,10 @@ describe('InquiryEscalationService', () => {
     eventBus.assertEmitted('conversation:escalated');
   });
 
-  it('sets respondentType to human when parent requiresHumanApproval', () => {
+  it('sets respondentType to human when current respondent requiresHumanApproval', () => {
     const conv = createConv({ respondentRoleId: 'role-child' });
-    const childRole = createRole({ id: 'role-child', parentId: 'role-parent' });
-    const parentRole = createRole({ id: 'role-parent', requiresHumanApproval: true, status: 'active' });
+    const childRole = createRole({ id: 'role-child', parentId: 'role-parent', requiresHumanApproval: true });
+    const parentRole = createRole({ id: 'role-parent', status: 'active' });
     vi.mocked(convRepo.findTimedOutInquiries).mockReturnValue([conv]);
     vi.mocked(roleRepo.findById).mockImplementation((id) => {
       if (id === 'role-child') return childRole;

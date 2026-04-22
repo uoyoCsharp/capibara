@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
-import { ChatCircleDots, ArrowBendUpLeft, CheckCircle, XCircle } from '@phosphor-icons/react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { ChatCircleDots, ArrowBendUpLeft, CheckCircle, XCircle, CircleNotch } from '@phosphor-icons/react';
+import { MarkdownContent } from '../ui/markdown-content';
 import { useConversationStore } from '../../store/conversation.store';
 import { useOrganizationStore } from '../../store/organization.store';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
-import type { ConversationRecord, ConversationMessageRecord, RoleRecord } from '@core/shared/types';
+import type { ConversationRecord, ConversationMessageRecord, RoleRecord, DesktopEvent } from '@core/shared/types';
 
 interface InboxPageProps {
   orgId: string | null;
@@ -44,7 +45,16 @@ export function InboxPage({ orgId }: InboxPageProps) {
   const roles = useOrganizationStore((s) => s.roles);
   const loadRoles = useOrganizationStore((s) => s.loadRoles);
 
+  const waitingAIIds = useConversationStore((s) => s.waitingAIConversationIds);
+  const markWaitingAI = useConversationStore((s) => s.markWaitingAI);
+  const clearWaitingAI = useConversationStore((s) => s.clearWaitingAI);
+
+  const isWaitingAI = selectedId ? waitingAIIds.has(selectedId) : false;
+
   const [replyText, setReplyText] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
 
   useEffect(() => {
     if (orgId) {
@@ -54,12 +64,37 @@ export function InboxPage({ orgId }: InboxPageProps) {
   }, [orgId, loadConversations, loadRoles]);
 
   useEffect(() => {
-    if (selectedId) void loadMessages(selectedId);
+    if (selectedId) {
+      prevMessageCountRef.current = 0;
+      setReplyText('');
+      void loadMessages(selectedId);
+    }
   }, [selectedId, loadMessages]);
 
-  useEventSubscription(['conversation:changed', 'conversation:response-needed'], useCallback(() => {
+  useEffect(() => {
+    if (!messagesContainerRef.current || messages.length === 0) return;
+    if (prevMessageCountRef.current === 0) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    } else if (messages.length > prevMessageCountRef.current) {
+      messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: 'smooth' });
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages]);
+
+  const conversationEventTypes = useMemo<DesktopEvent['type'][]>(() => ['conversation:changed', 'conversation:response-needed'], []);
+  useEventSubscription(conversationEventTypes, useCallback(() => {
     if (orgId) void loadConversations(orgId);
-  }, [orgId, loadConversations]));
+    if (selectedId) void loadMessages(selectedId);
+  }, [orgId, selectedId, loadConversations, loadMessages]));
+
+  const runEventTypes = useMemo<DesktopEvent['type'][]>(() => ['run:completed'], []);
+  useEventSubscription(runEventTypes, useCallback(() => {
+    for (const id of useConversationStore.getState().waitingAIConversationIds) {
+      clearWaitingAI(id);
+    }
+    if (orgId) void loadConversations(orgId);
+    if (selectedId) void loadMessages(selectedId);
+  }, [orgId, selectedId, loadConversations, loadMessages, clearWaitingAI]));
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
 
@@ -67,17 +102,23 @@ export function InboxPage({ orgId }: InboxPageProps) {
   const api = () => window.capibara as any;
 
   const handleReply = useCallback(async () => {
-    if (!selectedId || !replyText.trim()) return;
-    await api().addConversationMessage({
-      conversationId: selectedId,
-      authorRoleId: null,
-      authorType: 'human',
-      content: replyText.trim(),
-      intent: 'reply',
-    });
-    setReplyText('');
-    void loadMessages(selectedId);
-  }, [selectedId, replyText, loadMessages]);
+    if (!selectedId || !replyText.trim() || isSending) return;
+    setIsSending(true);
+    try {
+      await api().addConversationMessage({
+        conversationId: selectedId,
+        authorRoleId: null,
+        authorType: 'human',
+        content: replyText.trim(),
+        intent: 'reply',
+      });
+      setReplyText('');
+      markWaitingAI(selectedId);
+      await loadMessages(selectedId);
+    } finally {
+      setIsSending(false);
+    }
+  }, [selectedId, replyText, isSending, loadMessages, markWaitingAI]);
 
   const active = conversations.filter((c) => ['active', 'waiting', 'escalated'].includes(c.state));
   const resolved = conversations.filter((c) => ['resolved', 'completed', 'cancelled', 'timed_out'].includes(c.state));
@@ -147,29 +188,38 @@ export function InboxPage({ orgId }: InboxPageProps) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} msg={msg} roles={roles} />
               ))}
             </div>
 
             {['active', 'waiting'].includes(selected.state) && selected.respondentType === 'human' && (
-              <div className="p-4 border-t border-border flex gap-2">
-                <input
-                  type="text"
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void handleReply()}
-                  placeholder="Type your reply..."
-                  className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  onClick={() => void handleReply()}
-                  disabled={!replyText.trim()}
-                  className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                >
-                  <ArrowBendUpLeft size={16} />
-                </button>
+              <div className="border-t border-border">
+                {isWaitingAI && (
+                  <div className="px-4 py-2 flex items-center gap-2 text-xs text-muted-foreground bg-muted/30">
+                    <CircleNotch size={14} className="animate-spin" />
+                    <span>AI is processing your reply...</span>
+                  </div>
+                )}
+                <div className="p-4 flex gap-2">
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !isSending && !isWaitingAI && void handleReply()}
+                    placeholder={isWaitingAI ? 'Waiting for AI response...' : 'Type your reply...'}
+                    disabled={isSending || isWaitingAI}
+                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    onClick={() => void handleReply()}
+                    disabled={!replyText.trim() || isSending || isWaitingAI}
+                    className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    {isSending ? <CircleNotch size={16} className="animate-spin" /> : <ArrowBendUpLeft size={16} />}
+                  </button>
+                </div>
               </div>
             )}
           </>
@@ -212,7 +262,11 @@ function MessageBubble({ msg, roles }: { msg: ConversationMessageRecord; roles: 
         <p className="text-xs font-medium mb-0.5 opacity-70">
           {msg.authorType === 'system' ? 'System' : roleName(msg.authorRoleId, roles)}
         </p>
-        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+        {isHuman ? (
+          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+        ) : (
+          <MarkdownContent content={msg.content} />
+        )}
       </div>
     </div>
   );

@@ -82,9 +82,7 @@ export class ConversationService {
       conversationDepth: depth ?? 0,
     });
 
-    if (decision.respondentRoleId) {
-      this.convRepo.updateRespondent(conv.id, decision.respondentRoleId, decision.respondentType);
-    }
+    this.convRepo.updateRespondent(conv.id, decision.respondentRoleId, decision.respondentType);
 
     this.transitionState(conv.id, 'waiting');
     this.eventLogger.log(conv.id, 'respondent-assigned', { respondentRoleId: decision.respondentRoleId, respondentType: decision.respondentType, auditReason: decision.auditReason });
@@ -130,11 +128,14 @@ export class ConversationService {
     if (!conv) throw new NotFoundError('Conversation', conversationId);
 
     const msg = this.msgRepo.create(input);
-    this.emitEvent('conversation:message-added', { conversationId, messageId: msg.id, authorType: input.authorType });
+    this.emitEvent('conversation:message-added', { conversationId, orgId: conv.orgId, messageId: msg.id, authorType: input.authorType });
 
     const needsResponse = this.determineResponseNeeded(conv, input);
     if (needsResponse) {
-      this.emitEvent('conversation:response-needed', { conversationId, orgId: conv.orgId, roleId: conv.respondentRoleId });
+      const targetRoleId = conv.type === 'inquiry' && input.authorType === 'human'
+        ? conv.initiatorRoleId
+        : conv.respondentRoleId;
+      this.emitEvent('conversation:response-needed', { conversationId, orgId: conv.orgId, roleId: targetRoleId });
     }
 
     return msg;
@@ -185,7 +186,8 @@ export class ConversationService {
 
   private determineResponseNeeded(conv: Conversation, input: CreateMessageInput): boolean {
     if (conv.type === 'inquiry') {
-      return input.authorType === 'ai' && input.intent === 'question' && conv.state === 'waiting';
+      if (input.authorType === 'human') return true;
+      return input.intent === 'question' && conv.state === 'waiting';
     }
     return input.authorType === 'human';
   }

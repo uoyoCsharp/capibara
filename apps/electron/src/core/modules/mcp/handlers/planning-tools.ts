@@ -1,13 +1,15 @@
 import type { McpToolDefinition } from '../registry/mcp-tool.registry';
 import type { PendingPlanStore } from '@core/infrastructure/stores/pending-plan.store';
+import type { PlanningService } from '@core/modules/planning/planning.service';
 
 export function createPlanningTools(
   pendingPlanStore: PendingPlanStore,
+  planningService: PlanningService,
 ): McpToolDefinition[] {
   return [
     {
       name: 'capibara_plan_tasks',
-      description: 'Submit a structured task plan for human confirmation',
+      description: 'Submit a structured task plan and create tasks immediately',
       inputSchema: {
         type: 'object',
         properties: {
@@ -23,14 +25,20 @@ export function createPlanningTools(
         required: ['conversationId', 'orgId', 'roleId', 'tasks'],
       },
       handler: async (params) => {
-        pendingPlanStore.set(params.conversationId as string, {
-          conversationId: params.conversationId as string,
-          orgId: params.orgId as string,
+        const conversationId = params.conversationId as string;
+        const orgId = params.orgId as string;
+
+        pendingPlanStore.set(conversationId, {
+          conversationId,
+          orgId,
           roleId: params.roleId as string,
           tasks: params.tasks as unknown[],
           submittedAt: new Date().toISOString(),
         });
-        return { status: 'plan_submitted', conversationId: params.conversationId };
+
+        planningService.confirmPlan(conversationId, orgId, null);
+
+        return { status: 'plan_confirmed', conversationId, orgId };
       },
     },
   ];

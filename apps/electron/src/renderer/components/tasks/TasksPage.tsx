@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle } from '@phosphor-icons/react';
+import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle, CircleNotch } from '@phosphor-icons/react';
 import { useTaskStore } from '../../store/task.store';
 import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
-import type { TaskRecord, RoleRecord } from '@core/shared/types';
+import type { TaskRecord, RoleRecord, RunRecord } from '@core/shared/types';
 import { TaskCreateModal } from './TaskCreateModal';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
 import { toast } from '../../store/toast.store';
@@ -36,7 +36,7 @@ function buildTaskTree(tasks: TaskRecord[]): TaskNode[] {
 }
 
 function TaskRow({
-  node, depth, typeLabel, statusLabel, isTerminal, isApproval, selectedId, onSelect, onApprove, onReject, availableTransitions,
+  node, depth, typeLabel, statusLabel, isTerminal, isApproval, selectedId, onSelect, onApprove, onReject, availableTransitions, runningTaskIds,
 }: {
   node: TaskNode;
   depth: number;
@@ -49,11 +49,13 @@ function TaskRow({
   onApprove: (taskId: string) => void;
   onReject: (taskId: string) => void;
   availableTransitions: (from: string) => string[];
+  runningTaskIds: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(true);
   const { task } = node;
   const terminal = isTerminal(task.status);
   const approval = isApproval(task.status);
+  const isRunning = runningTaskIds.has(task.id);
   const isSelected = task.id === selectedId;
 
   return (
@@ -95,10 +97,12 @@ function TaskRow({
         )}
 
         {terminal && <CheckCircle size={16} className="text-green-500" />}
+        {isRunning && <CircleNotch size={16} className="text-blue-500 animate-spin" />}
 
         <span className={`text-xs px-1.5 py-0.5 rounded ${
           terminal ? 'bg-green-500/10 text-green-600' :
           approval ? 'bg-yellow-500/10 text-yellow-600' :
+          isRunning ? 'bg-blue-500/10 text-blue-600 animate-pulse' :
           'bg-blue-500/10 text-blue-600'
         }`}>
           {statusLabel(task.status)}
@@ -119,6 +123,7 @@ function TaskRow({
           onApprove={onApprove}
           onReject={onReject}
           availableTransitions={availableTransitions}
+          runningTaskIds={runningTaskIds}
         />
       ))}
     </div>
@@ -139,6 +144,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [runningTaskIds, setRunningTaskIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (orgId) {
@@ -153,7 +159,22 @@ export function TasksPage({ orgId }: TasksPageProps) {
     if (orgId) void loadTasks(orgId);
   }, [orgId, loadTasks]);
 
-  useEventSubscription(['task:changed'], useCallback(() => {
+  useEffect(() => {
+    if (!orgId) return;
+    api().getRunsByOrgId(orgId).then((res: { ok: boolean; data?: RunRecord[] }) => {
+      if (res.ok && res.data) {
+        const ids = new Set<string>();
+        for (const run of res.data) {
+          if (run.taskId && (run.status === 'running' || run.status === 'queued')) {
+            ids.add(run.taskId);
+          }
+        }
+        setRunningTaskIds(ids);
+      }
+    });
+  }, [orgId, tasks]);
+
+  useEventSubscription(['task:changed', 'run:changed'], useCallback(() => {
     if (orgId) void loadTasks(orgId);
   }, [orgId, loadTasks]));
 
@@ -225,6 +246,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
               onApprove={handleApprove}
               onReject={handleReject}
               availableTransitions={getAvailableTransitions}
+              runningTaskIds={runningTaskIds}
             />
           ))}
         </div>

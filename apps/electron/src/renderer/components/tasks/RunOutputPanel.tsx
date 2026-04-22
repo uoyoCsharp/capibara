@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { CircleNotch, CheckCircle, XCircle, Clock, Terminal, FolderOpen } from '@phosphor-icons/react';
+import { MarkdownContent } from '../ui/markdown-content';
 import type { RunRecord } from '@core/shared/types';
 import { useRunLogs } from '../../hooks/use-run-logs';
 import { Badge } from '../ui/badge';
@@ -26,6 +27,8 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
 
   const { entries, assistantText } = useRunLogs(isRunning ? selectedRunId : null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
+  const initialScrollDoneRef = useRef(false);
 
   useEffect(() => {
     api().getRunsByTaskId(taskId).then((res: { ok: boolean; data?: RunRecord[] }) => {
@@ -37,6 +40,10 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
       }
     });
   }, [taskId]);
+
+  useEffect(() => {
+    initialScrollDoneRef.current = false;
+  }, [selectedRunId]);
 
   useEffect(() => {
     if (!selectedRunId || isRunning) {
@@ -51,7 +58,15 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
   }, [selectedRunId, isRunning]);
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!logContainerRef.current) return;
+    if (historicLogs.length > 0 && !initialScrollDoneRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      initialScrollDoneRef.current = true;
+      return;
+    }
+    if (entries.length > 0) {
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [entries, historicLogs]);
 
   const truncatedHistoricLogs = useMemo(() => {
@@ -137,7 +152,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
           {selectedRun.summary && (
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Summary</p>
-              <p className="text-sm whitespace-pre-wrap">{selectedRun.summary}</p>
+              <MarkdownContent content={selectedRun.summary} />
             </div>
           )}
 
@@ -155,7 +170,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">AI Output</p>
           <div className="rounded-lg border border-border bg-background p-3 max-h-[300px] overflow-auto">
-            <pre className="text-sm whitespace-pre-wrap font-mono">{assistantText}</pre>
+            <MarkdownContent content={assistantText} />
           </div>
         </div>
       )}
@@ -181,7 +196,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
             </button>
           )}
         </div>
-        <div className="rounded-lg border border-border bg-zinc-950 p-3 max-h-[400px] overflow-auto font-mono text-xs">
+        <div ref={logContainerRef} className="rounded-lg border border-border bg-zinc-950 p-3 max-h-[400px] overflow-auto font-mono text-xs">
           {loadingLogs && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <CircleNotch size={12} className="animate-spin" /> Loading...

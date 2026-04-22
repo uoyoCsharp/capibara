@@ -63,7 +63,7 @@ function AppContent() {
         else if (event.status === 'failed') toast.error(t.runs?.failed ?? 'Run failed');
         else if (event.status === 'cancelled') toast.info(t.runs?.cancelled ?? 'Run cancelled');
       }
-      if (event.type === 'conversation:response-needed') {
+      if (event.type === 'conversation:response-needed' && activeSection !== 'inbox') {
         toast.info(t.conversations?.humanReplyNotification ?? 'Conversation needs response', {
           duration: 5000,
           action: { label: t.conversations?.goToConversations ?? 'View', onClick: () => setActiveSection('inbox') },

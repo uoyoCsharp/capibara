@@ -21,6 +21,7 @@ export class RunEngine implements IRunEngine {
   private textCallbacks: TextCallback[] = [];
   private parsers = new Map<string, StreamJsonParser>();
   private logContexts = new Map<string, { contextLabel: string; contextId: string }>();
+  private mcpConfigPath = '';
 
   constructor(
     private readonly runRepo: IRunRepository,
@@ -34,6 +35,10 @@ export class RunEngine implements IRunEngine {
     this.executor.onLog((runId, stream, chunk) => {
       this.handleLog(runId, stream, chunk);
     });
+  }
+
+  setMcpConfigPath(path: string): void {
+    this.mcpConfigPath = path;
   }
 
   async execute(params: RunExecutionParams): Promise<RunResult> {
@@ -77,7 +82,7 @@ export class RunEngine implements IRunEngine {
         taskId: params.taskId ?? params.contextId,
         wakeReason: params.wakeReason ?? 'task_assigned',
         prompt: params.sessionId && params.userMessage ? params.userMessage : params.prompt,
-        mcpConfigPath: '',
+        mcpConfigPath: this.mcpConfigPath,
         projectDir: params.projectDir || this.config.cli.projectDir,
         executor: this.config.cli.defaultExecutor,
         cliConfig: {

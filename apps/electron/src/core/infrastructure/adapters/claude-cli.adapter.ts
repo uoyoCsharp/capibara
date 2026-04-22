@@ -12,6 +12,7 @@ const MANAGED_FLAGS = [
   '--max-turns',
   '--resume',
   '--mcp-config',
+  '--strict-mcp-config',
   '--verbose',
   '--print',
   '-p',
@@ -145,9 +146,10 @@ export class ClaudeCliAdapter implements ICliAdapter {
       '--print',
       '--output-format', 'stream-json',
       '--verbose',
+      '--dangerously-skip-permissions',
     ];
 
-    if (ctx.mcpConfigPath) args.push('--mcp-config', ctx.mcpConfigPath);
+    if (ctx.mcpConfigPath) args.push('--mcp-config', ctx.mcpConfigPath, '--strict-mcp-config');
     if (ctx.cliConfig?.model) args.push('--model', ctx.cliConfig.model);
     if (ctx.cliConfig?.maxTurnsPerRun && ctx.cliConfig.maxTurnsPerRun > 0) {
       args.push('--max-turns', String(ctx.cliConfig.maxTurnsPerRun));

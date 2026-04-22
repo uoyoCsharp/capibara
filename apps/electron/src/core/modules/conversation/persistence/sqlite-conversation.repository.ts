@@ -118,7 +118,7 @@ export class SqliteConversationRepository implements IConversationRepository {
       .run(state, now, id);
   }
 
-  updateRespondent(id: string, respondentRoleId: string, respondentType: string): void {
+  updateRespondent(id: string, respondentRoleId: string | null, respondentType: string): void {
     const now = new Date().toISOString();
     this.connection.getDb()
       .prepare('UPDATE conversations SET respondent_role_id = ?, respondent_type = ?, updated_at = ? WHERE id = ?')

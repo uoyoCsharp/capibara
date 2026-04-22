@@ -85,6 +85,16 @@ export class RunCoordinator {
       this.conversationService.updateExternalSessionId(conversationId, result.sessionId);
     }
 
+    if (result.status === 'succeeded' && result.summary) {
+      this.conversationService.addMessage(conversationId, {
+        conversationId,
+        authorRoleId: roleId,
+        authorType: 'ai',
+        content: result.summary,
+        intent: 'reply',
+      });
+    }
+
     return { runId: result.runId, status: result.status };
   }
 }

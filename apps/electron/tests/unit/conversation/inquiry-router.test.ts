@@ -45,6 +45,24 @@ describe('InquiryRouter', () => {
     router = new InquiryRouter(roleRepo, logger);
   });
 
+  it('routes to human when asking role requiresHumanApproval', () => {
+    vi.mocked(roleRepo.findById).mockReturnValue(
+      createRole({ requiresHumanApproval: true, parentId: 'role-parent' }),
+    );
+
+    const decision = router.route({
+      askingRoleId: TEST_ROLE_ID,
+      orgId: TEST_ORG_ID,
+      taskId: TEST_TASK_ID,
+      questionContent: 'Approval needed',
+      conversationDepth: 0,
+    });
+
+    expect(decision.respondentRoleId).toBeNull();
+    expect(decision.respondentType).toBe('human');
+    expect(decision.auditReason).toContain('requires human approval');
+  });
+
   it('routes to parent role when available and active', () => {
     const parent = createRole({ id: 'role-parent', name: 'Lead' });
     vi.mocked(roleRepo.findById).mockImplementation((id) => {
@@ -66,7 +84,7 @@ describe('InquiryRouter', () => {
     expect(decision.auditReason).toContain('parent');
   });
 
-  it('routes to parent as human when requiresHumanApproval', () => {
+  it('routes to parent as ai even when parent has requiresHumanApproval', () => {
     const parent = createRole({ id: 'role-parent', name: 'Manager', requiresHumanApproval: true });
     vi.mocked(roleRepo.findById).mockImplementation((id) => {
       if (id === TEST_ROLE_ID) return createRole({ parentId: 'role-parent' });
@@ -78,11 +96,12 @@ describe('InquiryRouter', () => {
       askingRoleId: TEST_ROLE_ID,
       orgId: TEST_ORG_ID,
       taskId: TEST_TASK_ID,
-      questionContent: 'Approval needed',
+      questionContent: 'Need help',
       conversationDepth: 0,
     });
 
-    expect(decision.respondentType).toBe('human');
+    expect(decision.respondentRoleId).toBe('role-parent');
+    expect(decision.respondentType).toBe('ai');
   });
 
   it('falls back to peer when parent is paused', () => {

@@ -9,7 +9,7 @@ export interface IConversationRepository {
   findTimedOutInquiries(): Conversation[];
   create(input: CreateConversationInput): Conversation;
   updateState(id: string, state: ConversationState): void;
-  updateRespondent(id: string, respondentRoleId: string, respondentType: string): void;
+  updateRespondent(id: string, respondentRoleId: string | null, respondentType: string): void;
   updateExternalSessionId(id: string, externalSessionId: string): void;
   delete(id: string): void;
 }

@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createPlanningTools } from '@core/modules/mcp/handlers/planning-tools';
 import type { McpToolDefinition } from '@core/modules/mcp/registry/mcp-tool.registry';
 import type { PendingPlanStore } from '@core/infrastructure/stores/pending-plan.store';
+import type { PlanningService } from '@core/modules/planning/planning.service';
 
 describe('Planning Tools (MCP Handlers)', () => {
   let tools: McpToolDefinition[];
   let pendingPlanStore: PendingPlanStore;
+  let planningService: PlanningService;
 
   beforeEach(() => {
     pendingPlanStore = {
@@ -16,7 +18,15 @@ describe('Planning Tools (MCP Handlers)', () => {
       clear: vi.fn(),
     } as unknown as PendingPlanStore;
 
-    tools = createPlanningTools(pendingPlanStore);
+    planningService = {
+      confirmPlan: vi.fn(),
+      discardPlan: vi.fn(),
+      start: vi.fn(),
+      sendMessage: vi.fn(),
+      getPendingPlan: vi.fn(),
+    } as unknown as PlanningService;
+
+    tools = createPlanningTools(pendingPlanStore, planningService);
   });
 
   function findTool(name: string): McpToolDefinition {
@@ -24,7 +34,7 @@ describe('Planning Tools (MCP Handlers)', () => {
   }
 
   describe('capibara_plan_tasks', () => {
-    it('stores plan in PendingPlanStore', async () => {
+    it('stores plan and auto-confirms via PlanningService', async () => {
       const tasks = [
         { type: 'task', title: 'Design API', assigneeRoleId: 'role-1' },
         { type: 'task', title: 'Implement API', assigneeRoleId: 'role-2' },
@@ -41,7 +51,8 @@ describe('Planning Tools (MCP Handlers)', () => {
         roleId: 'role-planner',
         tasks,
       }));
-      expect(result).toEqual({ status: 'plan_submitted', conversationId: 'conv-1' });
+      expect(planningService.confirmPlan).toHaveBeenCalledWith('conv-1', 'org-1', null);
+      expect(result).toEqual({ status: 'plan_confirmed', conversationId: 'conv-1', orgId: 'org-1' });
     });
 
     it('includes submittedAt timestamp in stored plan', async () => {

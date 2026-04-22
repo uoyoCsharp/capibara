@@ -152,7 +152,7 @@ describe('ConversationService', () => {
       expect(result.respondentRoleId).toBe('role-responder');
     });
 
-    it('does not update respondent when router returns null respondentRoleId', () => {
+    it('updates respondent to human when router returns null respondentRoleId', () => {
       vi.mocked(inquiryRouter.route).mockReturnValue({
         respondentRoleId: null,
         respondentType: 'human',
@@ -161,7 +161,7 @@ describe('ConversationService', () => {
       });
 
       service.createInquiry(TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID, 'Help?');
-      expect(convRepo.updateRespondent).not.toHaveBeenCalled();
+      expect(convRepo.updateRespondent).toHaveBeenCalledWith('conv-1', null, 'human');
     });
 
     it('passes parentConversationId and depth when provided', () => {
@@ -212,6 +212,7 @@ describe('ConversationService', () => {
     });
 
     it('creates message and emits message-added event', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc', respondentRoleId: 'role-resp' }));
       const result = service.addMessage('conv-1', {
         conversationId: 'conv-1',
         authorRoleId: null,
@@ -225,17 +226,78 @@ describe('ConversationService', () => {
       expect(result.id).toBe('msg-1');
     });
 
-    it('emits response-needed for human messages on non-inquiry conversations', () => {
-      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc', respondentRoleId: 'role-resp' }));
+    it('message-added payload contains correct metadata', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc' }));
       service.addMessage('conv-1', {
         conversationId: 'conv-1',
         authorRoleId: null,
         authorType: 'human',
-        content: 'Do this',
+        content: 'Test',
         intent: 'general',
+      });
+
+      const event = eventBus.getLastEmitted('conversation:message-added');
+      expect(event?.payload).toEqual(expect.objectContaining({
+        conversationId: 'conv-1',
+        authorType: 'human',
+      }));
+    });
+
+    // ─── inquiry + human reply ───────────────────────────────────
+
+    it('emits response-needed when human replies to inquiry in waiting state', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'waiting', initiatorRoleId: 'role-cto', respondentType: 'human' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Approved with changes',
+        intent: 'reply',
       });
       eventBus.assertEmitted('conversation:response-needed');
     });
+
+    it('targets initiatorRoleId when human replies to inquiry', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'waiting', initiatorRoleId: 'role-cto', respondentRoleId: null, respondentType: 'human' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Go ahead',
+        intent: 'reply',
+      });
+
+      const event = eventBus.getLastEmitted('conversation:response-needed');
+      expect(event?.payload).toEqual(expect.objectContaining({ roleId: 'role-cto' }));
+    });
+
+    it('emits response-needed when human replies to inquiry in active state', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'active', initiatorRoleId: 'role-cto', respondentType: 'human' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Rejected',
+        intent: 'reply',
+      });
+      eventBus.assertEmitted('conversation:response-needed');
+    });
+
+    it('emits response-needed when human replies to escalated inquiry', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'escalated', initiatorRoleId: 'role-pm', respondentType: 'human' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Feedback after escalation',
+        intent: 'reply',
+      });
+      eventBus.assertEmitted('conversation:response-needed');
+      const event = eventBus.getLastEmitted('conversation:response-needed');
+      expect(event?.payload).toEqual(expect.objectContaining({ roleId: 'role-pm' }));
+    });
+
+    // ─── inquiry + ai messages ───────────────────────────────────
 
     it('emits response-needed for inquiry when ai asks question in waiting state', () => {
       vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'waiting', respondentRoleId: 'role-resp' }));
@@ -249,6 +311,20 @@ describe('ConversationService', () => {
       eventBus.assertEmitted('conversation:response-needed');
     });
 
+    it('targets respondentRoleId when ai asks question in inquiry', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'waiting', respondentRoleId: 'role-resp' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: TEST_ROLE_ID,
+        authorType: 'ai',
+        content: 'Clarify?',
+        intent: 'question',
+      });
+
+      const event = eventBus.getLastEmitted('conversation:response-needed');
+      expect(event?.payload).toEqual(expect.objectContaining({ roleId: 'role-resp' }));
+    });
+
     it('does not emit response-needed for ai reply in inquiry', () => {
       vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'waiting' }));
       service.addMessage('conv-1', {
@@ -259,6 +335,130 @@ describe('ConversationService', () => {
         intent: 'reply',
       });
       eventBus.assertNotEmitted('conversation:response-needed');
+    });
+
+    it('does not emit response-needed for ai question in active state (not yet routed)', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'active', respondentRoleId: 'role-resp' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: TEST_ROLE_ID,
+        authorType: 'ai',
+        content: 'Question?',
+        intent: 'question',
+      });
+      eventBus.assertNotEmitted('conversation:response-needed');
+    });
+
+    it('does not emit response-needed for ai general message in inquiry', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'waiting' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: TEST_ROLE_ID,
+        authorType: 'ai',
+        content: 'Status update',
+        intent: 'general',
+      });
+      eventBus.assertNotEmitted('conversation:response-needed');
+    });
+
+    // ─── non-inquiry conversations ───────────────────────────────
+
+    it('emits response-needed for human messages on adhoc conversations', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc', respondentRoleId: 'role-resp' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Do this',
+        intent: 'general',
+      });
+      eventBus.assertEmitted('conversation:response-needed');
+    });
+
+    it('targets respondentRoleId for human messages on adhoc conversations', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc', respondentRoleId: 'role-resp' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Do this',
+        intent: 'general',
+      });
+
+      const event = eventBus.getLastEmitted('conversation:response-needed');
+      expect(event?.payload).toEqual(expect.objectContaining({ roleId: 'role-resp' }));
+    });
+
+    it('emits response-needed for human messages on planning conversations', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'planning', respondentRoleId: 'role-planner' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Adjust the plan',
+        intent: 'reply',
+      });
+      eventBus.assertEmitted('conversation:response-needed');
+      const event = eventBus.getLastEmitted('conversation:response-needed');
+      expect(event?.payload).toEqual(expect.objectContaining({ roleId: 'role-planner' }));
+    });
+
+    it('does not emit response-needed for ai messages on adhoc conversations', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc', respondentRoleId: 'role-resp' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: 'role-resp',
+        authorType: 'ai',
+        content: 'Done',
+        intent: 'reply',
+      });
+      eventBus.assertNotEmitted('conversation:response-needed');
+    });
+
+    // ─── system messages ─────────────────────────────────────────
+
+    it('does not emit response-needed for system messages on inquiry', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'inquiry', state: 'waiting' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'system',
+        content: 'Timed out',
+        intent: 'general',
+      });
+      eventBus.assertNotEmitted('conversation:response-needed');
+    });
+
+    it('does not emit response-needed for system messages on adhoc', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'system',
+        content: 'Note',
+        intent: 'general',
+      });
+      eventBus.assertNotEmitted('conversation:response-needed');
+    });
+
+    // ─── payload correctness ─────────────────────────────────────
+
+    it('response-needed payload includes conversationId and orgId', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ type: 'adhoc', orgId: 'org-abc', respondentRoleId: 'role-resp' }));
+      service.addMessage('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: null,
+        authorType: 'human',
+        content: 'Hello',
+        intent: 'general',
+      });
+
+      const event = eventBus.getLastEmitted('conversation:response-needed');
+      expect(event?.payload).toEqual(expect.objectContaining({
+        conversationId: 'conv-1',
+        orgId: 'org-abc',
+        roleId: 'role-resp',
+      }));
     });
   });
 

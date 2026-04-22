@@ -11,7 +11,6 @@ import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { CapibaraConfig } from '@core/config/config.types';
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
-import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
 import { SqliteRunRepository } from '@core/modules/execution/persistence/sqlite-run.repository';
 import { SqliteCostEntryRepository } from '@core/modules/execution/persistence/sqlite-cost-entry.repository';
 import { WorkerService } from '@core/modules/execution/workers/worker-service';
@@ -22,7 +21,7 @@ import { RunEngine } from '@core/modules/execution/engines/run.engine';
 
 export interface ExecutionModule {
   runRepo: IRunRepository;
-  runEngine: IRunEngine;
+  runEngine: RunEngine;
   costTracker: CostTracker;
   workerService: WorkerService;
   fileLogService: FileLogService;

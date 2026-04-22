@@ -82,6 +82,7 @@ describe('RunCoordinator', () => {
     };
     conversationService = {
       updateExternalSessionId: vi.fn(),
+      addMessage: vi.fn(),
     } as unknown as ConversationService;
     orgRepo = {
       findById: vi.fn().mockReturnValue({ id: TEST_ORG_ID, workspacePath: '/workspace' }),
@@ -146,6 +147,13 @@ describe('RunCoordinator', () => {
         sessionId: undefined,
       }));
       expect(conversationService.updateExternalSessionId).toHaveBeenCalledWith('conv-1', 'sess-1');
+      expect(conversationService.addMessage).toHaveBeenCalledWith('conv-1', {
+        conversationId: 'conv-1',
+        authorRoleId: TEST_ROLE_ID,
+        authorType: 'ai',
+        content: 'Done',
+        intent: 'reply',
+      });
       expect(result).toEqual({ runId: 'run-1', status: 'succeeded' });
     });
 
@@ -176,6 +184,18 @@ describe('RunCoordinator', () => {
       vi.mocked(runEngine.execute).mockResolvedValue(createRunResult({ sessionId: null }));
       await coordinator.executeForConversation('conv-1', TEST_ROLE_ID, TEST_ORG_ID, 'en-US');
       expect(conversationService.updateExternalSessionId).not.toHaveBeenCalled();
+    });
+
+    it('does not add message when run fails', async () => {
+      vi.mocked(runEngine.execute).mockResolvedValue(createRunResult({ status: 'failed', summary: null }));
+      await coordinator.executeForConversation('conv-1', TEST_ROLE_ID, TEST_ORG_ID, 'en-US');
+      expect(conversationService.addMessage).not.toHaveBeenCalled();
+    });
+
+    it('does not add message when summary is null', async () => {
+      vi.mocked(runEngine.execute).mockResolvedValue(createRunResult({ status: 'succeeded', summary: null }));
+      await coordinator.executeForConversation('conv-1', TEST_ROLE_ID, TEST_ORG_ID, 'en-US');
+      expect(conversationService.addMessage).not.toHaveBeenCalled();
     });
   });
 });

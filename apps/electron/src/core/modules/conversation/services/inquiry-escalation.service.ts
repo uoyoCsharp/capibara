@@ -45,7 +45,7 @@ export class InquiryEscalationService {
     if (!parent || parent.status !== 'active') return false;
 
     this.convRepo.updateState(conversationId, 'escalated');
-    this.convRepo.updateRespondent(conversationId, parent.id, parent.requiresHumanApproval ? 'human' : 'ai');
+    this.convRepo.updateRespondent(conversationId, parent.id, respondent.requiresHumanApproval ? 'human' : 'ai');
     this.emitEvent('conversation:escalated', { conversationId, orgId, newRespondentRoleId: parent.id });
     return true;
   }

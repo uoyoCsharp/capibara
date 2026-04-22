@@ -1,5 +1,6 @@
 import { injectable } from 'tsyringe';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
+import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import { ValidationError, NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { ProcessEngine } from '../engines/process.engine';
@@ -7,11 +8,17 @@ import type { Task, CreateTaskInput, BatchCreateTaskInput } from '../types/workf
 
 @injectable()
 export class TaskService {
+  private convRepo: IConversationRepository | null = null;
+
   constructor(
     private readonly taskRepo: ITaskRepository,
     private readonly processEngine: ProcessEngine,
     private readonly eventBus: IEventBus,
   ) {}
+
+  setConversationRepository(repo: IConversationRepository): void {
+    this.convRepo = repo;
+  }
 
   findById(id: string): Task | null {
     return this.taskRepo.findById(id);
@@ -85,6 +92,18 @@ export class TaskService {
   }
 
   delete(id: string): void {
+    const children = this.taskRepo.findChildren(id);
+    for (const child of children) {
+      this.delete(child.id);
+    }
+
+    if (this.convRepo) {
+      const conversations = this.convRepo.findByTaskId(id);
+      for (const conv of conversations) {
+        this.convRepo.delete(conv.id);
+      }
+    }
+
     this.taskRepo.delete(id);
   }
 }

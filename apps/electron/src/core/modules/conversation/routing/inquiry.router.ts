@@ -16,12 +16,21 @@ export class InquiryRouter {
       return this.humanFallback('Asking role not found');
     }
 
+    if (askingRole.requiresHumanApproval) {
+      return {
+        respondentRoleId: null,
+        respondentType: 'human',
+        priority: 0,
+        auditReason: `Role "${askingRole.name}" requires human approval`,
+      };
+    }
+
     if (askingRole.parentId) {
       const parent = this.roleRepo.findById(askingRole.parentId);
       if (parent && parent.status === 'active') {
         return {
           respondentRoleId: parent.id,
-          respondentType: parent.requiresHumanApproval ? 'human' : 'ai',
+          respondentType: 'ai',
           priority: 0,
           auditReason: `Routed to parent role: ${parent.name}`,
         };
@@ -39,7 +48,7 @@ export class InquiryRouter {
     if (candidate) {
       return {
         respondentRoleId: candidate.id,
-        respondentType: candidate.requiresHumanApproval ? 'human' : 'ai',
+        respondentType: 'ai',
         priority: 1,
         auditReason: `Routed to peer role: ${candidate.name}`,
       };

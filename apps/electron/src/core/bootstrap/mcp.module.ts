@@ -7,8 +7,10 @@ import type { ProcessEngine } from '@core/modules/workflow/engines/process.engin
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { RoleService } from '@core/modules/organization/services/role.service';
 import type { PendingPlanStore } from '@core/infrastructure/stores/pending-plan.store';
+import type { PlanningService } from '@core/modules/planning/planning.service';
 import { McpToolRegistry } from '@core/modules/mcp/registry/mcp-tool.registry';
 import { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
+import { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-generator';
 import { createTaskTools } from '@core/modules/mcp/handlers/task-tools';
 import { createConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
 import { createPlanningTools } from '@core/modules/mcp/handlers/planning-tools';
@@ -22,9 +24,11 @@ export function registerMcpModule(
   conversationService: ConversationService,
   roleService: RoleService,
   pendingPlanStore: PendingPlanStore,
-): { mcpIpcServer: McpIpcServer; mcpToolRegistry: McpToolRegistry } {
+  planningService: PlanningService,
+): { mcpIpcServer: McpIpcServer; mcpToolRegistry: McpToolRegistry; mcpConfigGen: McpConfigGenerator } {
   const toolRegistry = new McpToolRegistry(logger);
   const mcpIpcServer = new McpIpcServer(toolRegistry, logger);
+  const mcpConfigGen = new McpConfigGenerator(logger);
 
   for (const tool of createTaskTools(taskService, taskStateMachine, processEngine)) {
     toolRegistry.register(tool);
@@ -32,7 +36,7 @@ export function registerMcpModule(
   for (const tool of createConversationTools(conversationService)) {
     toolRegistry.register(tool);
   }
-  for (const tool of createPlanningTools(pendingPlanStore)) {
+  for (const tool of createPlanningTools(pendingPlanStore, planningService)) {
     toolRegistry.register(tool);
   }
   for (const tool of createContextTools(taskService, roleService)) {
@@ -42,5 +46,5 @@ export function registerMcpModule(
   container.register(MCP_TOOL_REGISTRY_TOKEN, { useValue: toolRegistry });
   container.register(MCP_IPC_SERVER_TOKEN, { useValue: mcpIpcServer });
 
-  return { mcpIpcServer, mcpToolRegistry: toolRegistry };
+  return { mcpIpcServer, mcpToolRegistry: toolRegistry, mcpConfigGen };
 }
