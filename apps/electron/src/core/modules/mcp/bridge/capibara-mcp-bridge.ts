@@ -21,14 +21,17 @@ if (!port) {
 
 const TOOLS = [
   {
-    name: 'capibara_task_complete',
-    description: 'Mark a task as completed by transitioning it to a terminal status.',
+    name: 'capibara_task_transition',
+    description:
+      'Transition a task to a new status. ' +
+      'On failure, returns the current status and available transitions so you can retry with a valid target.',
     inputSchema: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: 'The task ID to complete' },
+        taskId: { type: 'string', description: 'The task ID to transition' },
+        targetStatus: { type: 'string', description: 'The target status name to transition to' },
       },
-      required: ['taskId'],
+      required: ['taskId', 'targetStatus'],
     },
   },
   {
@@ -44,17 +47,6 @@ const TOOLS = [
         assigneeRoleId: { type: 'string', description: 'Role ID to assign', nullable: true },
       },
       required: ['parentId', 'type', 'title'],
-    },
-  },
-  {
-    name: 'capibara_task_review',
-    description: 'Submit a task for review by transitioning it to an approval status.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: 'The task ID to submit for review' },
-      },
-      required: ['taskId'],
     },
   },
   {

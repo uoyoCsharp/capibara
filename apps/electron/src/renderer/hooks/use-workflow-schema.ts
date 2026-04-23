@@ -20,8 +20,6 @@ interface StatusDef {
 interface TransitionDef {
   from: string;
   to: string;
-  mode?: string;
-  trigger?: string;
 }
 
 interface ProcessSchema {
@@ -69,7 +67,7 @@ export function useWorkflowSchema(orgId: string | null) {
   const getAvailableTransitions = useCallback((fromStatus: string): string[] => {
     if (!schema) return [];
     return schema.transitions
-      .filter((t) => t.from === fromStatus && (t.mode === 'manual' || t.trigger === 'manual'))
+      .filter((t) => t.from === fromStatus)
       .map((t) => t.to);
   }, [schema]);
 

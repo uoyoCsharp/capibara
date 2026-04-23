@@ -46,6 +46,9 @@ export function buildTaskPrompt(ctx: PromptContext): string {
     sections.push(`# Knowledge Base References\n\n${ctx.role.knowledgeBaseRefs.join('\n')}`);
   }
 
+  const workflowSection = buildWorkflowSchema(ctx);
+  if (workflowSection) sections.push(workflowSection);
+
   sections.push(buildSystemModel());
   sections.push(buildIdBindings(ctx));
   sections.push(buildToolGuidance(scenario));
@@ -63,7 +66,7 @@ function buildSystemModel(): string {
     `You are an AI agent in an automated task execution system.\n` +
     `- **Stateless runs**: Each activation is independent. You have no memory of previous runs — all context is in this prompt.\n` +
     `- **Sequential execution**: Sibling tasks under the same parent execute one at a time, in order.\n` +
-    `- **Automatic review**: When you call capibara_task_complete, the system automatically notifies your supervisor.\n` +
+    `- **Automatic review**: When you transition a task to an approval status, the system automatically notifies your supervisor.\n` +
     `- **Parent propagation**: When all sibling tasks complete, the system automatically advances the parent task.\n` +
     `- **Focus**: Work solely on YOUR current task. Do not attempt to coordinate sibling tasks.`
   );
@@ -82,17 +85,17 @@ function buildIdBindings(ctx: PromptContext): string {
 function buildToolGuidance(scenario: PromptScenario): string {
   const tools: Record<PromptScenario, string[]> = {
     propose_decomposition: ['capibara_ask_question', 'capibara_context'],
-    execute_decomposition: ['capibara_task_create_child', 'capibara_task_complete', 'capibara_context'],
-    execute_leaf: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
-    revision: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
-    review_approve: ['capibara_task_complete', 'capibara_context'],
-    task_completed: ['capibara_task_complete', 'capibara_context'],
-    conversation_reply: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
-    retry_failed: ['capibara_task_complete', 'capibara_ask_question', 'capibara_context'],
+    execute_decomposition: ['capibara_task_create_child', 'capibara_task_transition', 'capibara_context'],
+    execute_leaf: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
+    revision: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
+    review_approve: ['capibara_task_transition', 'capibara_context'],
+    task_completed: ['capibara_task_transition', 'capibara_context'],
+    conversation_reply: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
+    retry_failed: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
   };
 
   const toolDescriptions: Record<string, string> = {
-    capibara_task_complete: 'Mark the current task as complete',
+    capibara_task_transition: 'Transition the current task to a new status (see Workflow Status section for available transitions)',
     capibara_task_create_child: 'Create a child task under the current task',
     capibara_ask_question: 'Ask a question to your supervisor or a peer',
     capibara_context: 'Query additional context about tasks, roles, or the organization',
@@ -100,6 +103,46 @@ function buildToolGuidance(scenario: PromptScenario): string {
 
   const lines = tools[scenario].map((t) => `- \`mcp__capibara__${t}\` — ${toolDescriptions[t]}`).join('\n');
   return `# Tool Guidance\n\nUse the following MCP tools (provided by the \`capibara\` server):\n\n${lines}`;
+}
+
+function buildWorkflowSchema(ctx: PromptContext): string | null {
+  if (!ctx.workflowSchema) return null;
+
+  const { currentStatus, availableTransitions, allStatuses, allTransitions, terminalStatuses } = ctx.workflowSchema;
+
+  const currentLine = `Current status: **${currentStatus.label}** (\`${currentStatus.name}\`, category: ${currentStatus.category})`;
+
+  let availableSection: string;
+  if (availableTransitions.length > 0) {
+    const header = '| Target Status | Label |\n|---------------|-------|';
+    const rows = availableTransitions
+      .map((t) => `| \`${t.targetStatus}\` | ${t.targetLabel} |`)
+      .join('\n');
+    availableSection = `**Available transitions from current status:**\n\n${header}\n${rows}`;
+  } else {
+    availableSection = '**No transitions available from current status.** This is a terminal state.';
+  }
+
+  const stHeader = '| Status | Label | Category |\n|--------|-------|----------|';
+  const stRows = allStatuses.map((s) => `| \`${s.name}\` | ${s.label} | ${s.category} |`).join('\n');
+  const statusTable = `**All statuses:**\n\n${stHeader}\n${stRows}`;
+
+  const trHeader = '| From | To |\n|------|-----|';
+  const trRows = allTransitions.map((t) => `| \`${t.from}\` | \`${t.to}\` |`).join('\n');
+  const transitionTable = `**All transitions:**\n\n${trHeader}\n${trRows}`;
+
+  const terminalLine = `**Terminal statuses:** ${terminalStatuses.map((s) => `\`${s}\``).join(', ')}`;
+
+  return (
+    `# Workflow Status\n\n` +
+    `${currentLine}\n\n` +
+    `${availableSection}\n\n` +
+    `${statusTable}\n\n` +
+    `${transitionTable}\n\n` +
+    `${terminalLine}\n\n` +
+    `> When calling \`capibara_task_transition\`, use an exact status name from the table above. ` +
+    `If the transition fails, the tool will return your current status and available transitions.`
+  );
 }
 
 function buildInstructions(_ctx: PromptContext, scenario: PromptScenario): string {
@@ -112,28 +155,30 @@ function buildInstructions(_ctx: PromptContext, scenario: PromptScenario): strin
     execute_decomposition:
       'Your decomposition proposal has been approved. ' +
       'Use `capibara_task_create_child` to create all planned child tasks. ' +
-      'Then call `capibara_task_complete` to mark this task as done.',
+      'Then use `capibara_task_transition` to advance this task to the next appropriate status (refer to the Workflow Status section for available transitions).',
     execute_leaf:
       'Execute this task directly. ' +
-      'When finished, call `capibara_task_complete`. ' +
+      'When finished, use `capibara_task_transition` to advance to the next status (refer to the Workflow Status section). ' +
       'If the description is unclear or missing details, use `capibara_ask_question` to clarify with your supervisor first.',
     revision:
       'Your previous work needs revision. ' +
-      'Review the latest feedback, address each point, and call `capibara_task_complete` when done. ' +
+      'Review the latest feedback, address each point, then use `capibara_task_transition` to advance to the next status. ' +
       'If the feedback is unclear, use `capibara_ask_question` to clarify first.',
     review_approve:
       'Your previous work has been approved. ' +
-      'Continue with any remaining steps or call `capibara_task_complete` to finalize.',
+      'Continue with any remaining steps or use `capibara_task_transition` to advance to the next status.',
     task_completed:
       'A child task has completed. ' +
-      'Check if there are other child tasks still pending, or if the parent task can now be completed.',
+      'Check if there are other child tasks still pending. ' +
+      'If all children are done, use `capibara_task_transition` to advance the parent task.',
     conversation_reply:
       'You previously started a conversation and have received a reply. ' +
       'Read the reply, then continue your work. ' +
-      'If you need more information, continue the conversation; otherwise, proceed with task execution.',
+      'If you need more information, continue the conversation; otherwise, use `capibara_task_transition` to advance.',
     retry_failed:
       'Your previous execution failed. ' +
-      'Review the error, simplify your approach or try a different strategy, and retry.',
+      'Review the error, simplify your approach or try a different strategy, and retry. ' +
+      'Use `capibara_task_transition` to advance when ready.',
   };
 
   return `# Instructions\n\n${instructions[scenario]}`;

@@ -59,6 +59,27 @@ export interface PromptContext {
       allowedChildren: string[];
     } | null;
   };
+  workflowSchema?: {
+    currentStatus: {
+      name: string;
+      label: string;
+      category: string;
+    };
+    availableTransitions: Array<{
+      targetStatus: string;
+      targetLabel: string;
+    }>;
+    allStatuses: Array<{
+      name: string;
+      label: string;
+      category: string;
+    }>;
+    allTransitions: Array<{
+      from: string;
+      to: string;
+    }>;
+    terminalStatuses: string[];
+  };
 }
 
 export interface ConversationPromptContext {

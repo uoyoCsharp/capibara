@@ -53,6 +53,12 @@ export class ProcessEngine {
     return schema.transitions.some((t) => t.from === from && t.to === to);
   }
 
+  getAvailableTransitions(orgId: string, fromStatus: string): TransitionDefinition[] {
+    const schema = this.getSchema(orgId);
+    if (!schema) return [];
+    return schema.transitions.filter((t) => t.from === fromStatus);
+  }
+
   getTransition(orgId: string, from: string, to: string): TransitionDefinition | null {
     const schema = this.getSchema(orgId);
     if (!schema) return null;

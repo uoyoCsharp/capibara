@@ -88,6 +88,25 @@ export class RunContext {
       } : null,
     } : undefined;
 
+    const allStatuses = schema?.statuses ?? [];
+    const allTransitions = schema?.transitions ?? [];
+    const currentStatusDef = allStatuses.find((s) => s.name === task.status);
+    const availableTransitions = allTransitions
+      .filter((t) => t.from === task.status)
+      .map((t) => {
+        const targetDef = allStatuses.find((s) => s.name === t.to);
+        return { targetStatus: t.to, targetLabel: targetDef?.label ?? t.to };
+      });
+    const terminalStatuses = allStatuses.filter((s) => s.category === 'terminal').map((s) => s.name);
+
+    const workflowSchema = currentStatusDef ? {
+      currentStatus: { name: currentStatusDef.name, label: currentStatusDef.label, category: currentStatusDef.category },
+      availableTransitions,
+      allStatuses: allStatuses.map((s) => ({ name: s.name, label: s.label, category: s.category })),
+      allTransitions: allTransitions.map((t) => ({ from: t.from, to: t.to })),
+      terminalStatuses,
+    } : undefined;
+
     return {
       wakeReason,
       task: {
@@ -115,6 +134,7 @@ export class RunContext {
       organization,
       orgHierarchy,
       typeSchema,
+      workflowSchema,
     };
   }
 

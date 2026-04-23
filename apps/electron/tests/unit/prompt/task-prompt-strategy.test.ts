@@ -154,13 +154,13 @@ describe('buildTaskPrompt — new sections', () => {
     expect(result).toContain('org-1');
   });
 
-  it('execute_leaf: includes capibara_task_complete instruction', () => {
+  it('execute_leaf: includes capibara_task_transition instruction', () => {
     const ctx = createCtx({
       wakeReason: 'task_assigned',
       task: { ...defaultTask, isDecomposable: false },
     });
     const result = buildTaskPrompt(ctx);
-    expect(result).toContain('capibara_task_complete');
+    expect(result).toContain('capibara_task_transition');
     expect(result).not.toContain('capibara_task_create_child');
   });
 
@@ -174,14 +174,14 @@ describe('buildTaskPrompt — new sections', () => {
     expect(result).not.toContain('capibara_task_create_child');
   });
 
-  it('execute_decomposition: instructs to create children', () => {
+  it('execute_decomposition: instructs to create children and transition', () => {
     const ctx = createCtx({
       wakeReason: 'conversation_reply',
       task: { ...defaultTask, isDecomposable: true },
     });
     const result = buildTaskPrompt(ctx);
     expect(result).toContain('capibara_task_create_child');
-    expect(result).toContain('capibara_task_complete');
+    expect(result).toContain('capibara_task_transition');
   });
 
   it('revision: instructs to address feedback', () => {
@@ -347,6 +347,101 @@ describe('buildTaskPrompt — type schema', () => {
     });
     const result = buildTaskPrompt(ctx);
     expect(result).not.toContain('# Work Item Type Schema');
+  });
+});
+
+describe('buildTaskPrompt — workflow schema', () => {
+  const workflowSchema: PromptContext['workflowSchema'] = {
+    currentStatus: { name: 'in_progress', label: 'In Progress', category: 'active' },
+    availableTransitions: [
+      { targetStatus: 'awaiting_review', targetLabel: 'Awaiting Review' },
+      { targetStatus: 'blocked', targetLabel: 'Blocked' },
+      { targetStatus: 'cancelled', targetLabel: 'Cancelled' },
+    ],
+    allStatuses: [
+      { name: 'pending', label: 'Pending', category: 'initial' },
+      { name: 'in_progress', label: 'In Progress', category: 'active' },
+      { name: 'awaiting_review', label: 'Awaiting Review', category: 'approval' },
+      { name: 'approved', label: 'Approved', category: 'terminal' },
+      { name: 'done', label: 'Done', category: 'terminal' },
+    ],
+    allTransitions: [
+      { from: 'pending', to: 'in_progress' },
+      { from: 'in_progress', to: 'awaiting_review' },
+      { from: 'in_progress', to: 'blocked' },
+      { from: 'awaiting_review', to: 'approved' },
+      { from: 'approved', to: 'done' },
+    ],
+    terminalStatuses: ['approved', 'done'],
+  };
+
+  it('renders Workflow Status section with current status', () => {
+    const ctx = createCtx({ workflowSchema });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('# Workflow Status');
+    expect(result).toContain('**In Progress**');
+    expect(result).toContain('`in_progress`');
+    expect(result).toContain('category: active');
+  });
+
+  it('renders available transitions table', () => {
+    const ctx = createCtx({ workflowSchema });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('Available transitions from current status');
+    expect(result).toContain('`awaiting_review`');
+    expect(result).toContain('`blocked`');
+    expect(result).toContain('`cancelled`');
+  });
+
+  it('renders full status table', () => {
+    const ctx = createCtx({ workflowSchema });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('All statuses');
+    expect(result).toContain('`pending`');
+    expect(result).toContain('`approved`');
+    expect(result).toContain('`done`');
+  });
+
+  it('renders full transition table', () => {
+    const ctx = createCtx({ workflowSchema });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('All transitions');
+    expect(result).toContain('`pending`');
+    expect(result).toContain('`in_progress`');
+  });
+
+  it('renders terminal statuses', () => {
+    const ctx = createCtx({ workflowSchema });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('Terminal statuses');
+    expect(result).toContain('`approved`');
+    expect(result).toContain('`done`');
+  });
+
+  it('renders guidance note about capibara_task_transition', () => {
+    const ctx = createCtx({ workflowSchema });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('capibara_task_transition');
+    expect(result).toContain('available transitions');
+  });
+
+  it('shows no-transitions message for terminal status', () => {
+    const ctx = createCtx({
+      workflowSchema: {
+        ...workflowSchema,
+        currentStatus: { name: 'done', label: 'Done', category: 'terminal' },
+        availableTransitions: [],
+      },
+    });
+    const result = buildTaskPrompt(ctx);
+    expect(result).toContain('No transitions available');
+    expect(result).toContain('terminal state');
+  });
+
+  it('omits workflow section when workflowSchema is undefined', () => {
+    const ctx = createCtx({ workflowSchema: undefined });
+    const result = buildTaskPrompt(ctx);
+    expect(result).not.toContain('# Workflow Status');
   });
 });
 

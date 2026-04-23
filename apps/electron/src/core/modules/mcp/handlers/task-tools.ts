@@ -10,25 +10,52 @@ export function createTaskTools(
 ): McpToolDefinition[] {
   return [
     {
-      name: 'capibara_task_complete',
-      description: 'Mark a task as completed by transitioning it to a terminal status',
+      name: 'capibara_task_transition',
+      description:
+        'Transition a task to a new status. ' +
+        'On failure, returns the current status and available transitions so you can retry with a valid target.',
       inputSchema: {
         type: 'object',
         properties: {
-          taskId: { type: 'string', description: 'The task ID to complete' },
+          taskId: { type: 'string', description: 'The task ID to transition' },
+          targetStatus: { type: 'string', description: 'The target status name to transition to' },
         },
-        required: ['taskId'],
+        required: ['taskId', 'targetStatus'],
       },
       handler: async (params) => {
         const taskId = params.taskId as string;
+        const targetStatus = params.targetStatus as string;
         const task = taskService.findById(taskId);
         if (!task) return { error: `Task not found: ${taskId}` };
 
-        const terminalStatuses = processEngine.getStatusesByCategory(task.orgId, 'terminal');
-        const targetStatus = terminalStatuses[0]?.name ?? 'done';
+        const currentCategory = processEngine.getStatusCategory(task.orgId, task.status);
+        if (currentCategory === 'terminal') {
+          return {
+            taskId: task.id,
+            previousStatus: task.status,
+            currentStatus: task.status,
+            message: `Task is already in terminal status "${task.status}". No transition needed.`,
+          };
+        }
 
+        const availableTransitions = processEngine.getAvailableTransitions(task.orgId, task.status);
+
+        if (!processEngine.validateTransition(task.orgId, task.status, targetStatus)) {
+          return {
+            error: `Invalid transition: "${task.status}" → "${targetStatus}" is not allowed.`,
+            taskId: task.id,
+            currentStatus: task.status,
+            availableTransitions: availableTransitions.map((t) => t.to),
+          };
+        }
+
+        const previousStatus = task.status;
         const updated = taskStateMachine.transition(taskId, targetStatus);
-        return { taskId: updated.id, status: updated.status };
+        return {
+          taskId: updated.id,
+          previousStatus,
+          currentStatus: updated.status,
+        };
       },
     },
     {
@@ -58,28 +85,6 @@ export function createTaskTools(
           assigneeRoleId: (params.assigneeRoleId as string) ?? null,
         });
         return { taskId: child.id, status: child.status };
-      },
-    },
-    {
-      name: 'capibara_task_review',
-      description: 'Submit a task for review by transitioning it to an approval status',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          taskId: { type: 'string', description: 'The task ID to submit for review' },
-        },
-        required: ['taskId'],
-      },
-      handler: async (params) => {
-        const taskId = params.taskId as string;
-        const task = taskService.findById(taskId);
-        if (!task) return { error: `Task not found: ${taskId}` };
-
-        const approvalStatuses = processEngine.getStatusesByCategory(task.orgId, 'approval');
-        const targetStatus = approvalStatuses[0]?.name ?? 'awaiting_approval';
-
-        const updated = taskStateMachine.transition(taskId, targetStatus);
-        return { taskId: updated.id, status: updated.status };
       },
     },
   ];

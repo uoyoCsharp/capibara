@@ -1,7 +1,6 @@
 export type TaskType = string;
 export type TaskStatus = string;
 export type StatusCategory = 'initial' | 'active' | 'approval' | 'terminal';
-export type TransitionMode = 'manual' | 'auto' | 'system';
 
 export interface Task {
   id: string;
@@ -38,7 +37,6 @@ export interface StatusDefinition {
 export interface TransitionDefinition {
   from: string;
   to: string;
-  mode: TransitionMode;
 }
 
 export type BehaviorTrigger =
