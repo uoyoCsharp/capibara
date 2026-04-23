@@ -35,7 +35,8 @@ export function registerWorkflowModule(
   const schemaRepo = new SqliteProcessSchemaRepository(connection);
   const processEngine = new ProcessEngine(schemaRepo, logger);
   const taskStateMachine = new TaskStateMachine(taskRepo, processEngine, eventBus, logger);
-  const behaviorEngine = new BehaviorEngine(processEngine, eventBus, logger);
+  const behaviorEngine = new BehaviorEngine(taskRepo, processEngine, taskStateMachine, logger);
+  taskStateMachine.setBehaviorEngine(behaviorEngine);
   const taskService = new TaskService(taskRepo, processEngine, eventBus);
   const processTemplateService = new ProcessTemplateService(logger, workflowsDir);
 

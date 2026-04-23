@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, Trash, UserCircle } from '@phosphor-icons/react';
+import { Trash, UserCircle, Play, XCircle } from '@phosphor-icons/react';
 import type { TaskRecord, RoleRecord } from '@core/shared/types';
 import {
   Sheet,
@@ -34,8 +34,9 @@ interface TaskDetailDrawerProps {
   statusLabel: (name: string) => string;
   isTerminal: (name: string) => boolean;
   isApproval: (name: string) => boolean;
-  availableTransitions: (from: string) => string[];
-  onTransition: (taskId: string, newStatus: string) => void;
+  isInitial: (name: string) => boolean;
+  onStart: (taskId: string) => void;
+  onCancel: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onClose: () => void;
 }
@@ -47,8 +48,9 @@ export function TaskDetailDrawer({
   statusLabel,
   isTerminal,
   isApproval,
-  availableTransitions,
-  onTransition,
+  isInitial,
+  onStart,
+  onCancel,
   onDelete,
   onClose,
 }: TaskDetailDrawerProps) {
@@ -56,9 +58,9 @@ export function TaskDetailDrawer({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const assignee = roles.find((r) => r.id === task.assigneeRoleId);
-  const transitions = availableTransitions(task.status);
   const terminal = isTerminal(task.status);
   const approval = isApproval(task.status);
+  const initial = isInitial(task.status);
 
   const statusColor = terminal
     ? 'bg-green-500/10 text-green-600 border-green-500/30'
@@ -131,26 +133,34 @@ export function TaskDetailDrawer({
                   </div>
                 </div>
 
-                {/* Transitions */}
-                {transitions.length > 0 && !terminal && (
+                {/* Actions */}
+                {!terminal && (
                   <div className="space-y-2">
                     <Separator />
                     <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       {t.taskDetail?.actions ?? 'Actions'}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {transitions.map((toStatus) => (
+                      {initial && (
                         <Button
-                          key={toStatus}
-                          variant="outline"
+                          variant="default"
                           size="sm"
-                          onClick={() => onTransition(task.id, toStatus)}
+                          onClick={() => onStart(task.id)}
                           className="gap-1.5"
                         >
-                          <ArrowRight size={14} />
-                          {statusLabel(toStatus)}
+                          <Play size={14} weight="fill" />
+                          {t.taskDetail?.start ?? 'Start'}
                         </Button>
-                      ))}
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onCancel(task.id)}
+                        className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+                      >
+                        <XCircle size={14} />
+                        {t.common?.cancel ?? 'Cancel'}
+                      </Button>
                     </div>
                   </div>
                 )}

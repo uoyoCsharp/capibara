@@ -12,6 +12,7 @@ interface OrgRow {
   custom_instructions: string;
   status: string;
   budget_limit: number;
+  auto_start_on_create: number;
   org_template_id: string | null;
   planning_role_id: string | null;
   workspace_path: string;
@@ -27,6 +28,7 @@ function toOrganization(row: OrgRow): Organization {
     customInstructions: row.custom_instructions,
     status: row.status as Organization['status'],
     budgetLimit: row.budget_limit,
+    autoStartOnCreate: row.auto_start_on_create === 1,
     orgTemplateId: row.org_template_id,
     planningRoleId: row.planning_role_id,
     workspacePath: row.workspace_path,
@@ -75,6 +77,7 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     if (input.customInstructions !== undefined) { fields.push('custom_instructions = ?'); values.push(input.customInstructions); }
     if (input.status !== undefined) { fields.push('status = ?'); values.push(input.status); }
     if (input.budgetLimit !== undefined) { fields.push('budget_limit = ?'); values.push(input.budgetLimit); }
+    if (input.autoStartOnCreate !== undefined) { fields.push('auto_start_on_create = ?'); values.push(input.autoStartOnCreate ? 1 : 0); }
     if (input.workspacePath !== undefined) { fields.push('workspace_path = ?'); values.push(input.workspacePath); }
     if (input.planningRoleId !== undefined) { fields.push('planning_role_id = ?'); values.push(input.planningRoleId); }
 

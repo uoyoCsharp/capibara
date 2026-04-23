@@ -5,16 +5,23 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEventType } from '@core/foundation/events';
 import { TaskStateError, NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { ProcessEngine } from './process.engine';
+import type { BehaviorEngine } from './behavior.engine';
 import type { Task, TaskStatus } from '../types/workflow.types';
 
 @injectable()
 export class TaskStateMachine {
+  private behaviorEngine: BehaviorEngine | null = null;
+
   constructor(
     private readonly taskRepo: ITaskRepository,
     private readonly processEngine: ProcessEngine,
     private readonly eventBus: IEventBus,
     private readonly logger: ILogger,
   ) {}
+
+  setBehaviorEngine(engine: BehaviorEngine): void {
+    this.behaviorEngine = engine;
+  }
 
   transition(taskId: string, newStatus: TaskStatus): Task {
     const task = this.taskRepo.findById(taskId);
@@ -45,6 +52,11 @@ export class TaskStateMachine {
       this.emitEvent('task:completed', { taskId, orgId: task.orgId, status: newStatus });
     }
 
+    if (this.behaviorEngine) {
+      const freshTask = this.taskRepo.findById(taskId)!;
+      this.behaviorEngine.onStatusEnter(freshTask);
+    }
+
     return this.taskRepo.findById(taskId)!;
   }
 
@@ -67,6 +79,11 @@ export class TaskStateMachine {
 
     if (nextCategory === 'terminal') {
       this.emitEvent('task:completed', { taskId, orgId: task.orgId, status: nextStatus });
+    }
+
+    if (this.behaviorEngine) {
+      const freshTask = this.taskRepo.findById(taskId)!;
+      this.behaviorEngine.onStatusEnter(freshTask);
     }
 
     return this.taskRepo.findById(taskId)!;

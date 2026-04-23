@@ -91,6 +91,9 @@ export async function bootstrap(): Promise<void> {
     conversation.conversationService,
     prompt.promptBuilder,
     execution.costTracker,
+    workflow.processEngine,
+    workflow.taskStateMachine,
+    workflow.behaviorEngine,
   );
 
   const notification = registerNotificationModule(eventBus, logger);

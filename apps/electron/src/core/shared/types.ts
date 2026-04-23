@@ -18,6 +18,7 @@ export interface OrganizationRecord {
   customInstructions: string;
   status: 'active' | 'paused' | 'archived';
   budgetLimit: number;
+  autoStartOnCreate: boolean;
   orgTemplateId: string | null;
   planningRoleId: string | null;
   workspacePath: string;

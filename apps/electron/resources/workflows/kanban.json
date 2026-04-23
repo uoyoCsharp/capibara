@@ -4,9 +4,9 @@
   "description": "Simplified Kanban board with To Do / In Progress / Done columns. Flat task structure, no review cycle. Best for small teams or rapid prototyping.",
   "schema": {
     "workItemTypes": [
-      { "name": "feature", "label": "Feature", "isLeaf": false, "allowedChildren": ["task", "bug"], "allowedAtRoot": true, "canDecompose": true, "hasDiscussionGroup": true },
-      { "name": "task", "label": "Task", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": true, "canDecompose": false, "hasDiscussionGroup": false },
-      { "name": "bug", "label": "Bug", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": true, "canDecompose": false, "hasDiscussionGroup": false }
+      { "name": "feature", "label": "Feature", "isLeaf": false, "allowedChildren": ["task", "bug"], "allowedAtRoot": true, "canDecompose": true },
+      { "name": "task", "label": "Task", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": true, "canDecompose": false },
+      { "name": "bug", "label": "Bug", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": true, "canDecompose": false }
     ],
     "statuses": [
       { "name": "todo", "label": "To Do", "category": "initial" },
@@ -26,17 +26,8 @@
         "id": "kanban-propagate-parent",
         "name": "Auto-complete parent when all children done",
         "priority": 10,
-        "trigger": { "type": "on_all_children_terminal" },
-        "condition": { "type": "always" },
-        "action": { "type": "auto_transition", "targetStatus": "done" }
-      },
-      {
-        "id": "kanban-discussion-group",
-        "name": "Create discussion group on task creation",
-        "priority": 20,
-        "trigger": { "type": "on_task_created" },
-        "condition": { "type": "always" },
-        "action": { "type": "create_discussion_group" }
+        "trigger": "on_all_children_terminal",
+        "action": { "type": "transition", "params": { "targetStatus": "done" } }
       }
     ]
   }

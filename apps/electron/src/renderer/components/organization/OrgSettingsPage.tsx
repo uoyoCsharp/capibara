@@ -20,6 +20,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
     description: '',
     customInstructions: '',
     budgetLimit: 50,
+    autoStartOnCreate: true,
     status: 'active' as string,
   });
   const [saving, setSaving] = useState(false);
@@ -32,6 +33,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
         description: org.description,
         customInstructions: org.customInstructions,
         budgetLimit: org.budgetLimit,
+        autoStartOnCreate: org.autoStartOnCreate ?? true,
         status: org.status,
       });
     }
@@ -54,6 +56,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
       description: form.description,
       customInstructions: form.customInstructions,
       budgetLimit: form.budgetLimit,
+      autoStartOnCreate: form.autoStartOnCreate,
       status: form.status,
     });
     await refresh();
@@ -135,6 +138,28 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
               <option value="archived">Archived</option>
             </select>
           </div>
+        </div>
+
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <label className="text-sm font-medium">Auto-start tasks on create</label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Automatically begin execution when a root task is created
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.autoStartOnCreate}
+            onClick={() => setForm((f) => ({ ...f, autoStartOnCreate: !f.autoStartOnCreate }))}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              form.autoStartOnCreate ? 'bg-primary' : 'bg-muted-foreground/30'
+            }`}
+          >
+            <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+              form.autoStartOnCreate ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
         </div>
 
         <div>

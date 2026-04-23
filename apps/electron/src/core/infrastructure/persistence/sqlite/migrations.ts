@@ -414,6 +414,17 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 10,
+    description: 'Add auto_start_on_create to organizations',
+    up: (db) => {
+      const cols = db.pragma('table_info(organizations)') as Array<{ name: string }>;
+      const colNames = new Set(cols.map((c) => c.name));
+      if (!colNames.has('auto_start_on_create')) {
+        db.exec('ALTER TABLE organizations ADD COLUMN auto_start_on_create INTEGER NOT NULL DEFAULT 1');
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

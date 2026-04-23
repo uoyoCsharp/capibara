@@ -39,29 +39,33 @@ export interface TransitionDefinition {
   to: string;
 }
 
-export type BehaviorTrigger =
-  | 'on_status_enter'
-  | 'on_status_exit'
-  | 'on_task_created'
-  | 'on_task_completed'
-  | 'on_approval_confirmed'
-  | 'on_approval_rejected';
+export type BehaviorTrigger = 'on_status_enter' | 'on_all_children_terminal';
 
-export interface BehaviorCondition {
+export interface FieldCondition {
   field: string;
-  operator: 'equals' | 'not_equals' | 'in' | 'not_in';
+  op: 'eq' | 'neq' | 'in' | 'not_in' | 'gt' | 'lt';
   value: unknown;
 }
 
-export type BehaviorActionType =
-  | 'transition'
-  | 'wake_role'
-  | 'create_child_task'
-  | 'notify';
+export interface AllCondition {
+  all: BehaviorCondition[];
+}
+
+export interface AnyCondition {
+  any: BehaviorCondition[];
+}
+
+export interface NotCondition {
+  not: BehaviorCondition;
+}
+
+export type BehaviorCondition = FieldCondition | AllCondition | AnyCondition | NotCondition;
+
+export type BehaviorActionType = 'transition';
 
 export interface BehaviorAction {
   type: BehaviorActionType;
-  params: Record<string, unknown>;
+  params?: Record<string, unknown>;
 }
 
 export interface BehaviorRule {
@@ -69,7 +73,7 @@ export interface BehaviorRule {
   name: string;
   priority: number;
   trigger: BehaviorTrigger;
-  condition: BehaviorCondition | null;
+  condition?: BehaviorCondition | null;
   action: BehaviorAction;
 }
 

@@ -4,13 +4,13 @@
   "description": "Classic Capibara workflow with epics, stories, tasks, and a full review cycle. Suitable for structured software teams.",
   "schema": {
     "workItemTypes": [
-      { "name": "epic", "label": "Epic", "isLeaf": false, "allowedChildren": ["story", "spike"], "allowedAtRoot": true, "canDecompose": true, "hasDiscussionGroup": true },
-      { "name": "story", "label": "Story", "isLeaf": false, "allowedChildren": ["task", "bug", "chore", "spike"], "allowedAtRoot": true, "canDecompose": true, "hasDiscussionGroup": true },
-      { "name": "task", "label": "Task", "isLeaf": false, "allowedChildren": ["subtask"], "allowedAtRoot": false, "canDecompose": false, "hasDiscussionGroup": false },
-      { "name": "subtask", "label": "Subtask", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false, "hasDiscussionGroup": false },
-      { "name": "spike", "label": "Spike", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false, "hasDiscussionGroup": false },
-      { "name": "bug", "label": "Bug", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false, "hasDiscussionGroup": false },
-      { "name": "chore", "label": "Chore", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false, "hasDiscussionGroup": false }
+      { "name": "epic", "label": "Epic", "isLeaf": false, "allowedChildren": ["story", "spike"], "allowedAtRoot": true, "canDecompose": true },
+      { "name": "story", "label": "Story", "isLeaf": false, "allowedChildren": ["task", "bug", "chore", "spike"], "allowedAtRoot": true, "canDecompose": true },
+      { "name": "task", "label": "Task", "isLeaf": false, "allowedChildren": ["subtask"], "allowedAtRoot": false, "canDecompose": false },
+      { "name": "subtask", "label": "Subtask", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false },
+      { "name": "spike", "label": "Spike", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false },
+      { "name": "bug", "label": "Bug", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false },
+      { "name": "chore", "label": "Chore", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false }
     ],
     "statuses": [
       { "name": "pending", "label": "Pending", "category": "initial" },
@@ -39,27 +39,23 @@
     "behaviorRules": [
       {
         "id": "default-auto-done-leaf",
-        "name": "Auto-complete leaf on approval",
+        "name": "Auto-complete leaf on terminal entry",
         "priority": 10,
-        "trigger": { "type": "on_status_enter", "status": "approved" },
-        "condition": { "type": "item_is_leaf" },
-        "action": { "type": "auto_transition", "targetStatus": "done" }
+        "trigger": "on_status_enter",
+        "condition": {
+          "all": [
+            { "field": "status.category", "op": "eq", "value": "terminal" },
+            { "field": "type.isLeaf", "op": "eq", "value": true }
+          ]
+        },
+        "action": { "type": "transition", "params": { "targetStatus": "done" } }
       },
       {
         "id": "default-propagate-parent",
-        "name": "Auto-transition parent when all children terminal",
+        "name": "Auto-complete parent when all children terminal",
         "priority": 20,
-        "trigger": { "type": "on_all_children_terminal" },
-        "condition": { "type": "always" },
-        "action": { "type": "auto_transition", "targetStatus": "done" }
-      },
-      {
-        "id": "default-discussion-group",
-        "name": "Create discussion group on task creation",
-        "priority": 30,
-        "trigger": { "type": "on_task_created" },
-        "condition": { "type": "always" },
-        "action": { "type": "create_discussion_group" }
+        "trigger": "on_all_children_terminal",
+        "action": { "type": "transition", "params": { "targetStatus": "done" } }
       }
     ]
   }

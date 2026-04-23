@@ -31,6 +31,8 @@ const api = {
   getTaskChildren: (parentId: string) => ipcRenderer.invoke('capibara:task:children', parentId),
   createTask: (input: unknown) => ipcRenderer.invoke('capibara:task:create', input),
   updateTaskStatus: (taskId: string, status: string) => ipcRenderer.invoke('capibara:task:transition', taskId, status),
+  startTask: (taskId: string) => ipcRenderer.invoke('capibara:task:start', taskId),
+  cancelTask: (taskId: string) => ipcRenderer.invoke('capibara:task:cancel', taskId),
   deleteTask: (id: string) => ipcRenderer.invoke('capibara:task:delete', id),
 
   // Approval

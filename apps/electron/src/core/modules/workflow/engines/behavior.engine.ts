@@ -1,89 +1,151 @@
 import { injectable } from 'tsyringe';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { ITaskRepository } from '../interfaces/i-task.repository';
 import type { ProcessEngine } from './process.engine';
-import type { BehaviorRule, BehaviorTrigger, BehaviorCondition, BehaviorAction } from '../types/workflow.types';
-
-export interface BehaviorContext {
-  orgId: string;
-  taskId: string;
-  taskType: string;
-  taskStatus: string;
-  assigneeRoleId: string | null;
-  parentId: string | null;
-  depth: number;
-}
-
-export interface BehaviorResult {
-  ruleId: string;
-  ruleName: string;
-  action: BehaviorAction;
-}
+import type { TaskStateMachine } from './task.state-machine';
+import type {
+  Task,
+  BehaviorTrigger,
+  BehaviorCondition,
+  BehaviorAction,
+  FieldCondition,
+  ProcessSchema,
+} from '../types/workflow.types';
 
 @injectable()
 export class BehaviorEngine {
+  private evaluating = new Set<string>();
+
   constructor(
+    private readonly taskRepo: ITaskRepository,
     private readonly processEngine: ProcessEngine,
-    private readonly eventBus: IEventBus,
+    private readonly taskStateMachine: TaskStateMachine,
     private readonly logger: ILogger,
   ) {}
 
-  evaluate(trigger: BehaviorTrigger, context: BehaviorContext): BehaviorResult[] {
-    const schema = this.processEngine.getSchema(context.orgId);
-    if (!schema) return [];
-
-    const matchingRules = schema.behaviorRules
-      .filter((rule) => rule.trigger === trigger)
-      .sort((a, b) => a.priority - b.priority);
-
-    const results: BehaviorResult[] = [];
-
-    for (const rule of matchingRules) {
-      if (this.evaluateCondition(rule.condition, context)) {
-        results.push({
-          ruleId: rule.id,
-          ruleName: rule.name,
-          action: rule.action,
-        });
-        this.logger.debug('Behavior rule matched', { ruleId: rule.id, ruleName: rule.name, trigger });
-        this.eventBus.emit({
-          type: 'behavior:executed',
-          timestamp: new Date().toISOString(),
-          payload: { ruleId: rule.id, ruleName: rule.name, trigger, orgId: context.orgId, taskId: context.taskId },
-        });
-      }
-    }
-
-    return results;
+  onStatusEnter(task: Task): void {
+    this.evaluateAndExecute('on_status_enter', task);
   }
 
-  private evaluateCondition(condition: BehaviorCondition | null, context: BehaviorContext): boolean {
-    if (!condition) return true;
+  onChildCompleted(childTask: Task): void {
+    if (!childTask.parentId) return;
 
-    const fieldValue = this.resolveField(condition.field, context);
+    const siblings = this.taskRepo.findChildren(childTask.parentId);
+    const allTerminal = siblings.every(
+      (s) => this.processEngine.getStatusCategory(s.orgId, s.status) === 'terminal',
+    );
 
-    switch (condition.operator) {
-      case 'equals':
-        return fieldValue === condition.value;
-      case 'not_equals':
-        return fieldValue !== condition.value;
+    if (!allTerminal) return;
+
+    const parent = this.taskRepo.findById(childTask.parentId);
+    if (!parent) return;
+
+    this.evaluateAndExecute('on_all_children_terminal', parent);
+  }
+
+  private evaluateAndExecute(trigger: BehaviorTrigger, task: Task): void {
+    const key = `${task.id}:${trigger}`;
+    if (this.evaluating.has(key)) return;
+    this.evaluating.add(key);
+
+    try {
+      const schema = this.processEngine.getSchema(task.orgId);
+      if (!schema) return;
+
+      const context = this.buildContext(task, schema);
+      const rules = (schema.behaviorRules ?? [])
+        .filter((r) => r.trigger === trigger)
+        .sort((a, b) => a.priority - b.priority);
+
+      for (const rule of rules) {
+        if (this.evaluateCondition(rule.condition, context)) {
+          this.logger.info('Behavior rule matched', { ruleId: rule.id, taskId: task.id, trigger });
+          this.executeAction(rule.action, task);
+        }
+      }
+    } finally {
+      this.evaluating.delete(key);
+    }
+  }
+
+  private buildContext(task: Task, schema: ProcessSchema): Record<string, unknown> {
+    const statusDef = schema.statuses.find((s) => s.name === task.status);
+    const typeDef = schema.workItemTypes.find((t) => t.name === task.type);
+    const children = this.taskRepo.findChildren(task.id);
+
+    return {
+      'task.type': task.type,
+      'task.status': task.status,
+      'task.depth': task.depth,
+      'task.hasChildren': children.length > 0,
+      'task.hasAssignee': task.assigneeRoleId !== null,
+      'status.category': statusDef?.category ?? null,
+      'type.isLeaf': typeDef?.isLeaf ?? false,
+      'type.canDecompose': typeDef?.canDecompose ?? false,
+    };
+  }
+
+  evaluateCondition(
+    condition: BehaviorCondition | null | undefined,
+    context: Record<string, unknown>,
+  ): boolean {
+    if (condition == null) return true;
+
+    if ('all' in condition) {
+      return (condition.all as BehaviorCondition[]).every((c) =>
+        this.evaluateCondition(c, context),
+      );
+    }
+
+    if ('any' in condition) {
+      return (condition.any as BehaviorCondition[]).some((c) =>
+        this.evaluateCondition(c, context),
+      );
+    }
+
+    if ('not' in condition) {
+      return !this.evaluateCondition((condition as { not: BehaviorCondition }).not, context);
+    }
+
+    const { field, op, value } = condition as FieldCondition;
+    const actual = context[field];
+
+    if (actual === undefined) return false;
+
+    switch (op) {
+      case 'eq':
+        return actual === value;
+      case 'neq':
+        return actual !== value;
       case 'in':
-        return Array.isArray(condition.value) && (condition.value as unknown[]).includes(fieldValue);
+        return Array.isArray(value) && (value as unknown[]).includes(actual);
       case 'not_in':
-        return Array.isArray(condition.value) && !(condition.value as unknown[]).includes(fieldValue);
+        return Array.isArray(value) && !(value as unknown[]).includes(actual);
+      case 'gt':
+        return typeof actual === 'number' && typeof value === 'number' && actual > value;
+      case 'lt':
+        return typeof actual === 'number' && typeof value === 'number' && actual < value;
       default:
         return false;
     }
   }
 
-  private resolveField(field: string, context: BehaviorContext): unknown {
-    switch (field) {
-      case 'taskType': return context.taskType;
-      case 'taskStatus': return context.taskStatus;
-      case 'assigneeRoleId': return context.assigneeRoleId;
-      case 'depth': return context.depth;
-      case 'parentId': return context.parentId;
-      default: return undefined;
+  private executeAction(action: BehaviorAction, task: Task): void {
+    switch (action.type) {
+      case 'transition': {
+        const targetStatus = action.params?.targetStatus as string;
+        if (!targetStatus) {
+          this.logger.warn('Behavior action missing targetStatus', { taskId: task.id });
+          return;
+        }
+        this.taskStateMachine.transition(task.id, targetStatus);
+        break;
+      }
+      default:
+        this.logger.warn('Unknown behavior action type', {
+          type: action.type,
+          taskId: task.id,
+        });
     }
   }
 }

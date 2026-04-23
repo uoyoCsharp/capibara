@@ -384,4 +384,97 @@ describe('TaskStateMachine', () => {
       );
     });
   });
+
+  // ─── BehaviorEngine integration ───────────────────────────────
+
+  describe('BehaviorEngine integration', () => {
+    let behaviorEngine: { onStatusEnter: ReturnType<typeof vi.fn>; onChildCompleted: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      behaviorEngine = {
+        onStatusEnter: vi.fn(),
+        onChildCompleted: vi.fn(),
+      };
+    });
+
+    it('transition success calls behaviorEngine.onStatusEnter with updated task', () => {
+      stateMachine.setBehaviorEngine(behaviorEngine as any);
+
+      const task = createTask({ status: 'pending' });
+      const freshTask = createTask({ status: 'in_progress' });
+      vi.mocked(taskRepo.findById)
+        .mockReturnValueOnce(task)       // initial lookup
+        .mockReturnValueOnce(freshTask)  // behaviorEngine lookup (freshTask)
+        .mockReturnValueOnce(freshTask); // return value
+
+      const result = stateMachine.transition('task-1', 'in_progress');
+
+      expect(behaviorEngine.onStatusEnter).toHaveBeenCalledWith(freshTask);
+      expect(result.status).toBe('in_progress');
+    });
+
+    it('transition validation fails — onStatusEnter NOT called', () => {
+      stateMachine.setBehaviorEngine(behaviorEngine as any);
+
+      const task = createTask({ status: 'in_progress' });
+      vi.mocked(taskRepo.findById).mockReturnValue(task);
+      vi.mocked(processEngine.validateTransition).mockReturnValue(false);
+
+      expect(() => stateMachine.transition('task-1', 'approved')).toThrow(TaskStateError);
+      expect(behaviorEngine.onStatusEnter).not.toHaveBeenCalled();
+    });
+
+    it('same-status transition — onStatusEnter NOT called', () => {
+      stateMachine.setBehaviorEngine(behaviorEngine as any);
+
+      const task = createTask({ status: 'in_progress' });
+      vi.mocked(taskRepo.findById).mockReturnValue(task);
+
+      const result = stateMachine.transition('task-1', 'in_progress');
+
+      expect(result).toBe(task);
+      expect(behaviorEngine.onStatusEnter).not.toHaveBeenCalled();
+    });
+
+    it('onStatusEnter throws — updateStatus and events already completed, error propagates', () => {
+      stateMachine.setBehaviorEngine(behaviorEngine as any);
+
+      const task = createTask({ status: 'pending' });
+      const freshTask = createTask({ status: 'in_progress' });
+      vi.mocked(taskRepo.findById)
+        .mockReturnValueOnce(task)       // initial lookup
+        .mockReturnValueOnce(freshTask); // behaviorEngine lookup
+      behaviorEngine.onStatusEnter.mockImplementation(() => { throw new Error('BehaviorEngine boom'); });
+
+      expect(() => stateMachine.transition('task-1', 'in_progress')).toThrow('BehaviorEngine boom');
+
+      // updateStatus was called before behaviorEngine
+      expect(taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'in_progress');
+      // events were emitted before behaviorEngine
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'task:status-changed',
+          payload: expect.objectContaining({ taskId: 'task-1', from: 'pending', to: 'in_progress' }),
+        }),
+      );
+    });
+
+    it('confirmApproval calls onStatusEnter', () => {
+      stateMachine.setBehaviorEngine(behaviorEngine as any);
+
+      const task = createTask({ status: 'awaiting_review' });
+      const freshTask = createTask({ status: 'approved' });
+      vi.mocked(taskRepo.findById)
+        .mockReturnValueOnce(task)       // initial lookup
+        .mockReturnValueOnce(freshTask)  // behaviorEngine lookup
+        .mockReturnValueOnce(freshTask); // return value
+      vi.mocked(processEngine.getStatusCategory)
+        .mockReturnValueOnce('approval')  // category check for current status
+        .mockReturnValueOnce('terminal'); // category check for next status
+
+      stateMachine.confirmApproval('task-1', 'approved');
+
+      expect(behaviorEngine.onStatusEnter).toHaveBeenCalledWith(freshTask);
+    });
+  });
 });

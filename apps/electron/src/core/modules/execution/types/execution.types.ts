@@ -8,6 +8,7 @@ export type RunStatus =
 
 export type WakeReason =
   | 'task_assigned'
+  | 'task_scheduled'
   | 'task_completed'
   | 'review_requested'
   | 'review_approve'

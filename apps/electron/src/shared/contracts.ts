@@ -44,6 +44,8 @@ export const IPC_CHANNELS = {
   getTaskChildren: 'capibara:task:get-children',
   createTask: 'capibara:task:create',
   updateTaskStatus: 'capibara:task:update-status',
+  startTask: 'capibara:task:start',
+  cancelTask: 'capibara:task:cancel',
   deleteTask: 'capibara:task:delete',
 
   // Discussion
@@ -189,6 +191,7 @@ export const updateOrganizationSchema = z.object({
   customInstructions: z.string().max(5000).optional(),
   status: z.enum(['active', 'paused', 'archived']).optional(),
   budgetLimit: z.number().min(0).optional(),
+  autoStartOnCreate: z.boolean().optional(),
   workspacePath: z.string().min(1).optional(),
 });
 
@@ -401,7 +404,6 @@ export const saveSchemaSchema = z.object({
       allowedChildren: z.array(z.string()),
       allowedAtRoot: z.boolean(),
       canDecompose: z.boolean(),
-      hasDiscussionGroup: z.boolean(),
     })),
     statuses: z.array(z.object({
       name: z.string().min(1),
@@ -417,20 +419,12 @@ export const saveSchemaSchema = z.object({
       id: z.string().min(1),
       name: z.string().min(1),
       priority: z.number().int(),
-      trigger: z.discriminatedUnion('type', [
-        z.object({ type: z.literal('on_status_enter'), status: z.string().min(1) }),
-        z.object({ type: z.literal('on_task_created') }),
-        z.object({ type: z.literal('on_all_children_terminal') }),
-        z.object({ type: z.literal('on_children_of_type_terminal'), childTypes: z.array(z.string().min(1)) }),
-      ]),
-      condition: z.object({ type: z.string().min(1) }).passthrough(),
-      action: z.discriminatedUnion('type', [
-        z.object({ type: z.literal('auto_transition'), targetStatus: z.string().min(1) }),
-        z.object({ type: z.literal('wake_assignee'), trigger: z.string().min(1) }),
-        z.object({ type: z.literal('wake_parent_assignee'), trigger: z.string().min(1) }),
-        z.object({ type: z.literal('skip_propagation') }),
-        z.object({ type: z.literal('create_discussion_group') }),
-      ]),
+      trigger: z.enum(['on_status_enter', 'on_all_children_terminal']),
+      condition: z.any().optional().nullable(),
+      action: z.object({
+        type: z.enum(['transition']),
+        params: z.record(z.unknown()).optional(),
+      }),
     })),
   }),
 });
@@ -514,6 +508,8 @@ export interface CapibaraApi {
   getTaskChildren: (parentId: string) => Promise<DesktopResult<TaskRecord[]>>;
   createTask: (input: CreateTaskInput) => Promise<DesktopResult<TaskRecord>>;
   updateTaskStatus: (input: UpdateTaskStatusInput) => Promise<DesktopResult<void>>;
+  startTask: (taskId: string) => Promise<DesktopResult<TaskRecord>>;
+  cancelTask: (taskId: string) => Promise<DesktopResult<TaskRecord>>;
   deleteTask: (id: string) => Promise<DesktopResult<void>>;
 
   // Narrative
@@ -617,6 +613,7 @@ export interface OrganizationRecord {
   customInstructions: string;
   status: OrgStatus;
   budgetLimit: number;
+  autoStartOnCreate: boolean;
   orgTemplateId: string | null;
   planningRoleId: string | null;
   workspacePath: string;
@@ -995,7 +992,6 @@ export interface WorkflowSchemaRecord {
     allowedChildren: string[];
     allowedAtRoot: boolean;
     canDecompose: boolean;
-    hasDiscussionGroup: boolean;
   }>;
   statuses: Array<{
     name: string;
@@ -1011,9 +1007,9 @@ export interface WorkflowSchemaRecord {
     id: string;
     name: string;
     priority: number;
-    trigger: Record<string, unknown>;
-    condition: Record<string, unknown>;
-    action: Record<string, unknown>;
+    trigger: 'on_status_enter' | 'on_all_children_terminal';
+    condition?: unknown;
+    action: { type: 'transition'; params?: Record<string, unknown> };
   }>;
 }
 

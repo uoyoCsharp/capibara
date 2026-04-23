@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle, CircleNotch } from '@phosphor-icons/react';
+import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle, CircleNotch, Play, XCircle } from '@phosphor-icons/react';
 import { useTaskStore } from '../../store/task.store';
 import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
@@ -36,7 +36,7 @@ function buildTaskTree(tasks: TaskRecord[]): TaskNode[] {
 }
 
 function TaskRow({
-  node, depth, typeLabel, statusLabel, isTerminal, isApproval, selectedId, onSelect, onApprove, onReject, availableTransitions, runningTaskIds,
+  node, depth, typeLabel, statusLabel, isTerminal, isApproval, isInitial, selectedId, onSelect, onStart, onApprove, onReject, onCancel, runningTaskIds,
 }: {
   node: TaskNode;
   depth: number;
@@ -44,17 +44,20 @@ function TaskRow({
   statusLabel: (n: string) => string;
   isTerminal: (n: string) => boolean;
   isApproval: (n: string) => boolean;
+  isInitial: (n: string) => boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onStart: (taskId: string) => void;
   onApprove: (taskId: string) => void;
   onReject: (taskId: string) => void;
-  availableTransitions: (from: string) => string[];
+  onCancel: (taskId: string) => void;
   runningTaskIds: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(true);
   const { task } = node;
   const terminal = isTerminal(task.status);
   const approval = isApproval(task.status);
+  const initial = isInitial(task.status);
   const isRunning = runningTaskIds.has(task.id);
   const isSelected = task.id === selectedId;
 
@@ -78,6 +81,16 @@ function TaskRow({
         <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{typeLabel(task.type)}</span>
         <span className={`flex-1 text-sm ${terminal ? 'line-through text-muted-foreground' : ''}`}>{task.title}</span>
 
+        {initial && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onStart(task.id); }}
+            className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
+          >
+            <Play size={12} weight="fill" />
+            Start
+          </button>
+        )}
+
         {approval && (
           <div className="flex items-center gap-1">
             <ShieldWarning size={16} className="text-yellow-500" />
@@ -96,6 +109,16 @@ function TaskRow({
           </div>
         )}
 
+        {!terminal && !initial && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCancel(task.id); }}
+            className="text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors opacity-0 group-hover:opacity-100"
+            title="Cancel task"
+          >
+            <XCircle size={14} />
+          </button>
+        )}
+
         {terminal && <CheckCircle size={16} className="text-green-500" />}
         {isRunning && <CircleNotch size={16} className="text-blue-500 animate-spin" />}
 
@@ -103,6 +126,7 @@ function TaskRow({
           terminal ? 'bg-green-500/10 text-green-600' :
           approval ? 'bg-yellow-500/10 text-yellow-600' :
           isRunning ? 'bg-blue-500/10 text-blue-600 animate-pulse' :
+          initial ? 'bg-gray-500/10 text-gray-600' :
           'bg-blue-500/10 text-blue-600'
         }`}>
           {statusLabel(task.status)}
@@ -118,11 +142,13 @@ function TaskRow({
           statusLabel={statusLabel}
           isTerminal={isTerminal}
           isApproval={isApproval}
+          isInitial={isInitial}
           selectedId={selectedId}
           onSelect={onSelect}
+          onStart={onStart}
           onApprove={onApprove}
           onReject={onReject}
-          availableTransitions={availableTransitions}
+          onCancel={onCancel}
           runningTaskIds={runningTaskIds}
         />
       ))}
@@ -140,7 +166,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
   const updateTaskStatus = useTaskStore((s) => s.updateTaskStatus);
   const createTask = useTaskStore((s) => s.createTask);
 
-  const { schema, getAllowedTypes, typeLabel, statusLabel, isTerminalStatus, isApprovalStatus, getAvailableTransitions } = useWorkflowSchema(orgId);
+  const { schema, getAllowedTypes, typeLabel, statusLabel, isTerminalStatus, isApprovalStatus, isInitialStatus, getAvailableTransitions } = useWorkflowSchema(orgId);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
@@ -174,9 +200,19 @@ export function TasksPage({ orgId }: TasksPageProps) {
     });
   }, [orgId, tasks]);
 
-  useEventSubscription(['task:changed', 'run:changed'], useCallback(() => {
+  useEventSubscription(['task:changed', 'run:changed', 'run:completed'], useCallback(() => {
     if (orgId) void loadTasks(orgId);
   }, [orgId, loadTasks]));
+
+  const handleStart = useCallback(async (taskId: string) => {
+    const res = await api().startTask(taskId);
+    if (res.ok) {
+      toast.success('Task started');
+      if (orgId) void loadTasks(orgId);
+    } else {
+      toast.error(res.error?.message ?? 'Failed to start task');
+    }
+  }, [orgId, loadTasks]);
 
   const handleApprove = useCallback(async (taskId: string) => {
     const transitions = getAvailableTransitions('awaiting_approval');
@@ -188,6 +224,16 @@ export function TasksPage({ orgId }: TasksPageProps) {
   const handleReject = useCallback(async (taskId: string) => {
     await api().rejectApproval(taskId, 'in_progress');
     if (orgId) void loadTasks(orgId);
+  }, [orgId, loadTasks]);
+
+  const handleCancel = useCallback(async (taskId: string) => {
+    const res = await api().cancelTask(taskId);
+    if (res.ok) {
+      toast.success('Task cancelled');
+      if (orgId) void loadTasks(orgId);
+    } else {
+      toast.error(res.error?.message ?? 'Failed to cancel task');
+    }
   }, [orgId, loadTasks]);
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
@@ -241,11 +287,13 @@ export function TasksPage({ orgId }: TasksPageProps) {
               statusLabel={statusLabel}
               isTerminal={isTerminalStatus}
               isApproval={isApprovalStatus}
+              isInitial={isInitialStatus}
               selectedId={selectedTaskId}
               onSelect={setSelectedTaskId}
+              onStart={handleStart}
               onApprove={handleApprove}
               onReject={handleReject}
-              availableTransitions={getAvailableTransitions}
+              onCancel={handleCancel}
               runningTaskIds={runningTaskIds}
             />
           ))}
@@ -286,16 +334,9 @@ export function TasksPage({ orgId }: TasksPageProps) {
           statusLabel={statusLabel}
           isTerminal={isTerminalStatus}
           isApproval={isApprovalStatus}
-          availableTransitions={getAvailableTransitions}
-          onTransition={async (taskId, newStatus) => {
-            const ok = await updateTaskStatus(taskId, newStatus);
-            if (ok) {
-              if (orgId) void loadTasks(orgId);
-              toast.success(`Status → ${statusLabel(newStatus)}`);
-            } else {
-              toast.error('Failed to update status');
-            }
-          }}
+          isInitial={isInitialStatus}
+          onStart={handleStart}
+          onCancel={handleCancel}
           onDelete={async (taskId) => {
             const ok = await useTaskStore.getState().deleteTask(taskId);
             if (ok) {

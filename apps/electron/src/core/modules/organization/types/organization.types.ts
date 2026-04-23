@@ -10,6 +10,7 @@ export interface Organization {
   customInstructions: string;
   status: OrgStatus;
   budgetLimit: number;
+  autoStartOnCreate: boolean;
   orgTemplateId: string | null;
   planningRoleId: string | null;
   workspacePath: string;
@@ -63,6 +64,7 @@ export interface UpdateOrganizationInput {
   customInstructions?: string;
   status?: OrgStatus;
   budgetLimit?: number;
+  autoStartOnCreate?: boolean;
   workspacePath?: string;
   planningRoleId?: string | null;
 }

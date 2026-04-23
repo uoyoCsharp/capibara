@@ -40,6 +40,30 @@ export function registerWorkflowHandlers(
     catch (e) { return err('INVALID_TRANSITION', String(e)); }
   });
 
+  ipcMain.handle('capibara:task:start', async (_ev, taskId: string) => {
+    try {
+      const task = taskService.findById(taskId);
+      if (!task) return err('NOT_FOUND', `Task not found: ${taskId}`);
+      const category = processEngine.getStatusCategory(task.orgId, task.status);
+      if (category !== 'initial') return err('INVALID_TRANSITION', `Task is not in initial status (current: ${task.status})`);
+      const transitions = processEngine.getAvailableTransitions(task.orgId, task.status);
+      const activeTarget = transitions.find((t) => processEngine.getStatusCategory(task.orgId, t.to) === 'active');
+      if (!activeTarget) return err('INVALID_TRANSITION', 'No active status transition available');
+      return ok(taskStateMachine.transition(taskId, activeTarget.to));
+    } catch (e) { return err('INVALID_TRANSITION', String(e)); }
+  });
+
+  ipcMain.handle('capibara:task:cancel', async (_ev, taskId: string) => {
+    try {
+      const task = taskService.findById(taskId);
+      if (!task) return err('NOT_FOUND', `Task not found: ${taskId}`);
+      const transitions = processEngine.getAvailableTransitions(task.orgId, task.status);
+      const cancelTarget = transitions.find((t) => t.to === 'cancelled');
+      if (!cancelTarget) return err('INVALID_TRANSITION', `Cannot cancel task in status: ${task.status}`);
+      return ok(taskStateMachine.transition(taskId, 'cancelled'));
+    } catch (e) { return err('INVALID_TRANSITION', String(e)); }
+  });
+
   ipcMain.handle('capibara:task:delete', async (_ev, id: string) => {
     try { taskService.delete(id); return ok(null); }
     catch (e) { return err('NOT_FOUND', String(e)); }

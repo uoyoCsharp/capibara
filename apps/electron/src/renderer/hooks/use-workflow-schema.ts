@@ -64,6 +64,10 @@ export function useWorkflowSchema(orgId: string | null) {
     return schema?.statuses.find((s) => s.name === name)?.category === 'approval';
   }, [schema]);
 
+  const isInitialStatus = useCallback((name: string): boolean => {
+    return schema?.statuses.find((s) => s.name === name)?.category === 'initial';
+  }, [schema]);
+
   const getAvailableTransitions = useCallback((fromStatus: string): string[] => {
     if (!schema) return [];
     return schema.transitions
@@ -71,5 +75,5 @@ export function useWorkflowSchema(orgId: string | null) {
       .map((t) => t.to);
   }, [schema]);
 
-  return { schema, getAllowedTypes, typeLabel, statusLabel, isTerminalStatus, isApprovalStatus, getAvailableTransitions };
+  return { schema, getAllowedTypes, typeLabel, statusLabel, isTerminalStatus, isApprovalStatus, isInitialStatus, getAvailableTransitions };
 }
