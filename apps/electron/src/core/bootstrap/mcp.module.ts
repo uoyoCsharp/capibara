@@ -6,8 +6,7 @@ import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { RoleService } from '@core/modules/organization/services/role.service';
-import type { PendingPlanStore } from '@core/infrastructure/stores/pending-plan.store';
-import type { PlanningService } from '@core/modules/planning/planning.service';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import { McpToolRegistry } from '@core/modules/mcp/registry/mcp-tool.registry';
 import { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
 import { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-generator';
@@ -23,8 +22,7 @@ export function registerMcpModule(
   processEngine: ProcessEngine,
   conversationService: ConversationService,
   roleService: RoleService,
-  pendingPlanStore: PendingPlanStore,
-  planningService: PlanningService,
+  eventPublisher: IEventPublisher,
 ): { mcpIpcServer: McpIpcServer; mcpToolRegistry: McpToolRegistry; mcpConfigGen: McpConfigGenerator } {
   const toolRegistry = new McpToolRegistry(logger);
   const mcpIpcServer = new McpIpcServer(toolRegistry, logger);
@@ -36,7 +34,7 @@ export function registerMcpModule(
   for (const tool of createConversationTools(conversationService)) {
     toolRegistry.register(tool);
   }
-  for (const tool of createPlanningTools(pendingPlanStore, planningService)) {
+  for (const tool of createPlanningTools(eventPublisher)) {
     toolRegistry.register(tool);
   }
   for (const tool of createContextTools(taskService, roleService)) {

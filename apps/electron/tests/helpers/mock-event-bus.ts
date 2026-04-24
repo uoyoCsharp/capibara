@@ -1,11 +1,18 @@
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
-import type { DomainEvent, DomainEventType } from '@core/foundation/events';
+import type { IEventBus, Unsubscribe } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { DomainEvent, DomainEventType, DomainEventMap } from '@core/foundation/events';
 
-export class MockEventBus implements IEventBus {
+/**
+ * Test double that satisfies BOTH IEventBus and IEventPublisher.
+ *
+ * `publish()` (publisher) and `emit()` (bus) share the same synchronous
+ * dispatch — tests don't need an outbox roundtrip.
+ */
+export class MockEventBus implements IEventBus, IEventPublisher {
   private handlers = new Map<DomainEventType, Array<(event: DomainEvent) => void>>();
   private emitted: DomainEvent[] = [];
 
-  emit<T>(event: DomainEvent<T>): void {
+  emit<T extends DomainEventType>(event: DomainEvent<T>): void {
     this.emitted.push(event as DomainEvent);
     const handlers = this.handlers.get(event.type) ?? [];
     for (const handler of handlers) {
@@ -13,16 +20,27 @@ export class MockEventBus implements IEventBus {
     }
   }
 
-  on<T>(eventType: DomainEventType, handler: (event: DomainEvent<T>) => void): void {
+  on<T extends DomainEventType>(
+    eventType: T,
+    handler: (event: DomainEvent<T>) => void,
+  ): Unsubscribe {
     const existing = this.handlers.get(eventType) ?? [];
     existing.push(handler as (event: DomainEvent) => void);
     this.handlers.set(eventType, existing);
+    return () => this.off(eventType, handler);
   }
 
-  off<T>(eventType: DomainEventType, handler: (event: DomainEvent<T>) => void): void {
+  off<T extends DomainEventType>(
+    eventType: T,
+    handler: (event: DomainEvent<T>) => void,
+  ): void {
     const existing = this.handlers.get(eventType) ?? [];
     const index = existing.indexOf(handler as (event: DomainEvent) => void);
     if (index >= 0) existing.splice(index, 1);
+  }
+
+  publish<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.emit({ type, timestamp: new Date().toISOString(), payload });
   }
 
   getEmitted(type?: DomainEventType): DomainEvent[] {

@@ -4,10 +4,15 @@ export type MessageIntent = 'question' | 'reply' | 'escalation' | 'resolution' |
 export type AuthorType = 'ai' | 'human' | 'system';
 export type RespondentType = 'ai' | 'human';
 
-export interface Conversation {
+import type {
+  InquiryMetadata,
+  PlanningMetadata,
+  AdhocMetadata,
+} from './conversation-metadata.schema';
+
+interface ConversationBase {
   id: string;
   orgId: string;
-  type: ConversationType;
   state: ConversationState;
   initiatorRoleId: string;
   respondentRoleId: string | null;
@@ -18,10 +23,14 @@ export interface Conversation {
   priority: number;
   timeoutAt: string | null;
   externalSessionId: string | null;
-  metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
+
+export type Conversation =
+  | (ConversationBase & { type: 'inquiry'; metadata: InquiryMetadata })
+  | (ConversationBase & { type: 'planning'; metadata: PlanningMetadata })
+  | (ConversationBase & { type: 'adhoc'; metadata: AdhocMetadata });
 
 export interface ConversationMessage {
   id: string;
@@ -34,17 +43,20 @@ export interface ConversationMessage {
   createdAt: string;
 }
 
-export interface CreateConversationInput {
+interface CreateConversationBase {
   orgId: string;
-  type: ConversationType;
   initiatorRoleId: string;
   respondentRoleId?: string | null;
   respondentType?: RespondentType | null;
   taskId?: string | null;
   parentConversationId?: string | null;
   externalSessionId?: string | null;
-  metadata?: Record<string, unknown>;
 }
+
+export type CreateConversationInput =
+  | (CreateConversationBase & { type: 'inquiry'; metadata?: Partial<InquiryMetadata> })
+  | (CreateConversationBase & { type: 'planning'; metadata?: Partial<PlanningMetadata> })
+  | (CreateConversationBase & { type: 'adhoc'; metadata?: Partial<AdhocMetadata> });
 
 export interface CreateMessageInput {
   conversationId: string;
@@ -53,21 +65,6 @@ export interface CreateMessageInput {
   content: string;
   intent: MessageIntent;
   inReplyToMessageId?: string | null;
-}
-
-export interface RoutingRequest {
-  askingRoleId: string;
-  orgId: string;
-  taskId: string;
-  questionContent: string;
-  conversationDepth: number;
-}
-
-export interface RoutingDecision {
-  respondentRoleId: string | null;
-  respondentType: RespondentType;
-  priority: number;
-  auditReason: string;
 }
 
 export interface ConversationTransition {

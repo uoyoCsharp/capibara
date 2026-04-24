@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import { ValidationError, NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { ProcessEngine } from '../engines/process.engine';
 import type { Task, CreateTaskInput, BatchCreateTaskInput } from '../types/workflow.types';
@@ -13,7 +13,7 @@ export class TaskService {
   constructor(
     private readonly taskRepo: ITaskRepository,
     private readonly processEngine: ProcessEngine,
-    private readonly eventBus: IEventBus,
+    private readonly eventPublisher: IEventPublisher,
   ) {}
 
   setConversationRepository(repo: IConversationRepository): void {
@@ -62,10 +62,11 @@ export class TaskService {
     }
 
     const task = this.taskRepo.create(input, depth);
-    this.eventBus.emit({
-      type: 'task:created',
-      timestamp: new Date().toISOString(),
-      payload: { taskId: task.id, orgId: task.orgId, type: task.type, parentId: task.parentId },
+    this.eventPublisher.publish('task:created', {
+      taskId: task.id,
+      orgId: task.orgId,
+      type: task.type,
+      parentId: task.parentId,
     });
     return task;
   }

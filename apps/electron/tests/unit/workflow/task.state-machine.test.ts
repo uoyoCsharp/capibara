@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { Task } from '@core/modules/workflow/types/workflow.types';
 import { TaskStateError, NotFoundError } from '@core/foundation/errors/capibara.errors';
@@ -19,6 +19,7 @@ function createTask(overrides?: Partial<Task>): Task {
     assigneeRoleId: 'role-1',
     depth: 0,
     artifactPaths: null,
+    pausedReason: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -29,7 +30,7 @@ describe('TaskStateMachine', () => {
   let stateMachine: TaskStateMachine;
   let taskRepo: ITaskRepository;
   let processEngine: ProcessEngine;
-  let eventBus: IEventBus;
+  let eventPublisher: IEventPublisher;
   let logger: ILogger;
 
   beforeEach(() => {
@@ -40,6 +41,7 @@ describe('TaskStateMachine', () => {
       findByAssigneeRoleId: vi.fn(),
       create: vi.fn(),
       updateStatus: vi.fn(),
+      updatePausedReason: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     } as unknown as ITaskRepository;
@@ -50,11 +52,11 @@ describe('TaskStateMachine', () => {
       getStatusesByCategory: vi.fn().mockReturnValue([]),
     } as unknown as ProcessEngine;
 
-    eventBus = { emit: vi.fn(), on: vi.fn(), off: vi.fn() } as IEventBus;
+    eventPublisher = { publish: vi.fn() } as IEventPublisher;
 
     logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as ILogger;
 
-    stateMachine = new TaskStateMachine(taskRepo, processEngine, eventBus, logger);
+    stateMachine = new TaskStateMachine(taskRepo, processEngine, eventPublisher, logger);
   });
 
   // ─── transition() ──────────────────────────────────────────────
@@ -84,7 +86,7 @@ describe('TaskStateMachine', () => {
       const result = stateMachine.transition('task-1', 'in_progress');
 
       expect(taskRepo.updateStatus).not.toHaveBeenCalled();
-      expect(eventBus.emit).not.toHaveBeenCalled();
+      expect(eventPublisher.publish).not.toHaveBeenCalled();
       expect(result).toBe(task);
     });
 
@@ -158,11 +160,9 @@ describe('TaskStateMachine', () => {
 
       stateMachine.transition('task-1', 'awaiting_review');
 
-      expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'task:entered-approval',
-          payload: expect.objectContaining({ taskId: 'task-1', from: 'in_progress', to: 'awaiting_review' }),
-        }),
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:entered-approval',
+        expect.objectContaining({ taskId: 'task-1', from: 'in_progress', to: 'awaiting_review' }),
       );
     });
 
@@ -174,7 +174,7 @@ describe('TaskStateMachine', () => {
 
       stateMachine.transition('task-1', 'in_progress');
 
-      const emittedTypes = vi.mocked(eventBus.emit).mock.calls.map((c) => c[0].type);
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
       expect(emittedTypes).not.toContain('task:entered-approval');
     });
 
@@ -186,15 +186,13 @@ describe('TaskStateMachine', () => {
 
       stateMachine.transition('task-1', 'in_progress');
 
-      expect(eventBus.emit).toHaveBeenCalledWith(
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:status-changed',
         expect.objectContaining({
-          type: 'task:status-changed',
-          payload: expect.objectContaining({
-            taskId: 'task-1',
-            from: 'pending',
-            to: 'in_progress',
-            assigneeRoleId: 'role-1',
-          }),
+          taskId: 'task-1',
+          from: 'pending',
+          to: 'in_progress',
+          assigneeRoleId: 'role-1',
         }),
       );
     });
@@ -207,7 +205,7 @@ describe('TaskStateMachine', () => {
 
       stateMachine.transition('task-1', 'approved');
 
-      const emittedTypes = vi.mocked(eventBus.emit).mock.calls.map((c) => c[0].type);
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
       expect(emittedTypes).toContain('task:completed');
     });
 
@@ -219,7 +217,7 @@ describe('TaskStateMachine', () => {
 
       stateMachine.transition('task-1', 'in_progress');
 
-      const emittedTypes = vi.mocked(eventBus.emit).mock.calls.map((c) => c[0].type);
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
       expect(emittedTypes).not.toContain('task:completed');
     });
 
@@ -231,7 +229,7 @@ describe('TaskStateMachine', () => {
 
       stateMachine.transition('task-1', 'cancelled');
 
-      const emittedTypes = vi.mocked(eventBus.emit).mock.calls.map((c) => c[0].type);
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
       expect(emittedTypes).toContain('task:status-changed');
       expect(emittedTypes).toContain('task:completed');
     });
@@ -293,11 +291,9 @@ describe('TaskStateMachine', () => {
 
       stateMachine.confirmApproval('task-1', 'approved');
 
-      expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'task:approval-confirmed',
-          payload: expect.objectContaining({ taskId: 'task-1', from: 'awaiting_review', to: 'approved' }),
-        }),
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:approval-confirmed',
+        expect.objectContaining({ taskId: 'task-1', from: 'awaiting_review', to: 'approved' }),
       );
     });
 
@@ -311,7 +307,7 @@ describe('TaskStateMachine', () => {
 
       stateMachine.confirmApproval('task-1', 'approved');
 
-      const emittedTypes = vi.mocked(eventBus.emit).mock.calls.map((c) => c[0].type);
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
       expect(emittedTypes).toContain('task:completed');
     });
 
@@ -325,7 +321,7 @@ describe('TaskStateMachine', () => {
 
       stateMachine.confirmApproval('task-1', 'revision');
 
-      const emittedTypes = vi.mocked(eventBus.emit).mock.calls.map((c) => c[0].type);
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
       expect(emittedTypes).not.toContain('task:completed');
     });
   });
@@ -376,11 +372,9 @@ describe('TaskStateMachine', () => {
 
       stateMachine.rejectApproval('task-1', 'revision');
 
-      expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'task:approval-rejected',
-          payload: expect.objectContaining({ taskId: 'task-1', from: 'awaiting_review', to: 'revision' }),
-        }),
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:approval-rejected',
+        expect.objectContaining({ taskId: 'task-1', from: 'awaiting_review', to: 'revision' }),
       );
     });
   });
@@ -451,11 +445,9 @@ describe('TaskStateMachine', () => {
       // updateStatus was called before behaviorEngine
       expect(taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'in_progress');
       // events were emitted before behaviorEngine
-      expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'task:status-changed',
-          payload: expect.objectContaining({ taskId: 'task-1', from: 'pending', to: 'in_progress' }),
-        }),
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:status-changed',
+        expect.objectContaining({ taskId: 'task-1', from: 'pending', to: 'in_progress' }),
       );
     });
 

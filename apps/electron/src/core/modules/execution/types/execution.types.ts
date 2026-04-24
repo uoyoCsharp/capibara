@@ -20,11 +20,9 @@ export type WakeReason =
   | 'conversation_reply'
   | 'conversation_escalation';
 
-export interface Run {
+interface RunBase {
   id: string;
   orgId: string;
-  taskId: string | null;
-  conversationId: string | null;
   roleId: string;
   status: RunStatus;
   wakeReason: WakeReason;
@@ -36,6 +34,23 @@ export interface Run {
   errorMessage: string | null;
   createdAt: string;
 }
+
+/**
+ * A Run always targets exactly one of three valid scenarios:
+ *   - Task execution: taskId set, conversationId null
+ *   - Inquiry response: both set (AI responds inside a Task context)
+ *   - Planning / Adhoc: taskId null, conversationId set
+ *
+ * The DB enforces `task_id IS NOT NULL OR conversation_id IS NOT NULL`
+ * (no run with both null). The "both set" case is permitted by the DB
+ * and required for inquiry responses.
+ */
+export type RunTarget =
+  | { taskId: string; conversationId: null }
+  | { taskId: string; conversationId: string }
+  | { taskId: null; conversationId: string };
+
+export type Run = RunBase & RunTarget;
 
 export interface CostEntry {
   id: string;
@@ -113,13 +128,13 @@ export interface RunResult {
   errorMessage: string | null;
 }
 
-export interface CreateRunInput {
+interface CreateRunBase {
   orgId: string;
-  taskId: string | null;
-  conversationId: string | null;
   roleId: string;
   wakeReason: WakeReason;
 }
+
+export type CreateRunInput = CreateRunBase & RunTarget;
 
 export interface CreateCostEntryInput {
   runId: string;

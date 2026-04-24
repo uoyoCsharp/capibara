@@ -1,13 +1,14 @@
 import { injectable } from 'tsyringe';
 import type { IOrganizationRepository } from '../interfaces/i-organization.repository';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import type { Organization, CreateOrganizationInput, UpdateOrganizationInput } from '../types/organization.types';
 
 @injectable()
 export class OrganizationService {
   constructor(
     private readonly orgRepo: IOrganizationRepository,
-    private readonly eventBus: IEventBus,
+    private readonly eventPublisher: IEventPublisher,
   ) {}
 
   findAll(): Organization[] {
@@ -35,11 +36,7 @@ export class OrganizationService {
     this.emitEvent('org:deleted', { orgId: id });
   }
 
-  private emitEvent(type: string, payload: Record<string, unknown>): void {
-    this.eventBus.emit({
-      type: type as import('@core/foundation/events').DomainEventType,
-      timestamp: new Date().toISOString(),
-      payload,
-    });
+  private emitEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.eventPublisher.publish(type, payload);
   }
 }

@@ -1,32 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createPlanningTools } from '@core/modules/mcp/handlers/planning-tools';
 import type { McpToolDefinition } from '@core/modules/mcp/registry/mcp-tool.registry';
-import type { PendingPlanStore } from '@core/infrastructure/stores/pending-plan.store';
-import type { PlanningService } from '@core/modules/planning/planning.service';
+import { MockEventBus } from '../../helpers/mock-event-bus';
 
 describe('Planning Tools (MCP Handlers)', () => {
   let tools: McpToolDefinition[];
-  let pendingPlanStore: PendingPlanStore;
-  let planningService: PlanningService;
+  let bus: MockEventBus;
 
   beforeEach(() => {
-    pendingPlanStore = {
-      get: vi.fn(),
-      set: vi.fn(),
-      has: vi.fn(),
-      delete: vi.fn(),
-      clear: vi.fn(),
-    } as unknown as PendingPlanStore;
-
-    planningService = {
-      confirmPlan: vi.fn(),
-      discardPlan: vi.fn(),
-      start: vi.fn(),
-      sendMessage: vi.fn(),
-      getPendingPlan: vi.fn(),
-    } as unknown as PlanningService;
-
-    tools = createPlanningTools(pendingPlanStore, planningService);
+    bus = new MockEventBus();
+    // MockEventBus implements IEventPublisher; publish delegates to emit
+    tools = createPlanningTools(bus);
   });
 
   function findTool(name: string): McpToolDefinition {
@@ -34,7 +18,7 @@ describe('Planning Tools (MCP Handlers)', () => {
   }
 
   describe('capibara_plan_tasks', () => {
-    it('stores plan and auto-confirms via PlanningService', async () => {
+    it('publishes plan:submitted with the submitted task tree', async () => {
       const tasks = [
         { type: 'task', title: 'Design API', assigneeRoleId: 'role-1' },
         { type: 'task', title: 'Implement API', assigneeRoleId: 'role-2' },
@@ -45,26 +29,28 @@ describe('Planning Tools (MCP Handlers)', () => {
         'run-1',
       );
 
-      expect(pendingPlanStore.set).toHaveBeenCalledWith('conv-1', expect.objectContaining({
+      bus.assertEmitted('plan:submitted');
+      const event = bus.getLastEmitted('plan:submitted');
+      expect(event?.payload).toEqual(expect.objectContaining({
         conversationId: 'conv-1',
         orgId: 'org-1',
         roleId: 'role-planner',
         tasks,
       }));
-      expect(planningService.confirmPlan).toHaveBeenCalledWith('conv-1', 'org-1', null);
-      expect(result).toEqual({ status: 'plan_confirmed', conversationId: 'conv-1', orgId: 'org-1' });
+      expect(result).toEqual({ status: 'plan_pending', conversationId: 'conv-1', orgId: 'org-1' });
     });
 
-    it('includes submittedAt timestamp in stored plan', async () => {
+    it('includes submittedAt timestamp in the event payload', async () => {
       const tool = findTool('capibara_plan_tasks');
       await tool.handler(
         { conversationId: 'conv-2', orgId: 'org-1', roleId: 'role-1', tasks: [] },
         'run-1',
       );
 
-      const stored = vi.mocked(pendingPlanStore.set).mock.calls[0][1];
-      expect(stored.submittedAt).toBeDefined();
-      expect(new Date(stored.submittedAt).getTime()).not.toBeNaN();
+      const event = bus.getLastEmitted('plan:submitted');
+      const submittedAt = (event?.payload as { submittedAt: string }).submittedAt;
+      expect(submittedAt).toBeDefined();
+      expect(new Date(submittedAt).getTime()).not.toBeNaN();
     });
   });
 });

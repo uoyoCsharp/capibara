@@ -1,3 +1,14 @@
+> **⚠ ARCHIVED — Historical Design Proposal**
+>
+> This proposal was authored **before** the v2.1 refactor. The feature described here (BehaviorEngine, cascade execution, auto-done propagation) was subsequently implemented and is **now live**, but the code organization no longer matches this document:
+> - The monolithic `Orchestrator` class referenced throughout has been split into `TaskOrchestrator` / `ConversationOrchestrator` / `RunOrchestrator` (see `_bmad-output/planning-artifacts/refactoring-architecture-plan.v2.1.md` §3.7).
+> - `pausedTasks` in-memory Set has been replaced by the persisted `tasks.paused_reason` column.
+> - `PendingPlanStore` referenced here no longer exists.
+>
+> For the current architecture, see the v2.1 plan and completion report. Kept for historical context only; do not use as a coding reference.
+
+---
+
 # Capibara 自动级联执行机制 — 设计提案 v3
 
 ## 1. 问题陈述

@@ -1,0 +1,174 @@
+import { z } from 'zod';
+import type { DomainEventMap, DomainEventType } from './events';
+
+// ═══════════════════════════════════════════════════════════════
+// Zod schemas mirroring DomainEventMap payloads.
+// Used at runtime for Outbox deserialization and (future) IPC.
+// ═══════════════════════════════════════════════════════════════
+
+// Organization ─────────────────────────────────────────────────
+const OrgCreatedSchema = z.object({ orgId: z.string(), name: z.string() });
+const OrgUpdatedSchema = z.object({ orgId: z.string(), changes: z.array(z.string()) });
+const OrgDeletedSchema = z.object({ orgId: z.string() });
+const RoleCreatedSchema = z.object({ roleId: z.string(), orgId: z.string(), name: z.string() });
+const RoleUpdatedSchema = z.object({ roleId: z.string(), orgId: z.string() });
+const RoleDeletedSchema = z.object({ roleId: z.string(), orgId: z.string() });
+
+// Task ─────────────────────────────────────────────────────────
+const TaskCreatedSchema = z.object({
+  taskId: z.string(),
+  orgId: z.string(),
+  type: z.string(),
+  parentId: z.string().nullable(),
+});
+const TaskStatusChangedSchema = z.object({
+  taskId: z.string(),
+  orgId: z.string(),
+  from: z.string(),
+  to: z.string(),
+  assigneeRoleId: z.string().nullable(),
+});
+const TaskApprovalTransitionSchema = z.object({
+  taskId: z.string(),
+  orgId: z.string(),
+  from: z.string(),
+  to: z.string(),
+});
+const TaskCompletedSchema = z.object({
+  taskId: z.string(),
+  orgId: z.string(),
+  status: z.string(),
+});
+
+// Conversation ─────────────────────────────────────────────────
+const ConversationTypeSchema = z.enum(['inquiry', 'planning', 'adhoc']);
+const ConversationCreatedSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  type: ConversationTypeSchema,
+});
+const ConversationMessageAddedSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  messageId: z.string(),
+  authorType: z.enum(['ai', 'human', 'system']),
+});
+const ConversationResponseNeededSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  roleId: z.string().nullable(),
+});
+const ConversationNeedsRoutingSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  askingRoleId: z.string(),
+  taskId: z.string(),
+  conversationDepth: z.number(),
+});
+const ConversationRespondentAssignedSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  respondentRoleId: z.string().nullable(),
+});
+const ConversationResolvedSchema = z.object({ conversationId: z.string() });
+const ConversationEscalatedSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  newRespondentRoleId: z.string(),
+});
+const ConversationTimedOutSchema = z.object({ conversationId: z.string(), orgId: z.string() });
+const ConversationCancelledSchema = z.object({ conversationId: z.string() });
+
+// Run ──────────────────────────────────────────────────────────
+const RunLifecycleSchema = z.object({
+  runId: z.string(),
+  orgId: z.string(),
+  roleId: z.string(),
+});
+const RunWithTokensSchema = RunLifecycleSchema.extend({ tokenCount: z.number() });
+const RunFailedSchema = RunWithTokensSchema.extend({ errorMessage: z.string().nullable() });
+const RunLogSchema = z.object({
+  runId: z.string(),
+  stream: z.enum(['stdout', 'stderr']),
+  chunk: z.string(),
+});
+const RunAssistantTextSchema = z.object({ runId: z.string(), text: z.string() });
+const RunStatusSchema = z.object({ runId: z.string(), status: z.string() });
+
+// Planning ─────────────────────────────────────────────────────
+const PlanTaskDraftSchema: z.ZodType<{
+  type: string;
+  title: string;
+  description?: string;
+  assigneeRoleId?: string | null;
+  children?: Array<z.infer<typeof PlanTaskDraftSchema>>;
+}> = z.lazy(() =>
+  z.object({
+    type: z.string(),
+    title: z.string(),
+    description: z.string().optional(),
+    assigneeRoleId: z.string().nullable().optional(),
+    children: z.array(PlanTaskDraftSchema).optional(),
+  }),
+);
+const PlanSubmittedSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  roleId: z.string(),
+  tasks: z.array(PlanTaskDraftSchema),
+  submittedAt: z.string(),
+});
+const PlanningPlanReadySchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+  taskCount: z.number(),
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Master registry — one schema per DomainEventType
+// ═══════════════════════════════════════════════════════════════
+
+export const EVENT_SCHEMAS = {
+  'org:created': OrgCreatedSchema,
+  'org:updated': OrgUpdatedSchema,
+  'org:deleted': OrgDeletedSchema,
+  'role:created': RoleCreatedSchema,
+  'role:updated': RoleUpdatedSchema,
+  'role:deleted': RoleDeletedSchema,
+
+  'task:created': TaskCreatedSchema,
+  'task:status-changed': TaskStatusChangedSchema,
+  'task:entered-approval': TaskApprovalTransitionSchema,
+  'task:approval-confirmed': TaskApprovalTransitionSchema,
+  'task:approval-rejected': TaskApprovalTransitionSchema,
+  'task:completed': TaskCompletedSchema,
+
+  'conversation:created': ConversationCreatedSchema,
+  'conversation:message-added': ConversationMessageAddedSchema,
+  'conversation:response-needed': ConversationResponseNeededSchema,
+  'conversation:needs-routing': ConversationNeedsRoutingSchema,
+  'conversation:respondent-assigned': ConversationRespondentAssignedSchema,
+  'conversation:resolved': ConversationResolvedSchema,
+  'conversation:escalated': ConversationEscalatedSchema,
+  'conversation:timed-out': ConversationTimedOutSchema,
+  'conversation:cancelled': ConversationCancelledSchema,
+
+  'run:queued': RunLifecycleSchema,
+  'run:started': RunLifecycleSchema,
+  'run:succeeded': RunWithTokensSchema,
+  'run:failed': RunFailedSchema,
+  'run:cancelled': RunWithTokensSchema,
+  'run:log': RunLogSchema,
+  'run:assistant-text': RunAssistantTextSchema,
+  'run:status': RunStatusSchema,
+
+  'plan:submitted': PlanSubmittedSchema,
+  'planning:plan-ready': PlanningPlanReadySchema,
+} as const satisfies { [K in DomainEventType]: z.ZodType<DomainEventMap[K]> };
+
+export function parseEventPayload<T extends DomainEventType>(
+  type: T,
+  raw: unknown,
+): DomainEventMap[T] {
+  return EVENT_SCHEMAS[type].parse(raw) as DomainEventMap[T];
+}

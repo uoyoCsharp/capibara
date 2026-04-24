@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { InquiryRouter } from '@core/modules/conversation/routing/inquiry.router';
+import { InquiryRouter } from '@core/modules/coordination/routing/inquiry.router';
+import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import { MockEventBus } from '../../helpers/mock-event-bus';
 import { MockLogger } from '../../helpers/mock-logger';
 import { TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID } from '../../helpers/fixtures';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
@@ -26,10 +28,26 @@ function createRole(overrides?: Partial<Role>): Role {
   };
 }
 
+function emitNeedsRouting(bus: MockEventBus, askingRoleId = TEST_ROLE_ID): void {
+  bus.emit({
+    type: 'conversation:needs-routing',
+    timestamp: new Date().toISOString(),
+    payload: {
+      conversationId: 'conv-1',
+      orgId: TEST_ORG_ID,
+      askingRoleId,
+      taskId: TEST_TASK_ID,
+      conversationDepth: 0,
+    },
+  });
+}
+
 describe('InquiryRouter', () => {
   let router: InquiryRouter;
   let roleRepo: IRoleRepository;
-  let logger: MockLogger;
+  let bus: MockEventBus;
+  let conversationService: ConversationService;
+  let assignRespondent: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     roleRepo = {
@@ -41,8 +59,11 @@ describe('InquiryRouter', () => {
       update: vi.fn(),
       delete: vi.fn(),
     };
-    logger = new MockLogger();
-    router = new InquiryRouter(roleRepo, logger);
+    bus = new MockEventBus();
+    assignRespondent = vi.fn();
+    conversationService = { assignRespondent } as unknown as ConversationService;
+    router = new InquiryRouter(roleRepo, conversationService, bus, new MockLogger());
+    router.start();
   });
 
   it('routes to human when asking role requiresHumanApproval', () => {
@@ -50,17 +71,14 @@ describe('InquiryRouter', () => {
       createRole({ requiresHumanApproval: true, parentId: 'role-parent' }),
     );
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Approval needed',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBeNull();
-    expect(decision.respondentType).toBe('human');
-    expect(decision.auditReason).toContain('requires human approval');
+    expect(assignRespondent).toHaveBeenCalledWith(
+      'conv-1',
+      null,
+      'human',
+      expect.stringContaining('requires human approval'),
+    );
   });
 
   it('routes to parent role when available and active', () => {
@@ -71,17 +89,14 @@ describe('InquiryRouter', () => {
       return null;
     });
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Need help',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBe('role-parent');
-    expect(decision.respondentType).toBe('ai');
-    expect(decision.auditReason).toContain('parent');
+    expect(assignRespondent).toHaveBeenCalledWith(
+      'conv-1',
+      'role-parent',
+      'ai',
+      expect.stringContaining('parent'),
+    );
   });
 
   it('routes to parent as ai even when parent has requiresHumanApproval', () => {
@@ -92,16 +107,9 @@ describe('InquiryRouter', () => {
       return null;
     });
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Need help',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBe('role-parent');
-    expect(decision.respondentType).toBe('ai');
+    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-parent', 'ai', expect.any(String));
   });
 
   it('falls back to peer when parent is paused', () => {
@@ -114,16 +122,14 @@ describe('InquiryRouter', () => {
     });
     vi.mocked(roleRepo.findChildren).mockReturnValue([createRole(), peer]);
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Help',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBe('role-peer');
-    expect(decision.auditReason).toContain('peer');
+    expect(assignRespondent).toHaveBeenCalledWith(
+      'conv-1',
+      'role-peer',
+      'ai',
+      expect.stringContaining('peer'),
+    );
   });
 
   it('routes to peer sibling when no parent', () => {
@@ -131,15 +137,9 @@ describe('InquiryRouter', () => {
     vi.mocked(roleRepo.findById).mockReturnValue(createRole({ parentId: null }));
     vi.mocked(roleRepo.findByOrgId).mockReturnValue([createRole(), peer]);
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Help',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBe('role-peer');
+    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-peer', 'ai', expect.any(String));
   });
 
   it('skips system roles when finding peers', () => {
@@ -148,15 +148,9 @@ describe('InquiryRouter', () => {
     vi.mocked(roleRepo.findById).mockReturnValue(createRole({ parentId: null }));
     vi.mocked(roleRepo.findByOrgId).mockReturnValue([createRole(), systemRole, normalPeer]);
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Help',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBe('role-normal');
+    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-normal', 'ai', expect.any(String));
   });
 
   it('skips paused peers', () => {
@@ -165,48 +159,43 @@ describe('InquiryRouter', () => {
     vi.mocked(roleRepo.findById).mockReturnValue(createRole({ parentId: null }));
     vi.mocked(roleRepo.findByOrgId).mockReturnValue([createRole(), pausedPeer, activePeer]);
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Help',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBe('role-active');
+    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-active', 'ai', expect.any(String));
   });
 
   it('falls back to human when no AI roles available', () => {
     vi.mocked(roleRepo.findById).mockReturnValue(createRole({ parentId: null }));
     vi.mocked(roleRepo.findByOrgId).mockReturnValue([createRole()]);
 
-    const decision = router.route({
-      askingRoleId: TEST_ROLE_ID,
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Help',
-      conversationDepth: 0,
-    });
+    emitNeedsRouting(bus);
 
-    expect(decision.respondentRoleId).toBeNull();
-    expect(decision.respondentType).toBe('human');
-    expect(decision.priority).toBe(10);
-    expect(decision.auditReason).toContain('Human fallback');
+    expect(assignRespondent).toHaveBeenCalledWith(
+      'conv-1',
+      null,
+      'human',
+      expect.stringContaining('Human fallback'),
+    );
   });
 
   it('falls back to human when asking role not found', () => {
     vi.mocked(roleRepo.findById).mockReturnValue(null);
 
-    const decision = router.route({
-      askingRoleId: 'nonexistent',
-      orgId: TEST_ORG_ID,
-      taskId: TEST_TASK_ID,
-      questionContent: 'Help',
-      conversationDepth: 0,
+    emitNeedsRouting(bus, 'nonexistent');
+
+    expect(assignRespondent).toHaveBeenCalledWith(
+      'conv-1',
+      null,
+      'human',
+      expect.stringContaining('not found'),
+    );
+  });
+
+  it('logs and swallows errors from assignRespondent', () => {
+    assignRespondent.mockImplementation(() => {
+      throw new Error('boom');
     });
 
-    expect(decision.respondentRoleId).toBeNull();
-    expect(decision.respondentType).toBe('human');
-    expect(decision.auditReason).toContain('not found');
+    expect(() => emitNeedsRouting(bus)).not.toThrow();
   });
 });

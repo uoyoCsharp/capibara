@@ -8,6 +8,7 @@ import {
 } from '@core/foundation/tokens';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { CapibaraConfig } from '@core/config/config.types';
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
@@ -30,6 +31,7 @@ export interface ExecutionModule {
 export function registerExecutionModule(
   connection: ISqliteConnection,
   eventBus: IEventBus,
+  eventPublisher: IEventPublisher,
   logger: ILogger,
   config: CapibaraConfig,
   workerPath: string,
@@ -40,7 +42,7 @@ export function registerExecutionModule(
   const fileLogService = new FileLogService(config.logging.logDir);
   const workerService = new WorkerService(workerPath, logger);
   const executor = new UtilityProcessExecutor(workerService);
-  const runEngine = new RunEngine(runRepo, executor, eventBus, logger, config, costTracker, fileLogService);
+  const runEngine = new RunEngine(runRepo, executor, eventBus, eventPublisher, logger, config, costTracker, fileLogService);
 
   container.register(RUN_REPO_TOKEN, { useValue: runRepo });
   container.register(COST_ENTRY_REPO_TOKEN, { useValue: costEntryRepo });

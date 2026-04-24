@@ -69,12 +69,12 @@ export function registerWorkflowHandlers(
     catch (e) { return err('NOT_FOUND', String(e)); }
   });
 
-  ipcMain.handle('capibara:approval:confirm', async (_ev, taskId: string, nextStatus: string) => {
+  ipcMain.handle('capibara:task:approve', async (_ev, taskId: string, nextStatus: string) => {
     try { return ok(taskStateMachine.confirmApproval(taskId, nextStatus)); }
     catch (e) { return err('INVALID_TRANSITION', String(e)); }
   });
 
-  ipcMain.handle('capibara:approval:reject', async (_ev, taskId: string, revertStatus: string) => {
+  ipcMain.handle('capibara:task:reject', async (_ev, taskId: string, revertStatus: string) => {
     try { return ok(taskStateMachine.rejectApproval(taskId, revertStatus)); }
     catch (e) { return err('INVALID_TRANSITION', String(e)); }
   });

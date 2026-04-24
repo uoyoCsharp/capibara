@@ -1,3 +1,14 @@
+> **⚠ ARCHIVED — Superseded by real test files**
+>
+> This plan was written as a specification for the cascade-execution tests. The authoritative coverage now lives in:
+> - `tests/unit/workflow/behavior-engine.test.ts`
+> - `tests/unit/workflow/task.state-machine.test.ts`
+> - `tests/integration/cascade-execution.test.ts`
+>
+> The `Orchestrator` single-class assertions here refer to a class that no longer exists — v2.1 split it into `TaskOrchestrator` / `ConversationOrchestrator` / `RunOrchestrator`. Do not template new tests from this document; see the live test suite.
+
+---
+
 # 自动级联执行 — 测试计划
 
 基于 `auto-cascade-execution.md` v3 提案，覆盖三个新/重写模块和一个集成场景。

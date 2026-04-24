@@ -5,7 +5,6 @@ import { TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID } from '../../helpers/fixtures'
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IConversationMessageRepository } from '@core/modules/conversation/interfaces/i-conversation-message.repository';
 import type { ConversationEventLogger } from '@core/modules/conversation/persistence/conversation-event.logger';
-import type { InquiryRouter } from '@core/modules/conversation/routing/inquiry.router';
 import type { Conversation, ConversationMessage } from '@core/modules/conversation/types/conversation.types';
 
 function createConv(overrides?: Partial<Conversation>): Conversation {
@@ -50,7 +49,6 @@ describe('ConversationService', () => {
   let msgRepo: IConversationMessageRepository;
   let eventLogger: ConversationEventLogger;
   let eventBus: MockEventBus;
-  let inquiryRouter: InquiryRouter;
 
   beforeEach(() => {
     convRepo = {
@@ -77,16 +75,8 @@ describe('ConversationService', () => {
       findByConversationId: vi.fn().mockReturnValue([]),
     } as unknown as ConversationEventLogger;
     eventBus = new MockEventBus();
-    inquiryRouter = {
-      route: vi.fn().mockReturnValue({
-        respondentRoleId: 'role-responder',
-        respondentType: 'ai',
-        priority: 0,
-        auditReason: 'Routed to parent',
-      }),
-    } as unknown as InquiryRouter;
 
-    service = new ConversationService(convRepo, msgRepo, eventLogger, eventBus, inquiryRouter);
+    service = new ConversationService(convRepo, msgRepo, eventLogger, eventBus);
   });
 
   describe('findById', () => {
@@ -125,11 +115,7 @@ describe('ConversationService', () => {
   });
 
   describe('createInquiry', () => {
-    it('creates conversation, routes, transitions to waiting, and emits events', () => {
-      vi.mocked(convRepo.findById)
-        .mockReturnValueOnce(createConv({ state: 'active' }))
-        .mockReturnValue(createConv({ state: 'waiting', respondentRoleId: 'role-responder' }));
-
+    it('creates conversation, persists the question, and emits needs-routing', () => {
       const result = service.createInquiry(TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID, 'What is this?');
 
       expect(convRepo.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -144,34 +130,60 @@ describe('ConversationService', () => {
         content: 'What is this?',
         intent: 'question',
       }));
-      expect(inquiryRouter.route).toHaveBeenCalled();
-      expect(convRepo.updateRespondent).toHaveBeenCalledWith('conv-1', 'role-responder', 'ai');
-      expect(convRepo.updateState).toHaveBeenCalledWith('conv-1', 'waiting');
-      eventBus.assertEmitted('conversation:respondent-assigned');
-      eventBus.assertEmitted('conversation:response-needed');
-      expect(result.respondentRoleId).toBe('role-responder');
+      eventBus.assertEmitted('conversation:needs-routing');
+      eventBus.assertNotEmitted('conversation:respondent-assigned');
+      eventBus.assertNotEmitted('conversation:response-needed');
+      expect(convRepo.updateRespondent).not.toHaveBeenCalled();
+      expect(result).toBeDefined();
     });
 
-    it('updates respondent to human when router returns null respondentRoleId', () => {
-      vi.mocked(inquiryRouter.route).mockReturnValue({
-        respondentRoleId: null,
-        respondentType: 'human',
-        priority: 10,
-        auditReason: 'Human fallback',
-      });
-
-      service.createInquiry(TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID, 'Help?');
-      expect(convRepo.updateRespondent).toHaveBeenCalledWith('conv-1', null, 'human');
-    });
-
-    it('passes parentConversationId and depth when provided', () => {
+    it('needs-routing payload carries askingRoleId, taskId, and depth', () => {
       service.createInquiry(TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID, 'Q', 'parent-conv', 2);
       expect(convRepo.create).toHaveBeenCalledWith(expect.objectContaining({
         parentConversationId: 'parent-conv',
       }));
-      expect(inquiryRouter.route).toHaveBeenCalledWith(expect.objectContaining({
+      const event = eventBus.getLastEmitted('conversation:needs-routing');
+      expect(event?.payload).toEqual(expect.objectContaining({
+        conversationId: 'conv-1',
+        orgId: TEST_ORG_ID,
+        askingRoleId: TEST_ROLE_ID,
+        taskId: TEST_TASK_ID,
         conversationDepth: 2,
       }));
+    });
+
+    it('defaults conversationDepth to 0 when not provided', () => {
+      service.createInquiry(TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID, 'Q');
+      const event = eventBus.getLastEmitted('conversation:needs-routing');
+      expect(event?.payload).toEqual(expect.objectContaining({ conversationDepth: 0 }));
+    });
+  });
+
+  describe('assignRespondent', () => {
+    it('updates respondent, transitions to waiting, emits both assignment events', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ state: 'active' }));
+      service.assignRespondent('conv-1', 'role-responder', 'ai', 'Routed to parent');
+
+      expect(convRepo.updateRespondent).toHaveBeenCalledWith('conv-1', 'role-responder', 'ai');
+      expect(convRepo.updateState).toHaveBeenCalledWith('conv-1', 'waiting');
+      eventBus.assertEmitted('conversation:respondent-assigned');
+      eventBus.assertEmitted('conversation:response-needed');
+    });
+
+    it('accepts null respondentRoleId with human respondentType', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(createConv({ state: 'active' }));
+      service.assignRespondent('conv-1', null, 'human', 'Human fallback');
+
+      expect(convRepo.updateRespondent).toHaveBeenCalledWith('conv-1', null, 'human');
+      const assigned = eventBus.getLastEmitted('conversation:respondent-assigned');
+      expect(assigned?.payload).toEqual(expect.objectContaining({ respondentRoleId: null }));
+      const needed = eventBus.getLastEmitted('conversation:response-needed');
+      expect(needed?.payload).toEqual(expect.objectContaining({ roleId: null }));
+    });
+
+    it('throws NotFoundError when conversation does not exist', () => {
+      vi.mocked(convRepo.findById).mockReturnValue(null);
+      expect(() => service.assignRespondent('missing', 'role-x', 'ai', 'reason')).toThrow();
     });
   });
 

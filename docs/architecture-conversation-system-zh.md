@@ -7,6 +7,17 @@ audience: 'human-readable'
 language: 'zh-CN'
 ---
 
+> **⚠ ARCHIVED — Superseded by refactoring-architecture-plan v2.1**
+>
+> This draft described the initial Conversation module design. The ideas in §4–§6 (Conversation entity, state machine, routing策略) landed in production, but v2.1 restructured how they are wired:
+> - `InquiryRouter` moved from Layer 1 (inside `modules/conversation/`) to Layer 2 (`modules/coordination/routing/`).
+> - Conversation → Organization dependency removed; routing is now triggered by the `conversation:needs-routing` event.
+> - `Conversation.metadata` is now a discriminated union by type, not `Record<string, unknown>`.
+>
+> Authoritative source: `_bmad-output/planning-artifacts/refactoring-architecture-plan.v2.1.md`.
+
+---
+
 # Capibara 对话系统架构 v2（全新设计）
 
 > **前提**：这是一个全新项目，尚未上线。不受任何历史兼容约束。在复杂度有明确价值支撑的前提下，鼓励大胆采用新的架构模式。

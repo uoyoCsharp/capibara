@@ -1,8 +1,8 @@
 import { injectable } from 'tsyringe';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { DomainEventType } from '@core/foundation/events';
+import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import { TaskStateError, NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { ProcessEngine } from './process.engine';
 import type { BehaviorEngine } from './behavior.engine';
@@ -15,7 +15,7 @@ export class TaskStateMachine {
   constructor(
     private readonly taskRepo: ITaskRepository,
     private readonly processEngine: ProcessEngine,
-    private readonly eventBus: IEventBus,
+    private readonly eventPublisher: IEventPublisher,
     private readonly logger: ILogger,
   ) {}
 
@@ -43,8 +43,10 @@ export class TaskStateMachine {
     this.logger.debug('Task transition completed', { taskId, from: currentStatus, to: newStatus, category });
 
     if (category === 'approval') {
+      this.taskRepo.updatePausedReason(taskId, 'approval');
       this.emitEvent('task:entered-approval', { taskId, orgId: task.orgId, from: currentStatus, to: newStatus });
     } else {
+      if (task.pausedReason) this.taskRepo.updatePausedReason(taskId, null);
       this.emitEvent('task:status-changed', { taskId, orgId: task.orgId, from: currentStatus, to: newStatus, assigneeRoleId: task.assigneeRoleId });
     }
 
@@ -72,6 +74,7 @@ export class TaskStateMachine {
     }
 
     this.taskRepo.updateStatus(taskId, nextStatus);
+    this.taskRepo.updatePausedReason(taskId, null);
     this.emitEvent('task:approval-confirmed', { taskId, orgId: task.orgId, from: task.status, to: nextStatus });
 
     const nextCategory = this.processEngine.getStatusCategory(task.orgId, nextStatus);
@@ -101,13 +104,14 @@ export class TaskStateMachine {
     }
 
     this.taskRepo.updateStatus(taskId, revertStatus);
+    this.taskRepo.updatePausedReason(taskId, null);
     this.logger.debug('Approval rejected', { taskId, from: task.status, to: revertStatus });
     this.emitEvent('task:approval-rejected', { taskId, orgId: task.orgId, from: task.status, to: revertStatus });
 
     return this.taskRepo.findById(taskId)!;
   }
 
-  private emitEvent(type: DomainEventType, payload: Record<string, unknown>): void {
-    this.eventBus.emit({ type, timestamp: new Date().toISOString(), payload });
+  private emitEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.eventPublisher.publish(type, payload);
   }
 }

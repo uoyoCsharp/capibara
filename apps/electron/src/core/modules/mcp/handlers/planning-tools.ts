@@ -1,15 +1,14 @@
 import type { McpToolDefinition } from '../registry/mcp-tool.registry';
-import type { PendingPlanStore } from '@core/infrastructure/stores/pending-plan.store';
-import type { PlanningService } from '@core/modules/planning/planning.service';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { PlanTaskDraft } from '@core/foundation/events';
 
 export function createPlanningTools(
-  pendingPlanStore: PendingPlanStore,
-  planningService: PlanningService,
+  eventPublisher: IEventPublisher,
 ): McpToolDefinition[] {
   return [
     {
       name: 'capibara_plan_tasks',
-      description: 'Submit a structured task plan and create tasks immediately',
+      description: 'Submit a structured task plan for human review. The plan is recorded as pending and the human operator confirms it in the UI to batch-create the tasks.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -27,18 +26,18 @@ export function createPlanningTools(
       handler: async (params) => {
         const conversationId = params.conversationId as string;
         const orgId = params.orgId as string;
+        const roleId = params.roleId as string;
+        const tasks = params.tasks as PlanTaskDraft[];
 
-        pendingPlanStore.set(conversationId, {
+        eventPublisher.publish('plan:submitted', {
           conversationId,
           orgId,
-          roleId: params.roleId as string,
-          tasks: params.tasks as unknown[],
+          roleId,
+          tasks,
           submittedAt: new Date().toISOString(),
         });
 
-        planningService.confirmPlan(conversationId, orgId, null);
-
-        return { status: 'plan_confirmed', conversationId, orgId };
+        return { status: 'plan_pending', conversationId, orgId };
       },
     },
   ];

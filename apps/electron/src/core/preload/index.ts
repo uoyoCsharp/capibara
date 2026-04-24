@@ -35,9 +35,9 @@ const api = {
   cancelTask: (taskId: string) => ipcRenderer.invoke('capibara:task:cancel', taskId),
   deleteTask: (id: string) => ipcRenderer.invoke('capibara:task:delete', id),
 
-  // Approval
-  confirmApproval: (taskId: string, nextStatus: string) => ipcRenderer.invoke('capibara:approval:confirm', taskId, nextStatus),
-  rejectApproval: (taskId: string, revertStatus: string) => ipcRenderer.invoke('capibara:approval:reject', taskId, revertStatus),
+  // Approval (modeled as Task state transitions)
+  confirmApproval: (taskId: string, nextStatus: string) => ipcRenderer.invoke('capibara:task:approve', taskId, nextStatus),
+  rejectApproval: (taskId: string, revertStatus: string) => ipcRenderer.invoke('capibara:task:reject', taskId, revertStatus),
 
   // Process Schema
   getProcessSchema: (orgId: string) => ipcRenderer.invoke('capibara:process:get-schema', orgId),

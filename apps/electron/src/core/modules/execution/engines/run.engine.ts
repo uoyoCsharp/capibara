@@ -3,7 +3,9 @@ import type { IRunEngine } from '../interfaces/i-run-engine';
 import type { IRunRepository } from '../interfaces/i-run.repository';
 import type { IExecutor } from '../interfaces/i-executor';
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import type { CapibaraConfig } from '@core/config/config.types';
 import type { RunExecutionParams, RunResult, WakeReason } from '../types/execution.types';
 import { BudgetExceededError } from '@core/foundation/errors/capibara.errors';
@@ -27,6 +29,7 @@ export class RunEngine implements IRunEngine {
     private readonly runRepo: IRunRepository,
     private readonly executor: IExecutor,
     private readonly eventBus: IEventBus,
+    private readonly eventPublisher: IEventPublisher,
     private readonly logger: ILogger,
     private readonly config: CapibaraConfig,
     private readonly costTracker: CostTracker,
@@ -52,17 +55,23 @@ export class RunEngine implements IRunEngine {
       throw new ExecutionError('', `Org ${params.orgId} already has an active run: ${activeRun.id}`);
     }
 
-    const run = this.runRepo.create({
-      orgId: params.orgId,
-      taskId: params.taskId ?? null,
-      conversationId: params.conversationId ?? null,
-      roleId: params.roleId,
-      wakeReason: (params.wakeReason ?? 'task_assigned') as WakeReason,
-    });
+    const wakeReason: WakeReason = (params.wakeReason ?? 'task_assigned') as WakeReason;
+    const base = { orgId: params.orgId, roleId: params.roleId, wakeReason };
+    const target = params.taskId
+      ? params.conversationId
+        ? { taskId: params.taskId, conversationId: params.conversationId }
+        : { taskId: params.taskId, conversationId: null }
+      : params.conversationId
+        ? { taskId: null, conversationId: params.conversationId }
+        : null;
+    if (!target) {
+      throw new ExecutionError('', 'Run requires either taskId or conversationId');
+    }
+    const run = this.runRepo.create({ ...base, ...target });
 
     this.logContexts.set(run.id, { contextLabel: params.contextLabel, contextId: params.contextId });
 
-    this.emitEvent('run:queued', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
+    this.publishEvent('run:queued', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
 
     this.fileLogService.writeInput(params.contextLabel, params.contextId, run.id, {
       wakeReason: params.wakeReason,
@@ -71,7 +80,7 @@ export class RunEngine implements IRunEngine {
     });
 
     this.runRepo.updateStatus(run.id, 'running');
-    this.emitEvent('run:started', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
+    this.publishEvent('run:started', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
     this.logger.info('Run started', { runId: run.id, orgId: params.orgId, roleId: params.roleId, projectDir: params.projectDir || this.config.cli.projectDir });
 
     try {
@@ -102,11 +111,20 @@ export class RunEngine implements IRunEngine {
         this.costTracker.recordCost(run.id, params.roleId, params.orgId, tokenCount, 0);
       }
 
-      const eventType = result.status === 'succeeded' ? 'run:succeeded'
-        : result.status === 'cancelled' ? 'run:cancelled'
-        : 'run:failed';
       this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount, exitCode: result.exitCode });
-      this.emitEvent(eventType, { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
+      if (result.status === 'succeeded') {
+        this.publishEvent('run:succeeded', { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
+      } else if (result.status === 'cancelled') {
+        this.publishEvent('run:cancelled', { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
+      } else {
+        this.publishEvent('run:failed', {
+          runId: run.id,
+          orgId: params.orgId,
+          roleId: params.roleId,
+          tokenCount,
+          errorMessage: result.errorMessage ?? null,
+        });
+      }
 
       this.cleanupRun(run.id);
 
@@ -123,10 +141,11 @@ export class RunEngine implements IRunEngine {
       };
     } catch (err) {
       this.runRepo.finish(run.id, 'failed');
-      this.emitEvent('run:failed', {
+      this.publishEvent('run:failed', {
         runId: run.id,
         orgId: params.orgId,
         roleId: params.roleId,
+        tokenCount: 0,
         errorMessage: err instanceof Error ? err.message : String(err),
       });
       this.cleanupRun(run.id);
@@ -135,9 +154,17 @@ export class RunEngine implements IRunEngine {
   }
 
   async cancelRun(runId: string): Promise<void> {
+    const run = this.runRepo.findById(runId);
     this.executor.abort(runId);
     this.runRepo.finish(runId, 'cancelled');
-    this.emitEvent('run:cancelled', { runId });
+    if (run) {
+      this.publishEvent('run:cancelled', {
+        runId,
+        orgId: run.orgId,
+        roleId: run.roleId,
+        tokenCount: run.tokenCount,
+      });
+    }
     this.cleanupRun(runId);
   }
 
@@ -154,7 +181,7 @@ export class RunEngine implements IRunEngine {
       cb(runId, stream, chunk);
     }
 
-    this.emitEvent('run:log', { runId, stream, chunk });
+    this.emitStreamingEvent('run:log', { runId, stream, chunk });
 
     const ctx = this.logContexts.get(runId);
     if (ctx) {
@@ -166,10 +193,10 @@ export class RunEngine implements IRunEngine {
         this.parsers.set(runId, new StreamJsonParser({
           onText: (text) => {
             for (const cb of this.textCallbacks) cb(runId, text);
-            this.emitEvent('run:assistant-text', { runId, text });
+            this.emitStreamingEvent('run:assistant-text', { runId, text });
           },
           onStatus: (status) => {
-            this.emitEvent('run:status', { runId, status });
+            this.emitStreamingEvent('run:status', { runId, status });
           },
           onParseError: (line, error) => {
             this.logger.debug('Stream JSON parse error', { runId, line: line.slice(0, 200), error });
@@ -192,11 +219,14 @@ export class RunEngine implements IRunEngine {
     });
   }
 
-  private emitEvent(type: string, payload: Record<string, unknown>): void {
-    this.eventBus.emit({
-      type: type as import('@core/foundation/events').DomainEventType,
-      timestamp: new Date().toISOString(),
-      payload,
-    });
+  // Lifecycle events go through outbox (transactional, durable)
+  private publishEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.eventPublisher.publish(type, payload);
+  }
+
+  // Streaming events (log, assistant-text, status) are ephemeral high-volume
+  // signals tied to live stdout — bypass outbox and broadcast directly.
+  private emitStreamingEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.eventBus.emit({ type, timestamp: new Date().toISOString(), payload });
   }
 }

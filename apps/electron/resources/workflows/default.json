@@ -18,7 +18,6 @@
       { "name": "revision", "label": "Revision", "category": "active" },
       { "name": "blocked", "label": "Blocked", "category": "active" },
       { "name": "awaiting_review", "label": "Awaiting Review", "category": "approval" },
-      { "name": "approved", "label": "Approved", "category": "terminal" },
       { "name": "done", "label": "Done", "category": "terminal" },
       { "name": "cancelled", "label": "Cancelled", "category": "terminal" }
     ],
@@ -27,11 +26,10 @@
       { "from": "in_progress", "to": "awaiting_review" },
       { "from": "in_progress", "to": "blocked" },
       { "from": "blocked", "to": "in_progress" },
-      { "from": "awaiting_review", "to": "approved" },
+      { "from": "awaiting_review", "to": "done" },
       { "from": "awaiting_review", "to": "revision" },
       { "from": "revision", "to": "in_progress" },
       { "from": "revision", "to": "awaiting_review" },
-      { "from": "approved", "to": "done" },
       { "from": "pending", "to": "cancelled" },
       { "from": "in_progress", "to": "cancelled" },
       { "from": "blocked", "to": "cancelled" }

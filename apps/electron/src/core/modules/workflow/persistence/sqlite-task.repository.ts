@@ -3,7 +3,7 @@ import { injectable } from 'tsyringe';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import { NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
-import type { Task, CreateTaskInput, TaskStatus } from '../types/workflow.types';
+import type { Task, CreateTaskInput, TaskStatus, TaskPausedReason } from '../types/workflow.types';
 
 interface TaskRow {
   id: string;
@@ -16,6 +16,7 @@ interface TaskRow {
   assignee_role_id: string | null;
   depth: number;
   artifact_paths: string | null;
+  paused_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +33,7 @@ function toTask(row: TaskRow): Task {
     assigneeRoleId: row.assignee_role_id,
     depth: row.depth,
     artifactPaths: row.artifact_paths ? (JSON.parse(row.artifact_paths) as string[]) : null,
+    pausedReason: row.paused_reason as TaskPausedReason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -86,6 +88,13 @@ export class SqliteTaskRepository implements ITaskRepository {
     this.connection.getDb()
       .prepare('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?')
       .run(status, now, id);
+  }
+
+  updatePausedReason(id: string, reason: TaskPausedReason): void {
+    const now = new Date().toISOString();
+    this.connection.getDb()
+      .prepare('UPDATE tasks SET paused_reason = ?, updated_at = ? WHERE id = ?')
+      .run(reason, now, id);
   }
 
   update(id: string, fields: Partial<Pick<Task, 'title' | 'description' | 'assigneeRoleId' | 'artifactPaths'>>): Task {

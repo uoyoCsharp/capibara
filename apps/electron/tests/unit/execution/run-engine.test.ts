@@ -94,7 +94,7 @@ describe('RunEngine', () => {
     } as unknown as FileLogService;
 
     const config = createTestConfig();
-    engine = new RunEngine(runRepo, executor, eventBus, logger, config, costTracker, fileLogService);
+    engine = new RunEngine(runRepo, executor, eventBus, eventBus, logger, config, costTracker, fileLogService);
   });
 
   describe('execute — golden path (succeeded)', () => {
@@ -231,7 +231,7 @@ describe('RunEngine', () => {
     it('skips budget check when budgetLimit is 0', async () => {
       costEntryRepo.getTotalCostByOrgId.mockReturnValue(9999);
       const config = createTestConfig({ execution: { ...createTestConfig().execution, budgetLimit: 0 } });
-      engine = new RunEngine(runRepo, executor, eventBus, logger, config, costTracker, fileLogService);
+      engine = new RunEngine(runRepo, executor, eventBus, eventBus, logger, config, costTracker, fileLogService);
 
       const result = await engine.execute(createRunExecutionParams());
       expect(result.status).toBe('succeeded');

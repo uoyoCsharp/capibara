@@ -2,6 +2,8 @@ export type TaskType = string;
 export type TaskStatus = string;
 export type StatusCategory = 'initial' | 'active' | 'approval' | 'terminal';
 
+export type TaskPausedReason = 'approval' | null;
+
 export interface Task {
   id: string;
   orgId: string;
@@ -13,6 +15,7 @@ export interface Task {
   assigneeRoleId: string | null;
   depth: number;
   artifactPaths: string[] | null;
+  pausedReason: TaskPausedReason;
   createdAt: string;
   updatedAt: string;
 }

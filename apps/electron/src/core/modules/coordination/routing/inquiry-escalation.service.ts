@@ -1,16 +1,21 @@
 import { injectable } from 'tsyringe';
-import type { IConversationRepository } from '../interfaces/i-conversation.repository';
+import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { DomainEventType } from '@core/foundation/events';
+import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 
+/**
+ * Layer 2 coordinator. Periodically scans for timed-out inquiries and
+ * escalates them up the role hierarchy. Reads Organization data which is
+ * why this lives in coordination, not conversation.
+ */
 @injectable()
 export class InquiryEscalationService {
   constructor(
     private readonly convRepo: IConversationRepository,
     private readonly roleRepo: IRoleRepository,
-    private readonly eventBus: IEventBus,
+    private readonly eventPublisher: IEventPublisher,
     private readonly logger: ILogger,
   ) {}
 
@@ -50,7 +55,7 @@ export class InquiryEscalationService {
     return true;
   }
 
-  private emitEvent(type: DomainEventType, payload: Record<string, unknown>): void {
-    this.eventBus.emit({ type, timestamp: new Date().toISOString(), payload });
+  private emitEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.eventPublisher.publish(type, payload);
   }
 }

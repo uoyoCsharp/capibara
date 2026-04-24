@@ -22,11 +22,9 @@ interface RunRow {
 }
 
 function toRun(row: RunRow): Run {
-  return {
+  const base = {
     id: row.id,
     orgId: row.org_id,
-    taskId: row.task_id,
-    conversationId: row.conversation_id,
     roleId: row.role_id,
     status: row.status as RunStatus,
     wakeReason: row.wake_reason as Run['wakeReason'],
@@ -38,6 +36,19 @@ function toRun(row: RunRow): Run {
     errorMessage: row.error_message,
     createdAt: row.created_at,
   };
+
+  if (row.task_id && row.conversation_id) {
+    return { ...base, taskId: row.task_id, conversationId: row.conversation_id };
+  }
+  if (row.task_id) {
+    return { ...base, taskId: row.task_id, conversationId: null };
+  }
+  if (row.conversation_id) {
+    return { ...base, taskId: null, conversationId: row.conversation_id };
+  }
+  // DB CHECK (task_id IS NOT NULL OR conversation_id IS NOT NULL) prevents this,
+  // but surface it clearly if it ever occurs (corrupted row).
+  throw new Error(`Run ${row.id} has neither taskId nor conversationId`);
 }
 
 @injectable()

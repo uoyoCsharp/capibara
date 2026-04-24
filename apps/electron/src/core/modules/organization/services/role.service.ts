@@ -1,13 +1,14 @@
 import { injectable } from 'tsyringe';
 import type { IRoleRepository } from '../interfaces/i-role.repository';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import type { Role, CreateRoleInput, UpdateRoleInput } from '../types/organization.types';
 
 @injectable()
 export class RoleService {
   constructor(
     private readonly roleRepo: IRoleRepository,
-    private readonly eventBus: IEventBus,
+    private readonly eventPublisher: IEventPublisher,
   ) {}
 
   findById(id: string): Role | null {
@@ -60,11 +61,7 @@ export class RoleService {
     }
   }
 
-  private emitEvent(type: string, payload: Record<string, unknown>): void {
-    this.eventBus.emit({
-      type: type as import('@core/foundation/events').DomainEventType,
-      timestamp: new Date().toISOString(),
-      payload,
-    });
+  private emitEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.eventPublisher.publish(type, payload);
   }
 }

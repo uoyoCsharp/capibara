@@ -1,6 +1,8 @@
 import { container } from 'tsyringe';
 import {
-  ORCHESTRATOR_TOKEN,
+  TASK_ORCHESTRATOR_TOKEN,
+  CONVERSATION_ORCHESTRATOR_TOKEN,
+  RUN_ORCHESTRATOR_TOKEN,
   RUN_COORDINATOR_TOKEN,
   PENDING_WAKE_REPO_TOKEN,
 } from '@core/foundation/tokens';
@@ -22,11 +24,19 @@ import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state
 import type { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
 import { SqlitePendingWakeRepository } from '@core/modules/orchestrator/persistence/sqlite-pending-wake.repository';
 import { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
-import { BudgetGuard } from '@core/modules/orchestrator/budget.guard';
 import { RetryScheduler } from '@core/modules/orchestrator/retry.scheduler';
 import { RunCoordinator } from '@core/modules/orchestrator/run.coordinator';
 import { TaskScheduler } from '@core/modules/orchestrator/task.scheduler';
-import { Orchestrator } from '@core/modules/orchestrator/orchestrator';
+import { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
+import { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
+import { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
+
+export interface OrchestratorModule {
+  taskOrchestrator: TaskOrchestrator;
+  conversationOrchestrator: ConversationOrchestrator;
+  runOrchestrator: RunOrchestrator;
+  runCoordinator: RunCoordinator;
+}
 
 export function registerOrchestratorModule(
   connection: ISqliteConnection,
@@ -45,18 +55,51 @@ export function registerOrchestratorModule(
   processEngine: ProcessEngine,
   taskStateMachine: TaskStateMachine,
   behaviorEngine: BehaviorEngine,
-): { orchestrator: Orchestrator; runCoordinator: RunCoordinator } {
+): OrchestratorModule {
   const pendingWakeRepo = new SqlitePendingWakeRepository(connection);
   const wakeGateValidator = new WakeGateValidator(roleRepo, runRepo, costTracker, config, logger);
-  const budgetGuard = new BudgetGuard(costTracker, config);
   const retryScheduler = new RetryScheduler(runRepo, pendingWakeRepo, config, logger);
   const runCoordinator = new RunCoordinator(runEngine, promptBuilder, convRepo, conversationService, orgRepo, logger);
   const taskScheduler = new TaskScheduler(taskRepo, processEngine, logger);
-  const orchestrator = new Orchestrator(eventBus, logger, taskRepo, roleRepo, orgRepo, convRepo, pendingWakeRepo, wakeGateValidator, retryScheduler, runCoordinator, taskScheduler, taskStateMachine, processEngine, behaviorEngine);
+
+  const taskOrchestrator = new TaskOrchestrator(
+    eventBus,
+    logger,
+    taskRepo,
+    orgRepo,
+    pendingWakeRepo,
+    wakeGateValidator,
+    runCoordinator,
+    taskScheduler,
+    taskStateMachine,
+    processEngine,
+    behaviorEngine,
+  );
+
+  const conversationOrchestrator = new ConversationOrchestrator(
+    eventBus,
+    logger,
+    convRepo,
+    wakeGateValidator,
+    runCoordinator,
+    taskOrchestrator,
+  );
+
+  const runOrchestrator = new RunOrchestrator(
+    eventBus,
+    logger,
+    pendingWakeRepo,
+    wakeGateValidator,
+    retryScheduler,
+    runCoordinator,
+    taskOrchestrator,
+  );
 
   container.register(PENDING_WAKE_REPO_TOKEN, { useValue: pendingWakeRepo });
   container.register(RUN_COORDINATOR_TOKEN, { useValue: runCoordinator });
-  container.register(ORCHESTRATOR_TOKEN, { useValue: orchestrator });
+  container.register(TASK_ORCHESTRATOR_TOKEN, { useValue: taskOrchestrator });
+  container.register(CONVERSATION_ORCHESTRATOR_TOKEN, { useValue: conversationOrchestrator });
+  container.register(RUN_ORCHESTRATOR_TOKEN, { useValue: runOrchestrator });
 
-  return { orchestrator, runCoordinator };
+  return { taskOrchestrator, conversationOrchestrator, runOrchestrator, runCoordinator };
 }

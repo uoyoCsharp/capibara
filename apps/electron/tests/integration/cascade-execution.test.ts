@@ -4,7 +4,9 @@ import { MockLogger } from '../helpers/mock-logger';
 import { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
 import { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import { TaskScheduler } from '@core/modules/orchestrator/task.scheduler';
-import { Orchestrator } from '@core/modules/orchestrator/orchestrator';
+import { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
+import { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
+import { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
@@ -46,6 +48,14 @@ class InMemoryTaskStore {
     const t = this.tasks.get(id);
     if (t) {
       t.status = status;
+      t.updatedAt = new Date().toISOString();
+    }
+  }
+
+  updatePausedReason(id: string, reason: string | null): void {
+    const t = this.tasks.get(id);
+    if (t) {
+      t.pausedReason = reason as Task['pausedReason'];
       t.updatedAt = new Date().toISOString();
     }
   }
@@ -109,6 +119,7 @@ function makeTask(overrides: Partial<Task> & { id: string; orgId: string }): Tas
     assigneeRoleId: null,
     depth: 0,
     artifactPaths: null,
+    pausedReason: null,
     createdAt: `2026-01-01T00:00:${String(taskCounter).padStart(2, '0')}.000Z`,
     updatedAt: `2026-01-01T00:00:${String(taskCounter).padStart(2, '0')}.000Z`,
     ...overrides,
@@ -189,7 +200,10 @@ interface TestHarness {
   behaviorEngine: BehaviorEngine;
   taskStateMachine: TaskStateMachine;
   taskScheduler: TaskScheduler;
-  orchestrator: Orchestrator;
+  taskOrchestrator: TaskOrchestrator;
+  conversationOrchestrator: ConversationOrchestrator;
+  runOrchestrator: RunOrchestrator;
+  startOrchestrators: () => void;
   roleRepo: IRoleRepository;
   convRepo: IConversationRepository;
   pendingWakeRepo: IPendingWakeRepository;
@@ -211,13 +225,14 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
     findByAssigneeRoleId: vi.fn().mockReturnValue([]),
     create: vi.fn(),
     updateStatus: vi.fn().mockImplementation((id: string, status: string) => store.updateStatus(id, status)),
+    updatePausedReason: vi.fn().mockImplementation((id: string, reason: string | null) => store.updatePausedReason(id, reason)),
     update: vi.fn(),
     delete: vi.fn(),
   };
 
   const processEngine = createProcessEngineMock(schema);
 
-  // Real TaskStateMachine with real eventBus
+  // Real TaskStateMachine with MockEventBus (satisfies IEventPublisher too)
   const taskStateMachine = new TaskStateMachine(
     taskRepo,
     processEngine,
@@ -300,22 +315,44 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
     delete: vi.fn(),
   };
 
-  const orchestrator = new Orchestrator(
+  const taskOrchestrator = new TaskOrchestrator(
     eventBus,
     logger,
     taskRepo,
-    roleRepo,
     orgRepo,
-    convRepo,
     pendingWakeRepo,
     wakeGateValidator,
-    retryScheduler,
     runCoordinator,
     taskScheduler,
     taskStateMachine,
     processEngine,
     behaviorEngine,
   );
+
+  const conversationOrchestrator = new ConversationOrchestrator(
+    eventBus,
+    logger,
+    convRepo,
+    wakeGateValidator,
+    runCoordinator,
+    taskOrchestrator,
+  );
+
+  const runOrchestrator = new RunOrchestrator(
+    eventBus,
+    logger,
+    pendingWakeRepo,
+    wakeGateValidator,
+    retryScheduler,
+    runCoordinator,
+    taskOrchestrator,
+  );
+
+  const startOrchestrators = (): void => {
+    taskOrchestrator.start();
+    conversationOrchestrator.start();
+    runOrchestrator.start();
+  };
 
   return {
     store,
@@ -326,7 +363,10 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
     behaviorEngine,
     taskStateMachine,
     taskScheduler,
-    orchestrator,
+    taskOrchestrator,
+    conversationOrchestrator,
+    runOrchestrator,
+    startOrchestrators,
     roleRepo,
     convRepo,
     pendingWakeRepo,
@@ -348,7 +388,7 @@ describe('Cascade Execution Integration', () => {
   beforeEach(() => {
     taskCounter = 0;
     h = buildHarness();
-    h.orchestrator.start();
+    h.startOrchestrators();
   });
 
   // --------------------------------------------------------------------------
@@ -942,7 +982,7 @@ describe('Cascade Execution Integration', () => {
       };
 
       const ch = buildHarness(minimalSchema);
-      ch.orchestrator.start();
+      ch.startOrchestrators();
 
       const task = makeTask({
         id: 'min-task-1',
@@ -982,7 +1022,7 @@ describe('Cascade Execution Integration', () => {
       };
 
       const ch = buildHarness(noRulesSchema);
-      ch.orchestrator.start();
+      ch.startOrchestrators();
 
       // Parent with one child
       const parent = makeTask({
@@ -1033,7 +1073,7 @@ describe('Cascade Execution Integration', () => {
       };
 
       const ch = buildHarness(customSchema);
-      ch.orchestrator.start();
+      ch.startOrchestrators();
 
       const task = makeTask({
         id: 'custom-t-1',

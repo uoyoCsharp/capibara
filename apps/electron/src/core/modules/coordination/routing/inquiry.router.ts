@@ -1,16 +1,51 @@
 import { injectable } from 'tsyringe';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
+import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { RoutingRequest, RoutingDecision } from '../types/conversation.types';
+import type { DomainEvent } from '@core/foundation/events';
+import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { RoutingRequest, RoutingDecision } from './routing.types';
 
+/**
+ * Layer 2 coordinator. Subscribes to `conversation:needs-routing` events
+ * emitted by the Conversation module. Reads Organization data to decide
+ * which Role should respond, then calls ConversationService.assignRespondent
+ * to write the decision back.
+ *
+ * Conversation module has no knowledge of this component — the coupling
+ * flows entirely through events + a narrow write-back API.
+ */
 @injectable()
 export class InquiryRouter {
   constructor(
     private readonly roleRepo: IRoleRepository,
+    private readonly conversationService: ConversationService,
+    private readonly eventBus: IEventBus,
     private readonly logger: ILogger,
   ) {}
 
-  route(request: RoutingRequest): RoutingDecision {
+  start(): void {
+    this.eventBus.on('conversation:needs-routing', (e) => this.handle(e));
+    this.logger.info('InquiryRouter started');
+  }
+
+  private handle(event: DomainEvent<'conversation:needs-routing'>): void {
+    const { conversationId, orgId, askingRoleId, taskId, conversationDepth } = event.payload;
+
+    try {
+      const decision = this.route({ conversationId, askingRoleId, orgId, taskId, conversationDepth });
+      this.conversationService.assignRespondent(
+        conversationId,
+        decision.respondentRoleId,
+        decision.respondentType,
+        decision.auditReason,
+      );
+    } catch (err) {
+      this.logger.error('InquiryRouter failed', { conversationId, error: String(err) });
+    }
+  }
+
+  private route(request: RoutingRequest): RoutingDecision {
     const askingRole = this.roleRepo.findById(request.askingRoleId);
     if (!askingRole) {
       return this.humanFallback('Asking role not found');

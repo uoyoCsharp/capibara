@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { InquiryEscalationService } from '@core/modules/conversation/services/inquiry-escalation.service';
+import { InquiryEscalationService } from '@core/modules/coordination/routing/inquiry-escalation.service';
 import { MockEventBus } from '../../helpers/mock-event-bus';
 import { MockLogger } from '../../helpers/mock-logger';
 import { TEST_ORG_ID, TEST_ROLE_ID } from '../../helpers/fixtures';

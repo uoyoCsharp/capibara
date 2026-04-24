@@ -3,7 +3,14 @@ import { injectable } from 'tsyringe';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import { NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { IConversationRepository } from '../interfaces/i-conversation.repository';
-import type { Conversation, ConversationState, CreateConversationInput } from '../types/conversation.types';
+import type { Conversation, ConversationState, ConversationType, CreateConversationInput } from '../types/conversation.types';
+import {
+  InquiryMetadataSchema,
+  PlanningMetadataSchema,
+  AdhocMetadataSchema,
+  emptyMetadataFor,
+  parseConversationMetadata,
+} from '../types/conversation-metadata.schema';
 
 interface ConvRow {
   id: string;
@@ -25,11 +32,12 @@ interface ConvRow {
 }
 
 function toConversation(row: ConvRow): Conversation {
-  return {
+  const type = row.type as ConversationType;
+  const rawMeta: unknown = row.metadata ? JSON.parse(row.metadata) : {};
+  const base = {
     id: row.id,
     orgId: row.org_id,
-    type: row.type as Conversation['type'],
-    state: row.state as Conversation['state'],
+    state: row.state as ConversationState,
     initiatorRoleId: row.initiator_role_id,
     respondentRoleId: row.respondent_role_id,
     respondentType: row.respondent_type as Conversation['respondentType'],
@@ -39,10 +47,18 @@ function toConversation(row: ConvRow): Conversation {
     priority: row.priority,
     timeoutAt: row.timeout_at,
     externalSessionId: row.external_session_id,
-    metadata: JSON.parse(row.metadata || '{}') as Record<string, unknown>,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+
+  switch (type) {
+    case 'inquiry':
+      return { ...base, type, metadata: InquiryMetadataSchema.parse(rawMeta) };
+    case 'planning':
+      return { ...base, type, metadata: PlanningMetadataSchema.parse(rawMeta) };
+    case 'adhoc':
+      return { ...base, type, metadata: AdhocMetadataSchema.parse(rawMeta) };
+  }
 }
 
 @injectable()
@@ -95,6 +111,8 @@ export class SqliteConversationRepository implements IConversationRepository {
   create(input: CreateConversationInput): Conversation {
     const id = randomUUID();
     const now = new Date().toISOString();
+    const defaults = emptyMetadataFor(input.type);
+    const metadata = parseConversationMetadata(input.type, { ...defaults, ...(input.metadata ?? {}) });
     this.connection.getDb()
       .prepare(`
         INSERT INTO conversations (id, org_id, type, state, initiator_role_id, respondent_role_id, respondent_type, task_id, parent_conversation_id, external_session_id, metadata, created_at, updated_at)
@@ -105,7 +123,7 @@ export class SqliteConversationRepository implements IConversationRepository {
         input.respondentRoleId ?? null, input.respondentType ?? null,
         input.taskId ?? null, input.parentConversationId ?? null,
         input.externalSessionId ?? null,
-        JSON.stringify(input.metadata ?? {}),
+        JSON.stringify(metadata),
         now, now,
       );
     return this.findById(id)!;

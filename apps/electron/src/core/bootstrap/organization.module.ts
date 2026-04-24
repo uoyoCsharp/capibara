@@ -5,7 +5,7 @@ import {
   SKILL_REPO_TOKEN,
 } from '@core/foundation/tokens';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import { SqliteOrganizationRepository } from '@core/modules/organization/persistence/sqlite-organization.repository';
 import { SqliteRoleRepository } from '@core/modules/organization/persistence/sqlite-role.repository';
@@ -18,7 +18,7 @@ import { SkillSeeder } from '@core/modules/organization/services/skill-seeder';
 
 export function registerOrganizationModule(
   connection: ISqliteConnection,
-  eventBus: IEventBus,
+  eventPublisher: IEventPublisher,
   logger: ILogger,
   templatesDir: string,
 ): {
@@ -33,8 +33,8 @@ export function registerOrganizationModule(
   const roleRepo = new SqliteRoleRepository(connection);
   const skillRepo = new SqliteSkillRepository(connection);
 
-  const organizationService = new OrganizationService(orgRepo, eventBus);
-  const roleService = new RoleService(roleRepo, eventBus);
+  const organizationService = new OrganizationService(orgRepo, eventPublisher);
+  const roleService = new RoleService(roleRepo, eventPublisher);
   const skillService = new SkillService(skillRepo);
   const orgTemplateService = new OrgTemplateService(orgRepo, roleRepo, skillService, logger, templatesDir);
   const skillSeeder = new SkillSeeder(skillRepo);

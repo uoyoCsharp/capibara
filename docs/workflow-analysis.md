@@ -1,5 +1,14 @@
 # Capibara 任务工作流程与审批流程深度分析
 
+> **⚠ PARTIALLY STALE**
+>
+> Written against the pre-refactor codebase. The task state machine and approval semantics described (§1–§2) are still broadly accurate, but:
+> - `discussion.service.ts` / `consensus.detector.ts` / `org.orchestrator.ts` cited below **no longer exist** (removed in v2.1 refactor).
+> - Approval is now modeled as a `StatusCategory: 'approval'` + `tasks.paused_reason` column, not via Discussion groups.
+> - The Orchestrator is split into three sub-orchestrators.
+>
+> For current behavior, read the live `TaskStateMachine` + cascade-execution tests. Authoritative architecture: `_bmad-output/planning-artifacts/refactoring-architecture-plan.v2.1.md`.
+
 > 生成日期: 2026-04-03
 > 基于源码分析: `task.service.ts`, `discussion.service.ts`, `consensus.detector.ts`, `org.orchestrator.ts`, `task.state-machine.ts`
 

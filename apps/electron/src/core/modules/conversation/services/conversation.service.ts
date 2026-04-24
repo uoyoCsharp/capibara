@@ -2,19 +2,17 @@ import { injectable } from 'tsyringe';
 import type { IConversationRepository } from '../interfaces/i-conversation.repository';
 import type { IConversationMessageRepository } from '../interfaces/i-conversation-message.repository';
 import type { ConversationEventLogger } from '../persistence/conversation-event.logger';
-import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
-import type { DomainEventType } from '@core/foundation/events';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import { ConversationStateError, NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type {
   Conversation,
   ConversationMessage,
   ConversationState,
-  CreateConversationInput,
   CreateMessageInput,
-  CONVERSATION_TRANSITIONS,
+  RespondentType,
 } from '../types/conversation.types';
 import { CONVERSATION_TRANSITIONS as TRANSITIONS } from '../types/conversation.types';
-import type { InquiryRouter } from '../routing/inquiry.router';
 
 @injectable()
 export class ConversationService {
@@ -22,8 +20,7 @@ export class ConversationService {
     private readonly convRepo: IConversationRepository,
     private readonly msgRepo: IConversationMessageRepository,
     private readonly eventLogger: ConversationEventLogger,
-    private readonly eventBus: IEventBus,
-    private readonly inquiryRouter: InquiryRouter,
+    private readonly eventPublisher: IEventPublisher,
   ) {}
 
   findById(id: string): Conversation | null {
@@ -74,22 +71,53 @@ export class ConversationService {
       intent: 'question',
     });
 
-    const decision = this.inquiryRouter.route({
-      askingRoleId: initiatorRoleId,
+    // Conversation is left in 'active' state with no respondent. Layer 2
+    // InquiryRouter subscribes to this event, reads Organization data, and
+    // calls assignRespondent() to complete the routing decision.
+    this.emitEvent('conversation:needs-routing', {
+      conversationId: conv.id,
       orgId,
+      askingRoleId: initiatorRoleId,
       taskId,
-      questionContent,
       conversationDepth: depth ?? 0,
     });
 
-    this.convRepo.updateRespondent(conv.id, decision.respondentRoleId, decision.respondentType);
-
-    this.transitionState(conv.id, 'waiting');
-    this.eventLogger.log(conv.id, 'respondent-assigned', { respondentRoleId: decision.respondentRoleId, respondentType: decision.respondentType, auditReason: decision.auditReason });
-    this.emitEvent('conversation:respondent-assigned', { conversationId: conv.id, orgId, respondentRoleId: decision.respondentRoleId });
-    this.emitEvent('conversation:response-needed', { conversationId: conv.id, orgId, roleId: decision.respondentRoleId });
-
     return this.convRepo.findById(conv.id)!;
+  }
+
+  /**
+   * Writes back the routing decision. Called by Layer 2 InquiryRouter after
+   * reading Organization data to pick a respondent.
+   *
+   * Publishes conversation:respondent-assigned + conversation:response-needed
+   * so Orchestrator can dispatch a Run to the respondent.
+   */
+  assignRespondent(
+    conversationId: string,
+    respondentRoleId: string | null,
+    respondentType: RespondentType,
+    auditReason: string,
+  ): void {
+    const conv = this.convRepo.findById(conversationId);
+    if (!conv) throw new NotFoundError('Conversation', conversationId);
+
+    this.convRepo.updateRespondent(conversationId, respondentRoleId, respondentType);
+    this.transitionState(conversationId, 'waiting');
+    this.eventLogger.log(conversationId, 'respondent-assigned', {
+      respondentRoleId,
+      respondentType,
+      auditReason,
+    });
+    this.emitEvent('conversation:respondent-assigned', {
+      conversationId,
+      orgId: conv.orgId,
+      respondentRoleId,
+    });
+    this.emitEvent('conversation:response-needed', {
+      conversationId,
+      orgId: conv.orgId,
+      roleId: respondentRoleId,
+    });
   }
 
   createPlanningOrAdhoc(
@@ -192,7 +220,7 @@ export class ConversationService {
     return input.authorType === 'human';
   }
 
-  private emitEvent(type: DomainEventType, payload: Record<string, unknown>): void {
-    this.eventBus.emit({ type, timestamp: new Date().toISOString(), payload });
+  private emitEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
+    this.eventPublisher.publish(type, payload);
   }
 }

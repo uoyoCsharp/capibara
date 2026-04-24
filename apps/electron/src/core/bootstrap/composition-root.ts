@@ -6,7 +6,8 @@ import { PinoLogger } from '@core/infrastructure/observability/pino-logger';
 import { SqliteConnection } from '@core/infrastructure/persistence/sqlite/sqlite-connection';
 import { runMigrations } from '@core/infrastructure/persistence/sqlite/migrations';
 import { EmitteryEventBus } from '@core/infrastructure/observability/emittery-event-bus';
-import { PendingPlanStore } from '@core/infrastructure/stores/pending-plan.store';
+import { SqliteOutboxRepository } from '@core/infrastructure/persistence/sqlite/sqlite-outbox.repository';
+import { OutboxEventPublisher } from '@core/infrastructure/observability/outbox.publisher';
 import { registerExecutionModule } from './execution.module';
 import { registerOrganizationModule } from './organization.module';
 import { registerWorkflowModule } from './workflow.module';
@@ -14,6 +15,7 @@ import { registerConversationModule } from './conversation.module';
 import { registerPromptModule } from './prompt.module';
 import { registerMcpModule } from './mcp.module';
 import { registerOrchestratorModule } from './orchestrator.module';
+import { registerCoordinationModule } from './coordination.module';
 import { registerPlanningModule } from './planning.module';
 import { registerNotificationModule } from './notification.module';
 import { registerOrganizationHandlers } from '@core/ipc-handlers/organization.handlers';
@@ -24,7 +26,9 @@ import { registerPlanningHandlers } from '@core/ipc-handlers/planning.handlers';
 import { registerSystemHandlers } from '@core/ipc-handlers/system.handlers';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { WorkerService } from '@core/modules/execution/workers/worker-service';
-import type { Orchestrator } from '@core/modules/orchestrator/orchestrator';
+import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
+import type { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
+import type { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
 import type { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
 import type { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
 import type { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-generator';
@@ -32,7 +36,9 @@ import type { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-gen
 let logger: ILogger;
 let sqliteConn: SqliteConnection;
 let workerService: WorkerService;
-let orchestrator: Orchestrator;
+let taskOrchestrator: TaskOrchestrator;
+let conversationOrchestrator: ConversationOrchestrator;
+let runOrchestrator: RunOrchestrator;
 let eventBroadcaster: EventBroadcaster;
 let mcpIpcServer: McpIpcServer;
 let mcpConfigGen: McpConfigGenerator;
@@ -42,28 +48,38 @@ export async function bootstrap(): Promise<void> {
   logger = new PinoLogger(config.logging.level);
 
   sqliteConn = new SqliteConnection(config.database.sqlitePath);
-  runMigrations(sqliteConn.getDb());
+  runMigrations(sqliteConn.getDb(), { dbPath: config.database.sqlitePath });
 
   const eventBus = new EmitteryEventBus();
-  const pendingPlanStore = new PendingPlanStore();
+  const outboxRepo = new SqliteOutboxRepository(sqliteConn);
+  const eventPublisher = new OutboxEventPublisher(outboxRepo, eventBus, logger);
 
   const resourcesDir = join(app.getAppPath(), 'resources');
   const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.js');
 
-  const org = registerOrganizationModule(sqliteConn, eventBus, logger, join(resourcesDir, 'templates'));
-  const workflow = registerWorkflowModule(sqliteConn, eventBus, logger, join(resourcesDir, 'workflows'));
-  const conversation = registerConversationModule(sqliteConn, eventBus, logger, org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository);
+  const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));
+  const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'));
+  const conversation = registerConversationModule(sqliteConn, eventPublisher, logger);
   workflow.taskService.setConversationRepository(conversation.conversationRepo);
 
-  const execution = registerExecutionModule(sqliteConn, eventBus, logger, config, workerPath);
+  const coordination = registerCoordinationModule(
+    eventBus,
+    eventPublisher,
+    logger,
+    org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository,
+    conversation.conversationRepo,
+    conversation.conversationService,
+  );
+
+  const execution = registerExecutionModule(sqliteConn, eventBus, eventPublisher, logger, config, workerPath);
 
   const planning = registerPlanningModule(
-    conversation.conversationService, workflow.taskService, pendingPlanStore, eventBus, logger,
+    conversation.conversationService, workflow.taskService, eventBus, eventPublisher, logger,
   );
 
   const mcp = registerMcpModule(
     logger, workflow.taskService, workflow.taskStateMachine, workflow.processEngine,
-    conversation.conversationService, org.roleService, pendingPlanStore, planning.planningService,
+    conversation.conversationService, org.roleService, eventPublisher,
   );
 
   const mcpPort = await mcp.mcpIpcServer.start();
@@ -111,7 +127,9 @@ export async function bootstrap(): Promise<void> {
   registerSystemHandlers(sqliteConn);
 
   workerService = execution.workerService;
-  orchestrator = orchestratorModule.orchestrator;
+  taskOrchestrator = orchestratorModule.taskOrchestrator;
+  conversationOrchestrator = orchestratorModule.conversationOrchestrator;
+  runOrchestrator = orchestratorModule.runOrchestrator;
   eventBroadcaster = notification.eventBroadcaster;
   mcpIpcServer = mcp.mcpIpcServer;
   mcpConfigGen = mcp.mcpConfigGen;
@@ -128,8 +146,13 @@ export async function bootstrap(): Promise<void> {
     },
   });
 
-  orchestrator.start();
+  taskOrchestrator.start();
+  conversationOrchestrator.start();
+  runOrchestrator.start();
   eventBroadcaster.start();
+  coordination.inquiryRouter.start();
+  planning.planningService.init();
+  eventPublisher.start();
 
   logger.info('Capibara core bootstrapped successfully');
 }
