@@ -8,8 +8,7 @@ import { TaskCreateModal } from './TaskCreateModal';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
 import { toast } from '../../store/toast.store';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface TasksPageProps {
   orgId: string | null;

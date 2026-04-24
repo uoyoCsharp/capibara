@@ -1,180 +1,58 @@
 export type SupportedLocale = 'en-US' | 'zh-CN';
 
+/**
+ * Strictly typed locale message shape.
+ *
+ * Every key here is statically referenced by renderer code (verified via
+ * the phase-13 audit). Adding new UI strings: extend this interface, add
+ * the key to both en-US.ts and zh-CN.ts. The `locale-symmetry.test.ts`
+ * test catches drift.
+ */
 export interface LocaleMessages {
-  app: {
-    name: string;
-    tagline: string;
-    goToDashboard: string;
-  };
   sections: {
     dashboard: string;
     tasks: string;
     inbox: string;
+    planning: string;
     team: string;
     settings: string;
-    // Legacy (kept during migration)
-    organization: string;
-    execution: string;
-    discussion: string;
-    skills: string;
-    conversations: string;
   };
+
   workspace: {
     switchWorkspace: string;
-    workspaceSettings: string;
     createNewSpace: string;
     userPreferences: string;
-    logOut: string;
-    active: string;
   };
+
   status: {
     active: string;
     paused: string;
     archived: string;
     idle: string;
   };
-  task: Record<string, string>;
-  taskTypes: Record<string, string>;
-  taskTypeDesc: Record<string, string>;
-  vote: {
-    APPROVE: string;
-    REVISE: string;
-    CONCERN: string;
-    DELEGATE: string;
-  };
-  errors: {
-    notFound: string;
-    validation: string;
-    internal: string;
-    budgetExceeded: string;
-    failedToLoad: string;
-    failedToCreate: string;
-    failedToUpdate: string;
-    failedToDelete: string;
-  };
+
   common: {
     loading: string;
     save: string;
-    saving: string;
     cancel: string;
     delete: string;
-    confirm: string;
-    search: string;
-    noResults: string;
-    help: string;
     collapse: string;
     expand: string;
-    create: string;
-    edit: string;
-    refresh: string;
-    send: string;
-    browse: string;
     close: string;
-    unassigned: string;
-    none: string;
-    required: string;
-    optional: string;
-    yes: string;
-    no: string;
-    created: string;
-    updated: string;
-    unknown: string;
-    total: string;
-    noDescription: string;
-    actions: string;
-    truncated: string;
+    browse: string;
   };
-  i18n: {
-    language: string;
-    switchLanguage: string;
+
+  createOrg: {
+    workspaceLabel: string;
+    workspacePlaceholder: string;
   };
-  dashboard: {
-    title: string;
-    subtitle: string;
-    noOrgMessage: string;
-    generateReport: string;
-    generating: string;
-    projectProgress: string;
-    generatedAt: string;
-    noReportYet: string;
-    budgetUsage: string;
-    tokenUsage: string;
-    budgetCritical: string;
-    budgetApproaching: string;
-    costByRole: string;
-    tokensByRole: string;
-    runs: string;
-    failedToGenerate: string;
-    activeOrganizations: string;
-    tasksInProgress: string;
-    budgetUsed: string;
-    budgetEstimatedUsd: string;
-    projectNarrative: string;
-    noActiveProject: string;
-    blockedConversations: string;
-  };
+
   organization: {
-    title: string;
-    subtitle: string;
-    welcomeMessage: string;
-    noRolesMessage: string;
-    addRootRole: string;
-    fromTemplate: string;
-    blankOrg: string;
-    deleteOrganization: string;
-    openWorkspace: string;
-    roleHierarchy: string;
-    addRoot: string;
-    addChildRole: string;
-    createdSuccessfully: string;
-    deletedSuccessfully: string;
-    templateLoadedSuccessfully: string;
-    failedToLoadRoles: string;
     failedToCreateRole: string;
     failedToUpdateRole: string;
     failedToDeleteRole: string;
-    failedToLoadTemplate: string;
-    failedToCreateOrg: string;
   };
-  createOrg: {
-    title: string;
-    subtitle: string;
-    nameLabel: string;
-    namePlaceholder: string;
-    descriptionLabel: string;
-    descriptionPlaceholder: string;
-    workspaceLabel: string;
-    workspacePlaceholder: string;
-    customInstructionsLabel: string;
-    customInstructionsPlaceholder: string;
-    workflowLabel: string;
-  };
-  orgSettings: {
-    customInstructions: string;
-    customInstructionsHint: string;
-    saved: string;
-    failedToSave: string;
-  };
-  deleteOrg: {
-    title: string;
-    subtitle: string;
-    warning: string;
-    typeToConfirm: string;
-    deleting: string;
-  };
-  templateSelector: {
-    title: string;
-    subtitle: string;
-    roles: string;
-    orgNameLabel: string;
-    orgNamePlaceholder: string;
-    descriptionLabel: string;
-    descriptionPlaceholder: string;
-    workspaceLabel: string;
-    workspacePlaceholder: string;
-    creating: string;
-    createOrganization: string;
-  };
+
   roleDrawer: {
     title: string;
     subtitle: string;
@@ -196,53 +74,14 @@ export interface LocaleMessages {
     deleteWithChildrenMessage: string;
     deleteAnyway: string;
   };
+
   skillSelector: {
     closeSelector: string;
     selectSkills: string;
     searchPlaceholder: string;
     noSkillsFound: string;
   };
-  tasksExecution: {
-    title: string;
-    subtitle: string;
-    noOrgMessage: string;
-    newTask: string;
-    tasksTab: string;
-    runsTab: string;
-    activeCount: string;
-    tasksCount: string;
-    doneCount: string;
-    inProgressCount: string;
-    blockedCount: string;
-    pendingCount: string;
-    noRunsMessage: string;
-    execute: string;
-    running: string;
-    cancelRun: string;
-    trigger: string;
-    started: string;
-    finished: string;
-    cost: string;
-    outputLog: string;
-    parsedView: string;
-    rawView: string;
-    waitingForOutput: string;
-    noOutputLog: string;
-    loadingLog: string;
-    loadMore: string;
-    openLogFolder: string;
-    rawTruncated: string;
-    failedToLoadTasks: string;
-    failedToRefreshRuns: string;
-    failedToRefreshTasks: string;
-    failedToCreateTask: string;
-    failedToUpdateStatus: string;
-    failedToDeleteTask: string;
-    failedToStartRun: string;
-    failedToCancelRun: string;
-    hideCompleted: string;
-    showCompleted: string;
-  };
+
   taskCreate: {
     createChild: string;
     createNew: string;
@@ -256,201 +95,33 @@ export interface LocaleMessages {
     assigneeRequired: string;
     createTask: string;
   };
+
   taskDetail: {
-    title: string;
-    awaitingReview: string;
-    awaitingReviewMessage: string;
-    approve: string;
-    requestRevision: string;
-    blocked: string;
-    blockedMessage: string;
-    retry: string;
-    titleLabel: string;
-    typeLabel: string;
-    statusLabel: string;
-    assigneeLabel: string;
-    descriptionLabel: string;
-    artifactsLabel: string;
-    runOutputTab: string;
-    discussionTab: string;
-    deleteTask: string;
-    deleteTaskConfirm: string;
-    deleteTaskMessage: string;
-    approvalRequired: string;
+    actions: string;
+    assignee: string;
+    created: string;
+    description: string;
+    start: string;
+    unassigned: string;
+    updated: string;
+    deleteConfirmTitle: string;
+    deleteConfirmMessage: string;
   };
-  taskTree: {
-    emptyMessage: string;
-    createTask: string;
-    deleteConfirm: string;
-    deleteMessage: string;
-  };
-  discussions: {
-    title: string;
-    noOrgMessage: string;
-    noDiscussionsMessage: string;
-    selectDiscussionMessage: string;
-    unknownEpic: string;
-    system: string;
-    human: string;
-    ai: string;
-    noMessagesYet: string;
-    voteLabel: string;
-    addFeedbackPlaceholder: string;
-    typeMessagePlaceholder: string;
-    noVotesYet: string;
-    failedToLoadOrgs: string;
-    failedToLoadData: string;
-    failedToLoadMessages: string;
-    failedToPostMessage: string;
-  };
-  approval: {
-    humanApprovalRequired: string;
-    reviewer: string;
-    taskLabel: string;
-    subtasksProgress: string;
-    voteSummary: string;
-    openConcerns: string;
-    revisionHistory: string;
-    latestRevision: string;
-    delegate: string;
-    describeFeedback: string;
-    submitRevision: string;
-    selectRoleToDelegate: string;
-    confirmDelegation: string;
-  };
-  skills: {
-    title: string;
-    subtitle: string;
-    customSkill: string;
-    searchPlaceholder: string;
-    allCategories: string;
-    allSources: string;
-    loadingSkills: string;
-    noMatchMessage: string;
-    emptyMessage: string;
-    deleteSkillTitle: string;
-    deleteSkillMessage: string;
-    failedToLoadSkills: string;
-    failedToDeleteSkill: string;
-  };
-  skillForm: {
-    createTitle: string;
-    editTitle: string;
-    nameLabel: string;
-    namePlaceholder: string;
-    commandLabel: string;
-    commandPlaceholder: string;
-    commandHint: string;
-    descriptionLabel: string;
-    descriptionPlaceholder: string;
-    categoryLabel: string;
-    promptContentLabel: string;
-    promptPlaceholder: string;
-    promptHint: string;
-    nameCommandRequired: string;
-    updateSkill: string;
-    createSkill: string;
-  };
-  skillCategories: {
-    analysis: string;
-    design: string;
-    implementation: string;
-    review: string;
-    test: string;
-    general: string;
-  };
-  activity: {
-    title: string;
-    allEvents: string;
-    runsSucceeded: string;
-    runsFailed: string;
-    tasksCompleted: string;
-    escalations: string;
-    loadingActivity: string;
-    noActivity: string;
-    showMore: string;
-    runSucceeded: string;
-    runFailed: string;
-    taskStatus: string;
-    taskBlocked: string;
-  };
+
   runs: {
     completed: string;
     failed: string;
     cancelled: string;
   };
+
   conversations: {
-    title: string;
-    subtitle: string;
-    noOrgMessage: string;
-    noConversations: string;
-    active: string;
-    resolved: string;
-    cancelled: string;
-    timedOut: string;
-    escalated: string;
-    waitingForReply: string;
-    replyReceived: string;
-    resumed: string;
-    showResolved: string;
-    hideResolved: string;
-    cancelConversation: string;
-    cancelConfirm: string;
-    cancelSuccess: string;
-    failedToLoad: string;
-    failedToCancel: string;
-    askingRole: string;
-    respondent: string;
-    state: string;
-    priority: string;
-    elapsed: string;
-    needsHumanReply: string;
-    depth: string;
-    timeline: string;
-    questionPosted: string;
-    routingDecided: string;
-    replyPosted: string;
-    stateChanged: string;
-    timeoutTriggered: string;
-    escalationCreated: string;
-    humanGateEnforced: string;
-    metrics: string;
-    totalConversations: string;
-    avgResponseTime: string;
-    escalationRate: string;
-    timeoutRate: string;
-    humanInterventionRate: string;
-    avgDepth: string;
-    cycleDetections: string;
-    analytics: string;
-    mostAskedRoles: string;
-    slowestResponders: string;
-    escalationHotspots: string;
-    humanInterventions: string;
-    depthDistribution: string;
-    timeRange: string;
-    last7Days: string;
-    last30Days: string;
-    allTime: string;
-    questions: string;
-    avgResponse: string;
-    escalations: string;
-    hop: string;
-    replyPlaceholder: string;
-    replySend: string;
-    replySuccess: string;
-    replyFailed: string;
-    questionFrom: string;
     humanReplyNotification: string;
-    humanReplyNotificationBody: string;
     goToConversations: string;
   };
+
   onboarding: {
-    welcomeTitle: string;
-    welcomeSubtitle: string;
     healthCheck: string;
     healthCheckDesc: string;
-    checking: string;
     nodejs: string;
     claudeCli: string;
     network: string;
@@ -471,68 +142,14 @@ export interface LocaleMessages {
     chooseTemplate: string;
     recommended: string;
     agents: string;
-    complexity: string;
     letsGo: string;
     creating: string;
   };
-  discussionPanel: {
-    autoSummary: string;
-    noSummary: string;
-    replyWillWake: string;
-    markResolved: string;
-    markResolvedConfirm: string;
-    markResolvedMessage: string;
-    resolved: string;
-    agentPaused: string;
-    waitingFor: string;
-    triggered: string;
-    selectVoteTag: string;
-  };
-  inbox: {
-    title: string;
-    subtitle: string;
-    needsYourReply: string;
-    agentDiscussions: string;
-    noBlockedConversations: string;
-    noMonitoringConversations: string;
-    noActiveConversations: string;
-    askingAgent: string;
-    waitingForYou: string;
-    waitingForAgent: string;
-    waitingSinceLabel: string;
-    goToTask: string;
-    recentlyResolved: string;
-    noResolvedConversations: string;
-    showHistory: string;
-    hideHistory: string;
-    resolvedAgo: string;
-    cancelledAgo: string;
-    timedOutAgo: string;
-  };
+
   workspacePage: {
     title: string;
-    subtitle: string;
-    noOrgSelected: string;
-    nameLabel: string;
-    namePlaceholder: string;
-    descriptionLabel: string;
-    descriptionPlaceholder: string;
-    customInstructionsLabel: string;
-    customInstructionsPlaceholder: string;
-    customInstructionsHint: string;
-    budgetLimitLabel: string;
-    budgetLimitHint: string;
-    workspacePathLabel: string;
-    workspacePathHint: string;
-    statusLabel: string;
-    saveChanges: string;
-    saved: string;
-    saveFailed: string;
-    dangerZone: string;
-    deleteDescription: string;
-    openFolder: string;
-    openFolderFailed: string;
   };
+
   teamPage: {
     title: string;
     subtitle: string;
@@ -545,62 +162,11 @@ export interface LocaleMessages {
     noRolesHint: string;
     rolesCount: string;
   };
-  session: {
-    starting: string;
-    thinking: string;
-    cancelled: string;
-    completed: string;
-    switchRole: string;
-    noActive: string;
-    sendMessage: string;
-    cancelConfirm: string;
-    cancelConfirmMessage: string;
-    failedToStart: string;
-    failedToSend: string;
-    failedToCancel: string;
-  };
+
   executionControl: {
     pauseAll: string;
     resumeAll: string;
-    paused: string;
-    running: string;
-    pauseConfirm: string;
-    pauseConfirmMessage: string;
     pausedToast: string;
     resumedToast: string;
-  };
-  planning: {
-    startNewProject: string;
-    startNewProjectTooltip: string;
-    planningChat: string;
-    planningChatSubtitle: string;
-    inputPlaceholder: string;
-    inputPlaceholderThinking: string;
-    inputPlaceholderReply: string;
-    thinking: string;
-    thinkingElapsed: string;
-    streaming: string;
-    cancelSession: string;
-    cancelConfirm: string;
-    cancelConfirmMessage: string;
-    phaseDiverge: string;
-    phaseFocus: string;
-    phaseStructure: string;
-    planReady: string;
-    planSummary: string;
-    createAllTasks: string;
-    creatingTasks: string;
-    startOver: string;
-    startOverConfirm: string;
-    startOverConfirmMessage: string;
-    tasksCreated: string;
-    failedToStartPlanning: string;
-    failedToCreateTasks: string;
-    resumeSession: string;
-    resumeSessionMessage: string;
-    discardAndStartOver: string;
-    emptyStateCta: string;
-    refinePlan: string;
-    viewPlan: string;
   };
 }

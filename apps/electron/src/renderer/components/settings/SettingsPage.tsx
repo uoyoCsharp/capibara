@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { GearSix, FloppyDisk, Trash, Warning } from '@phosphor-icons/react';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface LogStats {
   totalSizeMB: number;
@@ -11,22 +10,24 @@ interface LogStats {
   newestMonth: string | null;
 }
 
+type LogAction = 'idle' | 'confirming-all' | 'confirming-old' | 'clearing';
+
 export function SettingsPage() {
   const [locale, setLocale] = useState('en-US');
   const [saving, setSaving] = useState(false);
   const [logStats, setLogStats] = useState<LogStats | null>(null);
-  const [logAction, setLogAction] = useState<'idle' | 'confirming-all' | 'confirming-old' | 'clearing'>('idle');
+  const [logAction, setLogAction] = useState<LogAction>('idle');
   const [logResult, setLogResult] = useState<string | null>(null);
 
   useEffect(() => {
-    api().getSetting('locale').then((result: { ok: boolean; data?: string | null }) => {
+    void api().getSetting('locale').then((result) => {
       if (result.ok && result.data) setLocale(result.data);
     });
   }, []);
 
   const refreshLogStats = useCallback(() => {
-    api().getLogStats?.().then((result: { ok: boolean; data?: LogStats }) => {
-      if (result.ok && result.data) setLogStats(result.data);
+    void api().getLogStats().then((result) => {
+      if (result.ok) setLogStats(result.data);
     });
   }, []);
 
@@ -41,8 +42,8 @@ export function SettingsPage() {
   const handleClearAll = async () => {
     setLogAction('clearing');
     setLogResult(null);
-    const result = await api().clearAllLogs?.();
-    if (result?.ok) {
+    const result = await api().clearAllLogs();
+    if (result.ok) {
       setLogResult(`Deleted ${result.data.deletedFiles} files, freed ${result.data.freedMB} MB`);
     }
     setLogAction('idle');
@@ -54,8 +55,8 @@ export function SettingsPage() {
     setLogResult(null);
     const now = new Date();
     const cutoff = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const result = await api().clearLogsBefore?.(cutoff);
-    if (result?.ok) {
+    const result = await api().clearLogsBefore(cutoff);
+    if (result.ok) {
       setLogResult(`Deleted ${result.data.deletedFiles} files, freed ${result.data.freedMB} MB`);
     }
     setLogAction('idle');
@@ -64,101 +65,35 @@ export function SettingsPage() {
 
   return (
     <div className="p-[var(--page-padding)] max-w-2xl space-y-[var(--section-gap)]">
-      <div>
+      <header>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <GearSix size={28} weight="duotone" />
           Settings
         </h1>
-      </div>
+      </header>
 
-      <div className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
+      <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
         <h2 className="font-semibold">Language</h2>
-        <div>
-          <select
-            value={locale}
-            onChange={(e) => setLocale(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-          >
-            <option value="en-US">English</option>
-            <option value="zh-CN">Chinese (Simplified)</option>
-          </select>
-        </div>
-      </div>
+        <select
+          value={locale}
+          onChange={(e) => setLocale(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+        >
+          <option value="en-US">English</option>
+          <option value="zh-CN">Chinese (Simplified)</option>
+        </select>
+      </section>
 
-      <div className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
-        <h2 className="font-semibold">Execution Logs</h2>
-        <p className="text-sm text-muted-foreground">
-          Log files are created for each AI execution run. Over time these can accumulate and take up disk space.
-        </p>
+      <LogsSection
+        logStats={logStats}
+        logAction={logAction}
+        setLogAction={setLogAction}
+        logResult={logResult}
+        onClearAll={handleClearAll}
+        onClearOld={handleClearOld}
+      />
 
-        {logStats && (
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <p className="text-muted-foreground text-xs">Total Size</p>
-              <p className="font-medium">{logStats.totalSizeMB} MB</p>
-            </div>
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <p className="text-muted-foreground text-xs">File Count</p>
-              <p className="font-medium">{logStats.fileCount}</p>
-            </div>
-            {logStats.oldestMonth && (
-              <div className="rounded-lg bg-muted/50 px-3 py-2">
-                <p className="text-muted-foreground text-xs">Oldest</p>
-                <p className="font-medium">{logStats.oldestMonth}</p>
-              </div>
-            )}
-            {logStats.newestMonth && (
-              <div className="rounded-lg bg-muted/50 px-3 py-2">
-                <p className="text-muted-foreground text-xs">Newest</p>
-                <p className="font-medium">{logStats.newestMonth}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {logResult && (
-          <p className="text-sm text-green-600 bg-green-500/10 rounded-lg px-3 py-2">{logResult}</p>
-        )}
-
-        <div className="flex gap-2 flex-wrap">
-          {logAction === 'confirming-old' ? (
-            <div className="flex items-center gap-2">
-              <Warning size={16} className="text-yellow-600" />
-              <span className="text-sm">Delete logs older than this month?</span>
-              <button onClick={handleClearOld} className="text-xs px-2 py-1 rounded bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20">Confirm</button>
-              <button onClick={() => setLogAction('idle')} className="text-xs px-2 py-1 rounded border border-border hover:bg-accent">Cancel</button>
-            </div>
-          ) : logAction === 'confirming-all' ? (
-            <div className="flex items-center gap-2">
-              <Warning size={16} className="text-red-600" />
-              <span className="text-sm">Delete all log files? This cannot be undone.</span>
-              <button onClick={handleClearAll} className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-600 hover:bg-red-500/20">Confirm</button>
-              <button onClick={() => setLogAction('idle')} className="text-xs px-2 py-1 rounded border border-border hover:bg-accent">Cancel</button>
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={() => setLogAction('confirming-old')}
-                disabled={logAction === 'clearing' || !logStats?.fileCount}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-50"
-              >
-                <Trash size={14} />
-                Clear Old Logs
-              </button>
-              <button
-                onClick={() => setLogAction('confirming-all')}
-                disabled={logAction === 'clearing' || !logStats?.fileCount}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-              >
-                <Trash size={14} />
-                Clear All Logs
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
+      <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
         <h2 className="font-semibold">System</h2>
         <button
           onClick={async () => {
@@ -169,7 +104,7 @@ export function SettingsPage() {
         >
           Check System Health
         </button>
-      </div>
+      </section>
 
       <button
         onClick={handleSave}
@@ -180,5 +115,128 @@ export function SettingsPage() {
         {saving ? 'Saving...' : 'Save Settings'}
       </button>
     </div>
+  );
+}
+
+interface LogsSectionProps {
+  logStats: LogStats | null;
+  logAction: LogAction;
+  setLogAction: (action: LogAction) => void;
+  logResult: string | null;
+  onClearAll: () => void;
+  onClearOld: () => void;
+}
+
+function LogsSection({ logStats, logAction, setLogAction, logResult, onClearAll, onClearOld }: LogsSectionProps) {
+  const hasFiles = (logStats?.fileCount ?? 0) > 0;
+
+  return (
+    <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
+      <h2 className="font-semibold">Execution Logs</h2>
+      <p className="text-sm text-muted-foreground">
+        Log files are created for each AI execution run. Over time these can accumulate and take up disk space.
+      </p>
+
+      {logStats && (
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <StatTile label="Total Size" value={`${logStats.totalSizeMB} MB`} />
+          <StatTile label="File Count" value={String(logStats.fileCount)} />
+          {logStats.oldestMonth && <StatTile label="Oldest" value={logStats.oldestMonth} />}
+          {logStats.newestMonth && <StatTile label="Newest" value={logStats.newestMonth} />}
+        </div>
+      )}
+
+      {logResult && (
+        <p className="text-sm text-green-600 bg-green-500/10 rounded-lg px-3 py-2">{logResult}</p>
+      )}
+
+      <div className="flex gap-2 flex-wrap">
+        {logAction === 'confirming-old' && (
+          <ConfirmInline
+            icon={<Warning size={16} className="text-yellow-600" />}
+            label="Delete logs older than this month?"
+            onConfirm={onClearOld}
+            onCancel={() => setLogAction('idle')}
+            confirmClass="bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20"
+          />
+        )}
+        {logAction === 'confirming-all' && (
+          <ConfirmInline
+            icon={<Warning size={16} className="text-red-600" />}
+            label="Delete all log files? This cannot be undone."
+            onConfirm={onClearAll}
+            onCancel={() => setLogAction('idle')}
+            confirmClass="bg-red-500/10 text-red-600 hover:bg-red-500/20"
+          />
+        )}
+        {logAction !== 'confirming-old' && logAction !== 'confirming-all' && (
+          <>
+            <ClearButton
+              label="Clear Old Logs"
+              disabled={logAction === 'clearing' || !hasFiles}
+              onClick={() => setLogAction('confirming-old')}
+            />
+            <ClearButton
+              label="Clear All Logs"
+              disabled={logAction === 'clearing' || !hasFiles}
+              onClick={() => setLogAction('confirming-all')}
+              danger
+            />
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-muted/50 px-3 py-2">
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className="font-medium">{value}</p>
+    </div>
+  );
+}
+
+function ConfirmInline({
+  icon, label, onConfirm, onCancel, confirmClass,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmClass: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {icon}
+      <span className="text-sm">{label}</span>
+      <button onClick={onConfirm} className={`text-xs px-2 py-1 rounded ${confirmClass}`}>Confirm</button>
+      <button onClick={onCancel} className="text-xs px-2 py-1 rounded border border-border hover:bg-accent">Cancel</button>
+    </div>
+  );
+}
+
+function ClearButton({
+  label, disabled, onClick, danger = false,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+        danger
+          ? 'border-red-200 text-red-600 hover:bg-red-500/10'
+          : 'border-border hover:bg-accent'
+      }`}
+    >
+      <Trash size={14} />
+      {label}
+    </button>
   );
 }

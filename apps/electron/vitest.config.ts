@@ -12,8 +12,17 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // Default environment is node. DOM tests opt in via a docblock pragma:
+    //   // @vitest-environment jsdom
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    // DOM tests dynamically import renderer modules and hit React 19's
+    // stricter act() pipeline; the default 5s timeout isn't enough when
+    // the jsdom env cold-starts inside a big suite.
+    testTimeout: 15000,
+    include: [
+      'tests/**/*.test.ts',
+      'tests/unit/renderer/*.dom.test.tsx',
+    ],
     exclude: ['tests/unit/_legacy/**'],
     setupFiles: ['tests/setup.ts'],
   },

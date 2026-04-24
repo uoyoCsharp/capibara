@@ -86,6 +86,11 @@ export function registerOrganizationHandlers(
     catch (e) { return err('VALIDATION_ERROR', String(e)); }
   });
 
+  ipcMain.handle('capibara:skill:delete', async (_ev, id: string) => {
+    try { skillService.delete(id); return ok(null); }
+    catch (e) { return err('VALIDATION_ERROR', String(e)); }
+  });
+
   ipcMain.handle('capibara:template:list', async () => {
     try { return ok(orgTemplateService.getTemplates()); }
     catch (e) { return err('INTERNAL', String(e)); }

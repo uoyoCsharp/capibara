@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import type { TaskRecord, RoleRecord } from '@core/shared/types';
+import { subscribeToEvents } from '../lib/subscribe-to-events';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface TaskState {
   tasks: TaskRecord[];
@@ -10,6 +10,7 @@ interface TaskState {
   currentOrgId: string | null;
   selectedTaskId: string | null;
   isLoading: boolean;
+  isInitialized: boolean;
 
   setCurrentOrgId: (orgId: string | null) => void;
   setSelectedTaskId: (id: string | null) => void;
@@ -18,7 +19,10 @@ interface TaskState {
   createTask: (input: unknown) => Promise<TaskRecord | null>;
   updateTaskStatus: (taskId: string, status: string) => Promise<boolean>;
   deleteTask: (id: string) => Promise<boolean>;
+  init: () => void;
 }
+
+let taskUnsubscribe: (() => void) | null = null;
 
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
@@ -26,6 +30,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   currentOrgId: null,
   selectedTaskId: null,
   isLoading: false,
+  isInitialized: false,
 
   setCurrentOrgId: (orgId) => set({ currentOrgId: orgId }),
   setSelectedTaskId: (id) => set({ selectedTaskId: id }),
@@ -34,7 +39,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: true });
     const result = await api().getTasksByOrgId(orgId);
     if (result.ok) {
-      set({ tasks: result.data as TaskRecord[], isLoading: false });
+      set({ tasks: result.data, isLoading: false });
     } else {
       set({ isLoading: false });
     }
@@ -42,7 +47,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   loadRoles: async (orgId) => {
     const result = await api().getRolesByOrgId(orgId);
-    if (result.ok) set({ roles: result.data as RoleRecord[] });
+    if (result.ok) set({ roles: result.data });
   },
 
   createTask: async (input) => {
@@ -51,7 +56,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       if (result.ok) {
         const { currentOrgId } = get();
         if (currentOrgId) await get().loadTasks(currentOrgId);
-        return result.data as TaskRecord;
+        return result.data;
       }
       console.error('[task.store] createTask failed:', result.error);
       return null;
@@ -80,5 +85,22 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       return true;
     }
     return false;
+  },
+
+  init: () => {
+    if (get().isInitialized) return;
+    set({ isInitialized: true });
+
+    if (taskUnsubscribe) taskUnsubscribe();
+    taskUnsubscribe = subscribeToEvents({
+      'task:changed': (e) => {
+        const { currentOrgId } = get();
+        if (currentOrgId && e.orgId === currentOrgId) void get().loadTasks(currentOrgId);
+      },
+      'task:entered-approval': (e) => {
+        const { currentOrgId } = get();
+        if (currentOrgId && e.orgId === currentOrgId) void get().loadTasks(currentOrgId);
+      },
+    });
   },
 }));

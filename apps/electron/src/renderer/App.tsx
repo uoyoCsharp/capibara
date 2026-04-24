@@ -1,21 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { SectionId, DesktopEvent } from '@core/shared/types';
+import { useEffect, useState } from 'react';
 import { LocaleProvider, useT } from './hooks/use-locale';
-import { useAppSnapshot } from './hooks/use-app-snapshot';
+import { useOnboardingGate } from './hooks/use-onboarding-gate';
+import { useCrossCuttingToasts } from './hooks/use-cross-cutting-toasts';
+import { useSectionShortcuts } from './hooks/use-section-shortcuts';
+import { useAppStore } from './store/app.store';
+import { useTaskStore } from './store/task.store';
+import { useRunStore } from './store/run.store';
+import { useConversationStore } from './store/conversation.store';
+import { useOrganizationStore } from './store/organization.store';
+import { usePlanningStore } from './store/planning.store';
 import { Sidebar } from './components/layout/Sidebar';
-import { DashboardPage } from './components/dashboard/DashboardPage';
-import { TasksPage } from './components/tasks/TasksPage';
-import { InboxPage } from './components/inbox/InboxPage';
-import { TeamPage } from './components/team/TeamPage';
-import { SettingsPage } from './components/settings/SettingsPage';
-import { OrgSettingsPage } from './components/organization/OrgSettingsPage';
-import { PlanningPage } from './components/planning/PlanningPage';
+import { SectionRouter } from './components/layout/SectionRouter';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { ToastContainer } from './components/shared/ToastContainer';
-import { toast } from './store/toast.store';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
 
 export function App() {
   return (
@@ -26,85 +23,55 @@ export function App() {
 }
 
 function AppContent() {
-  const [activeSection, setActiveSection] = useState<SectionId>('dashboard');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
-  const [isFirstTimeOnboarding, setIsFirstTimeOnboarding] = useState(true);
-
-  const { organizations, currentOrgId, isLoading, refresh } = useAppSnapshot();
   const t = useT();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  const activeSection = useAppStore((s) => s.activeSection);
+  const setActiveSection = useAppStore((s) => s.setActiveSection);
+  const currentOrgId = useAppStore((s) => s.currentOrgId);
+  const isLoading = useAppStore((s) => s.isLoading);
+  const loadOrganizations = useAppStore((s) => s.loadOrganizations);
+
+  const { show: showOnboarding, isFirstTime, openForNewWorkspace, markComplete } = useOnboardingGate();
+
+  // One-time store initialization — each store.init() is idempotent.
   useEffect(() => {
-    if (isLoading) return;
-    if (organizations.length > 0) {
-      setShowOnboarding(false);
-      return;
-    }
-    api().getSetting?.('onboardingCompleted').then((res: { ok: boolean; data?: string | null }) => {
-      if (res?.ok && res.data === 'true') {
-        setShowOnboarding(false);
-      } else {
-        setIsFirstTimeOnboarding(true);
-        setShowOnboarding(true);
-      }
-    }).catch(() => setShowOnboarding(false));
-  }, [isLoading, organizations.length]);
-
-  const handleCreateWorkspace = useCallback(() => {
-    setIsFirstTimeOnboarding(false);
-    setShowOnboarding(true);
+    useAppStore.getState().init();
+    useTaskStore.getState().init();
+    useRunStore.getState().init();
+    useConversationStore.getState().init();
+    useOrganizationStore.getState().init();
+    usePlanningStore.getState().init();
   }, []);
 
+  // Propagate current org to domain stores so their event filters work.
   useEffect(() => {
-    if (typeof api()?.subscribe !== 'function') return;
-    const unsub = api().subscribe((event: DesktopEvent) => {
-      if (event.type === 'run:completed') {
-        if (event.status === 'succeeded') toast.success(`${t.runs?.completed ?? 'Run completed'} — ${event.tokenCount} tokens`);
-        else if (event.status === 'failed') toast.error(t.runs?.failed ?? 'Run failed');
-        else if (event.status === 'cancelled') toast.info(t.runs?.cancelled ?? 'Run cancelled');
-      }
-      if (event.type === 'conversation:response-needed' && activeSection !== 'inbox') {
-        toast.info(t.conversations?.humanReplyNotification ?? 'Conversation needs response', {
-          duration: 5000,
-          action: { label: t.conversations?.goToConversations ?? 'View', onClick: () => setActiveSection('inbox') },
-        });
-      }
-    });
-    return unsub;
-  }, [t]);
+    useTaskStore.getState().setCurrentOrgId(currentOrgId);
+    useRunStore.getState().setCurrentOrgId(currentOrgId);
+    useConversationStore.getState().setCurrentOrgId(currentOrgId);
+    useOrganizationStore.getState().setCurrentOrgId(currentOrgId);
+  }, [currentOrgId]);
+
+  useCrossCuttingToasts(activeSection, setActiveSection);
+  useSectionShortcuts(setActiveSection);
 
   if (isLoading || showOnboarding === null) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
-          <p className="text-sm text-muted-foreground">{t.common?.loading ?? 'Loading...'}</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen label={t.common?.loading ?? 'Loading...'} />;
   }
 
   if (showOnboarding) {
     return (
       <OnboardingWizard
-        onComplete={() => { setShowOnboarding(false); refresh(); }}
-        skipHealthCheck={!isFirstTimeOnboarding}
-        isFirstTime={isFirstTimeOnboarding}
+        onComplete={markComplete}
+        skipHealthCheck={!isFirstTime}
+        isFirstTime={isFirstTime}
       />
     );
   }
 
-  const renderPage = () => {
-    switch (activeSection) {
-      case 'dashboard': return <DashboardPage orgId={currentOrgId} />;
-      case 'tasks': return <TasksPage orgId={currentOrgId} />;
-      case 'inbox': return <InboxPage orgId={currentOrgId} />;
-      case 'team': return <TeamPage orgId={currentOrgId} />;
-      case 'settings': return <SettingsPage />;
-      case 'planning': return <PlanningPage orgId={currentOrgId} />;
-      case 'workspace': return <OrgSettingsPage orgId={currentOrgId} onDeleted={() => { setActiveSection('dashboard'); refresh(); }} />;
-      default: return <DashboardPage orgId={currentOrgId} />;
-    }
+  const handleWorkspaceDeleted = () => {
+    setActiveSection('dashboard');
+    void loadOrganizations();
   };
 
   return (
@@ -114,12 +81,27 @@ function AppContent() {
         onNavigate={setActiveSection}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-        onCreateWorkspace={handleCreateWorkspace}
+        onCreateWorkspace={openForNewWorkspace}
       />
       <main className="flex-1 overflow-auto">
-        {renderPage()}
+        <SectionRouter
+          activeSection={activeSection}
+          orgId={currentOrgId}
+          onWorkspaceDeleted={handleWorkspaceDeleted}
+        />
       </main>
       <ToastContainer />
+    </div>
+  );
+}
+
+function LoadingScreen({ label }: { label: string }) {
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-background">
+      <div className="text-center">
+        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
+        <p className="text-sm text-muted-foreground">{label}</p>
+      </div>
     </div>
   );
 }

@@ -1,29 +1,15 @@
-import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/app.store';
 
+/**
+ * Thin wrapper around useAppStore for legacy callers. The store initializes
+ * itself and subscribes to org:changed / snapshot:updated events in its
+ * own init(). New components should read useAppStore directly.
+ */
 export function useAppSnapshot() {
-  const loadOrganizations = useAppStore((s) => s.loadOrganizations);
   const organizations = useAppStore((s) => s.organizations);
   const currentOrgId = useAppStore((s) => s.currentOrgId);
   const isLoading = useAppStore((s) => s.isLoading);
-  const calledRef = useRef(false);
-
-  useEffect(() => {
-    if (!calledRef.current) {
-      calledRef.current = true;
-      void loadOrganizations();
-    }
-
-    if (typeof window.capibara?.subscribe !== 'function') return;
-
-    const unsubscribe = window.capibara.subscribe((event) => {
-      if (event.type === 'org:changed' || event.type === 'snapshot:updated') {
-        void loadOrganizations();
-      }
-    });
-
-    return unsubscribe;
-  }, []);
+  const loadOrganizations = useAppStore((s) => s.loadOrganizations);
 
   return { organizations, currentOrgId, isLoading, refresh: loadOrganizations };
 }

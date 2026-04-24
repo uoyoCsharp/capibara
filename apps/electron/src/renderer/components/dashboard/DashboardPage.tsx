@@ -1,28 +1,14 @@
-import { useEffect, useCallback } from 'react';
-import { SquaresFour, ListChecks, UsersThree, ChatCircleDots, CurrencyDollar } from '@phosphor-icons/react';
+import { useEffect } from 'react';
+import { SquaresFour, ListChecks, UsersThree, ChatCircleDots, CurrencyDollar, Sparkle } from '@phosphor-icons/react';
 import { useTaskStore } from '../../store/task.store';
 import { useRunStore } from '../../store/run.store';
 import { useConversationStore } from '../../store/conversation.store';
 import { useOrganizationStore } from '../../store/organization.store';
-import { useEventSubscription } from '../../hooks/use-event-subscription';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+import { useAppStore } from '../../store/app.store';
+import { buildNarrative, type NarrativeSection } from './narrative';
 
 interface DashboardPageProps {
   orgId: string | null;
-}
-
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string | number; color: string }) {
-  return (
-    <div className="p-[var(--card-padding)] rounded-xl border border-border space-y-2">
-      <div className={`flex items-center gap-2 ${color}`}>
-        {icon}
-        <span className="text-sm font-medium">{label}</span>
-      </div>
-      <p className="text-2xl font-semibold">{value}</p>
-    </div>
-  );
 }
 
 export function DashboardPage({ orgId }: DashboardPageProps) {
@@ -34,6 +20,9 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   const loadActive = useConversationStore((s) => s.loadActiveConversations);
   const roles = useOrganizationStore((s) => s.roles);
   const loadRoles = useOrganizationStore((s) => s.loadRoles);
+  const organizations = useAppStore((s) => s.organizations);
+
+  const org = organizations.find((o) => o.id === orgId) ?? null;
 
   useEffect(() => {
     if (orgId) {
@@ -44,18 +33,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
     }
   }, [orgId, loadTasks, loadRuns, loadActive, loadRoles]);
 
-  useEventSubscription(['task:changed', 'run:changed', 'conversation:changed'], useCallback(() => {
-    if (orgId) {
-      void loadTasks(orgId);
-      void loadRuns(orgId);
-      void loadActive(orgId);
-    }
-  }, [orgId, loadTasks, loadRuns, loadActive]));
-
-  const activeTasks = tasks.filter((t) => !['done', 'cancelled'].includes(t.status));
-  const activeRuns = runs.filter((r) => ['queued', 'running'].includes(r.status));
-
-  if (!orgId) {
+  if (!orgId || !org) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
         <SquaresFour size={48} weight="duotone" />
@@ -64,49 +42,79 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
     );
   }
 
+  const narrative = buildNarrative({
+    orgName: org.name,
+    tasks,
+    runs,
+    conversations: activeConversations,
+    roles,
+  });
+
+  const activeTasks = tasks.filter((t) => !['done', 'cancelled'].includes(t.status));
+  const activeRuns = runs.filter((r) => ['queued', 'running'].includes(r.status));
+  const aiRoles = roles.filter((r) => !r.isSystemRole);
+
   return (
     <div className="p-[var(--page-padding)] space-y-[var(--section-gap)]">
-      <div>
+      <header>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <SquaresFour size={28} weight="duotone" />
           Dashboard
         </h1>
-      </div>
+      </header>
+
+      <NarrativeCard headline={narrative.headline} sections={narrative.sections} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={<ListChecks size={20} weight="duotone" />} label="Active Tasks" value={activeTasks.length} color="text-blue-600" />
-        <StatCard icon={<UsersThree size={20} weight="duotone" />} label="Roles" value={roles.filter((r) => !r.isSystemRole).length} color="text-purple-600" />
+        <StatCard icon={<UsersThree size={20} weight="duotone" />} label="AI Roles" value={aiRoles.length} color="text-purple-600" />
         <StatCard icon={<ChatCircleDots size={20} weight="duotone" />} label="Active Conversations" value={activeConversations.length} color="text-yellow-600" />
         <StatCard icon={<CurrencyDollar size={20} weight="duotone" />} label="Active Runs" value={activeRuns.length} color="text-green-600" />
       </div>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-xl border border-border p-[var(--card-padding)]">
-          <h2 className="font-semibold mb-3">Recent Tasks</h2>
-          {tasks.slice(0, 8).map((task) => (
-            <div key={task.id} className="flex items-center justify-between py-1.5 text-sm">
-              <span className="truncate flex-1">{task.title}</span>
-              <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground ml-2">{task.status}</span>
-            </div>
-          ))}
-          {tasks.length === 0 && <p className="text-sm text-muted-foreground">No tasks yet</p>}
-        </div>
-
-        <div className="rounded-xl border border-border p-[var(--card-padding)]">
-          <h2 className="font-semibold mb-3">Recent Runs</h2>
-          {runs.slice(0, 8).map((run) => (
-            <div key={run.id} className="flex items-center justify-between py-1.5 text-sm">
-              <span className="truncate flex-1">{run.wakeReason}</span>
-              <span className={`text-xs px-1.5 py-0.5 rounded ${
-                run.status === 'succeeded' ? 'bg-green-500/10 text-green-600' :
-                run.status === 'failed' ? 'bg-red-500/10 text-red-600' :
-                'bg-muted text-muted-foreground'
-              }`}>{run.status}</span>
-            </div>
-          ))}
-          {runs.length === 0 && <p className="text-sm text-muted-foreground">No runs yet</p>}
-        </div>
+function NarrativeCard({ headline, sections }: { headline: string; sections: NarrativeSection[] }) {
+  return (
+    <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4 bg-gradient-to-br from-background to-muted/20">
+      <div className="flex items-center gap-2">
+        <Sparkle size={20} weight="duotone" className="text-primary" />
+        <h2 className="text-lg font-semibold">{headline}</h2>
       </div>
+      <div className="space-y-3">
+        {sections.map((s, i) => (
+          <NarrativeRow key={i} section={s} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NarrativeRow({ section }: { section: NarrativeSection }) {
+  const toneBorder = {
+    info: 'border-l-blue-500',
+    positive: 'border-l-green-500',
+    warning: 'border-l-amber-500',
+    neutral: 'border-l-muted',
+  }[section.tone];
+
+  return (
+    <div className={`border-l-2 pl-3 py-1 ${toneBorder}`}>
+      <h3 className="text-sm font-medium text-foreground">{section.heading}</h3>
+      <p className="text-sm text-muted-foreground mt-0.5">{section.body}</p>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string | number; color: string }) {
+  return (
+    <div className="p-[var(--card-padding)] rounded-xl border border-border space-y-2">
+      <div className={`flex items-center gap-2 ${color}`}>
+        {icon}
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+      <p className="text-2xl font-semibold">{value}</p>
     </div>
   );
 }

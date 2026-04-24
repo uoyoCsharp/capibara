@@ -1,27 +1,32 @@
 import { create } from 'zustand';
 import type { RunRecord } from '@core/shared/types';
+import { subscribeToEvents } from '../lib/subscribe-to-events';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface RunState {
   runs: RunRecord[];
   currentOrgId: string | null;
   selectedRunId: string | null;
   isLoading: boolean;
+  isInitialized: boolean;
 
   setCurrentOrgId: (orgId: string | null) => void;
   setSelectedRunId: (id: string | null) => void;
   loadRuns: (orgId: string) => Promise<void>;
   cancelRun: (id: string) => Promise<boolean>;
   refreshRun: (id: string) => Promise<void>;
+  init: () => void;
 }
+
+let runUnsubscribe: (() => void) | null = null;
 
 export const useRunStore = create<RunState>((set, get) => ({
   runs: [],
   currentOrgId: null,
   selectedRunId: null,
   isLoading: false,
+  isInitialized: false,
 
   setCurrentOrgId: (orgId) => set({ currentOrgId: orgId }),
   setSelectedRunId: (id) => set({ selectedRunId: id }),
@@ -30,7 +35,7 @@ export const useRunStore = create<RunState>((set, get) => ({
     set({ isLoading: true });
     const result = await api().getRunsByOrgId(orgId);
     if (result.ok) {
-      set({ runs: result.data as RunRecord[], isLoading: false });
+      set({ runs: result.data, isLoading: false });
     } else {
       set({ isLoading: false });
     }
@@ -49,10 +54,30 @@ export const useRunStore = create<RunState>((set, get) => ({
   refreshRun: async (id) => {
     const result = await api().getRun(id);
     if (result.ok && result.data) {
-      const run = result.data as RunRecord;
+      const run = result.data;
       set((state) => ({
         runs: state.runs.map((r) => (r.id === id ? run : r)),
       }));
     }
+  },
+
+  init: () => {
+    if (get().isInitialized) return;
+    set({ isInitialized: true });
+
+    if (runUnsubscribe) runUnsubscribe();
+    runUnsubscribe = subscribeToEvents({
+      'run:changed': (e) => {
+        const { currentOrgId } = get();
+        if (currentOrgId && e.orgId === currentOrgId) void get().loadRuns(currentOrgId);
+      },
+      'run:completed': (e) => {
+        const { currentOrgId } = get();
+        if (currentOrgId && e.orgId === currentOrgId) void get().loadRuns(currentOrgId);
+      },
+      'run:status': (e) => {
+        void get().refreshRun(e.runId);
+      },
+    });
   },
 }));

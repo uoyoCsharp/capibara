@@ -19,6 +19,7 @@ const api = {
   getSkills: () => ipcRenderer.invoke('capibara:skill:list'),
   getSkill: (id: string) => ipcRenderer.invoke('capibara:skill:get', id),
   createSkill: (input: unknown) => ipcRenderer.invoke('capibara:skill:create', input),
+  deleteSkill: (id: string) => ipcRenderer.invoke('capibara:skill:delete', id),
 
   // Templates
   getTemplates: () => ipcRenderer.invoke('capibara:template:list'),

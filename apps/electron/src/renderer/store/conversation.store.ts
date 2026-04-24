@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import type { ConversationRecord, ConversationMessageRecord } from '@core/shared/types';
+import { subscribeToEvents } from '../lib/subscribe-to-events';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface ConversationState {
   conversations: ConversationRecord[];
@@ -12,6 +12,7 @@ interface ConversationState {
   selectedConversationId: string | null;
   isLoading: boolean;
   waitingAIConversationIds: Set<string>;
+  isInitialized: boolean;
 
   setCurrentOrgId: (orgId: string | null) => void;
   setSelectedConversationId: (id: string | null) => void;
@@ -22,7 +23,10 @@ interface ConversationState {
   cancel: (id: string) => Promise<boolean>;
   markWaitingAI: (conversationId: string) => void;
   clearWaitingAI: (conversationId: string) => void;
+  init: () => void;
 }
+
+let conversationUnsubscribe: (() => void) | null = null;
 
 export const useConversationStore = create<ConversationState>((set, get) => ({
   conversations: [],
@@ -32,6 +36,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   selectedConversationId: null,
   isLoading: false,
   waitingAIConversationIds: new Set(),
+  isInitialized: false,
 
   setCurrentOrgId: (orgId) => set({ currentOrgId: orgId }),
   setSelectedConversationId: (id) => set({ selectedConversationId: id }),
@@ -51,7 +56,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     set({ isLoading: true });
     const result = await api().getConversations(orgId);
     if (result.ok) {
-      set({ conversations: result.data as ConversationRecord[], isLoading: false });
+      set({ conversations: result.data, isLoading: false });
     } else {
       set({ isLoading: false });
     }
@@ -59,12 +64,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   loadActiveConversations: async (orgId) => {
     const result = await api().getActiveConversations(orgId);
-    if (result.ok) set({ activeConversations: result.data as ConversationRecord[] });
+    if (result.ok) set({ activeConversations: result.data });
   },
 
   loadMessages: async (conversationId) => {
     const result = await api().getConversationMessages(conversationId);
-    if (result.ok) set({ messages: result.data as ConversationMessageRecord[] });
+    if (result.ok) set({ messages: result.data });
   },
 
   resolve: async (id) => {
@@ -85,5 +90,30 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       return true;
     }
     return false;
+  },
+
+  init: () => {
+    if (get().isInitialized) return;
+    set({ isInitialized: true });
+
+    if (conversationUnsubscribe) conversationUnsubscribe();
+    conversationUnsubscribe = subscribeToEvents({
+      'conversation:changed': (e) => {
+        const { currentOrgId } = get();
+        if (currentOrgId && e.orgId === currentOrgId) {
+          void get().loadConversations(currentOrgId);
+          void get().loadActiveConversations(currentOrgId);
+        }
+      },
+      'conversation:response-needed': (e) => {
+        const { currentOrgId, selectedConversationId } = get();
+        if (currentOrgId && e.orgId === currentOrgId) {
+          void get().loadActiveConversations(currentOrgId);
+        }
+        if (selectedConversationId === e.conversationId) {
+          void get().loadMessages(e.conversationId);
+        }
+      },
+    });
   },
 }));

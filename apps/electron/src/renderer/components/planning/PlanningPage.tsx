@@ -1,10 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { TreeStructure, PaperPlaneTilt, Check, X, ChatCircle } from '@phosphor-icons/react';
+import { TreeStructure, PaperPlaneTilt, Check, X, ChatCircle, Sparkle } from '@phosphor-icons/react';
 import { usePlanningStore } from '../../store/planning.store';
 import { useConversationStore } from '../../store/conversation.store';
 import { useOrganizationStore } from '../../store/organization.store';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
-import type { RoleRecord } from '@core/shared/types';
 
 interface PlanningPageProps {
   orgId: string | null;
@@ -13,6 +12,8 @@ interface PlanningPageProps {
 export function PlanningPage({ orgId }: PlanningPageProps) {
   const conversationId = usePlanningStore((s) => s.conversationId);
   const pendingPlan = usePlanningStore((s) => s.pendingPlan);
+  const planReadyBanner = usePlanningStore((s) => s.planReadyBanner);
+  const dismissBanner = usePlanningStore((s) => s.dismissBanner);
   const isLoading = usePlanningStore((s) => s.isLoading);
   const startPlanning = usePlanningStore((s) => s.start);
   const sendMessage = usePlanningStore((s) => s.sendMessage);
@@ -141,6 +142,16 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
           New Session
         </button>
       </div>
+
+      {planReadyBanner && (
+        <div className="mx-4 mt-3 flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <div className="flex items-center gap-2 text-primary">
+            <Sparkle size={16} weight="duotone" />
+            <span>Plan ready — {planReadyBanner.taskCount} task(s) created successfully.</span>
+          </div>
+          <button onClick={dismissBanner} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg) => (

@@ -8,9 +8,15 @@ import {
 } from '@phosphor-icons/react';
 import { useT } from '../../hooks/use-locale';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
-type TemplateRecord = { id: string; name: string; description: string; rootRoles: Array<{ children: TemplateRecord['rootRoles'] }> };
+const api = () => window.capibara;
+
+type TemplateRecord = {
+  id: string;
+  name: string;
+  description: string;
+  rootRoles: Array<{ children: TemplateRecord['rootRoles'] }>;
+};
+
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
@@ -40,10 +46,11 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    api().getTemplates().then((res: { ok: boolean; data?: TemplateRecord[] }) => {
+    void api().getTemplates().then((res) => {
       if (res.ok && res.data) {
-        setTemplates(res.data);
-        if (res.data.length > 0) setSelectedId(res.data[0].id);
+        const tpls = res.data as TemplateRecord[];
+        setTemplates(tpls);
+        if (tpls.length > 0) setSelectedId(tpls[0].id);
       }
     });
   }, []);
@@ -62,10 +69,8 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
       const res = await api().loadTemplate(selectedId, name.trim(), workspace);
       if (res.ok) {
         if (isFirstTime) {
-          // Mark onboarding complete only on first-time setup
           await api().setSetting('onboardingCompleted', 'true');
         }
-        // Switch to the newly created org
         if (res.data?.id) {
           await api().setSetting('currentOrgId', res.data.id);
         }

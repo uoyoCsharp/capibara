@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface WorkItemType {
   name: string;
@@ -33,7 +32,7 @@ export function useWorkflowSchema(orgId: string | null) {
 
   useEffect(() => {
     if (!orgId) return;
-    api().getProcessSchema(orgId).then((result: { ok: boolean; data?: unknown }) => {
+    void api().getProcessSchema(orgId).then((result) => {
       if (result.ok && result.data) {
         setSchema(result.data as ProcessSchema);
       }

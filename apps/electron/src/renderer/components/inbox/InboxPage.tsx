@@ -98,8 +98,7 @@ export function InboxPage({ orgId }: InboxPageProps) {
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const api = () => window.capibara as any;
+  const api = () => window.capibara;
 
   const handleReply = useCallback(async () => {
     if (!selectedId || !replyText.trim() || isSending) return;
@@ -120,8 +119,7 @@ export function InboxPage({ orgId }: InboxPageProps) {
     }
   }, [selectedId, replyText, isSending, loadMessages, markWaitingAI]);
 
-  const active = conversations.filter((c) => ['active', 'waiting', 'escalated'].includes(c.state));
-  const resolved = conversations.filter((c) => ['resolved', 'completed', 'cancelled', 'timed_out'].includes(c.state));
+  const { blocked, monitoring, resolved } = partitionConversations(conversations);
 
   if (!orgId) {
     return (
@@ -137,7 +135,9 @@ export function InboxPage({ orgId }: InboxPageProps) {
       <div className="w-80 border-r border-border overflow-y-auto">
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold">Inbox</h2>
-          <p className="text-xs text-muted-foreground">{active.length} active</p>
+          <p className="text-xs text-muted-foreground">
+            {blocked.length} blocked · {monitoring.length} monitoring
+          </p>
         </div>
 
         {isLoading ? (
@@ -146,12 +146,19 @@ export function InboxPage({ orgId }: InboxPageProps) {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {active.map((conv) => (
+            <SectionLabel title="Blocked — needs your reply" count={blocked.length} tone="warning" />
+            {blocked.map((conv) => (
               <ConversationItem key={conv.id} conv={conv} roles={roles} selected={conv.id === selectedId} onSelect={setSelectedId} />
             ))}
+
+            <SectionLabel title="Monitoring — AI ↔ AI" count={monitoring.length} tone="info" />
+            {monitoring.map((conv) => (
+              <ConversationItem key={conv.id} conv={conv} roles={roles} selected={conv.id === selectedId} onSelect={setSelectedId} />
+            ))}
+
             {resolved.length > 0 && (
               <>
-                <div className="px-4 py-2 text-xs text-muted-foreground font-medium bg-muted/50">Resolved ({resolved.length})</div>
+                <SectionLabel title="Resolved" count={resolved.length} tone="neutral" />
                 {resolved.map((conv) => (
                   <ConversationItem key={conv.id} conv={conv} roles={roles} selected={conv.id === selectedId} onSelect={setSelectedId} />
                 ))}
@@ -230,6 +237,45 @@ export function InboxPage({ orgId }: InboxPageProps) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Pure partition: Blocked = AI asking human; Monitoring = AI↔AI in progress. */
+export function partitionConversations(all: ConversationRecord[]): {
+  blocked: ConversationRecord[];
+  monitoring: ConversationRecord[];
+  resolved: ConversationRecord[];
+} {
+  const blocked: ConversationRecord[] = [];
+  const monitoring: ConversationRecord[] = [];
+  const resolved: ConversationRecord[] = [];
+
+  for (const c of all) {
+    if (['resolved', 'completed', 'cancelled', 'timed_out'].includes(c.state)) {
+      resolved.push(c);
+      continue;
+    }
+    if (!['active', 'waiting', 'escalated'].includes(c.state)) continue;
+
+    if (c.respondentType === 'human' || (c.type === 'planning' || c.type === 'adhoc')) {
+      blocked.push(c);
+    } else {
+      monitoring.push(c);
+    }
+  }
+  return { blocked, monitoring, resolved };
+}
+
+function SectionLabel({ title, count, tone }: { title: string; count: number; tone: 'warning' | 'info' | 'neutral' }) {
+  if (count === 0) return null;
+  const toneClass =
+    tone === 'warning' ? 'text-amber-700 dark:text-amber-400' :
+    tone === 'info' ? 'text-blue-700 dark:text-blue-400' :
+    'text-muted-foreground';
+  return (
+    <div className={`px-4 py-2 text-xs font-medium bg-muted/50 ${toneClass}`}>
+      {title} ({count})
     </div>
   );
 }

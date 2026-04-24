@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   CheckCircle,
   WarningCircle,
@@ -10,10 +10,11 @@ import {
 } from '@phosphor-icons/react';
 import { useT } from '../../hooks/use-locale';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
+
 interface DepCheckItem { ok: boolean; version: string | null }
 interface SystemCheckResult { nodejs: DepCheckItem; claudeCli: DepCheckItem; network: DepCheckItem }
+
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import logoImg from '../../assets/logo.png';
@@ -32,29 +33,25 @@ export function HealthCheckStep({ onContinue }: HealthCheckStepProps) {
 
   const runCheck = useCallback(async () => {
     setState('checking');
+    const fallback: SystemCheckResult = {
+      nodejs: { ok: false, version: null },
+      claudeCli: { ok: false, version: null },
+      network: { ok: false, version: null },
+    };
     try {
       const res = await api().checkSystemDeps();
       if (res.ok) {
-        setResult(res.data);
+        setResult(res.data as SystemCheckResult);
       } else {
-        setResult({
-          nodejs: { ok: false, version: null },
-          claudeCli: { ok: false, version: null },
-          network: { ok: false, version: null },
-        });
+        setResult(fallback);
       }
     } catch {
-      setResult({
-        nodejs: { ok: false, version: null },
-        claudeCli: { ok: false, version: null },
-        network: { ok: false, version: null },
-      });
+      setResult(fallback);
     }
     setState('done');
   }, []);
 
-  // Auto-run on first render
-  useState(() => { runCheck(); });
+  useEffect(() => { void runCheck(); }, [runCheck]);
 
   const allPassed = result?.nodejs.ok && result?.claudeCli.ok && result?.network.ok;
 

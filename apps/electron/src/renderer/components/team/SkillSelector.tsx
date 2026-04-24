@@ -8,8 +8,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Card } from '../ui/card';
 import { useT } from '../../hooks/use-locale';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface SkillSelectorProps {
   selectedIds: string[];

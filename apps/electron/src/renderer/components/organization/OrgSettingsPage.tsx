@@ -72,8 +72,9 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const openFolder = () => (window.capibara as any).openFolder?.(org.workspacePath);
+  const openFolder = () => {
+    if (org.workspacePath) void window.capibara.openFolder(org.workspacePath);
+  };
 
   return (
     <div className="p-[var(--page-padding)] space-y-[var(--section-gap)] max-w-2xl">

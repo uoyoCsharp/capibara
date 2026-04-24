@@ -3,8 +3,7 @@ import type { ReactNode } from 'react';
 import type { SupportedLocale, LocaleMessages } from '@shared/locale/types.js';
 import { getMessages, DEFAULT_LOCALE, isSupportedLocale } from '@shared/locale/index.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 interface LocaleContextValue {
   locale: SupportedLocale;
@@ -23,8 +22,8 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<LocaleMessages>(getMessages(DEFAULT_LOCALE));
 
   useEffect(() => {
-    api().getSetting?.('locale').then((result: { ok: boolean; data?: string | null }) => {
-      if (result?.ok && result.data && isSupportedLocale(result.data)) {
+    void api().getSetting('locale').then((result) => {
+      if (result.ok && result.data && isSupportedLocale(result.data)) {
         setLocaleState(result.data);
         setMessages(getMessages(result.data));
       }
@@ -33,8 +32,8 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof api()?.subscribe !== 'function') return;
-    const unsub = api().subscribe((event: { type: string; locale?: string }) => {
-      if (event.type === 'settings:locale-changed' && event.locale && isSupportedLocale(event.locale)) {
+    const unsub = api().subscribe((event) => {
+      if (event.type === 'settings:locale-changed' && isSupportedLocale(event.locale)) {
         setLocaleState(event.locale);
         setMessages(getMessages(event.locale));
       }
@@ -45,7 +44,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const setLocale = useCallback((newLocale: SupportedLocale) => {
     setLocaleState(newLocale);
     setMessages(getMessages(newLocale));
-    api().setSetting?.('locale', newLocale);
+    void api().setSetting('locale', newLocale);
   }, []);
 
   return (

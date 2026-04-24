@@ -5,8 +5,7 @@ import type { RunRecord } from '@core/shared/types';
 import { useRunLogs } from '../../hooks/use-run-logs';
 import { Badge } from '../ui/badge';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const api = () => window.capibara as any;
+const api = () => window.capibara;
 
 const MAX_DISPLAY_LINES = 500;
 const TRUNCATION_KEEP_HEAD = 50;
