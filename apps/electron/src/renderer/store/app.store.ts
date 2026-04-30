@@ -34,11 +34,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       const result = await api().getOrganizations();
       if (result.ok) {
         const orgs = result.data;
-        set((state) => ({
-          organizations: orgs,
-          currentOrgId: state.currentOrgId ?? orgs[0]?.id ?? null,
-          isLoading: false,
-        }));
+        set((state) => {
+          const stillValid = state.currentOrgId && orgs.some((o) => o.id === state.currentOrgId);
+          return {
+            organizations: orgs,
+            currentOrgId: stillValid ? state.currentOrgId : (orgs[0]?.id ?? null),
+            isLoading: false,
+          };
+        });
       } else {
         set({ isLoading: false });
       }

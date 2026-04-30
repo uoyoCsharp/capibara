@@ -8,14 +8,16 @@ interface OnboardingWizardProps {
   skipHealthCheck?: boolean;
   /** Whether this is a first-time onboarding (controls onboardingCompleted setting) */
   isFirstTime?: boolean;
+  /** Cancel handler — when provided, wizard renders a back/cancel affordance. First-time onboarding should omit this. */
+  onCancel?: () => void;
 }
 
-export function OnboardingWizard({ onComplete, skipHealthCheck = false, isFirstTime = true }: OnboardingWizardProps) {
+export function OnboardingWizard({ onComplete, skipHealthCheck = false, isFirstTime = true, onCancel }: OnboardingWizardProps) {
   const [step, setStep] = useState<'health' | 'naming'>(skipHealthCheck ? 'naming' : 'health');
 
   if (step === 'health') {
     return <HealthCheckStep onContinue={() => setStep('naming')} />;
   }
 
-  return <NamingTemplateStep onComplete={onComplete} isFirstTime={isFirstTime} />;
+  return <NamingTemplateStep onComplete={onComplete} isFirstTime={isFirstTime} onCancel={onCancel} />;
 }

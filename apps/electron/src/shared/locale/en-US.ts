@@ -32,6 +32,7 @@ export const enUS: LocaleMessages = {
     expand: 'Expand',
     close: 'Close',
     browse: 'Browse',
+    back: 'Back',
   },
 
   createOrg: {

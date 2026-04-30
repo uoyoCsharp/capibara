@@ -48,5 +48,9 @@ export function useOnboardingGate() {
     void loadOrganizations();
   }, [loadOrganizations]);
 
-  return { show, isFirstTime, openForNewWorkspace, markComplete };
+  const cancelNewWorkspace = useCallback(() => {
+    setShow(false);
+  }, []);
+
+  return { show, isFirstTime, openForNewWorkspace, markComplete, cancelNewWorkspace };
 }

@@ -40,6 +40,7 @@ export interface LocaleMessages {
     expand: string;
     close: string;
     browse: string;
+    back: string;
   };
 
   createOrg: {

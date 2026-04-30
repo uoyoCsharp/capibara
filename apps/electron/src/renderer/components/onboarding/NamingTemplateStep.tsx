@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, type ChangeEvent } from 'react';
 import {
+  ArrowLeft,
   ArrowRight,
   Star,
   FolderOpen,
@@ -20,12 +21,15 @@ type TemplateRecord = {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
+import { useAppStore } from '../../store/app.store';
 import logoImg from '../../assets/logo.png';
 
 interface NamingTemplateStepProps {
   onComplete: () => void;
   /** Whether this is a first-time onboarding (controls onboardingCompleted setting) */
   isFirstTime?: boolean;
+  /** Cancel handler — when provided, renders a back button and enables ESC to dismiss. */
+  onCancel?: () => void;
 }
 
 function countAgents(template: TemplateRecord): number {
@@ -37,7 +41,7 @@ function countAgents(template: TemplateRecord): number {
   return count;
 }
 
-export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTemplateStepProps) {
+export function NamingTemplateStep({ onComplete, isFirstTime = true, onCancel }: NamingTemplateStepProps) {
   const t = useT();
   const [name, setName] = useState('');
   const [workspace, setWorkspace] = useState('');
@@ -54,6 +58,15 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!onCancel) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !creating) onCancel();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onCancel, creating]);
 
   const handleBrowse = useCallback(async () => {
     const res = await api().selectFolder();
@@ -73,6 +86,7 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
         }
         if (res.data?.id) {
           await api().setSetting('currentOrgId', res.data.id);
+          useAppStore.getState().setCurrentOrgId(res.data.id);
         }
         onComplete();
       }
@@ -159,7 +173,13 @@ export function NamingTemplateStep({ onComplete, isFirstTime = true }: NamingTem
         </div>
 
         {/* Submit */}
-        <div className="flex justify-end">
+        <div className={cn('flex', onCancel ? 'justify-between' : 'justify-end')}>
+          {onCancel && (
+            <Button variant="ghost" onClick={onCancel} disabled={creating} size="lg">
+              <ArrowLeft size={16} className="mr-1.5" />
+              {t.common.back}
+            </Button>
+          )}
           <Button onClick={handleSubmit} disabled={!canSubmit} size="lg">
             {creating ? (
               <>

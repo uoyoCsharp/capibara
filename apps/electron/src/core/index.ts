@@ -2,7 +2,7 @@
 // This stub will be wired as the Electron main entry once the legacy
 // src/main/index.ts is retired. For now it validates structure compiles.
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import { join } from 'node:path';
 import { bootstrap, shutdown, getEventBroadcaster } from './bootstrap/composition-root';
 
@@ -12,11 +12,13 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: false,
     },
   });
+  mainWindow.setMenuBarVisibility(false);
 
   const broadcaster = getEventBroadcaster();
   broadcaster.setSendFn((event) => {
@@ -31,6 +33,7 @@ async function createWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null);
   await bootstrap();
   await createWindow();
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CaretUpDown, Check, Gear, Plus } from '@phosphor-icons/react';
 import type { SectionId } from '@core/shared/types';
 import { useT } from '../../hooks/use-locale';
+import { useAppStore } from '../../store/app.store';
 import { cn } from '../../lib/utils';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Separator } from '../ui/separator';
@@ -40,6 +41,7 @@ export function AvatarPopover({
     if (orgId === currentOrgId) return;
     try {
       await api().setSetting('currentOrgId', orgId);
+      useAppStore.getState().setCurrentOrgId(orgId);
     } catch { /* silent */ }
     setOpen(false);
   };

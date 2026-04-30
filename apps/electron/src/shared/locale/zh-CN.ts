@@ -32,6 +32,7 @@ export const zhCN: LocaleMessages = {
     expand: '展开',
     close: '关闭',
     browse: '浏览',
+    back: '返回',
   },
 
   createOrg: {

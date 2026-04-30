@@ -32,7 +32,7 @@ function AppContent() {
   const isLoading = useAppStore((s) => s.isLoading);
   const loadOrganizations = useAppStore((s) => s.loadOrganizations);
 
-  const { show: showOnboarding, isFirstTime, openForNewWorkspace, markComplete } = useOnboardingGate();
+  const { show: showOnboarding, isFirstTime, openForNewWorkspace, markComplete, cancelNewWorkspace } = useOnboardingGate();
 
   // One-time store initialization — each store.init() is idempotent.
   useEffect(() => {
@@ -65,6 +65,7 @@ function AppContent() {
         onComplete={markComplete}
         skipHealthCheck={!isFirstTime}
         isFirstTime={isFirstTime}
+        onCancel={isFirstTime ? undefined : cancelNewWorkspace}
       />
     );
   }
