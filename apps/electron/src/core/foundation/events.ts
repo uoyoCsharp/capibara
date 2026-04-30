@@ -157,25 +157,38 @@ export interface RunStatusPayload {
   status: string;
 }
 
-// Planning ─────────────────────────────────────────────────────
-export interface PlanTaskDraft {
+// Plan tree (task-scoped preview/eager decomposition) ────────────
+// Strict tree node — validated server-side by plan-tree-tools.
+export interface PlanTreeNode {
   type: string;
   title: string;
-  description?: string;
-  assigneeRoleId?: string | null;
-  children?: PlanTaskDraft[];
+  description: string;
+  assigneeRoleId: string;
+  children: PlanTreeNode[];
 }
-export interface PlanSubmittedPayload {
-  conversationId: string;
+
+export type PlanTreeMode = 'preview' | 'eager';
+
+export interface PlanTreeSubmittedPayload {
+  rootTaskId: string;
   orgId: string;
   roleId: string;
-  tasks: PlanTaskDraft[];
+  mode: PlanTreeMode;
+  tree: PlanTreeNode;
   submittedAt: string;
 }
-export interface PlanningPlanReadyPayload {
-  conversationId: string;
+
+export interface PlanTreeReadyPayload {
+  rootTaskId: string;
   orgId: string;
-  taskCount: number;
+  nodeCount: number;
+  maxDepth: number;
+}
+
+export interface PlanTreeDiscardedPayload {
+  rootTaskId: string;
+  orgId: string;
+  reason: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -220,9 +233,10 @@ export interface DomainEventMap {
   'run:assistant-text': RunAssistantTextPayload;
   'run:status': RunStatusPayload;
 
-  // Planning
-  'plan:submitted': PlanSubmittedPayload;
-  'planning:plan-ready': PlanningPlanReadyPayload;
+  // Plan tree (task-scoped preview/eager decomposition)
+  'plan-tree:submitted': PlanTreeSubmittedPayload;
+  'plan-tree:ready': PlanTreeReadyPayload;
+  'plan-tree:discarded': PlanTreeDiscardedPayload;
 }
 
 export type DomainEventType = keyof DomainEventMap;

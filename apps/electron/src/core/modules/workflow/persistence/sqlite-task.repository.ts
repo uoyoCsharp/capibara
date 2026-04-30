@@ -3,7 +3,7 @@ import { injectable } from 'tsyringe';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import { NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
-import type { Task, CreateTaskInput, TaskStatus, TaskPausedReason } from '../types/workflow.types';
+import type { Task, CreateTaskInput, TaskStatus, TaskPausedReason, PlanningMode } from '../types/workflow.types';
 
 interface TaskRow {
   id: string;
@@ -17,6 +17,7 @@ interface TaskRow {
   depth: number;
   artifact_paths: string | null;
   paused_reason: string | null;
+  planning_mode: string;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +35,7 @@ function toTask(row: TaskRow): Task {
     depth: row.depth,
     artifactPaths: row.artifact_paths ? (JSON.parse(row.artifact_paths) as string[]) : null,
     pausedReason: row.paused_reason as TaskPausedReason,
+    planningMode: row.planning_mode as PlanningMode,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -74,12 +76,13 @@ export class SqliteTaskRepository implements ITaskRepository {
   create(input: CreateTaskInput, depth: number): Task {
     const id = randomUUID();
     const now = new Date().toISOString();
+    const planningMode: PlanningMode = input.planningMode ?? 'layered';
     this.connection.getDb()
       .prepare(`
-        INSERT INTO tasks (id, org_id, parent_id, type, title, description, status, assignee_role_id, depth, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+        INSERT INTO tasks (id, org_id, parent_id, type, title, description, status, assignee_role_id, depth, planning_mode, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
       `)
-      .run(id, input.orgId, input.parentId, input.type, input.title, input.description, input.assigneeRoleId, depth, now, now);
+      .run(id, input.orgId, input.parentId, input.type, input.title, input.description, input.assigneeRoleId, depth, planningMode, now, now);
     return this.findById(id)!;
   }
 

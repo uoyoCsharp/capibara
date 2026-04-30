@@ -13,7 +13,6 @@ export interface LocaleMessages {
     dashboard: string;
     tasks: string;
     inbox: string;
-    planning: string;
     team: string;
     settings: string;
   };

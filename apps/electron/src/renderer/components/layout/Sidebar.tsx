@@ -6,7 +6,6 @@ import {
   Gear,
   CaretLeft,
   CaretRight,
-  TreeStructure,
 } from '@phosphor-icons/react';
 import { useEffect } from 'react';
 import type { SectionId } from '@core/shared/types';
@@ -37,7 +36,6 @@ const NAV_ITEM_DEFS: Array<{
   { id: 'dashboard', sectionKey: 'dashboard', icon: House },
   { id: 'tasks', sectionKey: 'tasks', icon: ListChecks },
   { id: 'inbox', sectionKey: 'inbox', icon: Tray },
-  { id: 'planning', sectionKey: 'planning' as keyof LocaleMessages['sections'], icon: TreeStructure },
   { id: 'team', sectionKey: 'team', icon: UsersThree },
   { id: 'settings', sectionKey: 'settings', icon: Gear },
 ];

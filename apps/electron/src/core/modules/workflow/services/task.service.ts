@@ -61,6 +61,15 @@ export class TaskService {
       throw new ValidationError(`Unknown task type: ${input.type}`);
     }
 
+    if (input.planningMode && input.planningMode !== 'layered') {
+      const typeDef = this.processEngine.getWorkItemType(input.orgId, input.type);
+      if (!typeDef?.canDecompose) {
+        throw new ValidationError(
+          `INVALID_PLANNING_MODE_FOR_TYPE: type '${input.type}' does not support planningMode '${input.planningMode}'`,
+        );
+      }
+    }
+
     const task = this.taskRepo.create(input, depth);
     this.eventPublisher.publish('task:created', {
       taskId: task.id,

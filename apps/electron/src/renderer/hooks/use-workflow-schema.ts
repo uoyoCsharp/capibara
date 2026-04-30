@@ -8,6 +8,7 @@ interface WorkItemType {
   isLeaf: boolean;
   allowedChildren: string[];
   allowedAtRoot: boolean;
+  canDecompose: boolean;
 }
 
 interface StatusDef {

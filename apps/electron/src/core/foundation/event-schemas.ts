@@ -95,33 +95,42 @@ const RunLogSchema = z.object({
 const RunAssistantTextSchema = z.object({ runId: z.string(), text: z.string() });
 const RunStatusSchema = z.object({ runId: z.string(), status: z.string() });
 
-// Planning ─────────────────────────────────────────────────────
-const PlanTaskDraftSchema: z.ZodType<{
+// Plan tree ─────────────────────────────────────────────────────
+// Strict shape for `plan-tree:submitted` (task-scoped preview/eager).
+const PlanTreeNodeSchema: z.ZodType<{
   type: string;
   title: string;
-  description?: string;
-  assigneeRoleId?: string | null;
-  children?: Array<z.infer<typeof PlanTaskDraftSchema>>;
+  description: string;
+  assigneeRoleId: string;
+  children: Array<z.infer<typeof PlanTreeNodeSchema>>;
 }> = z.lazy(() =>
   z.object({
-    type: z.string(),
-    title: z.string(),
-    description: z.string().optional(),
-    assigneeRoleId: z.string().nullable().optional(),
-    children: z.array(PlanTaskDraftSchema).optional(),
+    type: z.string().min(1),
+    title: z.string().min(1),
+    description: z.string().min(1),
+    assigneeRoleId: z.string().min(1),
+    children: z.array(PlanTreeNodeSchema),
   }),
 );
-const PlanSubmittedSchema = z.object({
-  conversationId: z.string(),
-  orgId: z.string(),
-  roleId: z.string(),
-  tasks: z.array(PlanTaskDraftSchema),
+
+const PlanTreeSubmittedSchema = z.object({
+  rootTaskId: z.string().min(1),
+  orgId: z.string().min(1),
+  roleId: z.string().min(1),
+  mode: z.enum(['preview', 'eager']),
+  tree: PlanTreeNodeSchema,
   submittedAt: z.string(),
 });
-const PlanningPlanReadySchema = z.object({
-  conversationId: z.string(),
+const PlanTreeReadySchema = z.object({
+  rootTaskId: z.string(),
   orgId: z.string(),
-  taskCount: z.number(),
+  nodeCount: z.number(),
+  maxDepth: z.number(),
+});
+const PlanTreeDiscardedSchema = z.object({
+  rootTaskId: z.string(),
+  orgId: z.string(),
+  reason: z.string().nullable(),
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -162,8 +171,9 @@ export const EVENT_SCHEMAS = {
   'run:assistant-text': RunAssistantTextSchema,
   'run:status': RunStatusSchema,
 
-  'plan:submitted': PlanSubmittedSchema,
-  'planning:plan-ready': PlanningPlanReadySchema,
+  'plan-tree:submitted': PlanTreeSubmittedSchema,
+  'plan-tree:ready': PlanTreeReadySchema,
+  'plan-tree:discarded': PlanTreeDiscardedSchema,
 } as const satisfies { [K in DomainEventType]: z.ZodType<DomainEventMap[K]> };
 
 export function parseEventPayload<T extends DomainEventType>(

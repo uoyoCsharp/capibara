@@ -3,6 +3,7 @@ import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { ProcessTemplateService } from '@core/modules/workflow/services/process-template.service';
+import type { PlanningService } from '@core/modules/planning/planning.service';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }
@@ -12,6 +13,7 @@ export function registerWorkflowHandlers(
   taskStateMachine: TaskStateMachine,
   processEngine: ProcessEngine,
   processTemplateService: ProcessTemplateService,
+  planningService: PlanningService,
 ): void {
   ipcMain.handle('capibara:task:list', async (_ev, orgId: string) => {
     try { return ok(taskService.findByOrgId(orgId)); }
@@ -44,6 +46,9 @@ export function registerWorkflowHandlers(
     try {
       const task = taskService.findById(taskId);
       if (!task) return err('NOT_FOUND', `Task not found: ${taskId}`);
+      if (planningService.getPendingTree(taskId)) {
+        return err('PENDING_PLAN_TREE', 'This task has a pending decomposition plan awaiting review. Approve or discard it first.');
+      }
       const category = processEngine.getStatusCategory(task.orgId, task.status);
       if (category !== 'initial') return err('INVALID_TRANSITION', `Task is not in initial status (current: ${task.status})`);
       const transitions = processEngine.getAvailableTransitions(task.orgId, task.status);

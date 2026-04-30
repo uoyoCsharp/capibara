@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RoleRecord } from '@core/shared/types';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -18,7 +18,10 @@ import { useT } from '../../hooks/use-locale';
 interface WorkItemType {
   name: string;
   label: string;
+  canDecompose?: boolean;
 }
+
+type PlanningMode = 'layered' | 'eager' | 'preview';
 
 interface TaskCreateModalProps {
   orgId: string;
@@ -33,6 +36,7 @@ interface TaskCreateModalProps {
     title: string;
     description: string;
     assigneeRoleId: string;
+    planningMode: PlanningMode;
   }) => void;
 }
 
@@ -50,7 +54,15 @@ export function TaskCreateModal({
   const [description, setDescription] = useState('');
   const [type, setType] = useState(defaultType);
   const [assigneeRoleId, setAssigneeRoleId] = useState<string | null>(null);
+  const [planningMode, setPlanningMode] = useState<PlanningMode>('layered');
   const [error, setError] = useState<string | null>(null);
+
+  const currentTypeDef = allowedTypes.find((t) => t.name === type);
+  const canDecompose = currentTypeDef?.canDecompose ?? false;
+
+  useEffect(() => {
+    setPlanningMode('layered');
+  }, [type]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +74,7 @@ export function TaskCreateModal({
       setError(t.taskCreate?.assigneeRequired ?? 'Assignee is required');
       return;
     }
+
     onSubmit({
       orgId,
       parentId,
@@ -69,6 +82,7 @@ export function TaskCreateModal({
       title: title.trim(),
       description: description.trim(),
       assigneeRoleId,
+      planningMode: canDecompose ? planningMode : 'layered',
     });
   };
 
@@ -151,6 +165,11 @@ export function TaskCreateModal({
             </Select>
           </div>
 
+          {/* Planning Mode — only for decomposable types */}
+          {canDecompose && (
+            <PlanningModeSelector value={planningMode} onChange={setPlanningMode} />
+          )}
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               {t.common?.cancel ?? 'Cancel'}
@@ -162,5 +181,63 @@ export function TaskCreateModal({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PlanningModeSelector({
+  value,
+  onChange,
+}: {
+  value: PlanningMode;
+  onChange: (v: PlanningMode) => void;
+}) {
+  const options: Array<{ id: PlanningMode; title: string; hint: string; disabled?: boolean }> = [
+    {
+      id: 'layered',
+      title: 'Layered',
+      hint: 'Propose & approve at each level (default).',
+    },
+    {
+      id: 'preview',
+      title: 'Preview Tree',
+      hint: 'AI drafts the full tree in one pass, you review then commit.',
+    },
+    {
+      id: 'eager',
+      title: 'Eager',
+      hint: 'AI decomposes all the way to leaves and persists immediately. NO human review.',
+    },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <Label>Decomposition Mode</Label>
+      <div className="space-y-1.5">
+        {options.map((opt) => (
+          <label
+            key={opt.id}
+            className={cn(
+              'flex items-start gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors',
+              value === opt.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/30',
+              opt.disabled && 'opacity-60 cursor-not-allowed',
+            )}
+          >
+            <input
+              type="radio"
+              name="planningMode"
+              value={opt.id}
+              checked={value === opt.id}
+              onChange={() => !opt.disabled && onChange(opt.id)}
+              disabled={opt.disabled}
+              className="mt-0.5"
+            />
+            <div className="flex-1">
+              <p className="font-medium text-foreground">{opt.title}</p>
+              <p className="text-xs text-muted-foreground">{opt.hint}</p>
+            </div>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -90,6 +90,8 @@ const migrations: Migration[] = [
           depth INTEGER NOT NULL DEFAULT 0,
           artifact_paths TEXT,
           paused_reason TEXT,
+          planning_mode TEXT NOT NULL DEFAULT 'layered'
+            CHECK (planning_mode IN ('layered','eager','preview')),
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -230,6 +232,38 @@ const migrations: Migration[] = [
 
         CREATE INDEX idx_outbox_unpublished ON outbox(created_at)
           WHERE published_at IS NULL;
+      `);
+    },
+  },
+  {
+    version: 2,
+    description: 'Add tasks.planning_mode for preview/eager decomposition',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE tasks ADD COLUMN planning_mode TEXT NOT NULL DEFAULT 'layered'
+          CHECK (planning_mode IN ('layered','eager','preview'));
+      `);
+    },
+  },
+  {
+    version: 3,
+    description: 'Mark legacy plan:submitted outbox rows as published — payload shape tightened, replay unsafe',
+    up: (db) => {
+      db.exec(`
+        UPDATE outbox
+           SET published_at = datetime('now')
+         WHERE published_at IS NULL
+           AND event_type = 'plan:submitted';
+      `);
+    },
+  },
+  {
+    version: 4,
+    description: 'Drop legacy planning event rows — plan:submitted + planning:plan-ready no longer exist in schema',
+    up: (db) => {
+      db.exec(`
+        DELETE FROM outbox
+         WHERE event_type IN ('plan:submitted', 'planning:plan-ready');
       `);
     },
   },

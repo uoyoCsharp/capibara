@@ -5,7 +5,6 @@ import { InboxPage } from '../inbox/InboxPage';
 import { TeamPage } from '../team/TeamPage';
 import { SettingsPage } from '../settings/SettingsPage';
 import { OrgSettingsPage } from '../organization/OrgSettingsPage';
-import { PlanningPage } from '../planning/PlanningPage';
 
 interface SectionRouterProps {
   activeSection: SectionId;
@@ -29,8 +28,6 @@ export function SectionRouter({ activeSection, orgId, onWorkspaceDeleted }: Sect
       return <TeamPage orgId={orgId} />;
     case 'settings':
       return <SettingsPage />;
-    case 'planning':
-      return <PlanningPage orgId={orgId} />;
     case 'workspace':
       return <OrgSettingsPage orgId={orgId} onDeleted={onWorkspaceDeleted} />;
     default:

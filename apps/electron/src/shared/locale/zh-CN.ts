@@ -5,7 +5,6 @@ export const zhCN: LocaleMessages = {
     dashboard: '仪表盘',
     tasks: '任务',
     inbox: '收件箱',
-    planning: '规划',
     team: '团队',
     settings: '设置',
   },

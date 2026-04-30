@@ -22,7 +22,7 @@ import { registerOrganizationHandlers } from '@core/ipc-handlers/organization.ha
 import { registerWorkflowHandlers } from '@core/ipc-handlers/workflow.handlers';
 import { registerConversationHandlers } from '@core/ipc-handlers/conversation.handlers';
 import { registerExecutionHandlers } from '@core/ipc-handlers/execution.handlers';
-import { registerPlanningHandlers } from '@core/ipc-handlers/planning.handlers';
+import { registerPlanTreeHandlers } from '@core/ipc-handlers/plan-tree.handlers';
 import { registerSystemHandlers } from '@core/ipc-handlers/system.handlers';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { WorkerService } from '@core/modules/execution/workers/worker-service';
@@ -74,7 +74,10 @@ export async function bootstrap(): Promise<void> {
   const execution = registerExecutionModule(sqliteConn, eventBus, eventPublisher, logger, config, workerPath);
 
   const planning = registerPlanningModule(
-    conversation.conversationService, workflow.taskService, eventBus, eventPublisher, logger,
+    workflow.taskService,
+    workflow.taskStateMachine, workflow.processEngine,
+    sqliteConn,
+    eventBus, eventPublisher, logger,
   );
 
   const mcp = registerMcpModule(
@@ -115,7 +118,7 @@ export async function bootstrap(): Promise<void> {
   const notification = registerNotificationModule(eventBus, logger);
 
   registerOrganizationHandlers(org.organizationService, org.roleService, org.skillService, org.orgTemplateService, logger);
-  registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService);
+  registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService, planning.planningService);
   registerConversationHandlers(conversation.conversationService);
   registerExecutionHandlers(
     execution.runRepo,
@@ -123,7 +126,7 @@ export async function bootstrap(): Promise<void> {
     execution.costTracker,
     execution.fileLogService,
   );
-  registerPlanningHandlers(planning.planningService);
+  registerPlanTreeHandlers(planning.planningService);
   registerSystemHandlers(sqliteConn);
 
   workerService = execution.workerService;
@@ -133,6 +136,13 @@ export async function bootstrap(): Promise<void> {
   eventBroadcaster = notification.eventBroadcaster;
   mcpIpcServer = mcp.mcpIpcServer;
   mcpConfigGen = mcp.mcpConfigGen;
+
+  planning.planningService.setWaker({
+    tryWake: (roleId, orgId, reason, taskId) => taskOrchestrator.tryWake(roleId, orgId, reason, taskId),
+  });
+  prompt.runContext.setFeedbackProvider({
+    consumePendingFeedback: (rootTaskId) => planning.planningService.consumePendingFeedback(rootTaskId),
+  });
 
   org.skillSeeder.seedAll();
   org.orgTemplateService.loadTemplatesFromDisk();

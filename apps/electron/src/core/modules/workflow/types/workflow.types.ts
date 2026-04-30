@@ -4,6 +4,8 @@ export type StatusCategory = 'initial' | 'active' | 'approval' | 'terminal';
 
 export type TaskPausedReason = 'approval' | null;
 
+export type PlanningMode = 'layered' | 'eager' | 'preview';
+
 export interface Task {
   id: string;
   orgId: string;
@@ -16,6 +18,7 @@ export interface Task {
   depth: number;
   artifactPaths: string[] | null;
   pausedReason: TaskPausedReason;
+  planningMode: PlanningMode;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,6 +106,7 @@ export interface CreateTaskInput {
   title: string;
   description: string;
   assigneeRoleId: string | null;
+  planningMode?: PlanningMode;
 }
 
 export interface BatchCreateTaskInput {

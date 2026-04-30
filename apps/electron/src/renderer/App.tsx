@@ -8,7 +8,7 @@ import { useTaskStore } from './store/task.store';
 import { useRunStore } from './store/run.store';
 import { useConversationStore } from './store/conversation.store';
 import { useOrganizationStore } from './store/organization.store';
-import { usePlanningStore } from './store/planning.store';
+import { usePlanTreeStore } from './store/plan-tree.store';
 import { Sidebar } from './components/layout/Sidebar';
 import { SectionRouter } from './components/layout/SectionRouter';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
@@ -41,7 +41,7 @@ function AppContent() {
     useRunStore.getState().init();
     useConversationStore.getState().init();
     useOrganizationStore.getState().init();
-    usePlanningStore.getState().init();
+    usePlanTreeStore.getState().init();
   }, []);
 
   // Propagate current org to domain stores so their event filters work.

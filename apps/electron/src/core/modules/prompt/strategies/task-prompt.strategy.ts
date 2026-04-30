@@ -86,6 +86,8 @@ function buildToolGuidance(scenario: PromptScenario): string {
   const tools: Record<PromptScenario, string[]> = {
     propose_decomposition: ['capibara_ask_question', 'capibara_context'],
     execute_decomposition: ['capibara_task_create_child', 'capibara_task_transition', 'capibara_context'],
+    preview_decomposition: ['capibara_plan_submit_tree', 'capibara_context'],
+    eager_decomposition: ['capibara_plan_submit_tree', 'capibara_context'],
     execute_leaf: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
     revision: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
     review_approve: ['capibara_task_transition', 'capibara_context'],
@@ -97,6 +99,7 @@ function buildToolGuidance(scenario: PromptScenario): string {
   const toolDescriptions: Record<string, string> = {
     capibara_task_transition: 'Transition the current task to a new status (see Workflow Status section for available transitions)',
     capibara_task_create_child: 'Create a child task under the current task',
+    capibara_plan_submit_tree: 'Submit the full decomposition tree for this task in a single call (root + all descendants). The tool validates structure server-side.',
     capibara_ask_question: 'Ask a question to your supervisor or a peer',
     capibara_context: 'Query additional context about tasks, roles, or the organization',
   };
@@ -145,7 +148,7 @@ function buildWorkflowSchema(ctx: PromptContext): string | null {
   );
 }
 
-function buildInstructions(_ctx: PromptContext, scenario: PromptScenario): string {
+function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string {
   const instructions: Record<PromptScenario, string> = {
     propose_decomposition:
       'Analyze the task requirements and create a decomposition proposal. ' +
@@ -156,6 +159,25 @@ function buildInstructions(_ctx: PromptContext, scenario: PromptScenario): strin
       'Your decomposition proposal has been approved. ' +
       'Use `capibara_task_create_child` to create all planned child tasks. ' +
       'Then use `capibara_task_transition` to advance this task to the next appropriate status (refer to the Workflow Status section for available transitions).',
+    preview_decomposition:
+      'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
+      'Structural rules:\n' +
+      '- The tree root MUST match the current task (same type).\n' +
+      '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema).\n' +
+      '- Every leaf node\'s type MUST have `isLeaf=true`; every non-leaf MUST have at least one child.\n' +
+      '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
+      '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
+      'Do NOT call `capibara_task_create_child`. The user will review the tree and approve it before any task is persisted.',
+    eager_decomposition:
+      'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
+      'Structural rules:\n' +
+      '- The tree root MUST match the current task (same type).\n' +
+      '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema).\n' +
+      '- Every leaf node\'s type MUST have `isLeaf=true`; every non-leaf MUST have at least one child.\n' +
+      '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
+      '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
+      'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct. ' +
+      'Do NOT call `capibara_task_create_child`.',
     execute_leaf:
       'Execute this task directly. ' +
       'When finished, use `capibara_task_transition` to advance to the next status (refer to the Workflow Status section). ' +
@@ -181,7 +203,13 @@ function buildInstructions(_ctx: PromptContext, scenario: PromptScenario): strin
       'Use `capibara_task_transition` to advance when ready.',
   };
 
-  return `# Instructions\n\n${instructions[scenario]}`;
+  const feedback = ctx.task.pendingFeedback;
+  const feedbackSection =
+    feedback && (scenario === 'preview_decomposition' || scenario === 'eager_decomposition')
+      ? `\n\n## User Feedback on Previous Tree\n\nThe user reviewed your previous submission and left this feedback. Incorporate it when you re-submit:\n\n> ${feedback.replace(/\n/g, '\n> ')}\n\nSubmit a revised tree via \`capibara_plan_submit_tree\`.`
+      : '';
+
+  return `# Instructions\n\n${instructions[scenario]}${feedbackSection}`;
 }
 
 function buildOrgInstructions(ctx: PromptContext): string | null {
@@ -195,7 +223,11 @@ function buildOrgContext(ctx: PromptContext, scenario: PromptScenario): string |
   const { parentRole, subordinates, peers } = ctx.orgHierarchy;
   if (!parentRole && subordinates.length === 0 && peers.length === 0) return null;
 
-  const showSkills = scenario === 'propose_decomposition' || scenario === 'execute_decomposition';
+  const showSkills =
+    scenario === 'propose_decomposition' ||
+    scenario === 'execute_decomposition' ||
+    scenario === 'preview_decomposition' ||
+    scenario === 'eager_decomposition';
   const lines: string[] = [];
 
   if (parentRole) {
@@ -245,7 +277,12 @@ function buildExecutionSequence(ctx: PromptContext): string | null {
 }
 
 function buildTypeSchema(ctx: PromptContext, scenario: PromptScenario): string | null {
-  if (scenario !== 'propose_decomposition' && scenario !== 'execute_decomposition') return null;
+  const needsSchema =
+    scenario === 'propose_decomposition' ||
+    scenario === 'execute_decomposition' ||
+    scenario === 'preview_decomposition' ||
+    scenario === 'eager_decomposition';
+  if (!needsSchema) return null;
   if (!ctx.typeSchema || ctx.typeSchema.allTypes.length === 0) return null;
 
   const tableHeader = '| Type | Label | Leaf | Allowed Children |\n|------|-------|:----:|-----------------|';

@@ -3,6 +3,8 @@ import type { PromptContext } from '../types/prompt.types';
 export type PromptScenario =
   | 'propose_decomposition'
   | 'execute_decomposition'
+  | 'preview_decomposition'
+  | 'eager_decomposition'
   | 'execute_leaf'
   | 'revision'
   | 'review_approve'
@@ -18,11 +20,18 @@ export function resolveScenario(ctx: PromptContext): PromptScenario {
   if (wakeReason === 'task_completed') return 'task_completed';
 
   if (wakeReason === 'conversation_reply' && ctx.task.isDecomposable) {
+    if (ctx.task.planningMode === 'preview') return 'preview_decomposition';
+    if (ctx.task.planningMode === 'eager') return 'eager_decomposition';
     return 'execute_decomposition';
   }
   if (wakeReason === 'conversation_reply') return 'conversation_reply';
 
   if (wakeReason === 'review_approve') return 'review_approve';
 
-  return ctx.task.isDecomposable ? 'propose_decomposition' : 'execute_leaf';
+  if (ctx.task.isDecomposable) {
+    if (ctx.task.planningMode === 'preview') return 'preview_decomposition';
+    if (ctx.task.planningMode === 'eager') return 'eager_decomposition';
+    return 'propose_decomposition';
+  }
+  return 'execute_leaf';
 }

@@ -11,9 +11,8 @@ export const SECTION_SHORTCUT_MAP: Readonly<Record<string, SectionId>> = {
   '1': 'dashboard',
   '2': 'tasks',
   '3': 'inbox',
-  '4': 'planning',
-  '5': 'team',
-  '6': 'settings',
+  '4': 'team',
+  '5': 'settings',
 };
 
 function isTypingTarget(target: EventTarget | null): boolean {

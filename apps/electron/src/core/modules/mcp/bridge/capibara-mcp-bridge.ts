@@ -77,17 +77,24 @@ const TOOLS = [
     },
   },
   {
-    name: 'capibara_plan_tasks',
-    description: 'Submit a structured task plan for human confirmation.',
+    name: 'capibara_plan_submit_tree',
+    description:
+      'Submit the complete decomposition tree for the current task in a single call. ' +
+      'The server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, ' +
+      'node count ≤500, depth ≤10) before accepting. In preview mode the tree waits for human approval; ' +
+      'in eager mode it is persisted immediately.',
     inputSchema: {
       type: 'object',
       properties: {
-        conversationId: { type: 'string', description: 'Planning conversation ID' },
-        orgId: { type: 'string', description: 'Organization ID' },
-        roleId: { type: 'string', description: 'Planning role ID' },
-        tasks: { type: 'array', description: 'Array of task definitions forming the plan tree', items: { type: 'object' } },
+        rootTaskId: { type: 'string', description: 'The current task ID (must be the root of the submitted tree)' },
+        tree: {
+          type: 'object',
+          description:
+            'The decomposition tree. The root node must match the current task type. ' +
+            'Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
+        },
       },
-      required: ['conversationId', 'orgId', 'roleId', 'tasks'],
+      required: ['rootTaskId', 'tree'],
     },
   },
 ];

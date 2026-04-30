@@ -8,7 +8,7 @@ import type {
   ConversationRecord,
   ConversationMessageRecord,
   CostSummaryRecord,
-  PendingPlanRecord,
+  PendingTreeRecord,
   DesktopEvent,
 } from './types';
 
@@ -112,20 +112,20 @@ export interface CapibaraApi {
   // ─── Cost ────────────────────────────────────────────────────────
   getCostSummary: (orgId: string) => Promise<DesktopResult<CostSummaryRecord>>;
 
-  // ─── Planning ────────────────────────────────────────────────────
-  startPlanning: (
-    orgId: string,
-    roleId: string,
-    message: string,
-  ) => Promise<DesktopResult<{ conversationId: string }>>;
-  sendPlanningMessage: (conversationId: string, message: string) => Promise<DesktopResult<null>>;
-  getPendingPlan: (conversationId: string) => Promise<DesktopResult<PendingPlanRecord | null>>;
-  confirmPlan: (
-    conversationId: string,
-    orgId: string,
-    parentTaskId: string | null,
+  // ─── Plan tree (task-scoped preview/eager decomposition) ─────────
+  getPlanTree: (rootTaskId: string) => Promise<DesktopResult<PendingTreeRecord | null>>;
+  approvePlanTree: (
+    rootTaskId: string,
+    expectedVersion?: number,
   ) => Promise<DesktopResult<null>>;
-  discardPlan: (conversationId: string) => Promise<DesktopResult<null>>;
+  discardPlanTree: (
+    rootTaskId: string,
+    reason?: string,
+  ) => Promise<DesktopResult<null>>;
+  refinePlanTree: (
+    rootTaskId: string,
+    feedback: string,
+  ) => Promise<DesktopResult<null>>;
 
   // ─── Settings ────────────────────────────────────────────────────
   getSetting: (key: string) => Promise<DesktopResult<string | null>>;

@@ -74,15 +74,14 @@ const api = {
   // Cost
   getCostSummary: (orgId: string) => ipcRenderer.invoke('capibara:cost:summary', orgId),
 
-  // Planning
-  startPlanning: (orgId: string, roleId: string, message: string) =>
-    ipcRenderer.invoke('capibara:planning:start', orgId, roleId, message),
-  sendPlanningMessage: (conversationId: string, message: string) =>
-    ipcRenderer.invoke('capibara:planning:send-message', conversationId, message),
-  getPendingPlan: (conversationId: string) => ipcRenderer.invoke('capibara:planning:get-pending', conversationId),
-  confirmPlan: (conversationId: string, orgId: string, parentTaskId: string | null) =>
-    ipcRenderer.invoke('capibara:planning:confirm', conversationId, orgId, parentTaskId),
-  discardPlan: (conversationId: string) => ipcRenderer.invoke('capibara:planning:discard', conversationId),
+  // Plan tree (task-scoped preview/eager decomposition)
+  getPlanTree: (rootTaskId: string) => ipcRenderer.invoke('capibara:plan-tree:get', rootTaskId),
+  approvePlanTree: (rootTaskId: string, expectedVersion?: number) =>
+    ipcRenderer.invoke('capibara:plan-tree:approve', rootTaskId, expectedVersion),
+  discardPlanTree: (rootTaskId: string, reason?: string) =>
+    ipcRenderer.invoke('capibara:plan-tree:discard', rootTaskId, reason),
+  refinePlanTree: (rootTaskId: string, feedback: string) =>
+    ipcRenderer.invoke('capibara:plan-tree:refine', rootTaskId, feedback),
 
   // Settings
   getSetting: (key: string) => ipcRenderer.invoke('capibara:settings:get', key),

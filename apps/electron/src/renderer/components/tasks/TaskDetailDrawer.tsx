@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Trash, UserCircle, Play, XCircle } from '@phosphor-icons/react';
+import { useEffect, useState } from 'react';
+import { Trash, UserCircle, Play, XCircle, TreeStructure } from '@phosphor-icons/react';
 import type { TaskRecord, RoleRecord } from '@core/shared/types';
+import { usePlanTreeStore } from '../../store/plan-tree.store';
+import { PlanTreeReview } from '../planning/PlanTreeReview';
 import {
   Sheet,
   SheetContent,
@@ -41,6 +43,46 @@ interface TaskDetailDrawerProps {
   onClose: () => void;
 }
 
+function PendingPlanTreeBanner({
+  rootTaskId,
+  onOpen,
+}: {
+  rootTaskId: string;
+  onOpen: () => void;
+}) {
+  const loadPlanTree = usePlanTreeStore((s) => s.loadPlanTree);
+  const pending = usePlanTreeStore((s) => s.byRootTaskId[rootTaskId] ?? null);
+
+  useEffect(() => {
+    void loadPlanTree(rootTaskId);
+  }, [rootTaskId, loadPlanTree]);
+
+  if (!pending) return null;
+
+  const count = (function count(node: { children: { children: unknown[] }[] }): number {
+    let c = 1;
+    for (const child of node.children) c += count(child as { children: { children: unknown[] }[] });
+    return c;
+  })(pending.tree);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full flex items-start gap-3 rounded-md border border-primary/40 bg-primary/5 px-3 py-2.5 text-left hover:bg-primary/10 transition-colors"
+    >
+      <TreeStructure size={18} className="text-primary mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground">AI has drafted a decomposition plan</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {count} node{count === 1 ? '' : 's'} pending review · version {pending.version}
+        </p>
+      </div>
+      <span className="text-xs text-primary shrink-0 self-center">Review →</span>
+    </button>
+  );
+}
+
 export function TaskDetailDrawer({
   task,
   roles,
@@ -56,6 +98,9 @@ export function TaskDetailDrawer({
 }: TaskDetailDrawerProps) {
   const t = useT() as AnyLocale;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPlanReview, setShowPlanReview] = useState(false);
+
+  const pendingTree = usePlanTreeStore((s) => s.byRootTaskId[task.id] ?? null);
 
   const assignee = roles.find((r) => r.id === task.assigneeRoleId);
   const terminal = isTerminal(task.status);
@@ -85,6 +130,10 @@ export function TaskDetailDrawer({
               </TabsList>
 
               <TabsContent value="details" className="space-y-6">
+                {task.planningMode !== 'layered' && (
+                  <PendingPlanTreeBanner rootTaskId={task.id} onOpen={() => setShowPlanReview(true)} />
+                )}
+
                 {/* Status & Type */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className={statusColor}>
@@ -93,6 +142,11 @@ export function TaskDetailDrawer({
                   <Badge variant="secondary">
                     {typeLabel(task.type)}
                   </Badge>
+                  {task.planningMode !== 'layered' && (
+                    <Badge variant="outline" className="text-xs">
+                      {task.planningMode === 'preview' ? 'Preview plan' : 'Eager plan'}
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Assignee */}
@@ -187,6 +241,25 @@ export function TaskDetailDrawer({
               {t.common?.close ?? 'Close'}
             </Button>
           </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={showPlanReview} onOpenChange={(open) => !open && setShowPlanReview(false)}>
+        <SheetContent side="right" className="w-[640px] p-0 sm:max-w-[640px]">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Plan tree review</SheetTitle>
+            <SheetDescription>Review the decomposition plan drafted by the AI.</SheetDescription>
+          </SheetHeader>
+          {pendingTree ? (
+            <PlanTreeReview
+              pending={pendingTree}
+              roles={roles}
+              typeLabel={typeLabel}
+              onClose={() => setShowPlanReview(false)}
+            />
+          ) : (
+            <div className="p-6 text-sm text-muted-foreground">No pending plan.</div>
+          )}
         </SheetContent>
       </Sheet>
 

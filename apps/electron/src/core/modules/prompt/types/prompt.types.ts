@@ -1,4 +1,5 @@
 import type { WakeReason } from '@core/modules/execution/types/execution.types';
+import type { PlanningMode } from '@core/modules/workflow/types/workflow.types';
 
 export type { WakeReason };
 
@@ -13,6 +14,8 @@ export interface PromptContext {
     orgId: string;
     hasChildren: boolean;
     isDecomposable: boolean;
+    planningMode: PlanningMode;
+    pendingFeedback: string | null;
     allowedChildTypes: string[];
     isTerminal: boolean;
     parentChain: Array<{ id: string; type: string; title: string; status: string }>;

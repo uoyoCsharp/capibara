@@ -8,7 +8,6 @@ export type SectionId =
   | 'inbox'
   | 'team'
   | 'settings'
-  | 'planning'
   | 'workspace';
 
 export interface OrganizationRecord {
@@ -67,6 +66,8 @@ export interface TaskRecord {
   assigneeRoleId: string | null;
   depth: number;
   artifactPaths: string[] | null;
+  pausedReason: 'approval' | null;
+  planningMode: 'layered' | 'eager' | 'preview';
   createdAt: string;
   updatedAt: string;
 }
@@ -123,12 +124,22 @@ export interface CostSummaryRecord {
   totalCost: number;
 }
 
-export interface PendingPlanRecord {
-  conversationId: string;
+export interface PlanDraftNodeRecord {
+  type: string;
+  title: string;
+  description: string;
+  assigneeRoleId: string;
+  children: PlanDraftNodeRecord[];
+}
+
+export interface PendingTreeRecord {
+  rootTaskId: string;
   orgId: string;
   roleId: string;
-  tasks: unknown[];
+  mode: 'preview' | 'eager';
+  tree: PlanDraftNodeRecord;
   submittedAt: string;
+  version: number;
 }
 
 export type DesktopEvent =
@@ -147,6 +158,7 @@ export type DesktopEvent =
   | { type: 'conversation:response-needed'; orgId: string; conversationId: string }
   | { type: 'scheduler:paused'; cancelledRunCount: number }
   | { type: 'scheduler:resumed' }
-  | { type: 'planning:plan-ready'; orgId: string; taskCount: number }
+  | { type: 'plan-tree:ready'; orgId: string; rootTaskId: string; nodeCount: number; maxDepth: number }
+  | { type: 'plan-tree:discarded'; orgId: string; rootTaskId: string }
   | { type: 'notification'; title: string; body: string }
   | { type: 'settings:locale-changed'; locale: string };

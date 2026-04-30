@@ -5,7 +5,6 @@ export const enUS: LocaleMessages = {
     dashboard: 'Dashboard',
     tasks: 'Tasks',
     inbox: 'Inbox',
-    planning: 'Planning',
     team: 'Team',
     settings: 'Settings',
   },

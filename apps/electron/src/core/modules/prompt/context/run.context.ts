@@ -8,8 +8,14 @@ import type { IConversationRepository } from '@core/modules/conversation/interfa
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { PromptContext, ConversationPromptContext, WakeReason } from '../types/prompt.types';
 
+export interface IPlanTreeFeedbackProvider {
+  consumePendingFeedback(rootTaskId: string): string | null;
+}
+
 @injectable()
 export class RunContext {
+  private feedbackProvider: IPlanTreeFeedbackProvider | null = null;
+
   constructor(
     private readonly taskRepo: ITaskRepository,
     private readonly roleRepo: IRoleRepository,
@@ -19,6 +25,10 @@ export class RunContext {
     private readonly processEngine: ProcessEngine,
     private readonly orgRepo: IOrganizationRepository,
   ) {}
+
+  setFeedbackProvider(provider: IPlanTreeFeedbackProvider): void {
+    this.feedbackProvider = provider;
+  }
 
   buildForTask(taskId: string, roleId: string, locale: string, wakeReason: WakeReason): PromptContext | null {
     const task = this.taskRepo.findById(taskId);
@@ -118,6 +128,11 @@ export class RunContext {
         orgId: task.orgId,
         hasChildren: children.length > 0,
         isDecomposable: typeDef?.canDecompose ?? false,
+        planningMode: task.planningMode,
+        pendingFeedback:
+          (typeDef?.canDecompose && (task.planningMode === 'preview' || task.planningMode === 'eager'))
+            ? (this.feedbackProvider?.consumePendingFeedback(task.id) ?? null)
+            : null,
         allowedChildTypes: typeDef?.allowedChildren ?? [],
         isTerminal: statusCategory === 'terminal',
         parentChain: parentChain.map((t) => ({ id: t.id, type: t.type, title: t.title, status: t.status })),

@@ -19,7 +19,8 @@ export type DesktopEvent =
   | { type: 'conversation:response-needed'; orgId: string; conversationId: string }
   | { type: 'scheduler:paused'; cancelledRunCount: number }
   | { type: 'scheduler:resumed' }
-  | { type: 'planning:plan-ready'; orgId: string; taskCount: number }
+  | { type: 'plan-tree:ready'; orgId: string; rootTaskId: string; nodeCount: number; maxDepth: number }
+  | { type: 'plan-tree:discarded'; orgId: string; rootTaskId: string }
   | { type: 'notification'; title: string; body: string };
 
 type SendFn = (event: DesktopEvent) => void;
@@ -87,8 +88,18 @@ const EVENT_MAPPINGS = [
         : { type: 'conversation:response-needed', orgId: p.orgId, conversationId: p.conversationId },
   }),
   mapping({
-    domain: 'planning:plan-ready',
-    map: (p) => ({ type: 'planning:plan-ready', orgId: p.orgId, taskCount: p.taskCount }),
+    domain: 'plan-tree:ready',
+    map: (p) => ({
+      type: 'plan-tree:ready',
+      orgId: p.orgId,
+      rootTaskId: p.rootTaskId,
+      nodeCount: p.nodeCount,
+      maxDepth: p.maxDepth,
+    }),
+  }),
+  mapping({
+    domain: 'plan-tree:discarded',
+    map: (p) => ({ type: 'plan-tree:discarded', orgId: p.orgId, rootTaskId: p.rootTaskId }),
   }),
 ] as const;
 

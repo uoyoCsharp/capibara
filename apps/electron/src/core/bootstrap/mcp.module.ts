@@ -12,8 +12,8 @@ import { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
 import { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-generator';
 import { createTaskTools } from '@core/modules/mcp/handlers/task-tools';
 import { createConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
-import { createPlanningTools } from '@core/modules/mcp/handlers/planning-tools';
 import { createContextTools } from '@core/modules/mcp/handlers/context-tools';
+import { createPlanTreeTools } from '@core/modules/mcp/handlers/plan-tree-tools';
 
 export function registerMcpModule(
   logger: ILogger,
@@ -34,7 +34,7 @@ export function registerMcpModule(
   for (const tool of createConversationTools(conversationService)) {
     toolRegistry.register(tool);
   }
-  for (const tool of createPlanningTools(eventPublisher)) {
+  for (const tool of createPlanTreeTools(taskService, processEngine, roleService, eventPublisher)) {
     toolRegistry.register(tool);
   }
   for (const tool of createContextTools(taskService, roleService)) {
