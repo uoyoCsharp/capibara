@@ -10,6 +10,7 @@ export function registerPlanTreeHandlers(planningService: PlanningService): void
       const pending = planningService.getPendingTree(rootTaskId);
       if (!pending) return ok(null);
       return ok({
+        id: pending.id,
         rootTaskId: pending.rootTaskId,
         orgId: pending.orgId,
         roleId: pending.roleId,
@@ -17,6 +18,11 @@ export function registerPlanTreeHandlers(planningService: PlanningService): void
         tree: pending.tree,
         submittedAt: pending.submittedAt,
         version: pending.version,
+        status: pending.status,
+        pendingFeedback: pending.pendingFeedback,
+        conversationId: pending.conversationId,
+        expiresAt: pending.expiresAt,
+        reviewedAt: pending.reviewedAt,
       });
     } catch (e) { return err('INTERNAL', String(e)); }
   });

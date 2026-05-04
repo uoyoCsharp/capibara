@@ -191,6 +191,12 @@ export interface PlanTreeDiscardedPayload {
   reason: string | null;
 }
 
+export interface PlanTreeApprovedPayload {
+  rootTaskId: string;
+  orgId: string;
+  nodeCount: number;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // DomainEventMap — single source of truth for event type → payload
 // ═══════════════════════════════════════════════════════════════
@@ -237,6 +243,7 @@ export interface DomainEventMap {
   'plan-tree:submitted': PlanTreeSubmittedPayload;
   'plan-tree:ready': PlanTreeReadyPayload;
   'plan-tree:discarded': PlanTreeDiscardedPayload;
+  'plan-tree:approved': PlanTreeApprovedPayload;
 }
 
 export type DomainEventType = keyof DomainEventMap;

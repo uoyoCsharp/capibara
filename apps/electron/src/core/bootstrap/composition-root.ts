@@ -78,6 +78,7 @@ export async function bootstrap(): Promise<void> {
     workflow.taskStateMachine, workflow.processEngine,
     sqliteConn,
     eventBus, eventPublisher, logger,
+    conversation.conversationService,
   );
 
   const mcp = registerMcpModule(

@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { ChatCircleDots, ArrowBendUpLeft, CheckCircle, XCircle, CircleNotch } from '@phosphor-icons/react';
+import { ChatCircleDots, ArrowBendUpLeft, CheckCircle, XCircle, CircleNotch, TreeStructure } from '@phosphor-icons/react';
 import { MarkdownContent } from '../ui/markdown-content';
 import { useConversationStore } from '../../store/conversation.store';
 import { useOrganizationStore } from '../../store/organization.store';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
-import type { ConversationRecord, ConversationMessageRecord, RoleRecord, DesktopEvent } from '@core/shared/types';
+import type { ConversationRecord, ConversationMessageRecord, RoleRecord, DesktopEvent, PendingTreeRecord } from '@core/shared/types';
+import { PlanTreeReview } from '../planning/PlanTreeReview';
+import { usePlanTreeStore } from '../../store/plan-tree.store';
 
 interface InboxPageProps {
   orgId: string | null;
@@ -24,6 +26,7 @@ const TYPE_LABELS: Record<string, string> = {
   inquiry: 'Inquiry',
   planning: 'Planning',
   adhoc: 'Chat',
+  plan_review: 'Plan Review',
 };
 
 function roleName(id: string | null, roles: RoleRecord[]): string {
@@ -170,6 +173,9 @@ export function InboxPage({ orgId }: InboxPageProps) {
 
       <div className="flex-1 flex flex-col">
         {selected ? (
+          selected.type === 'plan_review' ? (
+            <InboxPlanReviewPanel conversation={selected} roles={roles} />
+          ) : (
           <>
             <div className="p-4 border-b border-border flex items-center justify-between">
               <div>
@@ -230,6 +236,7 @@ export function InboxPage({ orgId }: InboxPageProps) {
               </div>
             )}
           </>
+          )
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
             <ChatCircleDots size={48} weight="duotone" />
@@ -258,13 +265,59 @@ export function partitionConversations(all: ConversationRecord[]): {
     }
     if (!['active', 'waiting', 'escalated'].includes(c.state)) continue;
 
-    if (c.respondentType === 'human' || (c.type === 'planning' || c.type === 'adhoc')) {
+    if (c.respondentType === 'human' || c.type === 'planning' || c.type === 'adhoc' || c.type === 'plan_review') {
       blocked.push(c);
     } else {
       monitoring.push(c);
     }
   }
   return { blocked, monitoring, resolved };
+}
+
+function InboxPlanReviewPanel({ conversation, roles }: { conversation: ConversationRecord; roles: RoleRecord[] }) {
+  const rootTaskId = (conversation.metadata as { rootTaskId?: string }).rootTaskId;
+  const loadPlanTree = usePlanTreeStore((s) => s.loadPlanTree);
+  const pending = usePlanTreeStore((s) => rootTaskId ? s.byRootTaskId[rootTaskId] ?? null : null);
+  const loading = usePlanTreeStore((s) => rootTaskId ? s.loading[rootTaskId] ?? false : false);
+
+  useEffect(() => {
+    if (rootTaskId) void loadPlanTree(rootTaskId);
+  }, [rootTaskId, loadPlanTree]);
+
+  if (!rootTaskId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+        <TreeStructure size={48} weight="duotone" />
+        <p>Missing rootTaskId in conversation metadata</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <CircleNotch size={24} className="animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!pending) {
+    const isTerminal = ['completed', 'cancelled', 'resolved'].includes(conversation.state);
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+        <TreeStructure size={48} weight="duotone" />
+        <p>{isTerminal ? 'This plan review has been completed.' : 'No pending plan tree found.'}</p>
+      </div>
+    );
+  }
+
+  return (
+    <PlanTreeReview
+      pending={pending}
+      roles={roles}
+      typeLabel={(name) => TYPE_LABELS[name] ?? name}
+    />
+  );
 }
 
 function SectionLabel({ title, count, tone }: { title: string; count: number; tone: 'warning' | 'info' | 'neutral' }) {

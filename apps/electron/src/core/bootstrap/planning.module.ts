@@ -7,7 +7,9 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import { PlanningService } from '@core/modules/planning/planning.service';
+import { SqlitePendingPlanTreeRepository } from '@core/modules/planning/persistence/sqlite-pending-plan-tree.repository';
 
 export function registerPlanningModule(
   taskService: TaskService,
@@ -17,7 +19,10 @@ export function registerPlanningModule(
   eventBus: IEventBus,
   eventPublisher: IEventPublisher,
   logger: ILogger,
+  conversationService: ConversationService,
 ): { planningService: PlanningService } {
+  const pendingPlanTreeRepo = new SqlitePendingPlanTreeRepository(connection);
+
   const planningService = new PlanningService(
     taskService,
     taskStateMachine,
@@ -26,6 +31,8 @@ export function registerPlanningModule(
     eventBus,
     eventPublisher,
     logger,
+    pendingPlanTreeRepo,
+    conversationService,
   );
 
   container.register(PLANNING_SERVICE_TOKEN, { useValue: planningService });

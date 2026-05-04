@@ -95,12 +95,11 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
     // Cost
     getCostSummary: vi.fn(),
 
-    // Planning
-    startPlanning: vi.fn(),
-    sendPlanningMessage: vi.fn().mockResolvedValue(ok(null)),
-    getPendingPlan: vi.fn().mockResolvedValue(ok(null)),
-    confirmPlan: vi.fn().mockResolvedValue(ok(null)),
-    discardPlan: vi.fn().mockResolvedValue(ok(null)),
+    // Plan Tree
+    getPlanTree: vi.fn().mockResolvedValue(ok(null)),
+    approvePlanTree: vi.fn().mockResolvedValue(ok(null)),
+    discardPlanTree: vi.fn().mockResolvedValue(ok(null)),
+    refinePlanTree: vi.fn().mockResolvedValue(ok(null)),
 
     // Settings
     getSetting: vi.fn().mockResolvedValue(ok(null)),

@@ -21,6 +21,7 @@ export type DesktopEvent =
   | { type: 'scheduler:resumed' }
   | { type: 'plan-tree:ready'; orgId: string; rootTaskId: string; nodeCount: number; maxDepth: number }
   | { type: 'plan-tree:discarded'; orgId: string; rootTaskId: string }
+  | { type: 'plan-tree:approved'; orgId: string; rootTaskId: string }
   | { type: 'notification'; title: string; body: string };
 
 type SendFn = (event: DesktopEvent) => void;
@@ -100,6 +101,10 @@ const EVENT_MAPPINGS = [
   mapping({
     domain: 'plan-tree:discarded',
     map: (p) => ({ type: 'plan-tree:discarded', orgId: p.orgId, rootTaskId: p.rootTaskId }),
+  }),
+  mapping({
+    domain: 'plan-tree:approved',
+    map: (p) => ({ type: 'plan-tree:approved', orgId: p.orgId, rootTaskId: p.rootTaskId }),
   }),
 ] as const;
 

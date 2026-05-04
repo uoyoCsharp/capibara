@@ -1,4 +1,4 @@
-export type ConversationType = 'inquiry' | 'planning' | 'adhoc';
+export type ConversationType = 'inquiry' | 'planning' | 'adhoc' | 'plan_review';
 export type ConversationState = 'active' | 'waiting' | 'resolved' | 'escalated' | 'timed_out' | 'cancelled' | 'completed';
 export type MessageIntent = 'question' | 'reply' | 'escalation' | 'resolution' | 'general';
 export type AuthorType = 'ai' | 'human' | 'system';
@@ -8,6 +8,7 @@ import type {
   InquiryMetadata,
   PlanningMetadata,
   AdhocMetadata,
+  PlanReviewMetadata,
 } from './conversation-metadata.schema';
 
 interface ConversationBase {
@@ -30,7 +31,8 @@ interface ConversationBase {
 export type Conversation =
   | (ConversationBase & { type: 'inquiry'; metadata: InquiryMetadata })
   | (ConversationBase & { type: 'planning'; metadata: PlanningMetadata })
-  | (ConversationBase & { type: 'adhoc'; metadata: AdhocMetadata });
+  | (ConversationBase & { type: 'adhoc'; metadata: AdhocMetadata })
+  | (ConversationBase & { type: 'plan_review'; metadata: PlanReviewMetadata });
 
 export interface ConversationMessage {
   id: string;
@@ -56,7 +58,8 @@ interface CreateConversationBase {
 export type CreateConversationInput =
   | (CreateConversationBase & { type: 'inquiry'; metadata?: Partial<InquiryMetadata> })
   | (CreateConversationBase & { type: 'planning'; metadata?: Partial<PlanningMetadata> })
-  | (CreateConversationBase & { type: 'adhoc'; metadata?: Partial<AdhocMetadata> });
+  | (CreateConversationBase & { type: 'adhoc'; metadata?: Partial<AdhocMetadata> })
+  | (CreateConversationBase & { type: 'plan_review'; metadata?: Partial<PlanReviewMetadata> });
 
 export interface CreateMessageInput {
   conversationId: string;

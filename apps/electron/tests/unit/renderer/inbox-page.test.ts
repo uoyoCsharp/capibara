@@ -86,4 +86,46 @@ describe('partitionConversations', () => {
     expect(monitoring).toHaveLength(1);
     expect(resolved).toHaveLength(1);
   });
+
+  it('IP-01: plan_review with AI respondent → blocked', () => {
+    const { blocked, monitoring } = partitionConversations([
+      conv('1', { type: 'plan_review', respondentType: 'ai', state: 'active' }),
+    ]);
+    expect(blocked).toHaveLength(1);
+    expect(monitoring).toHaveLength(0);
+  });
+
+  it('IP-02: plan_review with human respondent → blocked', () => {
+    const { blocked } = partitionConversations([
+      conv('1', { type: 'plan_review', respondentType: 'human', state: 'waiting' }),
+    ]);
+    expect(blocked).toHaveLength(1);
+  });
+
+  it('IP-03: completed plan_review → resolved', () => {
+    const { resolved } = partitionConversations([
+      conv('1', { type: 'plan_review', state: 'completed' }),
+    ]);
+    expect(resolved).toHaveLength(1);
+  });
+
+  it('IP-04: cancelled plan_review → resolved', () => {
+    const { resolved } = partitionConversations([
+      conv('1', { type: 'plan_review', state: 'cancelled' }),
+    ]);
+    expect(resolved).toHaveLength(1);
+  });
+
+  it('IP-05: mixed workload with plan_review partitions correctly', () => {
+    const input: ConversationRecord[] = [
+      conv('1', { type: 'plan_review', state: 'active', respondentType: 'human' }),
+      conv('2', { state: 'waiting', respondentType: 'ai' }),
+      conv('3', { type: 'plan_review', state: 'completed' }),
+      conv('4', { type: 'adhoc', state: 'active' }),
+    ];
+    const { blocked, monitoring, resolved } = partitionConversations(input);
+    expect(blocked).toHaveLength(2); // plan_review active + adhoc
+    expect(monitoring).toHaveLength(1); // inquiry AI
+    expect(resolved).toHaveLength(1); // completed plan_review
+  });
 });

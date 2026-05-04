@@ -92,7 +92,7 @@ export interface RunRecord {
 export interface ConversationRecord {
   id: string;
   orgId: string;
-  type: 'inquiry' | 'planning' | 'adhoc';
+  type: 'inquiry' | 'planning' | 'adhoc' | 'plan_review';
   state: 'active' | 'waiting' | 'resolved' | 'escalated' | 'timed_out' | 'cancelled' | 'completed';
   initiatorRoleId: string;
   respondentRoleId: string | null;
@@ -133,6 +133,7 @@ export interface PlanDraftNodeRecord {
 }
 
 export interface PendingTreeRecord {
+  id: string;
   rootTaskId: string;
   orgId: string;
   roleId: string;
@@ -140,6 +141,11 @@ export interface PendingTreeRecord {
   tree: PlanDraftNodeRecord;
   submittedAt: string;
   version: number;
+  status: 'active' | 'approved' | 'refining' | 'discarded' | 'expired';
+  pendingFeedback: string | null;
+  conversationId: string | null;
+  expiresAt: string;
+  reviewedAt: string | null;
 }
 
 export type DesktopEvent =
@@ -160,5 +166,6 @@ export type DesktopEvent =
   | { type: 'scheduler:resumed' }
   | { type: 'plan-tree:ready'; orgId: string; rootTaskId: string; nodeCount: number; maxDepth: number }
   | { type: 'plan-tree:discarded'; orgId: string; rootTaskId: string }
+  | { type: 'plan-tree:approved'; orgId: string; rootTaskId: string }
   | { type: 'notification'; title: string; body: string }
   | { type: 'settings:locale-changed'; locale: string };

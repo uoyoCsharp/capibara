@@ -10,7 +10,7 @@ interface Migration {
 const migrations: Migration[] = [
   {
     version: 1,
-    description: 'Greenfield baseline — all tables, including outbox and concurrency constraints',
+    description: 'Greenfield baseline schema (single migration)',
     up: (db) => {
       db.exec(`
         -- ═══════════════════════════════════════════════
@@ -117,7 +117,7 @@ const migrations: Migration[] = [
         CREATE TABLE conversations (
           id TEXT PRIMARY KEY,
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-          type TEXT NOT NULL CHECK(type IN ('inquiry', 'planning', 'adhoc')),
+          type TEXT NOT NULL CHECK(type IN ('inquiry', 'planning', 'adhoc', 'plan_review')),
           state TEXT NOT NULL CHECK(state IN ('active', 'waiting', 'resolved', 'escalated', 'timed_out', 'cancelled', 'completed')),
           initiator_role_id TEXT NOT NULL,
           respondent_role_id TEXT,
@@ -232,38 +232,37 @@ const migrations: Migration[] = [
 
         CREATE INDEX idx_outbox_unpublished ON outbox(created_at)
           WHERE published_at IS NULL;
-      `);
-    },
-  },
-  {
-    version: 2,
-    description: 'Add tasks.planning_mode for preview/eager decomposition',
-    up: (db) => {
-      db.exec(`
-        ALTER TABLE tasks ADD COLUMN planning_mode TEXT NOT NULL DEFAULT 'layered'
-          CHECK (planning_mode IN ('layered','eager','preview'));
-      `);
-    },
-  },
-  {
-    version: 3,
-    description: 'Mark legacy plan:submitted outbox rows as published — payload shape tightened, replay unsafe',
-    up: (db) => {
-      db.exec(`
-        UPDATE outbox
-           SET published_at = datetime('now')
-         WHERE published_at IS NULL
-           AND event_type = 'plan:submitted';
-      `);
-    },
-  },
-  {
-    version: 4,
-    description: 'Drop legacy planning event rows — plan:submitted + planning:plan-ready no longer exist in schema',
-    up: (db) => {
-      db.exec(`
-        DELETE FROM outbox
-         WHERE event_type IN ('plan:submitted', 'planning:plan-ready');
+
+        -- ═══════════════════════════════════════════════
+        -- 14. Pending Plan Trees (persistent preview/eager decomposition)
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE pending_plan_trees (
+          id TEXT PRIMARY KEY,
+          root_task_id TEXT NOT NULL,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          role_id TEXT NOT NULL,
+          mode TEXT NOT NULL CHECK (mode IN ('preview', 'eager')),
+          tree_json TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'active'
+            CHECK (status IN ('active', 'approved', 'refining', 'discarded', 'expired')),
+          pending_feedback TEXT,
+          conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+          submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+          expires_at TEXT NOT NULL,
+          reviewed_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Only one active/refining pending per root task
+        CREATE UNIQUE INDEX idx_pending_plan_trees_active
+          ON pending_plan_trees(root_task_id)
+          WHERE status IN ('active', 'refining');
+
+        CREATE INDEX idx_pending_plan_trees_org ON pending_plan_trees(org_id, status);
+        CREATE INDEX idx_pending_plan_trees_expires ON pending_plan_trees(expires_at)
+          WHERE status IN ('active', 'refining');
       `);
     },
   },

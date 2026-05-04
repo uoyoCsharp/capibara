@@ -41,7 +41,7 @@ const TaskCompletedSchema = z.object({
 });
 
 // Conversation ─────────────────────────────────────────────────
-const ConversationTypeSchema = z.enum(['inquiry', 'planning', 'adhoc']);
+const ConversationTypeSchema = z.enum(['inquiry', 'planning', 'adhoc', 'plan_review']);
 const ConversationCreatedSchema = z.object({
   conversationId: z.string(),
   orgId: z.string(),
@@ -132,6 +132,11 @@ const PlanTreeDiscardedSchema = z.object({
   orgId: z.string(),
   reason: z.string().nullable(),
 });
+const PlanTreeApprovedSchema = z.object({
+  rootTaskId: z.string(),
+  orgId: z.string(),
+  nodeCount: z.number(),
+});
 
 // ═══════════════════════════════════════════════════════════════
 // Master registry — one schema per DomainEventType
@@ -174,6 +179,7 @@ export const EVENT_SCHEMAS = {
   'plan-tree:submitted': PlanTreeSubmittedSchema,
   'plan-tree:ready': PlanTreeReadySchema,
   'plan-tree:discarded': PlanTreeDiscardedSchema,
+  'plan-tree:approved': PlanTreeApprovedSchema,
 } as const satisfies { [K in DomainEventType]: z.ZodType<DomainEventMap[K]> };
 
 export function parseEventPayload<T extends DomainEventType>(

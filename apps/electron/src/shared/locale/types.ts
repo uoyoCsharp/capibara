@@ -119,6 +119,15 @@ export interface LocaleMessages {
     goToConversations: string;
   };
 
+  planReview: {
+    title: string;
+    previewHint: string;
+    eagerHint: string;
+    noTree: string;
+    completed: string;
+    missingRootTaskId: string;
+  };
+
   onboarding: {
     healthCheck: string;
     healthCheckDesc: string;

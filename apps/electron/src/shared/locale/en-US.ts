@@ -111,6 +111,15 @@ export const enUS: LocaleMessages = {
     goToConversations: 'Go to Conversations',
   },
 
+  planReview: {
+    title: 'Review Decomposition Plan',
+    previewHint: 'Preview mode — approve to persist.',
+    eagerHint: 'Eager mode.',
+    noTree: 'No pending plan tree found.',
+    completed: 'This plan review has been completed.',
+    missingRootTaskId: 'Missing rootTaskId in conversation metadata.',
+  },
+
   onboarding: {
     healthCheck: 'Environment Health Check',
     healthCheckDesc: "Let's make sure everything is ready for a smooth experience.",

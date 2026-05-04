@@ -50,7 +50,7 @@ function extractHandlerChannels(): Set<string> {
     'core/ipc-handlers/organization.handlers.ts',
     'core/ipc-handlers/conversation.handlers.ts',
     'core/ipc-handlers/execution.handlers.ts',
-    'core/ipc-handlers/planning.handlers.ts',
+    'core/ipc-handlers/plan-tree.handlers.ts',
     'core/ipc-handlers/system.handlers.ts',
   ];
   const all = new Set<string>();

@@ -111,6 +111,15 @@ export const zhCN: LocaleMessages = {
     goToConversations: '前往对话管理',
   },
 
+  planReview: {
+    title: '审核分解计划',
+    previewHint: '预览模式 — 批准后生效。',
+    eagerHint: '即时模式。',
+    noTree: '未找到待审核的计划树。',
+    completed: '此计划审核已完成。',
+    missingRootTaskId: '对话元数据中缺少 rootTaskId。',
+  },
+
   onboarding: {
     healthCheck: '环境自检',
     healthCheckDesc: '确保一切就绪，享受流畅体验。',

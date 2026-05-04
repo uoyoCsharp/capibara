@@ -8,6 +8,7 @@ import {
   InquiryMetadataSchema,
   PlanningMetadataSchema,
   AdhocMetadataSchema,
+  PlanReviewMetadataSchema,
   emptyMetadataFor,
   parseConversationMetadata,
 } from '../types/conversation-metadata.schema';
@@ -58,6 +59,8 @@ function toConversation(row: ConvRow): Conversation {
       return { ...base, type, metadata: PlanningMetadataSchema.parse(rawMeta) };
     case 'adhoc':
       return { ...base, type, metadata: AdhocMetadataSchema.parse(rawMeta) };
+    case 'plan_review':
+      return { ...base, type, metadata: PlanReviewMetadataSchema.parse(rawMeta) };
   }
 }
 
@@ -111,8 +114,7 @@ export class SqliteConversationRepository implements IConversationRepository {
   create(input: CreateConversationInput): Conversation {
     const id = randomUUID();
     const now = new Date().toISOString();
-    const defaults = emptyMetadataFor(input.type);
-    const metadata = parseConversationMetadata(input.type, { ...defaults, ...(input.metadata ?? {}) });
+    const metadata = parseConversationMetadata(input.type, input.metadata ?? emptyMetadataFor(input.type));
     this.connection.getDb()
       .prepare(`
         INSERT INTO conversations (id, org_id, type, state, initiator_role_id, respondent_role_id, respondent_type, task_id, parent_conversation_id, external_session_id, metadata, created_at, updated_at)

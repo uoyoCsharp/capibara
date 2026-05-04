@@ -30,13 +30,18 @@ export interface PlanTreeValidationError {
 function isDraftNode(v: unknown): v is PlanTreeNode {
   if (typeof v !== 'object' || v === null) return false;
   const o = v as Record<string, unknown>;
-  return (
-    typeof o.type === 'string' && o.type.length > 0 &&
-    typeof o.title === 'string' && o.title.length > 0 &&
-    typeof o.description === 'string' && o.description.length > 0 &&
-    typeof o.assigneeRoleId === 'string' && o.assigneeRoleId.length > 0 &&
-    Array.isArray(o.children) && o.children.every(isDraftNode)
-  );
+  if (
+    typeof o.type !== 'string' || o.type.length === 0 ||
+    typeof o.title !== 'string' || o.title.length === 0 ||
+    typeof o.description !== 'string' ||
+    typeof o.assigneeRoleId !== 'string' || o.assigneeRoleId.length === 0
+  ) return false;
+  // Tolerate missing children (treat as leaf with [])
+  if (o.children === undefined || o.children === null) {
+    o.children = [];
+    return true;
+  }
+  return Array.isArray(o.children) && o.children.every(isDraftNode);
 }
 
 function countNodes(tree: PlanTreeNode): number {

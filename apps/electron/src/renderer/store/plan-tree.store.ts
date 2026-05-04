@@ -9,14 +9,12 @@ interface PlanTreeState {
   loading: Record<string, boolean>;
   refining: Record<string, boolean>;
   lastError: Record<string, string | null>;
-  readyBanner: { rootTaskId: string; nodeCount: number; maxDepth: number } | null;
   isInitialized: boolean;
 
   loadPlanTree: (rootTaskId: string) => Promise<void>;
   approve: (rootTaskId: string) => Promise<boolean>;
   discard: (rootTaskId: string, reason?: string) => Promise<boolean>;
   refine: (rootTaskId: string, feedback: string) => Promise<boolean>;
-  clearBanner: () => void;
   init: () => void;
 }
 
@@ -27,7 +25,6 @@ export const usePlanTreeStore = create<PlanTreeState>((set, get) => ({
   loading: {},
   refining: {},
   lastError: {},
-  readyBanner: null,
   isInitialized: false,
 
   loadPlanTree: async (rootTaskId) => {
@@ -95,26 +92,31 @@ export const usePlanTreeStore = create<PlanTreeState>((set, get) => ({
     return false;
   },
 
-  clearBanner: () => set({ readyBanner: null }),
-
   init: () => {
     if (get().isInitialized) return;
     set({ isInitialized: true });
     if (unsubscribe) unsubscribe();
     unsubscribe = subscribeToEvents({
       'plan-tree:ready': (e) => {
-        set({ readyBanner: { rootTaskId: e.rootTaskId, nodeCount: e.nodeCount, maxDepth: e.maxDepth } });
         void get().loadPlanTree(e.rootTaskId);
       },
       'plan-tree:discarded': (e) => {
         set((s) => {
           const nextByRoot = { ...s.byRootTaskId };
           delete nextByRoot[e.rootTaskId];
-          const banner = s.readyBanner && s.readyBanner.rootTaskId === e.rootTaskId ? null : s.readyBanner;
           return {
             byRootTaskId: nextByRoot,
             refining: { ...s.refining, [e.rootTaskId]: false },
-            readyBanner: banner,
+          };
+        });
+      },
+      'plan-tree:approved': (e) => {
+        set((s) => {
+          const nextByRoot = { ...s.byRootTaskId };
+          delete nextByRoot[e.rootTaskId];
+          return {
+            byRootTaskId: nextByRoot,
+            refining: { ...s.refining, [e.rootTaskId]: false },
           };
         });
       },

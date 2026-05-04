@@ -151,6 +151,40 @@ export class ConversationService {
     return conv;
   }
 
+  /**
+   * Create a plan_review conversation for inbox-driven tree review.
+   * respondentType is 'human' since the user must approve/refine/discard.
+   */
+  createPlanReview(
+    orgId: string,
+    initiatorRoleId: string,
+    rootTaskId: string,
+    pendingPlanId: string,
+    currentVersion: number,
+  ): Conversation {
+    const conv = this.convRepo.create({
+      orgId,
+      type: 'plan_review',
+      initiatorRoleId,
+      respondentRoleId: null,
+      respondentType: 'human',
+      taskId: rootTaskId,
+      metadata: { pendingPlanId, rootTaskId, currentVersion },
+    });
+
+    this.msgRepo.create({
+      conversationId: conv.id,
+      authorRoleId: initiatorRoleId,
+      authorType: 'ai',
+      content: `Decomposition plan submitted (version ${currentVersion}). Awaiting review.`,
+      intent: 'general',
+    });
+
+    this.emitEvent('conversation:created', { conversationId: conv.id, orgId, type: 'plan_review' });
+
+    return conv;
+  }
+
   addMessage(conversationId: string, input: CreateMessageInput): ConversationMessage {
     const conv = this.convRepo.findById(conversationId);
     if (!conv) throw new NotFoundError('Conversation', conversationId);
