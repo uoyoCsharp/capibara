@@ -111,6 +111,16 @@ export class TaskOrchestrator {
     this.logger.info('Task status changed', { taskId, from, to, assigneeRoleId });
     if (!assigneeRoleId) return;
 
+    const category = this.processEngine.getStatusCategory(orgId, to);
+    if (category !== 'active') {
+      this.logger.debug('Skipping wake for non-active status transition', {
+        taskId,
+        to,
+        category,
+      });
+      return;
+    }
+
     const task = this.taskRepo.findById(taskId);
     if (task?.pausedReason) {
       this.logger.debug('Task is paused, skipping wake', { taskId, pausedReason: task.pausedReason });

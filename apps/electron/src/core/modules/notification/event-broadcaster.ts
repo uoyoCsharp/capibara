@@ -77,6 +77,7 @@ const EVENT_MAPPINGS = [
   }),
   mapping({ domain: 'conversation:created', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId }) }),
   mapping({ domain: 'conversation:message-added', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId }) }),
+  mapping({ domain: 'conversation:completed', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId }) }),
   mapping({
     domain: 'conversation:resolved',
     map: () => null,

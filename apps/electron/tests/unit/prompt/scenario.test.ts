@@ -68,4 +68,27 @@ describe('resolveScenario', () => {
     const ctx = createCtx({ wakeReason: 'review_approve' });
     expect(resolveScenario(ctx)).toBe('review_approve');
   });
+
+  it('terminal task status → terminal_noop', () => {
+    const ctx = createCtx({
+      wakeReason: 'task_assigned',
+      task: { status: 'done', isDecomposable: true },
+    });
+    expect(resolveScenario(ctx)).toBe('terminal_noop');
+  });
+
+  it('terminal workflow category → terminal_noop', () => {
+    const ctx = createCtx({
+      wakeReason: 'conversation_reply',
+      task: { status: 'in_progress', isDecomposable: true },
+    });
+    ctx.workflowSchema = {
+      currentStatus: { name: 'done', label: 'Done', category: 'terminal' },
+      availableTransitions: [],
+      allStatuses: [],
+      allTransitions: [],
+      terminalStatuses: ['done', 'cancelled'],
+    };
+    expect(resolveScenario(ctx)).toBe('terminal_noop');
+  });
 });

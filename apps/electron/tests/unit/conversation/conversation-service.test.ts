@@ -499,11 +499,12 @@ describe('ConversationService', () => {
   });
 
   describe('complete', () => {
-    it('transitions state and logs event', () => {
+    it('transitions state, logs event, and emits completed event', () => {
       vi.mocked(convRepo.findById).mockReturnValue(createConv({ state: 'active' }));
       service.complete('conv-1');
       expect(convRepo.updateState).toHaveBeenCalledWith('conv-1', 'completed');
       expect(eventLogger.log).toHaveBeenCalledWith('conv-1', 'completed');
+      eventBus.assertEmitted('conversation:completed');
     });
   });
 

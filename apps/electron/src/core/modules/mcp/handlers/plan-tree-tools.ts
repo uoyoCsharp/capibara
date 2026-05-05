@@ -10,6 +10,7 @@ export const MAX_TREE_DEPTH = 10;
 
 export type PlanTreeValidationCode =
   | 'ROOT_TASK_NOT_FOUND'
+  | 'ROOT_TASK_TERMINAL'
   | 'TOOL_NOT_ALLOWED_IN_MODE'
   | 'ROOT_TYPE_MISMATCH'
   | 'UNKNOWN_WORK_ITEM_TYPE'
@@ -30,18 +31,26 @@ export interface PlanTreeValidationError {
 function isDraftNode(v: unknown): v is PlanTreeNode {
   if (typeof v !== 'object' || v === null) return false;
   const o = v as Record<string, unknown>;
-  if (
-    typeof o.type !== 'string' || o.type.length === 0 ||
-    typeof o.title !== 'string' || o.title.length === 0 ||
-    typeof o.description !== 'string' ||
-    typeof o.assigneeRoleId !== 'string' || o.assigneeRoleId.length === 0
-  ) return false;
-  // Tolerate missing children (treat as leaf with [])
-  if (o.children === undefined || o.children === null) {
-    o.children = [];
-    return true;
-  }
-  return Array.isArray(o.children) && o.children.every(isDraftNode);
+  return (
+    typeof o.type === 'string' && o.type.length > 0 &&
+    typeof o.title === 'string' && o.title.length > 0 &&
+    typeof o.description === 'string' &&
+    typeof o.assigneeRoleId === 'string' && o.assigneeRoleId.length > 0 &&
+    ((o.children === undefined || o.children === null) ||
+      (Array.isArray(o.children) && o.children.every(isDraftNode)))
+  );
+}
+
+function normalizeDraftNode(v: unknown): PlanTreeNode {
+  const o = v as Record<string, unknown>;
+  const rawChildren = Array.isArray(o.children) ? o.children : [];
+  return {
+    type: o.type as string,
+    title: o.title as string,
+    description: o.description as string,
+    assigneeRoleId: o.assigneeRoleId as string,
+    children: rawChildren.map((c) => normalizeDraftNode(c)),
+  };
 }
 
 function countNodes(tree: PlanTreeNode): number {
@@ -177,11 +186,19 @@ export function createPlanTreeTools(
             message: 'Tree does not match required shape. Each node must include type, title, description, assigneeRoleId, children[].',
           };
         }
-        const tree = rawTree;
+        const tree = normalizeDraftNode(rawTree);
 
         const rootTask = taskService.findById(rootTaskId);
         if (!rootTask) {
           return { error: 'ROOT_TASK_NOT_FOUND', message: `Root task "${rootTaskId}" not found.` };
+        }
+
+        const rootStatusCategory = processEngine.getStatusCategory(rootTask.orgId, rootTask.status);
+        if (rootStatusCategory === 'terminal') {
+          return {
+            error: 'ROOT_TASK_TERMINAL',
+            message: `Task "${rootTaskId}" is in terminal status "${rootTask.status}" and cannot be decomposed.`,
+          };
         }
 
         const mode: PlanTreeMode | null =
@@ -232,4 +249,4 @@ export function createPlanTreeTools(
   ];
 }
 
-export const __testing__ = { countNodes, measureDepth, isDraftNode };
+export const __testing__ = { countNodes, measureDepth, isDraftNode, normalizeDraftNode };

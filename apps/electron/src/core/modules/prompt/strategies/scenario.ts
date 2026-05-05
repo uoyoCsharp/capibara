@@ -1,6 +1,7 @@
 import type { PromptContext } from '../types/prompt.types';
 
 export type PromptScenario =
+  | 'terminal_noop'
   | 'propose_decomposition'
   | 'execute_decomposition'
   | 'preview_decomposition'
@@ -14,6 +15,11 @@ export type PromptScenario =
 
 export function resolveScenario(ctx: PromptContext): PromptScenario {
   const { wakeReason } = ctx;
+
+  const statusCategory = ctx.workflowSchema?.currentStatus.category;
+  if (statusCategory === 'terminal' || ctx.task.status === 'done' || ctx.task.status === 'cancelled') {
+    return 'terminal_noop';
+  }
 
   if (wakeReason === 'review_revise') return 'revision';
   if (wakeReason === 'retry_failed') return 'retry_failed';

@@ -216,8 +216,11 @@ export class ConversationService {
   }
 
   complete(conversationId: string): void {
+    const conv = this.convRepo.findById(conversationId);
+    if (!conv) throw new NotFoundError('Conversation', conversationId);
     this.transitionState(conversationId, 'completed');
     this.eventLogger.log(conversationId, 'completed');
+    this.emitEvent('conversation:completed', { conversationId, orgId: conv.orgId });
   }
 
   escalate(conversationId: string, newRespondentRoleId: string): void {

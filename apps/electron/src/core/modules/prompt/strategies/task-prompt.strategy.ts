@@ -84,6 +84,7 @@ function buildIdBindings(ctx: PromptContext): string {
 
 function buildToolGuidance(scenario: PromptScenario): string {
   const tools: Record<PromptScenario, string[]> = {
+    terminal_noop: ['capibara_context'],
     propose_decomposition: ['capibara_ask_question', 'capibara_context'],
     execute_decomposition: ['capibara_task_create_child', 'capibara_task_transition', 'capibara_context'],
     preview_decomposition: ['capibara_plan_submit_tree', 'capibara_context'],
@@ -150,6 +151,10 @@ function buildWorkflowSchema(ctx: PromptContext): string | null {
 
 function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string {
   const instructions: Record<PromptScenario, string> = {
+    terminal_noop:
+      'This task is already in a terminal status. ' +
+      'Do NOT call `capibara_plan_submit_tree`, `capibara_task_create_child`, or `capibara_task_transition`. ' +
+      'Treat this run as a no-op and provide a brief completion note only.',
     propose_decomposition:
       'Analyze the task requirements and create a decomposition proposal. ' +
       'Use `capibara_ask_question` to submit your proposal to your supervisor for review. ' +
@@ -163,19 +168,21 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
       'Structural rules:\n' +
       '- The tree root MUST match the current task (same type).\n' +
-      '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema).\n' +
+      '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema). A type whose name does NOT appear in the parent\'s Allowed Children list is INVALID, even if it is non-leaf.\n' +
       '- Every leaf node\'s type MUST have `isLeaf=true`; every non-leaf MUST have at least one child.\n' +
       '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
+      '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
       'Do NOT call `capibara_task_create_child`. The user will review the tree and approve it before any task is persisted.',
     eager_decomposition:
       'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
       'Structural rules:\n' +
       '- The tree root MUST match the current task (same type).\n' +
-      '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema).\n' +
+      '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema). A type whose name does NOT appear in the parent\'s Allowed Children list is INVALID, even if it is non-leaf.\n' +
       '- Every leaf node\'s type MUST have `isLeaf=true`; every non-leaf MUST have at least one child.\n' +
       '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
+      '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
       'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct. ' +
       'Do NOT call `capibara_task_create_child`.',
     execute_leaf:
@@ -298,7 +305,21 @@ function buildTypeSchema(ctx: PromptContext, scenario: PromptScenario): string |
     currentInfo = `\n\nYour current task type is **${def.label}** (\`${def.name}\`). You can decompose it into: ${childTypes}.`;
   }
 
-  return `# Work Item Type Schema\n\n${tableHeader}\n${rows}${currentInfo}`;
+  // Build explicit nesting chain to prevent models from guessing invalid hierarchies
+  const nonLeafTypes = ctx.typeSchema.allTypes.filter((t) => !t.isLeaf);
+  let nestingNote = '';
+  if (nonLeafTypes.length > 0) {
+    const chains: string[] = [];
+    for (const t of nonLeafTypes) {
+      const childrenStr = t.allowedChildren.join(', ');
+      chains.push(`${t.name} → [${childrenStr}]`);
+    }
+    nestingNote =
+      `\n\n**Nesting rules (strict):** ${chains.join(' | ')}. ` +
+      `A type NOT listed in its parent's Allowed Children column is FORBIDDEN — even if it is non-leaf.`;
+  }
+
+  return `# Work Item Type Schema\n\n${tableHeader}\n${rows}${currentInfo}${nestingNote}`;
 }
 
 function buildLanguage(ctx: PromptContext): string | null {

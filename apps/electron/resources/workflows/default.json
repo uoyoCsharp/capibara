@@ -4,13 +4,10 @@
   "description": "Classic Capibara workflow with epics, stories, tasks, and a full review cycle. Suitable for structured software teams.",
   "schema": {
     "workItemTypes": [
-      { "name": "epic", "label": "Epic", "isLeaf": false, "allowedChildren": ["story", "spike"], "allowedAtRoot": true, "canDecompose": true },
-      { "name": "story", "label": "Story", "isLeaf": false, "allowedChildren": ["task", "bug", "chore", "spike"], "allowedAtRoot": true, "canDecompose": true },
-      { "name": "task", "label": "Task", "isLeaf": false, "allowedChildren": ["subtask"], "allowedAtRoot": false, "canDecompose": false },
-      { "name": "subtask", "label": "Subtask", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false },
-      { "name": "spike", "label": "Spike", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false },
-      { "name": "bug", "label": "Bug", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false },
-      { "name": "chore", "label": "Chore", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false }
+      { "name": "epic", "label": "Epic", "isLeaf": false, "allowedChildren": ["story"], "allowedAtRoot": true, "canDecompose": true },
+      { "name": "story", "label": "Story", "isLeaf": false, "allowedChildren": ["task"], "allowedAtRoot": true, "canDecompose": true },
+      { "name": "task", "label": "Task", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false },
+      { "name": "bug", "label": "Bug", "isLeaf": true, "allowedChildren": [], "allowedAtRoot": false, "canDecompose": false }
     ],
     "statuses": [
       { "name": "pending", "label": "Pending", "category": "initial" },

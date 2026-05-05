@@ -122,7 +122,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
     } as unknown as TaskStateMachine;
     processEngine = {
       getAvailableTransitions: vi.fn().mockReturnValue([]),
-      getStatusCategory: vi.fn().mockReturnValue(null),
+      getStatusCategory: vi.fn().mockReturnValue('active'),
       getSchema: vi.fn().mockReturnValue(null),
     } as unknown as ProcessEngine;
     behaviorEngine = { onStatusEnter: vi.fn(), onChildCompleted: vi.fn() } as unknown as BehaviorEngine;

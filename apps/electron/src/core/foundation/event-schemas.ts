@@ -78,6 +78,7 @@ const ConversationEscalatedSchema = z.object({
 });
 const ConversationTimedOutSchema = z.object({ conversationId: z.string(), orgId: z.string() });
 const ConversationCancelledSchema = z.object({ conversationId: z.string() });
+const ConversationCompletedSchema = z.object({ conversationId: z.string(), orgId: z.string() });
 
 // Run ──────────────────────────────────────────────────────────
 const RunLifecycleSchema = z.object({
@@ -166,6 +167,7 @@ export const EVENT_SCHEMAS = {
   'conversation:escalated': ConversationEscalatedSchema,
   'conversation:timed-out': ConversationTimedOutSchema,
   'conversation:cancelled': ConversationCancelledSchema,
+  'conversation:completed': ConversationCompletedSchema,
 
   'run:queued': RunLifecycleSchema,
   'run:started': RunLifecycleSchema,

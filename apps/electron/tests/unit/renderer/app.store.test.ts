@@ -39,9 +39,9 @@ describe('useAppStore', () => {
     expect(s.isLoading).toBe(false);
   });
 
-  it('loadOrganizations keeps currentOrgId if already set', async () => {
+  it('loadOrganizations keeps currentOrgId if it is still valid', async () => {
     useAppStore.setState({ currentOrgId: 'pre' });
-    vi.mocked(ctrl.api.getOrganizations).mockResolvedValue({ ok: true, data: [org('o1')] });
+    vi.mocked(ctrl.api.getOrganizations).mockResolvedValue({ ok: true, data: [org('pre'), org('o1')] });
 
     await useAppStore.getState().loadOrganizations();
 

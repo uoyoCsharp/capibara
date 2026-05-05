@@ -125,7 +125,7 @@ describe('Orchestrators (task + conversation + run)', () => {
     } as unknown as TaskStateMachine;
     processEngine = {
       getAvailableTransitions: vi.fn().mockReturnValue([]),
-      getStatusCategory: vi.fn().mockReturnValue(null),
+      getStatusCategory: vi.fn().mockReturnValue('active'),
       getSchema: vi.fn().mockReturnValue(null),
     } as unknown as ProcessEngine;
     behaviorEngine = {

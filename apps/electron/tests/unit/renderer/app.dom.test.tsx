@@ -53,12 +53,12 @@ describe('<App /> (DOM smoke)', () => {
     });
   });
 
-  it('renders the sidebar with all six navigation items', async () => {
+  it('renders the sidebar with all current navigation items', async () => {
     const { findByText, getAllByText } = await mount();
     await findByText('Where we are');
     // "Dashboard" appears in both the page title AND the sidebar, so use
     // getAllByText and assert at least one occurrence.
-    for (const label of ['Dashboard', 'Tasks', 'Inbox', 'Planning', 'Team', 'Settings']) {
+    for (const label of ['Dashboard', 'Tasks', 'Inbox', 'Team', 'Settings']) {
       expect(getAllByText(label).length).toBeGreaterThan(0);
     }
   });

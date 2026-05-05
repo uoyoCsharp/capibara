@@ -112,6 +112,10 @@ export interface ConversationTimedOutPayload {
 export interface ConversationCancelledPayload {
   conversationId: string;
 }
+export interface ConversationCompletedPayload {
+  conversationId: string;
+  orgId: string;
+}
 
 // Run ──────────────────────────────────────────────────────────
 export interface RunQueuedPayload {
@@ -228,6 +232,7 @@ export interface DomainEventMap {
   'conversation:escalated': ConversationEscalatedPayload;
   'conversation:timed-out': ConversationTimedOutPayload;
   'conversation:cancelled': ConversationCancelledPayload;
+  'conversation:completed': ConversationCompletedPayload;
 
   // Run
   'run:queued': RunQueuedPayload;
