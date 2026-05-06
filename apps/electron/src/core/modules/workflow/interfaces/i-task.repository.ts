@@ -4,6 +4,7 @@ export interface ITaskRepository {
   findById(id: string): Task | null;
   findByOrgId(orgId: string): Task[];
   findChildren(parentId: string): Task[];
+  hasChildren(parentId: string): boolean;
   findByAssigneeRoleId(roleId: string): Task[];
   create(input: CreateTaskInput, depth: number): Task;
   updateStatus(id: string, status: TaskStatus): void;

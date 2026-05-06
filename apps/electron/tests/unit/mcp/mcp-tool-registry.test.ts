@@ -76,11 +76,19 @@ describe('McpToolRegistry', () => {
       await expect(registry.dispatch('missing', {}, 'run-1')).rejects.toThrow('Unknown MCP tool: missing');
     });
 
-    it('logs debug on successful dispatch', async () => {
+    it('logs info on successful dispatch (visible at default level)', async () => {
       registry.register(createTool({ name: 'logged_tool' }));
       await registry.dispatch('logged_tool', {}, 'run-1');
-      expect(logger.logs.some((l) => l.level === 'debug' && l.msg === 'MCP tool call started')).toBe(true);
-      expect(logger.logs.some((l) => l.level === 'debug' && l.msg === 'MCP tool call completed')).toBe(true);
+      expect(logger.logs.some((l) => l.level === 'info' && l.msg === 'MCP tool call started')).toBe(true);
+      expect(logger.logs.some((l) => l.level === 'info' && l.msg === 'MCP tool call completed')).toBe(true);
+    });
+
+    it('logs params at debug level (requires CAPIBARA_LOG_LEVEL=debug to surface)', async () => {
+      registry.register(createTool({ name: 'logged_tool' }));
+      await registry.dispatch('logged_tool', { foo: 'bar' }, 'run-1');
+      const paramsLog = logger.logs.find((l) => l.msg === 'MCP tool call params');
+      expect(paramsLog).toBeDefined();
+      expect(paramsLog!.level).toBe('debug');
     });
 
     it('logs error and rethrows when handler fails', async () => {

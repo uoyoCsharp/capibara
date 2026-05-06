@@ -66,42 +66,47 @@ export function TeamPage({ orgId }: TeamPageProps) {
   if (!orgId) return <EmptyOrgState t={t} />;
 
   return (
-    <div className="flex h-full flex-col p-6">
-      <header className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">{t.teamPage?.title ?? 'Team'}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t.teamPage?.subtitle ?? 'Manage your AI team hierarchy'}
+    <div className="flex h-full flex-col">
+      <header className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b border-border">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-semibold text-foreground">{t.teamPage?.title ?? 'Team'}</h1>
             {visibleRoles.length > 0 && (
-              <span className="ml-2 text-xs text-muted-foreground/70">
-                ({visibleRoles.length} {t.teamPage?.rolesCount ?? 'roles'})
+              <span className="text-xs font-medium text-muted-foreground bg-muted/60 border border-border rounded-full px-2 py-0.5">
+                {visibleRoles.length} {t.teamPage?.rolesCount ?? 'roles'}
               </span>
             )}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t.teamPage?.subtitle ?? 'Manage your AI team hierarchy'}
           </p>
         </div>
-        <Button size="sm" onClick={() => void handleAddRole(null)}>
+        <Button size="sm" onClick={() => void handleAddRole(null)} className="shrink-0">
           <Plus size={14} />
           {t.teamPage?.addAgent ?? 'Add Agent'}
         </Button>
       </header>
 
-      {isLoading ? (
-        <LoadingPane />
-      ) : visibleRoles.length === 0 ? (
-        <EmptyRolesState t={t} />
-      ) : (
-        <div className="flex-1 overflow-auto space-y-2">
-          {tree.map((node) => (
-            <RoleCard
-              key={node.role.id}
-              node={node}
-              depth={0}
-              roles={roles}
-              onSelect={setSelectedRoleId}
-            />
-          ))}
-        </div>
-      )}
+      <div className="flex-1 overflow-auto">
+        {isLoading ? (
+          <LoadingPane />
+        ) : visibleRoles.length === 0 ? (
+          <EmptyRolesState t={t} />
+        ) : (
+          <div className="px-6 py-5 max-w-4xl mx-auto space-y-1.5">
+            {tree.map((node, i) => (
+              <RoleCard
+                key={node.role.id}
+                node={node}
+                depth={0}
+                roles={roles}
+                onSelect={setSelectedRoleId}
+                isLast={i === tree.length - 1}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {selectedRole && (
         <RoleDrawer
@@ -119,20 +124,20 @@ export function TeamPage({ orgId }: TeamPageProps) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function EmptyOrgState({ t }: { t: any }) {
   return (
-    <div className="flex h-full flex-col p-6">
-      <header className="mb-6">
+    <div className="flex h-full flex-col">
+      <header className="px-6 pt-6 pb-4 border-b border-border">
         <h1 className="text-2xl font-semibold text-foreground">{t.teamPage?.title ?? 'Team'}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t.teamPage?.subtitle ?? 'Manage your AI team hierarchy'}
         </p>
       </header>
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex flex-1 items-center justify-center p-6">
         <div className="text-center">
           <UsersThree size={48} className="mx-auto mb-4 text-muted-foreground/50" />
-          <p className="text-lg font-medium text-muted-foreground">
+          <p className="text-base font-medium text-foreground">
             {t.teamPage?.noOrgSelected ?? 'No workspace selected'}
           </p>
-          <p className="text-sm text-muted-foreground/70">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t.teamPage?.noOrgHint ?? 'Select a workspace to view the team'}
           </p>
         </div>
@@ -144,13 +149,13 @@ function EmptyOrgState({ t }: { t: any }) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function EmptyRolesState({ t }: { t: any }) {
   return (
-    <div className="flex flex-1 items-center justify-center">
+    <div className="flex flex-1 items-center justify-center p-6">
       <div className="text-center">
         <UsersThree size={48} className="mx-auto mb-4 text-muted-foreground/50" />
-        <p className="text-lg font-medium text-muted-foreground">
+        <p className="text-base font-medium text-foreground">
           {t.teamPage?.noRoles ?? 'No roles yet'}
         </p>
-        <p className="text-sm text-muted-foreground/70">
+        <p className="mt-1 text-sm text-muted-foreground">
           {t.teamPage?.noRolesHint ?? 'Add roles to build your team'}
         </p>
       </div>
@@ -160,7 +165,7 @@ function EmptyRolesState({ t }: { t: any }) {
 
 function LoadingPane() {
   return (
-    <div className="flex flex-1 items-center justify-center">
+    <div className="flex flex-1 items-center justify-center p-6">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
     </div>
   );

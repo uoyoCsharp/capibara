@@ -50,6 +50,14 @@ export interface TaskEnteredApprovalPayload {
   from: string;
   to: string;
 }
+export interface TaskAutoApprovedPayload {
+  taskId: string;
+  orgId: string;
+  roleId: string | null;
+  from: string;
+  via: string;
+  to: string;
+}
 export interface TaskApprovalConfirmedPayload {
   taskId: string;
   orgId: string;
@@ -173,8 +181,15 @@ export interface PlanTreeNode {
 
 export type PlanTreeMode = 'preview' | 'eager';
 
+/**
+ * A tree submission is anchored to exactly one of:
+ *   - rootTaskId: task-scoped preview/eager decomposition (existing flow)
+ *   - sourceConversationId: conversation-only planning session (conversational planning flow)
+ * Exactly one of these fields is non-null.
+ */
 export interface PlanTreeSubmittedPayload {
-  rootTaskId: string;
+  rootTaskId: string | null;
+  sourceConversationId: string | null;
   orgId: string;
   roleId: string;
   mode: PlanTreeMode;
@@ -183,20 +198,23 @@ export interface PlanTreeSubmittedPayload {
 }
 
 export interface PlanTreeReadyPayload {
-  rootTaskId: string;
+  rootTaskId: string | null;
+  sourceConversationId: string | null;
   orgId: string;
   nodeCount: number;
   maxDepth: number;
 }
 
 export interface PlanTreeDiscardedPayload {
-  rootTaskId: string;
+  rootTaskId: string | null;
+  sourceConversationId: string | null;
   orgId: string;
   reason: string | null;
 }
 
 export interface PlanTreeApprovedPayload {
-  rootTaskId: string;
+  rootTaskId: string | null;
+  sourceConversationId: string | null;
   orgId: string;
   nodeCount: number;
 }
@@ -218,6 +236,7 @@ export interface DomainEventMap {
   'task:created': TaskCreatedPayload;
   'task:status-changed': TaskStatusChangedPayload;
   'task:entered-approval': TaskEnteredApprovalPayload;
+  'task:auto-approved': TaskAutoApprovedPayload;
   'task:approval-confirmed': TaskApprovalConfirmedPayload;
   'task:approval-rejected': TaskApprovalRejectedPayload;
   'task:completed': TaskCompletedPayload;

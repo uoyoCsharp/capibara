@@ -50,10 +50,15 @@ export class PlanningService {
     this.logger.info('PlanningService initialized');
   }
 
-  // ─── Plan tree (task-scoped) ─────────────────────────────────
+  // ─── Plan tree (both task-anchored and conversation-anchored) ───
 
   getPendingTree(rootTaskId: string): PendingPlanTree | undefined {
     const t = this.pendingPlanTreeRepo.findActiveByRootTaskId(rootTaskId);
+    return t ?? undefined;
+  }
+
+  getPendingTreeByConversation(conversationId: string): PendingPlanTree | undefined {
+    const t = this.pendingPlanTreeRepo.findActiveBySourceConversationId(conversationId);
     return t ?? undefined;
   }
 
@@ -62,11 +67,24 @@ export class PlanningService {
    * Uses the version field for optimistic locking so a concurrent refine
    * submit cannot silently replace the tree between the user seeing
    * "approve" and the write.
+   *
+   * Task-anchored: applies under existing rootTaskId parent.
+   * Conversation-anchored: creates the tree's top-level children as root tasks
+   * (parentId=null), then resolves the planning conversation.
    */
   approvePlanTree(rootTaskId: string, expectedVersion?: number): { ok: boolean; code?: string; message?: string } {
     const pending = this.pendingPlanTreeRepo.findActiveByRootTaskId(rootTaskId);
     if (!pending) return { ok: false, code: 'NO_PENDING_TREE', message: `No pending tree for task "${rootTaskId}".` };
+    return this.approvePending(pending, expectedVersion);
+  }
 
+  approvePlanTreeByConversation(conversationId: string, expectedVersion?: number): { ok: boolean; code?: string; message?: string } {
+    const pending = this.pendingPlanTreeRepo.findActiveBySourceConversationId(conversationId);
+    if (!pending) return { ok: false, code: 'NO_PENDING_TREE', message: `No pending tree for conversation "${conversationId}".` };
+    return this.approvePending(pending, expectedVersion);
+  }
+
+  private approvePending(pending: PendingPlanTree, expectedVersion?: number): { ok: boolean; code?: string; message?: string } {
     if (expectedVersion !== undefined && pending.version !== expectedVersion) {
       return {
         ok: false,
@@ -76,12 +94,33 @@ export class PlanningService {
     }
 
     try {
-      this.applyTree(pending.orgId, rootTaskId, pending.tree);
+      if (pending.rootTaskId) {
+        this.applyUnderTask(pending.orgId, pending.rootTaskId, pending.tree);
+      } else {
+        this.applyAsRoots(pending.orgId, pending.tree);
+      }
+
       const now = new Date().toISOString();
       this.pendingPlanTreeRepo.updateStatus(pending.id, 'approved', now);
-      this.advanceRootAfterDecomposition(rootTaskId);
 
-      // Complete the associated plan_review conversation
+      if (pending.rootTaskId) {
+        this.advanceRootAfterDecomposition(pending.rootTaskId);
+      }
+
+      // Resolve the source (planning) conversation if any — the discussion is
+      // done, no more AI wakes for it.
+      if (pending.sourceConversationId) {
+        try {
+          this.conversationService.resolve(pending.sourceConversationId);
+        } catch (err) {
+          this.logger.warn('Could not resolve source planning conversation', {
+            conversationId: pending.sourceConversationId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // Complete the associated plan_review conversation (task-anchored flow)
       if (pending.conversationId) {
         try {
           this.conversationService.complete(pending.conversationId);
@@ -94,15 +133,21 @@ export class PlanningService {
       }
 
       this.eventPublisher.publish('plan-tree:approved', {
-        rootTaskId,
+        rootTaskId: pending.rootTaskId,
+        sourceConversationId: pending.sourceConversationId,
         orgId: pending.orgId,
         nodeCount: this.countNodes(pending.tree),
       });
-      this.logger.info('Plan tree approved', { rootTaskId, nodeCount: this.countNodes(pending.tree) });
+      this.logger.info('Plan tree approved', {
+        rootTaskId: pending.rootTaskId,
+        sourceConversationId: pending.sourceConversationId,
+        nodeCount: this.countNodes(pending.tree),
+      });
       return { ok: true };
     } catch (err) {
       this.logger.error('Plan tree approve failed', {
-        rootTaskId,
+        rootTaskId: pending.rootTaskId,
+        sourceConversationId: pending.sourceConversationId,
         error: err instanceof Error ? err.message : String(err),
       });
       return { ok: false, code: 'APPLY_FAILED', message: err instanceof Error ? err.message : String(err) };
@@ -115,27 +160,15 @@ export class PlanningService {
     if (!root) return { ok: false, code: 'ROOT_TASK_NOT_FOUND', message: `Root task "${rootTaskId}" not found.` };
 
     if (pending) {
-      const now = new Date().toISOString();
-      this.pendingPlanTreeRepo.updateStatus(pending.id, 'discarded', now);
-
-      // Cancel the associated plan_review conversation
-      if (pending.conversationId) {
-        try {
-          this.conversationService.cancel(pending.conversationId);
-        } catch (err) {
-          this.logger.warn('Could not cancel plan_review conversation', {
-            conversationId: pending.conversationId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
+      this.discardPending(pending, reason);
+    } else {
+      this.eventPublisher.publish('plan-tree:discarded', {
+        rootTaskId,
+        sourceConversationId: null,
+        orgId: root.orgId,
+        reason: reason ?? 'user_discard',
+      });
     }
-
-    this.eventPublisher.publish('plan-tree:discarded', {
-      rootTaskId,
-      orgId: root.orgId,
-      reason: reason ?? 'user_discard',
-    });
 
     if (root.status !== 'pending') {
       try {
@@ -153,61 +186,126 @@ export class PlanningService {
     return { ok: true };
   }
 
-  /**
-   * Record feedback for a pending tree and wake the AI to re-submit.
-   */
-  refinePlanTree(rootTaskId: string, feedback: string): { ok: boolean; code?: string; message?: string } {
-    if (!feedback || feedback.trim().length === 0) {
-      return { ok: false, code: 'EMPTY_FEEDBACK', message: 'Feedback must not be empty.' };
-    }
+  discardPlanTreeByConversation(conversationId: string, reason: string | null): { ok: boolean; code?: string; message?: string } {
+    const pending = this.pendingPlanTreeRepo.findActiveBySourceConversationId(conversationId);
+    if (!pending) return { ok: false, code: 'NO_PENDING_TREE', message: `No pending tree for conversation "${conversationId}".` };
+    this.discardPending(pending, reason);
+    this.logger.info('Plan tree discarded (conversation-anchored)', { conversationId, reason });
+    return { ok: true };
+  }
 
-    const pending = this.pendingPlanTreeRepo.findActiveByRootTaskId(rootTaskId);
-    if (!pending) return { ok: false, code: 'NO_PENDING_TREE', message: `No pending tree for task "${rootTaskId}".` };
+  private discardPending(pending: PendingPlanTree, reason: string | null): void {
+    const now = new Date().toISOString();
+    this.pendingPlanTreeRepo.updateStatus(pending.id, 'discarded', now);
 
-    const trimmed = feedback.trim();
-    this.pendingPlanTreeRepo.updateFeedback(pending.id, trimmed);
-    this.pendingPlanTreeRepo.updateStatus(pending.id, 'refining');
-
-    // Add human feedback message to the plan_review conversation
     if (pending.conversationId) {
       try {
-        this.conversationService.addMessage(pending.conversationId, {
-          conversationId: pending.conversationId,
-          authorRoleId: null,
-          authorType: 'human',
-          content: trimmed,
-          intent: 'reply',
-        });
+        this.conversationService.cancel(pending.conversationId);
       } catch (err) {
-        this.logger.warn('Could not add feedback message to plan_review conversation', {
+        this.logger.warn('Could not cancel plan_review conversation', {
           conversationId: pending.conversationId,
           error: err instanceof Error ? err.message : String(err),
         });
       }
     }
 
+    this.eventPublisher.publish('plan-tree:discarded', {
+      rootTaskId: pending.rootTaskId,
+      sourceConversationId: pending.sourceConversationId,
+      orgId: pending.orgId,
+      reason: reason ?? 'user_discard',
+    });
+  }
+
+  /**
+   * Record feedback for a pending tree and wake the AI to re-submit.
+   * Works for both task-anchored and conversation-anchored trees.
+   */
+  refinePlanTree(rootTaskId: string, feedback: string): { ok: boolean; code?: string; message?: string } {
+    if (!feedback || feedback.trim().length === 0) {
+      return { ok: false, code: 'EMPTY_FEEDBACK', message: 'Feedback must not be empty.' };
+    }
+    const pending = this.pendingPlanTreeRepo.findActiveByRootTaskId(rootTaskId);
+    if (!pending) return { ok: false, code: 'NO_PENDING_TREE', message: `No pending tree for task "${rootTaskId}".` };
+    return this.refinePending(pending, feedback);
+  }
+
+  refinePlanTreeByConversation(conversationId: string, feedback: string): { ok: boolean; code?: string; message?: string } {
+    if (!feedback || feedback.trim().length === 0) {
+      return { ok: false, code: 'EMPTY_FEEDBACK', message: 'Feedback must not be empty.' };
+    }
+    const pending = this.pendingPlanTreeRepo.findActiveBySourceConversationId(conversationId);
+    if (!pending) return { ok: false, code: 'NO_PENDING_TREE', message: `No pending tree for conversation "${conversationId}".` };
+    return this.refinePending(pending, feedback);
+  }
+
+  private refinePending(pending: PendingPlanTree, feedback: string): { ok: boolean; code?: string; message?: string } {
+    if (!feedback || feedback.trim().length === 0) {
+      return { ok: false, code: 'EMPTY_FEEDBACK', message: 'Feedback must not be empty.' };
+    }
+
+    const trimmed = feedback.trim();
+    this.pendingPlanTreeRepo.updateFeedback(pending.id, trimmed);
+    this.pendingPlanTreeRepo.updateStatus(pending.id, 'refining');
+
+    // For task-anchored flow: feedback posted to the plan_review conversation.
+    // For conversation-anchored flow: feedback posted directly to the planning conversation.
+    const feedbackConvId = pending.conversationId ?? pending.sourceConversationId;
+    if (feedbackConvId) {
+      try {
+        this.conversationService.addMessage(feedbackConvId, {
+          conversationId: feedbackConvId,
+          authorRoleId: null,
+          authorType: 'human',
+          content: trimmed,
+          intent: 'reply',
+        });
+      } catch (err) {
+        this.logger.warn('Could not add feedback message to conversation', {
+          conversationId: feedbackConvId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     if (!this.waker) {
-      this.logger.error('Refine requested but no waker wired', { rootTaskId });
+      this.logger.error('Refine requested but no waker wired');
       return { ok: false, code: 'INTERNAL', message: 'Wake service unavailable.' };
     }
 
-    const root = this.taskService.findById(rootTaskId);
-    if (!root) return { ok: false, code: 'ROOT_TASK_NOT_FOUND', message: `Root task "${rootTaskId}" not found.` };
-    if (!root.assigneeRoleId) {
-      return { ok: false, code: 'NO_ASSIGNEE', message: 'Root task has no assignee role.' };
+    // Task-anchored: wake assignee on task; Conversation-anchored: wake the
+    // conversation respondent (role on pending tree = the AI agent).
+    if (pending.rootTaskId) {
+      const root = this.taskService.findById(pending.rootTaskId);
+      if (!root) return { ok: false, code: 'ROOT_TASK_NOT_FOUND', message: `Root task "${pending.rootTaskId}" not found.` };
+      if (!root.assigneeRoleId) return { ok: false, code: 'NO_ASSIGNEE', message: 'Root task has no assignee role.' };
+      this.waker.tryWake(root.assigneeRoleId, root.orgId, 'conversation_reply', pending.rootTaskId);
+    } else {
+      this.waker.tryWake(pending.roleId, pending.orgId, 'conversation_reply', null);
     }
 
-    this.waker.tryWake(root.assigneeRoleId, root.orgId, 'conversation_reply', rootTaskId);
-    this.logger.info('Plan tree refine requested', { rootTaskId, feedbackLength: feedback.length });
+    this.logger.info('Plan tree refine requested', {
+      rootTaskId: pending.rootTaskId,
+      sourceConversationId: pending.sourceConversationId,
+      feedbackLength: feedback.length,
+    });
     return { ok: true };
   }
 
   /**
    * Read-side helper for the prompt layer: returns and clears pending
-   * feedback so it is only injected into one run.
+   * feedback so it is only injected into one run. Works for both anchors.
    */
   consumePendingFeedback(rootTaskId: string): string | null {
     const pending = this.pendingPlanTreeRepo.findActiveByRootTaskId(rootTaskId);
+    if (!pending || !pending.pendingFeedback) return null;
+    const fb = pending.pendingFeedback;
+    this.pendingPlanTreeRepo.updateFeedback(pending.id, null);
+    return fb;
+  }
+
+  consumePendingFeedbackByConversation(conversationId: string): string | null {
+    const pending = this.pendingPlanTreeRepo.findActiveBySourceConversationId(conversationId);
     if (!pending || !pending.pendingFeedback) return null;
     const fb = pending.pendingFeedback;
     this.pendingPlanTreeRepo.updateFeedback(pending.id, null);
@@ -237,19 +335,57 @@ export class PlanningService {
 
       this.eventPublisher.publish('plan-tree:discarded', {
         rootTaskId: tree.rootTaskId,
+        sourceConversationId: tree.sourceConversationId,
         orgId: tree.orgId,
         reason: 'ttl_expired',
       });
-      this.logger.info('Pending plan tree expired', { rootTaskId: tree.rootTaskId, id: tree.id });
+      this.logger.info('Pending plan tree expired', {
+        rootTaskId: tree.rootTaskId,
+        sourceConversationId: tree.sourceConversationId,
+        id: tree.id,
+      });
     }
   }
 
   private onTreeSubmitted(event: DomainEvent<'plan-tree:submitted'>): void {
-    const { rootTaskId, orgId, roleId, mode, tree, submittedAt } = event.payload;
+    const { rootTaskId, sourceConversationId, orgId, roleId, mode, tree, submittedAt } = event.payload;
+
+    // Conversation-anchored: mode is always 'preview' (enforced by the tool).
+    // Persist + no plan_review conversation (the planning conversation IS the
+    // review channel).
+    if (sourceConversationId) {
+      try {
+        const expiresAt = new Date(Date.now() + MAX_AGE_MS).toISOString();
+        const pendingTree = this.pendingPlanTreeRepo.upsert({
+          sourceConversationId, orgId, roleId, mode, tree, submittedAt, expiresAt,
+        });
+
+        const nodeCount = this.countNodes(tree);
+        const maxDepth = this.measureDepth(tree);
+        this.eventPublisher.publish('plan-tree:ready', {
+          rootTaskId: null, sourceConversationId, orgId, nodeCount, maxDepth,
+        });
+        this.logger.info('Plan tree recorded (conversation-anchored)', {
+          sourceConversationId, nodeCount, maxDepth, version: pendingTree.version,
+        });
+      } catch (err) {
+        this.logger.error('Conversation-anchored plan tree persist failed', {
+          sourceConversationId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return;
+    }
+
+    // Task-anchored flow below.
+    if (!rootTaskId) {
+      this.logger.error('plan-tree:submitted with neither rootTaskId nor sourceConversationId; ignoring');
+      return;
+    }
 
     if (mode === 'eager') {
       try {
-        const created = this.applyTree(orgId, rootTaskId, tree);
+        const created = this.applyUnderTask(orgId, rootTaskId, tree);
         this.advanceRootAfterDecomposition(rootTaskId);
         this.logger.info('Plan tree applied (eager)', {
           rootTaskId,
@@ -262,6 +398,7 @@ export class PlanningService {
         });
         this.eventPublisher.publish('plan-tree:discarded', {
           rootTaskId,
+          sourceConversationId: null,
           orgId,
           reason: `eager_apply_failed: ${err instanceof Error ? err.message : String(err)}`,
         });
@@ -272,7 +409,7 @@ export class PlanningService {
     // preview: persist to DB, create/update plan_review conversation
     try {
       const expiresAt = new Date(Date.now() + MAX_AGE_MS).toISOString();
-      const pendingTree = this.pendingPlanTreeRepo.upsertByRootTaskId({
+      const pendingTree = this.pendingPlanTreeRepo.upsert({
         rootTaskId, orgId, roleId, mode, tree, submittedAt, expiresAt,
       });
 
@@ -281,7 +418,9 @@ export class PlanningService {
 
       const nodeCount = this.countNodes(tree);
       const maxDepth = this.measureDepth(tree);
-      this.eventPublisher.publish('plan-tree:ready', { rootTaskId, orgId, nodeCount, maxDepth });
+      this.eventPublisher.publish('plan-tree:ready', {
+        rootTaskId, sourceConversationId: null, orgId, nodeCount, maxDepth,
+      });
       this.logger.info('Plan tree recorded (preview)', { rootTaskId, nodeCount, maxDepth, version: pendingTree.version });
     } catch (err) {
       this.logger.error('Preview plan tree persist failed', {
@@ -320,10 +459,30 @@ export class PlanningService {
     this.pendingPlanTreeRepo.updateConversationId(pendingTree.id, conv.id);
   }
 
-  private applyTree(orgId: string, rootTaskId: string, tree: PlanTreeNode): Task[] {
+  private applyUnderTask(orgId: string, rootTaskId: string, tree: PlanTreeNode): Task[] {
     const children = tree.children as BatchCreateTaskInput[];
     const txn = this.connection.getDb().transaction((): Task[] =>
       this.taskService.batchCreate(orgId, rootTaskId, children),
+    );
+    return txn();
+  }
+
+  /**
+   * Apply a conversation-anchored tree: the tree's own root node and all its
+   * descendants become root-level tasks (parentId=null). The tree root's own
+   * type/title/description/assignee are respected as a new task — this is
+   * different from the task-anchored flow where the root IS an existing task.
+   */
+  private applyAsRoots(orgId: string, tree: PlanTreeNode): Task[] {
+    const rootAsChild: BatchCreateTaskInput = {
+      type: tree.type,
+      title: tree.title,
+      description: tree.description,
+      assigneeRoleId: tree.assigneeRoleId,
+      children: tree.children as BatchCreateTaskInput[],
+    };
+    const txn = this.connection.getDb().transaction((): Task[] =>
+      this.taskService.batchCreate(orgId, null, [rootAsChild]),
     );
     return txn();
   }
@@ -332,17 +491,25 @@ export class PlanningService {
     const root = this.taskService.findById(rootTaskId);
     if (!root) return;
 
+    if (root.status === 'in_progress') return;
+
     const transitions = this.processEngine.getAvailableTransitions(root.orgId, root.status);
-    const preferred = transitions.find((t) => t.to === 'in_progress') ?? transitions[0];
-    if (!preferred) return;
+    const target = transitions.find((t) => t.to === 'in_progress');
+    if (!target) {
+      this.logger.warn('Root has no pending→in_progress transition; leaving untouched', {
+        rootTaskId,
+        currentStatus: root.status,
+      });
+      return;
+    }
 
     try {
-      this.taskStateMachine.transition(rootTaskId, preferred.to);
+      this.taskStateMachine.transition(rootTaskId, target.to);
     } catch (err) {
       this.logger.warn('Could not advance root after decomposition', {
         rootTaskId,
         from: root.status,
-        to: preferred.to,
+        to: target.to,
         error: err instanceof Error ? err.message : String(err),
       });
     }

@@ -44,6 +44,13 @@ class InMemoryTaskStore {
     return [...this.tasks.values()].filter((t) => t.parentId === parentId).map((t) => ({ ...t }));
   }
 
+  hasChildren(parentId: string): boolean {
+    for (const t of this.tasks.values()) {
+      if (t.parentId === parentId) return true;
+    }
+    return false;
+  }
+
   updateStatus(id: string, status: string): void {
     const t = this.tasks.get(id);
     if (t) {
@@ -133,7 +140,7 @@ const DEFAULT_SCHEMA: ProcessSchema = {
   workItemTypes: [
     { name: 'epic', label: 'Epic', isLeaf: false, allowedChildren: ['story', 'spike'], allowedAtRoot: true, canDecompose: true },
     { name: 'story', label: 'Story', isLeaf: false, allowedChildren: ['task', 'bug', 'chore', 'spike'], allowedAtRoot: true, canDecompose: true },
-    { name: 'task', label: 'Task', isLeaf: false, allowedChildren: ['subtask'], allowedAtRoot: false, canDecompose: false },
+    { name: 'task', label: 'Task', isLeaf: true, allowedChildren: [], allowedAtRoot: false, canDecompose: false },
     { name: 'subtask', label: 'Subtask', isLeaf: true, allowedChildren: [], allowedAtRoot: false, canDecompose: false },
     { name: 'spike', label: 'Spike', isLeaf: true, allowedChildren: [], allowedAtRoot: false, canDecompose: false },
     { name: 'bug', label: 'Bug', isLeaf: true, allowedChildren: [], allowedAtRoot: false, canDecompose: false },
@@ -151,7 +158,9 @@ const DEFAULT_SCHEMA: ProcessSchema = {
   ],
   transitions: [
     { from: 'pending', to: 'in_progress' },
+    { from: 'pending', to: 'done' },
     { from: 'in_progress', to: 'awaiting_review' },
+    { from: 'in_progress', to: 'done' },
     { from: 'in_progress', to: 'blocked' },
     { from: 'blocked', to: 'in_progress' },
     { from: 'awaiting_review', to: 'approved' },
@@ -222,6 +231,7 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
     findById: vi.fn().mockImplementation((id: string) => store.findById(id)),
     findByOrgId: vi.fn().mockImplementation((orgId: string) => store.findByOrgId(orgId)),
     findChildren: vi.fn().mockImplementation((parentId: string) => store.findChildren(parentId)),
+    hasChildren: vi.fn().mockImplementation((parentId: string) => store.hasChildren(parentId)),
     findByAssigneeRoleId: vi.fn().mockReturnValue([]),
     create: vi.fn(),
     updateStatus: vi.fn().mockImplementation((id: string, status: string) => store.updateStatus(id, status)),
@@ -232,9 +242,21 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
 
   const processEngine = createProcessEngineMock(schema);
 
+  // Mock role repo — defaults to requiresHumanApproval=true so approval states pause by default.
+  const roleRepo: IRoleRepository = {
+    findById: vi.fn().mockReturnValue({ id: 'role-default', requiresHumanApproval: true }),
+    findByIds: vi.fn().mockReturnValue([]),
+    findByOrgId: vi.fn().mockReturnValue([]),
+    findChildren: vi.fn().mockReturnValue([]),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  };
+
   // Real TaskStateMachine with MockEventBus (satisfies IEventPublisher too)
   const taskStateMachine = new TaskStateMachine(
     taskRepo,
+    roleRepo,
     processEngine,
     eventBus,
     logger,
@@ -253,17 +275,6 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
 
   // Real TaskScheduler
   const taskScheduler = new TaskScheduler(taskRepo, processEngine, logger);
-
-  // Mock remaining orchestrator dependencies
-  const roleRepo: IRoleRepository = {
-    findById: vi.fn().mockReturnValue(null),
-    findByIds: vi.fn().mockReturnValue([]),
-    findByOrgId: vi.fn().mockReturnValue([]),
-    findChildren: vi.fn().mockReturnValue([]),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  };
 
   const convRepo: IConversationRepository = {
     findById: vi.fn().mockReturnValue(null),
@@ -333,6 +344,7 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
     eventBus,
     logger,
     convRepo,
+    pendingWakeRepo,
     wakeGateValidator,
     runCoordinator,
     taskOrchestrator,
@@ -430,9 +442,18 @@ describe('Cascade Execution Integration', () => {
       expect(result!.status).toBe('done');
     });
 
-    it('2 - All children terminal -> parent auto done', () => {
-      // Parent with 2 children, both done. When onChildCompleted fires for the
-      // last child, parent auto-transitions to done.
+    it('2 - All children terminal -> parent auto done (Bug 5)', () => {
+      // Bug 5: when every leaf child of a non-leaf parent terminates, the parent
+      // MUST auto-complete. The default workflow's behavior rule
+      // `default-propagate-parent` targets 'done' directly from whatever status
+      // the parent sits in — typically `in_progress`, because that's what the
+      // scheduler transitioned it to before dispatching children. If the schema
+      // does not allow `in_progress -> done`, the transition throws inside
+      // BehaviorEngine and the parent gets stuck forever.
+      //
+      // This test deliberately does NOT pre-position the parent in 'approved'
+      // (which was the old workaround) — we want the realistic in_progress state
+      // that the system actually produces at runtime.
       const parent = makeTask({
         id: 'story-1',
         orgId: ORG,
@@ -463,21 +484,9 @@ describe('Cascade Execution Integration', () => {
       });
       h.store.add(child2);
 
-      // We need in_progress->done transition for the parent. The default schema
-      // doesn't have that directly; the behaviorEngine calls
-      // taskStateMachine.transition(parent.id, 'done') which needs a valid
-      // transition. In the default schema, in_progress has no direct path to done.
-      // However, the behavior rule triggers transition to done. The state machine
-      // validates transitions. So we need the parent to be in a state that can
-      // reach done. Let's put the parent in "approved" state so approved->done is valid.
-      h.store.updateStatus('story-1', 'approved');
-
-      // Now make child2 terminal by directly setting done
-      h.store.updateStatus('task-c2', 'done');
-
-      // Manually call onChildCompleted to simulate the event
-      const freshChild2 = h.store.get('task-c2')!;
-      h.behaviorEngine.onChildCompleted(freshChild2);
+      // Complete the last running leaf via the state machine (same path the
+      // runtime takes — not a direct store write).
+      h.taskStateMachine.transition('task-c2', 'done');
 
       const parentResult = h.store.get('story-1');
       expect(parentResult).not.toBeNull();
@@ -879,6 +888,7 @@ describe('Cascade Execution Integration', () => {
         orgId: ORG,
         reason: 'task_assigned',
         taskId: 'task-wake-1',
+        conversationId: null,
         priority: 0,
         createdAt: new Date().toISOString(),
       });
@@ -907,6 +917,7 @@ describe('Cascade Execution Integration', () => {
         orgId: ORG,
         reason: 'task_scheduled',
         taskId: 'task-blocked',
+        conversationId: null,
         priority: 0,
         createdAt: new Date().toISOString(),
       });

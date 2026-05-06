@@ -34,7 +34,7 @@ export function registerMcpModule(
   for (const tool of createConversationTools(conversationService)) {
     toolRegistry.register(tool);
   }
-  for (const tool of createPlanTreeTools(taskService, processEngine, roleService, eventPublisher)) {
+  for (const tool of createPlanTreeTools(taskService, processEngine, roleService, conversationService, eventPublisher)) {
     toolRegistry.register(tool);
   }
   for (const tool of createContextTools(taskService, roleService)) {

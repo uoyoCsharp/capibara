@@ -1,5 +1,12 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { GearSix, FloppyDisk, Trash, Warning } from '@phosphor-icons/react';
+import { useLocaleContext, useT } from '../../hooks/use-locale';
+import type { SupportedLocale } from '@shared/locale/types';
+import { isSupportedLocale } from '@shared/locale/index';
+
+function interpolate(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
+}
 
 const api = () => window.capibara;
 
@@ -13,17 +20,17 @@ interface LogStats {
 type LogAction = 'idle' | 'confirming-all' | 'confirming-old' | 'clearing';
 
 export function SettingsPage() {
-  const [locale, setLocale] = useState('en-US');
+  const t = useT();
+  const { locale: currentLocale, setLocale: commitLocale } = useLocaleContext();
+  const [localeDraft, setLocaleDraft] = useState<SupportedLocale>(currentLocale);
   const [saving, setSaving] = useState(false);
   const [logStats, setLogStats] = useState<LogStats | null>(null);
   const [logAction, setLogAction] = useState<LogAction>('idle');
   const [logResult, setLogResult] = useState<string | null>(null);
 
-  useEffect(() => {
-    void api().getSetting('locale').then((result) => {
-      if (result.ok && result.data) setLocale(result.data);
-    });
-  }, []);
+  // Keep the draft in sync if the context locale updates from elsewhere
+  // (e.g. another component triggered setLocale while Settings was open).
+  useEffect(() => { setLocaleDraft(currentLocale); }, [currentLocale]);
 
   const refreshLogStats = useCallback(() => {
     void api().getLogStats().then((result) => {
@@ -35,7 +42,9 @@ export function SettingsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    await api().setSetting('locale', locale);
+    // commitLocale both updates the in-session LocaleContext (so UI strings
+    // retranslate immediately) and persists via api().setSetting('locale', ...).
+    commitLocale(localeDraft);
     setSaving(false);
   };
 
@@ -44,7 +53,10 @@ export function SettingsPage() {
     setLogResult(null);
     const result = await api().clearAllLogs();
     if (result.ok) {
-      setLogResult(`Deleted ${result.data.deletedFiles} files, freed ${result.data.freedMB} MB`);
+      setLogResult(interpolate(t.settings.logs.deleteResult, {
+        count: result.data.deletedFiles,
+        size: result.data.freedMB,
+      }));
     }
     setLogAction('idle');
     refreshLogStats();
@@ -57,7 +69,10 @@ export function SettingsPage() {
     const cutoff = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const result = await api().clearLogsBefore(cutoff);
     if (result.ok) {
-      setLogResult(`Deleted ${result.data.deletedFiles} files, freed ${result.data.freedMB} MB`);
+      setLogResult(interpolate(t.settings.logs.deleteResult, {
+        count: result.data.deletedFiles,
+        size: result.data.freedMB,
+      }));
     }
     setLogAction('idle');
     refreshLogStats();
@@ -68,23 +83,27 @@ export function SettingsPage() {
       <header>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <GearSix size={28} weight="duotone" />
-          Settings
+          {t.settings.title}
         </h1>
       </header>
 
       <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
-        <h2 className="font-semibold">Language</h2>
+        <h2 className="font-semibold">{t.settings.language.title}</h2>
         <select
-          value={locale}
-          onChange={(e) => setLocale(e.target.value)}
+          value={localeDraft}
+          onChange={(e) => {
+            const next = e.target.value;
+            if (isSupportedLocale(next)) setLocaleDraft(next);
+          }}
           className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
         >
-          <option value="en-US">English</option>
-          <option value="zh-CN">Chinese (Simplified)</option>
+          <option value="en-US">{t.settings.language.english}</option>
+          <option value="zh-CN">{t.settings.language.chinese}</option>
         </select>
       </section>
 
       <LogsSection
+        t={t}
         logStats={logStats}
         logAction={logAction}
         setLogAction={setLogAction}
@@ -93,32 +112,20 @@ export function SettingsPage() {
         onClearOld={handleClearOld}
       />
 
-      <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
-        <h2 className="font-semibold">System</h2>
-        <button
-          onClick={async () => {
-            const result = await api().getSystemHealth();
-            if (result.ok) alert(`System OK: ${result.data.timestamp}`);
-          }}
-          className="text-sm px-3 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors"
-        >
-          Check System Health
-        </button>
-      </section>
-
       <button
         onClick={handleSave}
         disabled={saving}
         className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
       >
         <FloppyDisk size={16} />
-        {saving ? 'Saving...' : 'Save Settings'}
+        {saving ? t.settings.saving : t.settings.save}
       </button>
     </div>
   );
 }
 
 interface LogsSectionProps {
+  t: ReturnType<typeof useT>;
   logStats: LogStats | null;
   logAction: LogAction;
   setLogAction: (action: LogAction) => void;
@@ -127,22 +134,22 @@ interface LogsSectionProps {
   onClearOld: () => void;
 }
 
-function LogsSection({ logStats, logAction, setLogAction, logResult, onClearAll, onClearOld }: LogsSectionProps) {
+function LogsSection({ t, logStats, logAction, setLogAction, logResult, onClearAll, onClearOld }: LogsSectionProps) {
   const hasFiles = (logStats?.fileCount ?? 0) > 0;
 
   return (
     <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
-      <h2 className="font-semibold">Execution Logs</h2>
+      <h2 className="font-semibold">{t.settings.logs.title}</h2>
       <p className="text-sm text-muted-foreground">
-        Log files are created for each AI execution run. Over time these can accumulate and take up disk space.
+        {t.settings.logs.description}
       </p>
 
       {logStats && (
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <StatTile label="Total Size" value={`${logStats.totalSizeMB} MB`} />
-          <StatTile label="File Count" value={String(logStats.fileCount)} />
-          {logStats.oldestMonth && <StatTile label="Oldest" value={logStats.oldestMonth} />}
-          {logStats.newestMonth && <StatTile label="Newest" value={logStats.newestMonth} />}
+          <StatTile label={t.settings.logs.totalSize} value={`${logStats.totalSizeMB} MB`} />
+          <StatTile label={t.settings.logs.fileCount} value={String(logStats.fileCount)} />
+          {logStats.oldestMonth && <StatTile label={t.settings.logs.oldest} value={logStats.oldestMonth} />}
+          {logStats.newestMonth && <StatTile label={t.settings.logs.newest} value={logStats.newestMonth} />}
         </div>
       )}
 
@@ -154,7 +161,9 @@ function LogsSection({ logStats, logAction, setLogAction, logResult, onClearAll,
         {logAction === 'confirming-old' && (
           <ConfirmInline
             icon={<Warning size={16} className="text-yellow-600" />}
-            label="Delete logs older than this month?"
+            label={t.settings.logs.confirmClearOld}
+            confirmLabel={t.settings.logs.confirm}
+            cancelLabel={t.common.cancel}
             onConfirm={onClearOld}
             onCancel={() => setLogAction('idle')}
             confirmClass="bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20"
@@ -163,7 +172,9 @@ function LogsSection({ logStats, logAction, setLogAction, logResult, onClearAll,
         {logAction === 'confirming-all' && (
           <ConfirmInline
             icon={<Warning size={16} className="text-red-600" />}
-            label="Delete all log files? This cannot be undone."
+            label={t.settings.logs.confirmClearAll}
+            confirmLabel={t.settings.logs.confirm}
+            cancelLabel={t.common.cancel}
             onConfirm={onClearAll}
             onCancel={() => setLogAction('idle')}
             confirmClass="bg-red-500/10 text-red-600 hover:bg-red-500/20"
@@ -172,12 +183,12 @@ function LogsSection({ logStats, logAction, setLogAction, logResult, onClearAll,
         {logAction !== 'confirming-old' && logAction !== 'confirming-all' && (
           <>
             <ClearButton
-              label="Clear Old Logs"
+              label={t.settings.logs.clearOld}
               disabled={logAction === 'clearing' || !hasFiles}
               onClick={() => setLogAction('confirming-old')}
             />
             <ClearButton
-              label="Clear All Logs"
+              label={t.settings.logs.clearAll}
               disabled={logAction === 'clearing' || !hasFiles}
               onClick={() => setLogAction('confirming-all')}
               danger
@@ -199,10 +210,12 @@ function StatTile({ label, value }: { label: string; value: string }) {
 }
 
 function ConfirmInline({
-  icon, label, onConfirm, onCancel, confirmClass,
+  icon, label, confirmLabel, cancelLabel, onConfirm, onCancel, confirmClass,
 }: {
   icon: React.ReactNode;
   label: string;
+  confirmLabel: string;
+  cancelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
   confirmClass: string;
@@ -211,8 +224,8 @@ function ConfirmInline({
     <div className="flex items-center gap-2">
       {icon}
       <span className="text-sm">{label}</span>
-      <button onClick={onConfirm} className={`text-xs px-2 py-1 rounded ${confirmClass}`}>Confirm</button>
-      <button onClick={onCancel} className="text-xs px-2 py-1 rounded border border-border hover:bg-accent">Cancel</button>
+      <button onClick={onConfirm} className={`text-xs px-2 py-1 rounded ${confirmClass}`}>{confirmLabel}</button>
+      <button onClick={onCancel} className="text-xs px-2 py-1 rounded border border-border hover:bg-accent">{cancelLabel}</button>
     </div>
   );
 }

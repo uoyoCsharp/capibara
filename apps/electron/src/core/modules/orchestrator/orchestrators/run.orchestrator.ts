@@ -61,22 +61,45 @@ export class RunOrchestrator {
         orgId,
         reason: next.reason,
         taskId: next.taskId,
+        conversationId: next.conversationId,
         priority: next.priority,
       });
       return;
     }
 
-    this.logger.info('Draining pending wake', { roleId: next.roleId, taskId: next.taskId });
-    this.runCoordinator
-      .executeForTask(
-        next.taskId!,
-        next.roleId,
-        orgId,
-        next.reason as WakeReason,
-        this.locale,
-      )
-      .catch((err) => {
-        this.logger.error('Pending wake execution failed', { error: String(err) });
-      });
+    this.logger.info('Draining pending wake', {
+      roleId: next.roleId,
+      taskId: next.taskId,
+      conversationId: next.conversationId,
+    });
+
+    // Dispatch by target: conversation wakes go through executeForConversation,
+    // task wakes through executeForTask. If somehow both are null the wake is
+    // invalid — log and drop rather than crash the orchestrator loop.
+    if (next.conversationId !== null) {
+      this.runCoordinator
+        .executeForConversation(next.conversationId, next.roleId, orgId, this.locale)
+        .catch((err) => {
+          this.logger.error('Pending wake execution failed', { error: String(err) });
+        });
+      return;
+    }
+
+    if (next.taskId !== null) {
+      this.runCoordinator
+        .executeForTask(
+          next.taskId,
+          next.roleId,
+          orgId,
+          next.reason as WakeReason,
+          this.locale,
+        )
+        .catch((err) => {
+          this.logger.error('Pending wake execution failed', { error: String(err) });
+        });
+      return;
+    }
+
+    this.logger.error('Pending wake has neither taskId nor conversationId; dropping', { id: next.id });
   }
 }

@@ -60,7 +60,16 @@ export class BehaviorEngine {
       for (const rule of rules) {
         if (this.evaluateCondition(rule.condition, context)) {
           this.logger.info('Behavior rule matched', { ruleId: rule.id, taskId: task.id, trigger });
-          this.executeAction(rule.action, task);
+          try {
+            this.executeAction(rule.action, task);
+          } catch (error) {
+            this.logger.warn('Behavior rule action failed', {
+              ruleId: rule.id,
+              taskId: task.id,
+              trigger,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       }
     } finally {

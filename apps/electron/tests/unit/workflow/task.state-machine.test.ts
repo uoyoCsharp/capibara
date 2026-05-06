@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
+import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
@@ -29,6 +30,7 @@ function createTask(overrides?: Partial<Task>): Task {
 describe('TaskStateMachine', () => {
   let stateMachine: TaskStateMachine;
   let taskRepo: ITaskRepository;
+  let roleRepo: IRoleRepository;
   let processEngine: ProcessEngine;
   let eventPublisher: IEventPublisher;
   let logger: ILogger;
@@ -38,6 +40,7 @@ describe('TaskStateMachine', () => {
       findById: vi.fn(),
       findByOrgId: vi.fn(),
       findChildren: vi.fn(),
+      hasChildren: vi.fn().mockReturnValue(false),
       findByAssigneeRoleId: vi.fn(),
       create: vi.fn(),
       updateStatus: vi.fn(),
@@ -46,17 +49,28 @@ describe('TaskStateMachine', () => {
       delete: vi.fn(),
     } as unknown as ITaskRepository;
 
+    roleRepo = {
+      findById: vi.fn().mockReturnValue({ id: 'role-1', requiresHumanApproval: true }),
+      findByIds: vi.fn(),
+      findByOrgId: vi.fn(),
+      findChildren: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    } as unknown as IRoleRepository;
+
     processEngine = {
       validateTransition: vi.fn().mockReturnValue(true),
       getStatusCategory: vi.fn().mockReturnValue('active'),
       getStatusesByCategory: vi.fn().mockReturnValue([]),
+      getAvailableTransitions: vi.fn().mockReturnValue([]),
     } as unknown as ProcessEngine;
 
     eventPublisher = { publish: vi.fn() } as IEventPublisher;
 
     logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as ILogger;
 
-    stateMachine = new TaskStateMachine(taskRepo, processEngine, eventPublisher, logger);
+    stateMachine = new TaskStateMachine(taskRepo, roleRepo, processEngine, eventPublisher, logger);
   });
 
   // ─── transition() ──────────────────────────────────────────────
@@ -148,6 +162,122 @@ describe('TaskStateMachine', () => {
       vi.mocked(processEngine.validateTransition).mockReturnValue(false);
 
       expect(() => stateMachine.transition('task-1', 'in_progress')).toThrow(TaskStateError);
+    });
+
+    // ─── Non-leaf approval guard ──────────────────────────────────
+
+    it('throws TaskStateError when a non-leaf task attempts to enter an approval status', () => {
+      const task = createTask({ status: 'in_progress' });
+      vi.mocked(taskRepo.findById).mockReturnValue(task);
+      vi.mocked(processEngine.getStatusCategory).mockReturnValue('approval');
+      vi.mocked(taskRepo.hasChildren).mockReturnValue(true);
+
+      expect(() => stateMachine.transition('task-1', 'awaiting_review')).toThrow(TaskStateError);
+      expect(() => stateMachine.transition('task-1', 'awaiting_review')).toThrow(
+        /non-leaf tasks cannot enter approval states/,
+      );
+      expect(taskRepo.updateStatus).not.toHaveBeenCalled();
+      expect(eventPublisher.publish).not.toHaveBeenCalled();
+    });
+
+    it('allows a leaf task to enter an approval status', () => {
+      const task = createTask({ status: 'in_progress' });
+      const updated = createTask({ status: 'awaiting_review' });
+      vi.mocked(taskRepo.findById).mockReturnValueOnce(task).mockReturnValueOnce(updated);
+      vi.mocked(processEngine.getStatusCategory).mockReturnValue('approval');
+      vi.mocked(taskRepo.hasChildren).mockReturnValue(false);
+
+      stateMachine.transition('task-1', 'awaiting_review');
+
+      expect(taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'awaiting_review');
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:entered-approval',
+        expect.objectContaining({ taskId: 'task-1' }),
+      );
+    });
+
+    // ─── AI role auto-approval ────────────────────────────────────
+
+    it('auto-approves when assignee role has requiresHumanApproval=false', () => {
+      const task = createTask({ status: 'in_progress', assigneeRoleId: 'ai-role' });
+      const inApproval = createTask({ status: 'awaiting_review', assigneeRoleId: 'ai-role' });
+      const done = createTask({ status: 'done', assigneeRoleId: 'ai-role' });
+      vi.mocked(taskRepo.findById)
+        .mockReturnValueOnce(task)        // transition() entry
+        .mockReturnValueOnce(inApproval)  // recursive transition() entry
+        .mockReturnValue(done);           // subsequent lookups
+      vi.mocked(processEngine.getStatusCategory).mockImplementation((_org, status) => {
+        if (status === 'awaiting_review') return 'approval';
+        if (status === 'done') return 'terminal';
+        return 'active';
+      });
+      vi.mocked(processEngine.getAvailableTransitions).mockImplementation((_org, from) => {
+        if (from === 'in_progress') return [{ from: 'in_progress', to: 'awaiting_review' }] as never;
+        if (from === 'awaiting_review') return [{ from: 'awaiting_review', to: 'done' }] as never;
+        return [];
+      });
+      vi.mocked(roleRepo.findById).mockReturnValue({ id: 'ai-role', requiresHumanApproval: false } as never);
+
+      stateMachine.transition('task-1', 'awaiting_review');
+
+      expect(taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'awaiting_review');
+      expect(taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'done');
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
+      expect(emittedTypes).toContain('task:auto-approved');
+      expect(emittedTypes).toContain('task:completed');
+      expect(emittedTypes).not.toContain('task:entered-approval');
+      expect(taskRepo.updatePausedReason).not.toHaveBeenCalledWith('task-1', 'approval');
+    });
+
+    it('pauses human-role leaf at approval state (no auto-approval)', () => {
+      const task = createTask({ status: 'in_progress', assigneeRoleId: 'human-role' });
+      const updated = createTask({ status: 'awaiting_review', assigneeRoleId: 'human-role' });
+      vi.mocked(taskRepo.findById).mockReturnValueOnce(task).mockReturnValueOnce(updated);
+      vi.mocked(processEngine.getStatusCategory).mockReturnValue('approval');
+      vi.mocked(roleRepo.findById).mockReturnValue({ id: 'human-role', requiresHumanApproval: true } as never);
+
+      stateMachine.transition('task-1', 'awaiting_review');
+
+      expect(taskRepo.updatePausedReason).toHaveBeenCalledWith('task-1', 'approval');
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
+      expect(emittedTypes).toContain('task:entered-approval');
+      expect(emittedTypes).not.toContain('task:auto-approved');
+    });
+
+    it('falls back to pause when AI role has no non-approval exit transition', () => {
+      const task = createTask({ status: 'in_progress', assigneeRoleId: 'ai-role' });
+      const updated = createTask({ status: 'awaiting_review', assigneeRoleId: 'ai-role' });
+      vi.mocked(taskRepo.findById).mockReturnValueOnce(task).mockReturnValueOnce(updated);
+      vi.mocked(processEngine.getStatusCategory).mockImplementation((_org, status) => {
+        if (status === 'awaiting_review' || status === 'needs_second_opinion') return 'approval';
+        return 'active';
+      });
+      vi.mocked(processEngine.getAvailableTransitions).mockReturnValue([
+        { from: 'awaiting_review', to: 'needs_second_opinion' },
+      ] as never);
+      vi.mocked(roleRepo.findById).mockReturnValue({ id: 'ai-role', requiresHumanApproval: false } as never);
+
+      stateMachine.transition('task-1', 'awaiting_review');
+
+      expect(taskRepo.updatePausedReason).toHaveBeenCalledWith('task-1', 'approval');
+      expect(logger.warn).toHaveBeenCalled();
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
+      expect(emittedTypes).toContain('task:entered-approval');
+      expect(emittedTypes).not.toContain('task:auto-approved');
+    });
+
+    it('pauses when task has no assigneeRoleId (no role to consult)', () => {
+      const task = createTask({ status: 'in_progress', assigneeRoleId: null });
+      const updated = createTask({ status: 'awaiting_review', assigneeRoleId: null });
+      vi.mocked(taskRepo.findById).mockReturnValueOnce(task).mockReturnValueOnce(updated);
+      vi.mocked(processEngine.getStatusCategory).mockReturnValue('approval');
+
+      stateMachine.transition('task-1', 'awaiting_review');
+
+      expect(taskRepo.updatePausedReason).toHaveBeenCalledWith('task-1', 'approval');
+      expect(roleRepo.findById).not.toHaveBeenCalled();
+      const emittedTypes = vi.mocked(eventPublisher.publish).mock.calls.map((c) => c[0]);
+      expect(emittedTypes).toContain('task:entered-approval');
     });
 
     // ─── Event emission ──────────────────────────────────────────

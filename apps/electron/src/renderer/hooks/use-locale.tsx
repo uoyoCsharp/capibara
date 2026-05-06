@@ -30,17 +30,6 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (typeof api()?.subscribe !== 'function') return;
-    const unsub = api().subscribe((event) => {
-      if (event.type === 'settings:locale-changed' && isSupportedLocale(event.locale)) {
-        setLocaleState(event.locale);
-        setMessages(getMessages(event.locale));
-      }
-    });
-    return unsub;
-  }, []);
-
   const setLocale = useCallback((newLocale: SupportedLocale) => {
     setLocaleState(newLocale);
     setMessages(getMessages(newLocale));

@@ -18,7 +18,8 @@ export type WakeReason =
   | 'retry_failed'
   | 'dispute_detected'
   | 'conversation_reply'
-  | 'conversation_escalation';
+  | 'conversation_escalation'
+  | 'respondent_woken';
 
 interface RunBase {
   id: string;

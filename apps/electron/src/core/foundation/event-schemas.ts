@@ -34,6 +34,14 @@ const TaskApprovalTransitionSchema = z.object({
   from: z.string(),
   to: z.string(),
 });
+const TaskAutoApprovedSchema = z.object({
+  taskId: z.string(),
+  orgId: z.string(),
+  roleId: z.string().nullable(),
+  from: z.string(),
+  via: z.string(),
+  to: z.string(),
+});
 const TaskCompletedSchema = z.object({
   taskId: z.string(),
   orgId: z.string(),
@@ -115,7 +123,8 @@ const PlanTreeNodeSchema: z.ZodType<{
 );
 
 const PlanTreeSubmittedSchema = z.object({
-  rootTaskId: z.string().min(1),
+  rootTaskId: z.string().min(1).nullable(),
+  sourceConversationId: z.string().min(1).nullable(),
   orgId: z.string().min(1),
   roleId: z.string().min(1),
   mode: z.enum(['preview', 'eager']),
@@ -123,18 +132,21 @@ const PlanTreeSubmittedSchema = z.object({
   submittedAt: z.string(),
 });
 const PlanTreeReadySchema = z.object({
-  rootTaskId: z.string(),
+  rootTaskId: z.string().nullable(),
+  sourceConversationId: z.string().nullable(),
   orgId: z.string(),
   nodeCount: z.number(),
   maxDepth: z.number(),
 });
 const PlanTreeDiscardedSchema = z.object({
-  rootTaskId: z.string(),
+  rootTaskId: z.string().nullable(),
+  sourceConversationId: z.string().nullable(),
   orgId: z.string(),
   reason: z.string().nullable(),
 });
 const PlanTreeApprovedSchema = z.object({
-  rootTaskId: z.string(),
+  rootTaskId: z.string().nullable(),
+  sourceConversationId: z.string().nullable(),
   orgId: z.string(),
   nodeCount: z.number(),
 });
@@ -154,6 +166,7 @@ export const EVENT_SCHEMAS = {
   'task:created': TaskCreatedSchema,
   'task:status-changed': TaskStatusChangedSchema,
   'task:entered-approval': TaskApprovalTransitionSchema,
+  'task:auto-approved': TaskAutoApprovedSchema,
   'task:approval-confirmed': TaskApprovalTransitionSchema,
   'task:approval-rejected': TaskApprovalTransitionSchema,
   'task:completed': TaskCompletedSchema,

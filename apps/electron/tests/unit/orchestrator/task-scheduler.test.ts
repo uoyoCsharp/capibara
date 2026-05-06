@@ -64,9 +64,15 @@ let scheduler: TaskScheduler;
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  const findChildrenMock = vi.fn().mockReturnValue([]);
   taskRepo = {
     findByOrgId: vi.fn().mockReturnValue([]),
-    findChildren: vi.fn().mockReturnValue([]),
+    findChildren: findChildrenMock,
+    // Default: derive from whatever findChildren returns. Individual tests
+    // that need to diverge (e.g. simulate an orphan leaf) override this.
+    hasChildren: vi.fn().mockImplementation(
+      (parentId: string) => (findChildrenMock(parentId) as Task[]).length > 0,
+    ),
     findById: vi.fn(),
     findByAssigneeRoleId: vi.fn(),
     create: vi.fn(),
@@ -75,10 +81,13 @@ beforeEach(() => {
     delete: vi.fn(),
   };
 
+  // Default: schema unknown → returns null → isLeaf check falls back to hasChildren.
+  // Individual tests that need isLeaf semantics override this mock.
   processEngine = {
     getStatusCategory: vi.fn().mockImplementation((_orgId: string, status: string) => {
       return STATUS_MAP[status] ?? null;
     }),
+    getWorkItemType: vi.fn().mockReturnValue(null),
   };
 
   logger = {
@@ -562,6 +571,291 @@ describe('TaskScheduler', () => {
       const result = scheduler.findNextTask('org-1');
 
       expect(result).toEqual({ task: child, wakeReason: 'task_scheduled' });
+    });
+  });
+
+  // =========================================================================
+  // 2.8 Leaf-only scheduling (Bug 1)
+  // =========================================================================
+  //
+  // The scheduler must only return tasks that are actually executable — i.e.
+  // LEAF tasks (no children in the repo). Returning a non-leaf parent causes
+  // Claude Code to run on a container whose semantics are undefined. The
+  // scheduler should descend into children of any non-leaf instead of
+  // returning the parent, regardless of the parent's status category.
+  //
+  // These tests reproduce a user-reported bug where user-story (non-leaf)
+  // nodes were triggering Claude Code runs after Eager/Preview decomposition.
+  // See findInSubtree in task.scheduler.ts.
+
+  describe('2.8 Leaf-only scheduling (Bug 1)', () => {
+    it('28: non-leaf (initial + assignee + has children) → descends to leaf, never returns the parent', () => {
+      // epic(pending, assignee) → story(pending, assignee) → task-leaf(pending, assignee)
+      // Today's scheduler returns the first `initial + assignee` node it sees (epic)
+      // which causes Claude Code to run on the epic container. It must descend.
+      const epic = createTask({ id: 'epic', status: 'pending', assigneeRoleId: 'role-1', type: 'epic' });
+      const story = createTask({ id: 'story', parentId: 'epic', status: 'pending', assigneeRoleId: 'role-1', type: 'story' });
+      const leaf = createTask({ id: 'task-leaf', parentId: 'story', status: 'pending', assigneeRoleId: 'role-2', type: 'task' });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      taskRepo.findChildren.mockImplementation((parentId: string) => {
+        if (parentId === 'epic') return [story];
+        if (parentId === 'story') return [leaf];
+        return [];
+      });
+      taskRepo.hasChildren.mockImplementation((id: string) => id === 'epic' || id === 'story');
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toEqual({ task: leaf, wakeReason: 'task_scheduled' });
+    });
+
+    it('29: non-leaf root in ACTIVE state after eager decomposition → descends to pending leaf', () => {
+      // This is the exact scenario the user hit. Planning advances root (epic) to
+      // in_progress, the scheduler is called, and today's code returns null at
+      // active without descending — so leaf tasks never get dispatched. Worse,
+      // onTaskStatusChanged may have already dispatched the active non-leaf itself.
+      const epic = createTask({ id: 'epic', status: 'in_progress', assigneeRoleId: 'role-1', type: 'epic' });
+      const story = createTask({ id: 'story', parentId: 'epic', status: 'pending', assigneeRoleId: 'role-1', type: 'story' });
+      const leaf = createTask({ id: 'task-leaf', parentId: 'story', status: 'pending', assigneeRoleId: 'role-2', type: 'task' });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      taskRepo.findChildren.mockImplementation((parentId: string) => {
+        if (parentId === 'epic') return [story];
+        if (parentId === 'story') return [leaf];
+        return [];
+      });
+      taskRepo.hasChildren.mockImplementation((id: string) => id === 'epic' || id === 'story');
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toEqual({ task: leaf, wakeReason: 'task_scheduled' });
+    });
+
+    it('30: non-leaf with only terminal descendants → null (nothing to schedule)', () => {
+      // A non-leaf whose entire subtree is terminal must not be itself returned,
+      // even though its status is `initial + assignee`. Expected: null (caller
+      // will propagate parent-completion instead).
+      const epic = createTask({ id: 'epic', status: 'pending', assigneeRoleId: 'role-1', type: 'epic' });
+      const story = createTask({ id: 'story', parentId: 'epic', status: 'done', type: 'story' });
+      const leaf = createTask({ id: 'task-leaf', parentId: 'story', status: 'done', type: 'task' });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      taskRepo.findChildren.mockImplementation((parentId: string) => {
+        if (parentId === 'epic') return [story];
+        if (parentId === 'story') return [leaf];
+        return [];
+      });
+      taskRepo.hasChildren.mockImplementation((id: string) => id === 'epic' || id === 'story');
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toBeNull();
+    });
+
+    it('31: mixed subtrees under active non-leaf — returns pending leaf in second subtree', () => {
+      //   epic(in_progress)
+      //     ├─ story-A(done) → task-A(done, leaf)
+      //     └─ story-B(in_progress) → task-B(pending, leaf, assignee)
+      // Must descend through active non-leaves in both directions and return task-B.
+      const epic = createTask({ id: 'epic', status: 'in_progress', assigneeRoleId: 'role-1', type: 'epic' });
+      const storyA = createTask({ id: 'story-A', parentId: 'epic', status: 'done', type: 'story', createdAt: '2026-01-01T00:00:00.000Z' });
+      const storyB = createTask({ id: 'story-B', parentId: 'epic', status: 'in_progress', type: 'story', createdAt: '2026-01-02T00:00:00.000Z' });
+      const taskA = createTask({ id: 'task-A', parentId: 'story-A', status: 'done', type: 'task' });
+      const taskB = createTask({ id: 'task-B', parentId: 'story-B', status: 'pending', assigneeRoleId: 'role-2', type: 'task' });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      taskRepo.findChildren.mockImplementation((parentId: string) => {
+        if (parentId === 'epic') return [storyA, storyB];
+        if (parentId === 'story-A') return [taskA];
+        if (parentId === 'story-B') return [taskB];
+        return [];
+      });
+      taskRepo.hasChildren.mockImplementation((id: string) => ['epic', 'story-A', 'story-B'].includes(id));
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toEqual({ task: taskB, wakeReason: 'task_scheduled' });
+    });
+
+    it('32: non-leaf pending whose leaves are ALL active (running) → null (nothing to schedule)', () => {
+      //   epic(pending) — non-leaf, must not be returned
+      //     ├─ task-1(in_progress, leaf)
+      //     └─ task-2(in_progress, leaf)
+      // Today's code returns epic (non-leaf bug). Correct behavior: descend, find
+      // only active leaves, return null. Gate prevents concurrent dispatch anyway.
+      const epic = createTask({ id: 'epic', status: 'pending', assigneeRoleId: 'role-1', type: 'epic' });
+      const t1 = createTask({ id: 't1', parentId: 'epic', status: 'in_progress', assigneeRoleId: 'role-1', type: 'task', createdAt: '2026-01-01T00:00:00.000Z' });
+      const t2 = createTask({ id: 't2', parentId: 'epic', status: 'in_progress', assigneeRoleId: 'role-1', type: 'task', createdAt: '2026-01-02T00:00:00.000Z' });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      taskRepo.findChildren.mockImplementation((parentId: string) =>
+        parentId === 'epic' ? [t1, t2] : [],
+      );
+      taskRepo.hasChildren.mockImplementation((id: string) => id === 'epic');
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toBeNull();
+    });
+
+    it('33: chained non-leaves (all initial) → recurses all the way to deep leaf', () => {
+      // root(pending, non-leaf) → mid(pending, non-leaf) → deep(pending, leaf)
+      // Scheduler must recurse through every non-leaf, returning only the deep leaf.
+      const root = createTask({ id: 'root', status: 'pending', assigneeRoleId: 'role-1', type: 'epic' });
+      const mid = createTask({ id: 'mid', parentId: 'root', status: 'pending', assigneeRoleId: 'role-1', type: 'story' });
+      const deep = createTask({ id: 'deep', parentId: 'mid', status: 'pending', assigneeRoleId: 'role-2', type: 'task' });
+
+      taskRepo.findByOrgId.mockReturnValue([root]);
+      taskRepo.findChildren.mockImplementation((parentId: string) => {
+        if (parentId === 'root') return [mid];
+        if (parentId === 'mid') return [deep];
+        return [];
+      });
+      taskRepo.hasChildren.mockImplementation((id: string) => id === 'root' || id === 'mid');
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toEqual({ task: deep, wakeReason: 'task_scheduled' });
+    });
+
+    it('34: non-leaf initial with NO assigneeRoleId but has schedulable children → descends, does NOT warn', () => {
+      // Non-leaves are containers — "no assignee" is not a blocking condition for
+      // them. The "Task blocked: no assigneeRoleId" warn must only fire for leaves.
+      const epic = createTask({ id: 'epic', status: 'pending', assigneeRoleId: null, type: 'epic' });
+      const leaf = createTask({ id: 'task-leaf', parentId: 'epic', status: 'pending', assigneeRoleId: 'role-1', type: 'task' });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      taskRepo.findChildren.mockImplementation((parentId: string) =>
+        parentId === 'epic' ? [leaf] : [],
+      );
+      taskRepo.hasChildren.mockImplementation((id: string) => id === 'epic');
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toEqual({ task: leaf, wakeReason: 'task_scheduled' });
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        'Task blocked: no assigneeRoleId',
+        expect.objectContaining({ taskId: 'epic' }),
+      );
+    });
+
+    it('35: leaf already in active state → null (must not re-schedule a running task)', () => {
+      // Regression guard: today's code correctly returns null on active leaves.
+      // The leaf fix must not break this.
+      const leaf = createTask({ id: 'leaf', status: 'in_progress', assigneeRoleId: 'role-1', type: 'task' });
+      taskRepo.findByOrgId.mockReturnValue([leaf]);
+      taskRepo.hasChildren.mockReturnValue(false);
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // 2.9 Non-leaf-but-not-yet-decomposed must schedule (Bug 4)
+  // =========================================================================
+  //
+  // A task whose schema type is non-leaf (isLeaf=false) but which has NO
+  // children yet is NOT a container — it's a node waiting to be decomposed.
+  // The scheduler MUST return it so the assignee role gets woken. The prompt
+  // scenario system will automatically route the wake to a decomposition
+  // scenario (preview_decomposition / eager_decomposition) based on
+  // task.planningMode. See scenario.ts.
+  //
+  // Without this, manually-created epic/story root tasks sit dormant forever.
+
+  describe('2.9 Non-leaf-but-not-yet-decomposed (Bug 4)', () => {
+    // Helper: schema says "epic is non-leaf". This is the whole point of these
+    // tests — we must not let the isLeaf=false signal alone classify the task
+    // as a container when it has no children yet.
+    function mockEpicIsNonLeaf() {
+      processEngine.getWorkItemType.mockImplementation(
+        (_orgId: string, typeName: string) =>
+          typeName === 'epic'
+            ? { name: 'epic', label: 'Epic', isLeaf: false, allowedChildren: ['story'], allowedAtRoot: true, canDecompose: true }
+            : null,
+      );
+    }
+
+    it('36: non-leaf type + initial + assignee + NO children → returns itself', () => {
+      // The typical manual-create case: user creates an epic root through UI,
+      // planningMode defaults to "preview", assignee is a planner role.
+      // Scheduler must dispatch it so the AI can decompose it.
+      mockEpicIsNonLeaf();
+      const epic = createTask({
+        id: 'epic-root',
+        type: 'epic',
+        status: 'pending',
+        assigneeRoleId: 'role-lead',
+      });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      // No children. Default hasChildren mock derives from findChildren=[].
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toEqual({ task: epic, wakeReason: 'task_scheduled' });
+    });
+
+    it('37: non-leaf + initial + NO assignee + no children → null, warn logged', () => {
+      mockEpicIsNonLeaf();
+      // Unlike the old over-broad "non-leaf is always a container" rule, a
+      // non-leaf without children IS schedulable — so the missing-assignee
+      // warning DOES apply here (same as leaves).
+      const epic = createTask({
+        id: 'epic-root',
+        type: 'epic',
+        status: 'pending',
+        assigneeRoleId: null,
+      });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toBeNull();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Task blocked: no assigneeRoleId',
+        expect.objectContaining({ taskId: 'epic-root' }),
+      );
+    });
+
+    it('38: non-leaf with children → still descends, never returns itself', () => {
+      // Regression guard on the OLD fix: once decomposition happened, the
+      // non-leaf must become a container. This parallels #28 but makes the
+      // before/after contrast explicit.
+      mockEpicIsNonLeaf();
+      const epic = createTask({ id: 'epic', type: 'epic', status: 'pending', assigneeRoleId: 'role-lead' });
+      const leaf = createTask({ id: 'leaf', parentId: 'epic', status: 'pending', assigneeRoleId: 'role-dev', type: 'task' });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+      taskRepo.findChildren.mockImplementation((parentId: string) =>
+        parentId === 'epic' ? [leaf] : [],
+      );
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result?.task.id).toBe('leaf');
+      expect(result?.task.id).not.toBe('epic');
+    });
+
+    it('39: non-leaf + active status + no children → null (run already in flight)', () => {
+      // The assignee is presumably already executing. Do not re-dispatch.
+      mockEpicIsNonLeaf();
+      const epic = createTask({
+        id: 'epic',
+        type: 'epic',
+        status: 'in_progress',
+        assigneeRoleId: 'role-lead',
+      });
+
+      taskRepo.findByOrgId.mockReturnValue([epic]);
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toBeNull();
     });
   });
 });

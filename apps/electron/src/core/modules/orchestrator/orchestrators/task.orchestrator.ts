@@ -50,6 +50,7 @@ export class TaskOrchestrator {
     this.eventBus.on('task:entered-approval', (e) => this.onTaskEnteredApproval(e));
     this.eventBus.on('task:approval-confirmed', (e) => this.onTaskApprovalConfirmed(e));
     this.eventBus.on('task:completed', (e) => this.onTaskCompleted(e));
+    this.eventBus.on('plan-tree:approved', (e) => this.onPlanTreeApproved(e));
     this.logger.info('TaskOrchestrator started');
   }
 
@@ -79,7 +80,7 @@ export class TaskOrchestrator {
   tryWake(roleId: string, orgId: string, reason: string, taskId: string | null): void {
     const gate = this.wakeGateValidator.validate(roleId, orgId);
     if (!gate.allowed) {
-      this.pendingWakeRepo.create({ roleId, orgId, reason, taskId, priority: 0 });
+      this.pendingWakeRepo.create({ roleId, orgId, reason, taskId, conversationId: null, priority: 0 });
       this.logger.info('Wake queued (gate blocked)', { roleId, reason: gate.reason });
       return;
     }
@@ -153,6 +154,16 @@ export class TaskOrchestrator {
     if (!task) return;
 
     this.behaviorEngine.onChildCompleted(task);
+    this.scheduleNext(orgId);
+  }
+
+  // Preview-tree approve path: children have just been materialized under a
+  // root that is typically already in_progress. advanceRootAfterDecomposition
+  // in PlanningService no-ops in that case, so no task:status-changed is
+  // emitted to drive scheduling. We must kick the scheduler explicitly.
+  private onPlanTreeApproved(event: DomainEvent<'plan-tree:approved'>): void {
+    const { rootTaskId, orgId } = event.payload;
+    this.logger.info('Plan tree approved, resuming scheduling', { rootTaskId, orgId });
     this.scheduleNext(orgId);
   }
 }

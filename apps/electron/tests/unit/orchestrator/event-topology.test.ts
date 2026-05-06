@@ -67,6 +67,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
       findById: vi.fn().mockReturnValue(taskFixture()),
       findByOrgId: vi.fn().mockReturnValue([]),
       findChildren: vi.fn().mockReturnValue([]),
+      hasChildren: vi.fn().mockReturnValue(false),
       findByAssigneeRoleId: vi.fn().mockReturnValue([]),
       create: vi.fn(),
       updateStatus: vi.fn(),
@@ -132,7 +133,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
       taskScheduler, taskStateMachine, processEngine, behaviorEngine,
     );
     const conversationOrchestrator = new ConversationOrchestrator(
-      bus, logger, convRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
+      bus, logger, convRepo, pendingWakeRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
     );
     const runOrchestrator = new RunOrchestrator(
       bus, logger, pendingWakeRepo, wakeGateValidator, retryScheduler, runCoordinator, taskOrchestrator,

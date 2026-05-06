@@ -3,6 +3,7 @@ import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { DomainEvent } from '@core/foundation/events';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
+import type { IPendingWakeRepository } from '../interfaces/i-pending-wake.repository';
 import type { WakeGateValidator } from '../wake-gate.validator';
 import type { RunCoordinator } from '../run.coordinator';
 import type { TaskOrchestrator } from './task.orchestrator';
@@ -21,6 +22,7 @@ export class ConversationOrchestrator {
     private readonly eventBus: IEventBus,
     private readonly logger: ILogger,
     private readonly convRepo: IConversationRepository,
+    private readonly pendingWakeRepo: IPendingWakeRepository,
     private readonly wakeGateValidator: WakeGateValidator,
     private readonly runCoordinator: RunCoordinator,
     private readonly taskOrchestrator: TaskOrchestrator,
@@ -38,7 +40,18 @@ export class ConversationOrchestrator {
 
     const gate = this.wakeGateValidator.validate(roleId, orgId);
     if (!gate.allowed) {
-      this.logger.info('Conversation wake blocked', { conversationId, roleId, reason: gate.reason });
+      // Queue the wake so RunOrchestrator.drainPendingWakes dispatches it
+      // after the currently-active run finishes. Without this, AI→AI
+      // inquiries vanish whenever the asker's run is still in flight.
+      this.pendingWakeRepo.create({
+        roleId,
+        orgId,
+        reason: 'respondent_woken',
+        taskId: null,
+        conversationId,
+        priority: 0,
+      });
+      this.logger.info('Conversation wake queued (gate blocked)', { conversationId, roleId, reason: gate.reason });
       return;
     }
 

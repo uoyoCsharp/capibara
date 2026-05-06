@@ -11,6 +11,7 @@ import {
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import { SqliteTaskRepository } from '@core/modules/workflow/persistence/sqlite-task.repository';
 import { SqliteProcessSchemaRepository } from '@core/modules/workflow/persistence/sqlite-process-schema.repository';
 import { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
@@ -24,6 +25,7 @@ export function registerWorkflowModule(
   eventPublisher: IEventPublisher,
   logger: ILogger,
   workflowsDir: string,
+  roleRepo: IRoleRepository,
 ): {
   taskService: TaskService;
   processEngine: ProcessEngine;
@@ -34,7 +36,7 @@ export function registerWorkflowModule(
   const taskRepo = new SqliteTaskRepository(connection);
   const schemaRepo = new SqliteProcessSchemaRepository(connection);
   const processEngine = new ProcessEngine(schemaRepo, logger);
-  const taskStateMachine = new TaskStateMachine(taskRepo, processEngine, eventPublisher, logger);
+  const taskStateMachine = new TaskStateMachine(taskRepo, roleRepo, processEngine, eventPublisher, logger);
   const behaviorEngine = new BehaviorEngine(taskRepo, processEngine, taskStateMachine, logger);
   taskStateMachine.setBehaviorEngine(behaviorEngine);
   const taskService = new TaskService(taskRepo, processEngine, eventPublisher);

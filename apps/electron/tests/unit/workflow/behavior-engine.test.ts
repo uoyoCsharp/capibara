@@ -83,6 +83,7 @@ describe('BehaviorEngine', () => {
       findById: vi.fn().mockReturnValue(null),
       findByOrgId: vi.fn().mockReturnValue([]),
       findChildren: vi.fn().mockReturnValue([]),
+      hasChildren: vi.fn().mockReturnValue(false),
       findByAssigneeRoleId: vi.fn().mockReturnValue([]),
       create: vi.fn(),
       updateStatus: vi.fn(),
@@ -1064,12 +1065,12 @@ describe('BehaviorEngine', () => {
       ];
       vi.mocked(processEngine.getSchema).mockReturnValue(schema);
 
-      // First call: transition throws
+      // First call: transition throws — caught & logged, does NOT propagate
       vi.mocked(taskStateMachine.transition).mockImplementationOnce(() => {
         throw new Error('Transition failed');
       });
 
-      expect(() => engine.onStatusEnter(task)).toThrow('Transition failed');
+      expect(() => engine.onStatusEnter(task)).not.toThrow();
 
       // Second call: transition succeeds — key should be cleared
       vi.mocked(taskStateMachine.transition).mockImplementation(() => undefined as never);

@@ -4,7 +4,7 @@ export type StatusCategory = 'initial' | 'active' | 'approval' | 'terminal';
 
 export type TaskPausedReason = 'approval' | null;
 
-export type PlanningMode = 'layered' | 'eager' | 'preview';
+export type PlanningMode = 'eager' | 'preview';
 
 export interface Task {
   id: string;

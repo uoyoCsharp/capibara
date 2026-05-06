@@ -90,8 +90,8 @@ const migrations: Migration[] = [
           depth INTEGER NOT NULL DEFAULT 0,
           artifact_paths TEXT,
           paused_reason TEXT,
-          planning_mode TEXT NOT NULL DEFAULT 'layered'
-            CHECK (planning_mode IN ('layered','eager','preview')),
+          planning_mode TEXT NOT NULL DEFAULT 'preview'
+            CHECK (planning_mode IN ('eager','preview')),
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -215,8 +215,10 @@ const migrations: Migration[] = [
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
           reason TEXT NOT NULL,
           task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+          conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
           priority INTEGER NOT NULL DEFAULT 0,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          CHECK (task_id IS NOT NULL OR conversation_id IS NOT NULL)
         );
 
         -- ═══════════════════════════════════════════════
@@ -238,7 +240,8 @@ const migrations: Migration[] = [
         -- ═══════════════════════════════════════════════
         CREATE TABLE pending_plan_trees (
           id TEXT PRIMARY KEY,
-          root_task_id TEXT NOT NULL,
+          root_task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+          source_conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
           org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
           role_id TEXT NOT NULL,
           mode TEXT NOT NULL CHECK (mode IN ('preview', 'eager')),
@@ -252,13 +255,22 @@ const migrations: Migration[] = [
           expires_at TEXT NOT NULL,
           reviewed_at TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          CHECK (
+            (root_task_id IS NOT NULL AND source_conversation_id IS NULL)
+            OR (root_task_id IS NULL AND source_conversation_id IS NOT NULL)
+          )
         );
 
-        -- Only one active/refining pending per root task
-        CREATE UNIQUE INDEX idx_pending_plan_trees_active
+        -- Only one active/refining pending per root task (when task-anchored)
+        CREATE UNIQUE INDEX idx_pending_plan_trees_active_task
           ON pending_plan_trees(root_task_id)
-          WHERE status IN ('active', 'refining');
+          WHERE status IN ('active', 'refining') AND root_task_id IS NOT NULL;
+
+        -- Only one active/refining pending per source conversation
+        CREATE UNIQUE INDEX idx_pending_plan_trees_active_conv
+          ON pending_plan_trees(source_conversation_id)
+          WHERE status IN ('active', 'refining') AND source_conversation_id IS NOT NULL;
 
         CREATE INDEX idx_pending_plan_trees_org ON pending_plan_trees(org_id, status);
         CREATE INDEX idx_pending_plan_trees_expires ON pending_plan_trees(expires_at)

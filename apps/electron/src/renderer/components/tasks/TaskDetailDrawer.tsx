@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash, UserCircle, Play, XCircle } from '@phosphor-icons/react';
+import { Trash, UserCircle, XCircle } from '@phosphor-icons/react';
 import type { TaskRecord, RoleRecord } from '@core/shared/types';
 import {
   Sheet,
@@ -34,8 +34,6 @@ interface TaskDetailDrawerProps {
   statusLabel: (name: string) => string;
   isTerminal: (name: string) => boolean;
   isApproval: (name: string) => boolean;
-  isInitial: (name: string) => boolean;
-  onStart: (taskId: string) => void;
   onCancel: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onClose: () => void;
@@ -48,8 +46,6 @@ export function TaskDetailDrawer({
   statusLabel,
   isTerminal,
   isApproval,
-  isInitial,
-  onStart,
   onCancel,
   onDelete,
   onClose,
@@ -60,7 +56,6 @@ export function TaskDetailDrawer({
   const assignee = roles.find((r) => r.id === task.assigneeRoleId);
   const terminal = isTerminal(task.status);
   const approval = isApproval(task.status);
-  const initial = isInitial(task.status);
 
   const statusColor = terminal
     ? 'bg-green-500/10 text-green-600 border-green-500/30'
@@ -93,11 +88,6 @@ export function TaskDetailDrawer({
                   <Badge variant="secondary">
                     {typeLabel(task.type)}
                   </Badge>
-                  {task.planningMode !== 'layered' && (
-                    <Badge variant="outline" className="text-xs">
-                      {task.planningMode === 'preview' ? 'Preview plan' : 'Eager plan'}
-                    </Badge>
-                  )}
                 </div>
 
                 {/* Assignee */}
@@ -146,17 +136,6 @@ export function TaskDetailDrawer({
                       {t.taskDetail?.actions ?? 'Actions'}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {initial && (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => onStart(task.id)}
-                          className="gap-1.5"
-                        >
-                          <Play size={14} weight="fill" />
-                          {t.taskDetail?.start ?? 'Start'}
-                        </Button>
-                      )}
                       <Button
                         variant="outline"
                         size="sm"

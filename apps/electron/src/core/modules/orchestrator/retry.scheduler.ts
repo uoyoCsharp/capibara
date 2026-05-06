@@ -39,6 +39,7 @@ export class RetryScheduler {
         orgId: run.orgId,
         reason: 'retry_failed',
         taskId: run.taskId,
+        conversationId: run.conversationId,
         priority: -1,
       });
     }, backoffMs);

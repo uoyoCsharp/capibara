@@ -3,6 +3,7 @@ import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publis
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { RoleService } from '@core/modules/organization/services/role.service';
+import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { PlanTreeNode, PlanTreeMode } from '@core/foundation/events';
 
 export const MAX_TREE_NODES = 500;
@@ -66,7 +67,8 @@ function measureDepth(tree: PlanTreeNode, depth = 1): number {
 
 interface ValidateArgs {
   orgId: string;
-  rootType: string;
+  /** When non-null: root node type must match. When null: root must be an allowedAtRoot type. */
+  rootType: string | null;
   tree: PlanTreeNode;
   processEngine: ProcessEngine;
   validRoleIds: Set<string>;
@@ -75,12 +77,30 @@ interface ValidateArgs {
 export function validatePlanTree(args: ValidateArgs): PlanTreeValidationError | null {
   const { orgId, rootType, tree, processEngine, validRoleIds } = args;
 
-  if (tree.type !== rootType) {
+  if (rootType !== null && tree.type !== rootType) {
     return {
       code: 'ROOT_TYPE_MISMATCH',
       message: `Root node type "${tree.type}" does not match root task type "${rootType}".`,
       nodePath: '$',
     };
+  }
+
+  if (rootType === null) {
+    const rootTypeDef = processEngine.getWorkItemType(orgId, tree.type);
+    if (!rootTypeDef) {
+      return {
+        code: 'UNKNOWN_WORK_ITEM_TYPE',
+        message: `Unknown type "${tree.type}".`,
+        nodePath: '$',
+      };
+    }
+    if (!rootTypeDef.allowedAtRoot) {
+      return {
+        code: 'ROOT_TYPE_MISMATCH',
+        message: `Type "${tree.type}" is not allowed at the root of the task hierarchy.`,
+        nodePath: '$',
+      };
+    }
   }
 
   const totalNodes = countNodes(tree);
@@ -154,31 +174,53 @@ export function createPlanTreeTools(
   taskService: TaskService,
   processEngine: ProcessEngine,
   roleService: RoleService,
+  conversationService: ConversationService,
   eventPublisher: IEventPublisher,
 ): McpToolDefinition[] {
   return [
     {
       name: 'capibara_plan_submit_tree',
       description:
-        'Submit the complete decomposition tree for the current task in a single call. ' +
-        'The server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10) ' +
-        'before accepting. In preview mode the tree waits for human approval; in eager mode it is persisted immediately.',
+        'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
+        '(rootTaskId) or a conversation (conversationId) — provide exactly one. ' +
+        'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
+        '(preview waits for approval, eager persists immediately). ' +
+        'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
+        'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
+        'are created as root-level tasks. ' +
+        'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
       inputSchema: {
         type: 'object',
         properties: {
-          rootTaskId: { type: 'string', description: 'The current task ID (must be the root of the submitted tree)' },
+          rootTaskId: {
+            type: 'string',
+            description: 'Task anchor — the current task ID (tree root type must match the task). Provide this OR conversationId.',
+          },
+          conversationId: {
+            type: 'string',
+            description: 'Conversation anchor — the planning conversation ID. Provide this OR rootTaskId.',
+          },
           tree: {
             type: 'object',
             description:
-              'The decomposition tree. The root node must match the current task type. ' +
+              'The decomposition tree. For task anchor: root must match current task type. ' +
+              'For conversation anchor: root must be an allowedAtRoot type. ' +
               'Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
           },
         },
-        required: ['rootTaskId', 'tree'],
+        required: ['tree'],
       },
       handler: async (params) => {
-        const rootTaskId = params.rootTaskId as string;
+        const rootTaskId = (params.rootTaskId ?? null) as string | null;
+        const conversationId = (params.conversationId ?? null) as string | null;
         const rawTree = params.tree;
+
+        if ((rootTaskId === null) === (conversationId === null)) {
+          return {
+            error: 'INVALID_ANCHOR',
+            message: 'Provide exactly one of rootTaskId or conversationId.',
+          };
+        }
 
         if (!isDraftNode(rawTree)) {
           return {
@@ -188,37 +230,50 @@ export function createPlanTreeTools(
         }
         const tree = normalizeDraftNode(rawTree);
 
-        const rootTask = taskService.findById(rootTaskId);
-        if (!rootTask) {
-          return { error: 'ROOT_TASK_NOT_FOUND', message: `Root task "${rootTaskId}" not found.` };
+        let orgId: string;
+        let agentRoleId: string;
+        let rootType: string | null;
+        let mode: PlanTreeMode;
+
+        if (rootTaskId) {
+          const rootTask = taskService.findById(rootTaskId);
+          if (!rootTask) {
+            return { error: 'ROOT_TASK_NOT_FOUND', message: `Root task "${rootTaskId}" not found.` };
+          }
+          const rootStatusCategory = processEngine.getStatusCategory(rootTask.orgId, rootTask.status);
+          if (rootStatusCategory === 'terminal') {
+            return {
+              error: 'ROOT_TASK_TERMINAL',
+              message: `Task "${rootTaskId}" is in terminal status "${rootTask.status}" and cannot be decomposed.`,
+            };
+          }
+          orgId = rootTask.orgId;
+          agentRoleId = rootTask.assigneeRoleId ?? tree.assigneeRoleId;
+          rootType = rootTask.type;
+          mode = rootTask.planningMode;
+        } else {
+          const conversation = conversationService.findById(conversationId!);
+          if (!conversation) {
+            return { error: 'CONVERSATION_NOT_FOUND', message: `Conversation "${conversationId}" not found.` };
+          }
+          if (conversation.type !== 'planning') {
+            return {
+              error: 'INVALID_CONVERSATION_TYPE',
+              message: `Conversation "${conversationId}" has type "${conversation.type}"; expected "planning".`,
+            };
+          }
+          orgId = conversation.orgId;
+          agentRoleId = conversation.respondentRoleId ?? tree.assigneeRoleId;
+          rootType = null; // root must be allowedAtRoot, verified by validator
+          mode = 'preview';
         }
 
-        const rootStatusCategory = processEngine.getStatusCategory(rootTask.orgId, rootTask.status);
-        if (rootStatusCategory === 'terminal') {
-          return {
-            error: 'ROOT_TASK_TERMINAL',
-            message: `Task "${rootTaskId}" is in terminal status "${rootTask.status}" and cannot be decomposed.`,
-          };
-        }
-
-        const mode: PlanTreeMode | null =
-          rootTask.planningMode === 'preview' ? 'preview' :
-          rootTask.planningMode === 'eager' ? 'eager' :
-          null;
-
-        if (mode === null) {
-          return {
-            error: 'TOOL_NOT_ALLOWED_IN_MODE',
-            message: `capibara_plan_submit_tree is not available for tasks with planningMode="${rootTask.planningMode}".`,
-          };
-        }
-
-        const roles = roleService.findByOrgId(rootTask.orgId);
+        const roles = roleService.findByOrgId(orgId);
         const validRoleIds = new Set(roles.map((r) => r.id));
 
         const err = validatePlanTree({
-          orgId: rootTask.orgId,
-          rootType: rootTask.type,
+          orgId,
+          rootType,
           tree,
           processEngine,
           validRoleIds,
@@ -227,12 +282,11 @@ export function createPlanTreeTools(
           return { error: err.code, message: err.message, nodePath: err.nodePath };
         }
 
-        const assigneeFromRoot = rootTask.assigneeRoleId ?? tree.assigneeRoleId;
-
         eventPublisher.publish('plan-tree:submitted', {
-          rootTaskId: rootTask.id,
-          orgId: rootTask.orgId,
-          roleId: assigneeFromRoot,
+          rootTaskId,
+          sourceConversationId: conversationId,
+          orgId,
+          roleId: agentRoleId,
           mode,
           tree,
           submittedAt: new Date().toISOString(),

@@ -1,5 +1,6 @@
 import { injectable } from 'tsyringe';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
+import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
@@ -14,6 +15,7 @@ export class TaskStateMachine {
 
   constructor(
     private readonly taskRepo: ITaskRepository,
+    private readonly roleRepo: IRoleRepository,
     private readonly processEngine: ProcessEngine,
     private readonly eventPublisher: IEventPublisher,
     private readonly logger: ILogger,
@@ -37,12 +39,33 @@ export class TaskStateMachine {
       throw new TaskStateError(currentStatus, newStatus);
     }
 
-    this.taskRepo.updateStatus(taskId, newStatus);
-
     const category = this.processEngine.getStatusCategory(task.orgId, newStatus);
+
+    if (category === 'approval' && this.taskRepo.hasChildren(taskId)) {
+      this.logger.debug('Non-leaf task cannot enter approval state', { taskId, from: currentStatus, to: newStatus });
+      throw new TaskStateError(
+        currentStatus,
+        newStatus,
+        'non-leaf tasks cannot enter approval states',
+      );
+    }
+
+    this.taskRepo.updateStatus(taskId, newStatus);
     this.logger.debug('Task transition completed', { taskId, from: currentStatus, to: newStatus, category });
 
     if (category === 'approval') {
+      const autoTarget = this.resolveAutoApprovalTarget(task, newStatus);
+      if (autoTarget) {
+        this.emitEvent('task:auto-approved', {
+          taskId,
+          orgId: task.orgId,
+          roleId: task.assigneeRoleId,
+          from: currentStatus,
+          via: newStatus,
+          to: autoTarget,
+        });
+        return this.transition(taskId, autoTarget);
+      }
       this.taskRepo.updatePausedReason(taskId, 'approval');
       this.emitEvent('task:entered-approval', { taskId, orgId: task.orgId, from: currentStatus, to: newStatus });
     } else {
@@ -60,6 +83,26 @@ export class TaskStateMachine {
     }
 
     return this.taskRepo.findById(taskId)!;
+  }
+
+  private resolveAutoApprovalTarget(task: Task, approvalStatus: TaskStatus): TaskStatus | null {
+    if (!task.assigneeRoleId) return null;
+    const role = this.roleRepo.findById(task.assigneeRoleId);
+    if (!role || role.requiresHumanApproval) return null;
+
+    const transitions = this.processEngine.getAvailableTransitions(task.orgId, approvalStatus);
+    const target = transitions.find(
+      (t) => this.processEngine.getStatusCategory(task.orgId, t.to) !== 'approval',
+    );
+    if (!target) {
+      this.logger.warn('AI role at approval state has no non-approval transition; pausing', {
+        taskId: task.id,
+        roleId: role.id,
+        approvalStatus,
+      });
+      return null;
+    }
+    return target.to;
   }
 
   confirmApproval(taskId: string, nextStatus: TaskStatus): Task {

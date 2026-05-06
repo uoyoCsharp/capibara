@@ -12,6 +12,8 @@ const defaultTask: PromptContext['task'] = {
   orgId: 'org-1',
   hasChildren: false,
   isDecomposable: false,
+  planningMode: 'preview',
+  pendingFeedback: null,
   allowedChildTypes: [],
   isTerminal: false,
   parentChain: [],
@@ -34,14 +36,19 @@ describe('resolveScenario', () => {
     expect(resolveScenario(ctx)).toBe('execute_leaf');
   });
 
-  it('task_assigned + decomposable → propose_decomposition', () => {
+  it('task_assigned + decomposable → preview_decomposition (default)', () => {
     const ctx = createCtx({ wakeReason: 'task_assigned', task: { isDecomposable: true } });
-    expect(resolveScenario(ctx)).toBe('propose_decomposition');
+    expect(resolveScenario(ctx)).toBe('preview_decomposition');
   });
 
-  it('conversation_reply + decomposable → execute_decomposition', () => {
+  it('task_assigned + decomposable + eager → eager_decomposition', () => {
+    const ctx = createCtx({ wakeReason: 'task_assigned', task: { isDecomposable: true, planningMode: 'eager' } });
+    expect(resolveScenario(ctx)).toBe('eager_decomposition');
+  });
+
+  it('conversation_reply + decomposable → preview_decomposition', () => {
     const ctx = createCtx({ wakeReason: 'conversation_reply', task: { isDecomposable: true } });
-    expect(resolveScenario(ctx)).toBe('execute_decomposition');
+    expect(resolveScenario(ctx)).toBe('preview_decomposition');
   });
 
   it('conversation_reply + leaf → conversation_reply', () => {

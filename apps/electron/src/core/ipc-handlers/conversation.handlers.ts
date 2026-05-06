@@ -53,4 +53,28 @@ export function registerConversationHandlers(
     try { return ok(conversationService.createPlanningOrAdhoc(orgId, 'adhoc', 'human', roleId, message)); }
     catch (e) { return err('VALIDATION_ERROR', String(e)); }
   });
+
+  /**
+   * Start a conversational planning session. Creates a type='planning'
+   * conversation with taskId=null and the agent role as respondent. The
+   * emitted `conversation:response-needed` event drives the first AI run
+   * automatically via ConversationOrchestrator.
+   */
+  ipcMain.handle('capibara:planning:start', async (_ev, orgId: string, agentRoleId: string, firstMessage: string) => {
+    try { return ok(conversationService.createPlanning(orgId, agentRoleId, firstMessage)); }
+    catch (e) { return err('VALIDATION_ERROR', String(e)); }
+  });
+
+  /**
+   * Find the active (non-resolved) planning conversation for an org, if any.
+   * Used by the Planning page's resume logic: only one active planning
+   * conversation is allowed per org in MVP.
+   */
+  ipcMain.handle('capibara:planning:active', async (_ev, orgId: string) => {
+    try {
+      const active = conversationService.findActiveByOrgId(orgId)
+        .find((c) => c.type === 'planning');
+      return ok(active ?? null);
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
 }

@@ -3,6 +3,7 @@ import { DashboardPage } from '../dashboard/DashboardPage';
 import { TasksPage } from '../tasks/TasksPage';
 import { InboxPage } from '../inbox/InboxPage';
 import { TeamPage } from '../team/TeamPage';
+import { PlanningPage } from '../planning/PlanningPage';
 import { SettingsPage } from '../settings/SettingsPage';
 import { OrgSettingsPage } from '../organization/OrgSettingsPage';
 
@@ -26,6 +27,8 @@ export function SectionRouter({ activeSection, orgId, onWorkspaceDeleted }: Sect
       return <InboxPage orgId={orgId} />;
     case 'team':
       return <TeamPage orgId={orgId} />;
+    case 'planning':
+      return <PlanningPage orgId={orgId} />;
     case 'settings':
       return <SettingsPage />;
     case 'workspace':

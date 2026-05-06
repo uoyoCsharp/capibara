@@ -79,6 +79,7 @@ describe('RunContext', () => {
       findById: vi.fn().mockReturnValue(createTask()),
       findByOrgId: vi.fn().mockReturnValue([]),
       findChildren: vi.fn().mockReturnValue([]),
+      hasChildren: vi.fn().mockReturnValue(false),
       findByAssigneeRoleId: vi.fn().mockReturnValue([]),
       findByStatus: vi.fn().mockReturnValue([]),
       create: vi.fn(),
@@ -457,6 +458,241 @@ describe('RunContext', () => {
 
       const ctx = runContext.buildForConversation('conv-1', TEST_ROLE_ID, 'en');
       expect(ctx!.task).toBeNull();
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // buildForConversation — planning-specific enrichment branch
+  // ═══════════════════════════════════════════════════════════════
+
+  describe('buildForConversation (planning conversation enrichment)', () => {
+    // Helper: mock a planning conversation in convRepo + convContextBuilder
+    function mockPlanningConversation(orgId: string = TEST_ORG_ID) {
+      const conv = {
+        id: 'conv-plan-1',
+        orgId,
+        type: 'planning',
+        state: 'waiting',
+        initiatorRoleId: TEST_ROLE_ID,
+        respondentRoleId: TEST_ROLE_ID,
+        respondentType: 'ai',
+        taskId: null,
+        parentConversationId: null,
+        depth: 0,
+        externalSessionId: null,
+        metadata: {},
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      vi.mocked(convRepo.findById).mockReturnValue(conv);
+      vi.mocked(convContextBuilder.build).mockReturnValue({
+        conversationId: 'conv-plan-1',
+        type: 'planning',
+        state: 'waiting',
+        initiatorRoleId: TEST_ROLE_ID,
+        respondentRoleId: TEST_ROLE_ID,
+        taskId: null,
+        messageHistory: [],
+        depth: 0,
+        externalSessionId: null,
+      });
+      return conv;
+    }
+
+    it('PR-01: propagates orgId onto context.conversation.orgId', () => {
+      mockPlanningConversation('org-custom');
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.conversation.orgId).toBe('org-custom');
+    });
+
+    it('PR-02: populates typeSchema from ProcessEngine schema', () => {
+      mockPlanningConversation();
+      vi.mocked(processEngine.getSchema).mockReturnValue({
+        workItemTypes: [
+          { name: 'epic', label: 'Epic', isLeaf: false, canDecompose: true, allowedChildren: ['story'], allowedAtRoot: true },
+          { name: 'task', label: 'Task', isLeaf: true, canDecompose: false, allowedChildren: [], allowedAtRoot: false },
+        ],
+        statuses: [],
+        transitions: [],
+        behaviorRules: [],
+      });
+
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.typeSchema).toBeDefined();
+      expect(ctx!.typeSchema!.allTypes).toHaveLength(2);
+      expect(ctx!.typeSchema!.allTypes[0]).toMatchObject({
+        name: 'epic',
+        allowedAtRoot: true,
+        isLeaf: false,
+      });
+    });
+
+    it('PR-03: leaves typeSchema undefined when ProcessEngine returns null', () => {
+      mockPlanningConversation();
+      vi.mocked(processEngine.getSchema).mockReturnValue(null);
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.typeSchema).toBeUndefined();
+    });
+
+    it('PR-04: populates orgRoles from roleRepo.findByOrgId, excluding system roles', () => {
+      mockPlanningConversation();
+      vi.mocked(roleRepo.findByOrgId).mockReturnValue([
+        createRole({ id: 'role-pm', name: 'PM', isSystemRole: false, skillIds: [] }),
+        createRole({ id: 'role-system', name: 'System', isSystemRole: true, skillIds: [] }),
+        createRole({ id: 'role-dev', name: 'Dev', isSystemRole: false, skillIds: [] }),
+      ]);
+
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.orgRoles).toBeDefined();
+      expect(ctx!.orgRoles).toHaveLength(2);
+      expect(ctx!.orgRoles!.map((r) => r.id)).toEqual(['role-pm', 'role-dev']);
+    });
+
+    it('PR-05: orgRoles contains skill descriptions when role has skills', () => {
+      mockPlanningConversation();
+      vi.mocked(roleRepo.findByOrgId).mockReturnValue([
+        createRole({ id: 'role-pm', name: 'PM', isSystemRole: false, skillIds: ['skill-1'] }),
+      ]);
+      vi.mocked(skillRepo.findById).mockImplementation((id: string) =>
+        id === 'skill-1' ? createSkill({ id: 'skill-1', description: 'Requirements gathering' }) : null,
+      );
+
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.orgRoles![0].skillDescriptions).toEqual(['Requirements gathering']);
+    });
+
+    it('PR-06: skips skill ids that resolve to null', () => {
+      mockPlanningConversation();
+      vi.mocked(roleRepo.findByOrgId).mockReturnValue([
+        createRole({ id: 'role-pm', skillIds: ['skill-ghost', 'skill-real'], isSystemRole: false }),
+      ]);
+      vi.mocked(skillRepo.findById).mockImplementation((id: string) =>
+        id === 'skill-real' ? createSkill({ id: 'skill-real', description: 'Real skill' }) : null,
+      );
+
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.orgRoles![0].skillDescriptions).toEqual(['Real skill']);
+    });
+
+    it('PR-07: calls consumePendingFeedbackByConversation on feedback provider', () => {
+      mockPlanningConversation();
+      const consumeFn = vi.fn().mockReturnValue('use better roles');
+      runContext.setFeedbackProvider({
+        consumePendingFeedback: vi.fn(),
+        consumePendingFeedbackByConversation: consumeFn,
+      });
+
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(consumeFn).toHaveBeenCalledWith('conv-plan-1');
+      expect(ctx!.pendingFeedback).toBe('use better roles');
+    });
+
+    it('PR-08: handles feedback provider without conv-specific consumer (back-compat)', () => {
+      mockPlanningConversation();
+      runContext.setFeedbackProvider({
+        consumePendingFeedback: vi.fn(),
+        // No consumePendingFeedbackByConversation — guarded in strategy
+      });
+
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.pendingFeedback).toBeUndefined();
+    });
+
+    it('PR-09: returns null feedback when provider returns null', () => {
+      mockPlanningConversation();
+      runContext.setFeedbackProvider({
+        consumePendingFeedback: vi.fn(),
+        consumePendingFeedbackByConversation: vi.fn().mockReturnValue(null),
+      });
+
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx!.pendingFeedback).toBeNull();
+    });
+
+    it('PR-10: does NOT enrich when conversation type is not planning', () => {
+      // Mock an inquiry conversation instead
+      vi.mocked(convRepo.findById).mockReturnValue({
+        id: 'conv-inquiry',
+        orgId: TEST_ORG_ID,
+        type: 'inquiry',
+        state: 'waiting',
+        initiatorRoleId: TEST_ROLE_ID,
+        respondentRoleId: TEST_ROLE_ID,
+        respondentType: 'ai',
+        taskId: null,
+        parentConversationId: null,
+        depth: 0,
+        externalSessionId: null,
+        metadata: {},
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+      vi.mocked(convContextBuilder.build).mockReturnValue({
+        conversationId: 'conv-inquiry',
+        type: 'inquiry',
+        state: 'waiting',
+        initiatorRoleId: TEST_ROLE_ID,
+        respondentRoleId: TEST_ROLE_ID,
+        taskId: null,
+        messageHistory: [],
+        depth: 0,
+        externalSessionId: null,
+      });
+      vi.mocked(processEngine.getSchema).mockReturnValue({
+        workItemTypes: [],
+        statuses: [],
+        transitions: [],
+        behaviorRules: [],
+      });
+      vi.mocked(roleRepo.findByOrgId).mockReturnValue([
+        createRole({ id: 'role-pm', isSystemRole: false }),
+      ]);
+
+      const ctx = runContext.buildForConversation('conv-inquiry', TEST_ROLE_ID, 'en');
+      expect(ctx!.typeSchema).toBeUndefined();
+      expect(ctx!.orgRoles).toBeUndefined();
+      expect(ctx!.pendingFeedback).toBeUndefined();
+    });
+
+    it('PR-11: does NOT enrich when conversation type is adhoc', () => {
+      vi.mocked(convContextBuilder.build).mockReturnValue({
+        conversationId: 'conv-adhoc',
+        type: 'adhoc',
+        state: 'active',
+        initiatorRoleId: TEST_ROLE_ID,
+        respondentRoleId: TEST_ROLE_ID,
+        taskId: null,
+        messageHistory: [],
+        depth: 0,
+        externalSessionId: null,
+      });
+      vi.mocked(convRepo.findById).mockReturnValue({
+        id: 'conv-adhoc', orgId: TEST_ORG_ID, type: 'adhoc',
+      } as never);
+
+      const ctx = runContext.buildForConversation('conv-adhoc', TEST_ROLE_ID, 'en');
+      expect(ctx!.typeSchema).toBeUndefined();
+      expect(ctx!.orgRoles).toBeUndefined();
+    });
+
+    it('PR-12: does not crash when convRepo.findById returns null (orgId resolves to empty)', () => {
+      vi.mocked(convContextBuilder.build).mockReturnValue({
+        conversationId: 'conv-plan-1',
+        type: 'planning',
+        state: 'waiting',
+        initiatorRoleId: TEST_ROLE_ID,
+        respondentRoleId: TEST_ROLE_ID,
+        taskId: null,
+        messageHistory: [],
+        depth: 0,
+        externalSessionId: null,
+      });
+      vi.mocked(convRepo.findById).mockReturnValue(null);
+      // When orgId is empty string, the planning branch should skip enrichment
+      const ctx = runContext.buildForConversation('conv-plan-1', TEST_ROLE_ID, 'en');
+      expect(ctx).not.toBeNull();
+      expect(ctx!.typeSchema).toBeUndefined();
+      expect(ctx!.orgRoles).toBeUndefined();
     });
   });
 });

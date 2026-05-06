@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle, CircleNotch, Play, XCircle } from '@phosphor-icons/react';
+import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle, CircleNotch, XCircle } from '@phosphor-icons/react';
 import { useTaskStore } from '../../store/task.store';
 import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
@@ -35,7 +35,7 @@ function buildTaskTree(tasks: TaskRecord[]): TaskNode[] {
 }
 
 function TaskRow({
-  node, depth, typeLabel, statusLabel, isTerminal, isApproval, isInitial, selectedId, onSelect, onStart, onApprove, onReject, onCancel, runningTaskIds,
+  node, depth, typeLabel, statusLabel, isTerminal, isApproval, isInitial, selectedId, onSelect, onApprove, onReject, onCancel, runningTaskIds,
 }: {
   node: TaskNode;
   depth: number;
@@ -46,7 +46,6 @@ function TaskRow({
   isInitial: (n: string) => boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onStart: (taskId: string) => void;
   onApprove: (taskId: string) => void;
   onReject: (taskId: string) => void;
   onCancel: (taskId: string) => void;
@@ -80,17 +79,7 @@ function TaskRow({
         <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{typeLabel(task.type)}</span>
         <span className={`flex-1 text-sm ${terminal ? 'line-through text-muted-foreground' : ''}`}>{task.title}</span>
 
-        {initial && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onStart(task.id); }}
-            className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
-          >
-            <Play size={12} weight="fill" />
-            Start
-          </button>
-        )}
-
-        {approval && (
+        {approval && node.children.length === 0 && (
           <div className="flex items-center gap-1">
             <ShieldWarning size={16} className="text-yellow-500" />
             <button
@@ -144,7 +133,6 @@ function TaskRow({
           isInitial={isInitial}
           selectedId={selectedId}
           onSelect={onSelect}
-          onStart={onStart}
           onApprove={onApprove}
           onReject={onReject}
           onCancel={onCancel}
@@ -203,27 +191,41 @@ export function TasksPage({ orgId }: TasksPageProps) {
     if (orgId) void loadTasks(orgId);
   }, [orgId, loadTasks]));
 
-  const handleStart = useCallback(async (taskId: string) => {
-    const res = await api().startTask(taskId);
-    if (res.ok) {
-      toast.success('Task started');
-      if (orgId) void loadTasks(orgId);
-    } else {
-      toast.error(res.error?.message ?? 'Failed to start task');
-    }
-  }, [orgId, loadTasks]);
-
   const handleApprove = useCallback(async (taskId: string) => {
-    const transitions = getAvailableTransitions('awaiting_approval');
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const transitions = getAvailableTransitions(task.status);
     const next = transitions.find((t) => !isApprovalStatus(t)) ?? transitions[0];
-    if (next) await api().confirmApproval(taskId, next);
+    if (!next) {
+      toast.error(`No approval transition available from "${task.status}"`);
+      return;
+    }
+    const res = await api().confirmApproval(taskId, next);
+    if (!res.ok) {
+      toast.error(res.error?.message ?? 'Approve failed');
+      return;
+    }
     if (orgId) void loadTasks(orgId);
-  }, [orgId, loadTasks, getAvailableTransitions, isApprovalStatus]);
+  }, [orgId, tasks, loadTasks, getAvailableTransitions, isApprovalStatus]);
 
   const handleReject = useCallback(async (taskId: string) => {
-    await api().rejectApproval(taskId, 'in_progress');
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const transitions = getAvailableTransitions(task.status);
+    const revert = transitions.find((t) => t === 'revision')
+      ?? transitions.find((t) => !isApprovalStatus(t))
+      ?? transitions[0];
+    if (!revert) {
+      toast.error(`No rejection transition available from "${task.status}"`);
+      return;
+    }
+    const res = await api().rejectApproval(taskId, revert);
+    if (!res.ok) {
+      toast.error(res.error?.message ?? 'Reject failed');
+      return;
+    }
     if (orgId) void loadTasks(orgId);
-  }, [orgId, loadTasks]);
+  }, [orgId, tasks, loadTasks, getAvailableTransitions, isApprovalStatus]);
 
   const handleCancel = useCallback(async (taskId: string) => {
     const res = await api().cancelTask(taskId);
@@ -289,7 +291,6 @@ export function TasksPage({ orgId }: TasksPageProps) {
               isInitial={isInitialStatus}
               selectedId={selectedTaskId}
               onSelect={setSelectedTaskId}
-              onStart={handleStart}
               onApprove={handleApprove}
               onReject={handleReject}
               onCancel={handleCancel}
@@ -333,8 +334,6 @@ export function TasksPage({ orgId }: TasksPageProps) {
           statusLabel={statusLabel}
           isTerminal={isTerminalStatus}
           isApproval={isApprovalStatus}
-          isInitial={isInitialStatus}
-          onStart={handleStart}
           onCancel={handleCancel}
           onDelete={async (taskId) => {
             const ok = await useTaskStore.getState().deleteTask(taskId);

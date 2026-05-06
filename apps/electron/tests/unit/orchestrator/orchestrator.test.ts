@@ -68,6 +68,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       findById: vi.fn().mockReturnValue(taskFixture()),
       findByOrgId: vi.fn(),
       findChildren: vi.fn(),
+      hasChildren: vi.fn().mockReturnValue(false),
       findByAssigneeRoleId: vi.fn(),
       create: vi.fn(),
       updateStatus: vi.fn(),
@@ -150,6 +151,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       eventBus,
       logger,
       convRepo,
+      pendingWakeRepo,
       wakeGateValidator,
       runCoordinator,
       taskOrchestrator,
@@ -232,6 +234,24 @@ describe('Orchestrators (task + conversation + run)', () => {
     });
   });
 
+  // Preview-tree flow (Bug 3):
+  //   AI run succeeds → plan tree submitted → human approves (separate event).
+  //   advanceRootAfterDecomposition early-returns if root is already in_progress,
+  //   so no task:status-changed fires. Without subscribing to plan-tree:approved,
+  //   children materialize but nobody calls scheduleNext — the whole subtree sits
+  //   dormant. This test pins the contract: on approve, TaskOrchestrator schedules.
+  describe('plan-tree:approved', () => {
+    it('calls scheduleNext so the newly-materialized children start running', () => {
+      eventBus.emit({
+        type: 'plan-tree:approved',
+        timestamp: new Date().toISOString(),
+        payload: { rootTaskId: TEST_TASK_ID, orgId: TEST_ORG_ID, nodeCount: 10 },
+      });
+
+      expect(taskScheduler.findNextTask).toHaveBeenCalledWith(TEST_ORG_ID);
+    });
+  });
+
   describe('task:completed', () => {
     it('calls behaviorEngine.onChildCompleted and scheduleNext', () => {
       const task = taskFixture({ parentId: 'parent-task' });
@@ -293,6 +313,220 @@ describe('Orchestrators (task + conversation + run)', () => {
         payload: { conversationId: 'conv-1', orgId: TEST_ORG_ID, roleId: null },
       });
       expect(runCoordinator.executeForConversation).not.toHaveBeenCalled();
+    });
+
+    // --------------------------------------------------------------
+    // Bug 2 — Conversation wake must be queued, not dropped, when gate blocks
+    // --------------------------------------------------------------
+    //
+    // Scenario: AI-A is executing a run and calls an inquiry tool routed to
+    // AI-B. The conversation service emits `conversation:response-needed`
+    // while AI-A's run is still active; the org-level wake gate blocks.
+    //
+    // Today's code just logs and returns — AI-B is NEVER woken, even after
+    // AI-A's run ends. The conversation sits in inbox forever.
+    //
+    // Fix requires ConversationOrchestrator to enqueue a pending wake whose
+    // payload carries enough metadata (conversationId + a reason marker) for
+    // RunOrchestrator to later dispatch via `executeForConversation`.
+    it('enqueues a pending wake when gate blocks (AI→AI inquiry during active run)', () => {
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: false, reason: 'Active run exists: run-x' });
+
+      eventBus.emit({
+        type: 'conversation:response-needed',
+        timestamp: new Date().toISOString(),
+        payload: { conversationId: 'conv-42', orgId: TEST_ORG_ID, roleId: 'role-respondent' },
+      });
+
+      expect(runCoordinator.executeForConversation).not.toHaveBeenCalled();
+      expect(pendingWakeRepo.create).toHaveBeenCalledTimes(1);
+
+      // Minimum contract: whatever field the implementation adds to distinguish
+      // a conversation wake from a task wake (reason=conversation_inquiry and/or
+      // conversationId), it must route to role-respondent in the correct org.
+      const createArg = vi.mocked(pendingWakeRepo.create).mock.calls[0]![0];
+      expect(createArg).toEqual(
+        expect.objectContaining({
+          roleId: 'role-respondent',
+          orgId: TEST_ORG_ID,
+        }),
+      );
+
+      const looksLikeConvWake =
+        createArg.reason === 'conversation_inquiry' ||
+        (createArg as unknown as { conversationId?: string }).conversationId === 'conv-42';
+      expect(looksLikeConvWake).toBe(true);
+    });
+
+    it('does not enqueue when roleId is null, even if gate would block', () => {
+      // Guard: a null respondent means the inquiry isn't ready to route yet.
+      // We must not leak ghost pending wakes with no target.
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: false, reason: 'x' });
+
+      eventBus.emit({
+        type: 'conversation:response-needed',
+        timestamp: new Date().toISOString(),
+        payload: { conversationId: 'conv-null', orgId: TEST_ORG_ID, roleId: null },
+      });
+
+      expect(pendingWakeRepo.create).not.toHaveBeenCalled();
+      expect(runCoordinator.executeForConversation).not.toHaveBeenCalled();
+    });
+
+    it('independent inquiries to different AI respondents each enqueue a distinct wake', () => {
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: false, reason: 'Active run' });
+
+      eventBus.emit({
+        type: 'conversation:response-needed',
+        timestamp: new Date().toISOString(),
+        payload: { conversationId: 'conv-A', orgId: TEST_ORG_ID, roleId: 'role-B' },
+      });
+      eventBus.emit({
+        type: 'conversation:response-needed',
+        timestamp: new Date().toISOString(),
+        payload: { conversationId: 'conv-B', orgId: TEST_ORG_ID, roleId: 'role-C' },
+      });
+
+      expect(pendingWakeRepo.create).toHaveBeenCalledTimes(2);
+      const calls = vi.mocked(pendingWakeRepo.create).mock.calls.map((c) => c[0]);
+      expect(calls.map((a) => a.roleId).sort()).toEqual(['role-B', 'role-C']);
+    });
+  });
+
+  // ==========================================================================
+  // drainPendingWakes — conversation variant (Bug 2)
+  // ==========================================================================
+  //
+  // Counterpart to the existing `drainPendingWakes` suite. When a pending
+  // wake represents a conversation inquiry (as enqueued by the tests above),
+  // RunOrchestrator must dispatch it via `executeForConversation`, not the
+  // task path. Otherwise the queued wake is run as a bogus task and the
+  // real conversation response never happens.
+
+  describe('drainPendingWakes (conversation variant, Bug 2)', () => {
+    const convWake = {
+      id: 'cwake-1',
+      roleId: 'role-respondent',
+      orgId: TEST_ORG_ID,
+      reason: 'conversation_inquiry',
+      taskId: null,
+      // The implementation is expected to add `conversationId` to PendingWake;
+      // we include it here so either dispatch strategy (reason-based or
+      // field-based) can pick it up.
+      conversationId: 'conv-42',
+      priority: 0,
+      createdAt: new Date().toISOString(),
+    } as unknown as ReturnType<typeof pendingWakeRepo.findNext> & { conversationId: string };
+
+    it('drained conversation wake dispatches via executeForConversation, NOT executeForTask', async () => {
+      vi.mocked(pendingWakeRepo.findNext).mockReturnValue(convWake);
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: true });
+
+      eventBus.emit({
+        type: 'run:succeeded',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'r-prev', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+      });
+
+      expect(pendingWakeRepo.delete).toHaveBeenCalledWith('cwake-1');
+
+      await vi.waitFor(() => {
+        expect(runCoordinator.executeForConversation).toHaveBeenCalledWith(
+          'conv-42',
+          'role-respondent',
+          TEST_ORG_ID,
+          'en-US',
+        );
+      });
+      expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
+    });
+
+    it('drained conversation wake re-enqueues when gate still blocks', () => {
+      vi.mocked(pendingWakeRepo.findNext).mockReturnValue(convWake);
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: false, reason: 'Role paused' });
+
+      eventBus.emit({
+        type: 'run:succeeded',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'r-prev', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+      });
+
+      expect(pendingWakeRepo.delete).toHaveBeenCalledWith('cwake-1');
+      expect(pendingWakeRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roleId: 'role-respondent',
+          orgId: TEST_ORG_ID,
+          reason: 'conversation_inquiry',
+        }),
+      );
+      expect(runCoordinator.executeForConversation).not.toHaveBeenCalled();
+      expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
+    });
+
+    it('logs error but does not crash when executeForConversation rejects', async () => {
+      vi.mocked(pendingWakeRepo.findNext).mockReturnValue(convWake);
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: true });
+      vi.mocked(runCoordinator.executeForConversation).mockRejectedValue(new Error('boom'));
+
+      expect(() => {
+        eventBus.emit({
+          type: 'run:succeeded',
+          timestamp: new Date().toISOString(),
+          payload: { runId: 'r-prev', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+        });
+      }).not.toThrow();
+
+      await vi.waitFor(() => {
+        expect(
+          logger.logs.some((l) => l.level === 'error' && /pending wake/i.test(l.msg)),
+        ).toBe(true);
+      });
+    });
+
+    it('full round trip: gate blocks inquiry → blocking run ends → drain wakes respondent', async () => {
+      // Stage 1: AI-A's run is active, inquiry arrives for AI-B → gate blocks,
+      // conversation orchestrator enqueues.
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: false, reason: 'Active run' });
+      eventBus.emit({
+        type: 'conversation:response-needed',
+        timestamp: new Date().toISOString(),
+        payload: { conversationId: 'conv-E2E', orgId: TEST_ORG_ID, roleId: 'role-B' },
+      });
+      expect(pendingWakeRepo.create).toHaveBeenCalledTimes(1);
+      expect(runCoordinator.executeForConversation).not.toHaveBeenCalled();
+
+      // Stage 2: AI-A's run ends; gate now allows. Simulate the queue handing
+      // the conversation wake back out of findNext, matching what the
+      // orchestrator would have enqueued in stage 1.
+      const enqueued = vi.mocked(pendingWakeRepo.create).mock.calls[0]![0];
+      vi.mocked(pendingWakeRepo.findNext).mockReturnValue({
+        id: 'cwake-E2E',
+        roleId: enqueued.roleId,
+        orgId: enqueued.orgId,
+        reason: enqueued.reason,
+        taskId: enqueued.taskId,
+        // Pass through whatever conversation identifier the impl chose.
+        conversationId:
+          (enqueued as unknown as { conversationId?: string }).conversationId ?? 'conv-E2E',
+        priority: 0,
+        createdAt: new Date().toISOString(),
+      } as unknown as ReturnType<typeof pendingWakeRepo.findNext>);
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: true });
+
+      eventBus.emit({
+        type: 'run:succeeded',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'run-A', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+      });
+
+      await vi.waitFor(() => {
+        expect(runCoordinator.executeForConversation).toHaveBeenCalledWith(
+          'conv-E2E',
+          'role-B',
+          TEST_ORG_ID,
+          'en-US',
+        );
+      });
     });
   });
 
@@ -425,6 +659,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       orgId: TEST_ORG_ID,
       reason: 'task_assigned',
       taskId: TEST_TASK_ID,
+      conversationId: null,
       priority: 0,
       createdAt: new Date().toISOString(),
     };

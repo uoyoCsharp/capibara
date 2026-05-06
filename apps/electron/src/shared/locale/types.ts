@@ -170,6 +170,8 @@ export interface LocaleMessages {
     noRoles: string;
     noRolesHint: string;
     rolesCount: string;
+    skillsBadge: string;
+    reportsBadge: string;
   };
 
   executionControl: {
@@ -177,5 +179,234 @@ export interface LocaleMessages {
     resumeAll: string;
     pausedToast: string;
     resumedToast: string;
+  };
+
+  settings: {
+    title: string;
+    save: string;
+    saving: string;
+    language: {
+      title: string;
+      english: string;
+      chinese: string;
+    };
+    system: {
+      title: string;
+      checkHealth: string;
+      healthOk: string;
+    };
+    logs: {
+      title: string;
+      description: string;
+      totalSize: string;
+      fileCount: string;
+      oldest: string;
+      newest: string;
+      clearOld: string;
+      clearAll: string;
+      confirmClearOld: string;
+      confirmClearAll: string;
+      confirm: string;
+      deleteResult: string;
+    };
+  };
+
+  dashboard: {
+    title: string;
+    noOrgSelected: string;
+    startPlanning: {
+      title: string;
+      description: string;
+      cta: string;
+    };
+    stats: {
+      activeTasks: string;
+      aiRoles: string;
+      activeConversations: string;
+      activeRuns: string;
+    };
+  };
+
+  planning: {
+    noOrgSelected: string;
+    loading: string;
+    preparingSession: string;
+    withAgent: string;
+    defaultAgent: string;
+    backToDashboard: string;
+    cancelSession: string;
+    discardTitle: string;
+    discardMessage: string;
+    keepChatting: string;
+    discard: string;
+    sessionDiscarded: string;
+    failedToStart: string;
+    failedToCancel: string;
+    tasksCreated: string;
+    firstMessage: {
+      title: string;
+      subtitle: string;
+      placeholder: string;
+      submit: string;
+      starting: string;
+      shortcutHint: string;
+    };
+  };
+
+  planningChat: {
+    startingConversation: string;
+    aiBusyLabel: string;
+    thinking: string;
+    thinkingWithTime: string;
+    inputPlaceholder: string;
+    thinkingPlaceholder: string;
+    you: string;
+    system: string;
+    failedResponse: string;
+    cancelled: string;
+  };
+
+  planPreview: {
+    title: string;
+    loading: string;
+    waitingTitle: string;
+    waitingDescription: string;
+    summaryVersion: string;
+    summaryNodes: string;
+    summaryDepth: string;
+    summaryByType: string;
+    approve: string;
+    approving: string;
+    discardBtn: string;
+    discarding: string;
+    refine: string;
+    refineTitle: string;
+    refinePlaceholder: string;
+    refineSend: string;
+    refineSending: string;
+    refineClose: string;
+    toastApproved: string;
+    toastDiscarded: string;
+    toastRefineSent: string;
+    errorApprove: string;
+    errorDiscard: string;
+    errorRefine: string;
+  };
+
+  planAgentPicker: {
+    title: string;
+    description: string;
+    noRoles: string;
+    continue: string;
+  };
+
+  inbox: {
+    title: string;
+    noOrgSelected: string;
+    noConversationSelected: string;
+    summary: string;
+    blockedSection: string;
+    monitoringSection: string;
+    resolvedSection: string;
+    resolve: string;
+    cancelConversation: string;
+    replyPlaceholder: string;
+    waitingForAIPlaceholder: string;
+    aiProcessing: string;
+    humanFallback: string;
+    systemAuthor: string;
+    types: {
+      inquiry: string;
+      planning: string;
+      adhoc: string;
+      planReview: string;
+    };
+    planReviewMissingRoot: string;
+    planReviewLoading: string;
+    planReviewCompleted: string;
+    planReviewNoTree: string;
+  };
+
+  planTreeReview: {
+    title: string;
+    previewModeHint: string;
+    eagerModeHint: string;
+    nodes: string;
+    depth: string;
+    roleDistribution: string;
+    refineTitle: string;
+    refinePlaceholder: string;
+    refineClose: string;
+    refineSend: string;
+    refineWaiting: string;
+    refineBtn: string;
+    discardReason: string;
+    discardPlaceholder: string;
+    discardBtn: string;
+    discardPlan: string;
+    approveBtn: string;
+    approveCommitting: string;
+    cancelBtn: string;
+    closeBtn: string;
+  };
+
+  orgSettings: {
+    title: string;
+    noOrgSelected: string;
+    nameLabel: string;
+    descriptionLabel: string;
+    customInstructionsLabel: string;
+    budgetLabel: string;
+    statusLabel: string;
+    statusActive: string;
+    statusPaused: string;
+    statusArchived: string;
+    autoStartLabel: string;
+    autoStartDescription: string;
+    workspacePathLabel: string;
+    workspacePathNotSet: string;
+    save: string;
+    saving: string;
+    deleteBtn: string;
+    deleteTitle: string;
+    deleteMessage: string;
+  };
+
+  narrative: {
+    sections: {
+      whereWeAre: string;
+      team: string;
+      attention: string;
+      budget: string;
+    };
+    whereWeAre: {
+      noActiveWork: string;
+      inProgress: string;
+      blocked: string;
+      awaitingReview: string;
+      activeRuns: string;
+      quietMoment: string;
+    };
+    team: {
+      noRoles: string;
+      multipleRoles: string;
+      singleRole: string;
+    };
+    attention: {
+      inquiriesWaiting: string;
+      tasksAwaitingApproval: string;
+      body: string;
+      separator: string;
+    };
+    budget: {
+      usage: string;
+      failedRuns: string;
+    };
+    headline: {
+      needsAttention: string;
+      activeProgress: string;
+      allClear: string;
+      readyToStart: string;
+    };
   };
 }

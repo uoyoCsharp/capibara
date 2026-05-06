@@ -24,8 +24,9 @@ export class ValidationError extends CapibaraError {
 }
 
 export class TaskStateError extends CapibaraError {
-  constructor(from: string, to: string) {
-    super(`Invalid task transition: ${from} → ${to}`, 'INVALID_TASK_TRANSITION');
+  constructor(from: string, to: string, reason?: string) {
+    const suffix = reason ? ` — ${reason}` : '';
+    super(`Invalid task transition: ${from} → ${to}${suffix}`, 'INVALID_TASK_TRANSITION');
     this.name = 'TaskStateError';
   }
 }

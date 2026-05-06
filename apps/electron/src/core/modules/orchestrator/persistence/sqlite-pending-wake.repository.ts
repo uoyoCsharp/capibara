@@ -9,6 +9,7 @@ interface WakeRow {
   org_id: string;
   reason: string;
   task_id: string | null;
+  conversation_id: string | null;
   priority: number;
   created_at: string;
 }
@@ -20,6 +21,7 @@ function toWake(row: WakeRow): PendingWake {
     orgId: row.org_id,
     reason: row.reason,
     taskId: row.task_id,
+    conversationId: row.conversation_id,
     priority: row.priority,
     createdAt: row.created_at,
   };
@@ -61,8 +63,8 @@ export class SqlitePendingWakeRepository implements IPendingWakeRepository {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.connection.getDb()
-      .prepare('INSERT INTO pending_wakes (id, role_id, org_id, reason, task_id, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, input.roleId, input.orgId, input.reason, input.taskId, input.priority, now);
+      .prepare('INSERT INTO pending_wakes (id, role_id, org_id, reason, task_id, conversation_id, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, input.roleId, input.orgId, input.reason, input.taskId, input.conversationId, input.priority, now);
     return this.findById(id)!;
   }
 

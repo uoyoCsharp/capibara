@@ -19,6 +19,8 @@ import { Separator } from '../ui/separator';
 import { SidebarNavItem } from './SidebarNavItem';
 import { AvatarPopover } from './AvatarPopover';
 import { SchedulerControlButton } from './SchedulerControlButton';
+import { partitionConversations } from '../inbox/InboxPage';
+import logoImg from '../../assets/logo.png';
 
 interface SidebarProps {
   activeSection: SectionId;
@@ -55,7 +57,10 @@ export function Sidebar({
     if (currentOrgId) void loadActive(currentOrgId);
   }, [currentOrgId, loadActive]);
 
-  const inboxCount = activeConversations.length;
+  // Inbox badge = things waiting for human attention ("blocked" bucket).
+  // Uses the same partition as InboxPage so the badge and list stay in sync
+  // — planning conversations and AI↔AI monitoring are excluded.
+  const inboxCount = partitionConversations(activeConversations).blocked.length;
 
   return (
     <aside className={cn(
@@ -124,7 +129,11 @@ function WorkspaceHeader({
       )}
       title={currentOrg ? (t.workspacePage?.title ?? 'Workspace') : 'Capibara'}
     >
-      <div className="h-8 w-8 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">C</div>
+      <img
+        src={logoImg}
+        alt="Capibara"
+        className="h-8 w-8 shrink-0 rounded-lg object-cover"
+      />
       {!collapsed && (
         <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase text-muted-foreground/60 tracking-wider leading-tight">

@@ -58,7 +58,6 @@ export interface CapibaraApi {
   getTaskChildren: (parentId: string) => Promise<DesktopResult<TaskRecord[]>>;
   createTask: (input: unknown) => Promise<DesktopResult<TaskRecord>>;
   updateTaskStatus: (taskId: string, status: string) => Promise<DesktopResult<TaskRecord>>;
-  startTask: (taskId: string) => Promise<DesktopResult<TaskRecord>>;
   cancelTask: (taskId: string) => Promise<DesktopResult<TaskRecord>>;
   deleteTask: (id: string) => Promise<DesktopResult<null>>;
 
@@ -90,6 +89,29 @@ export interface CapibaraApi {
     roleId: string,
     message: string,
   ) => Promise<DesktopResult<ConversationRecord>>;
+
+  // ─── Conversational Planning ─────────────────────────────────────
+  startPlanning: (
+    orgId: string,
+    agentRoleId: string,
+    firstMessage: string,
+  ) => Promise<DesktopResult<ConversationRecord>>;
+  getActivePlanning: (orgId: string) => Promise<DesktopResult<ConversationRecord | null>>;
+  getPlanTreeByConversation: (
+    conversationId: string,
+  ) => Promise<DesktopResult<PendingTreeRecord | null>>;
+  approvePlanTreeByConversation: (
+    conversationId: string,
+    expectedVersion?: number,
+  ) => Promise<DesktopResult<null>>;
+  discardPlanTreeByConversation: (
+    conversationId: string,
+    reason?: string,
+  ) => Promise<DesktopResult<null>>;
+  refinePlanTreeByConversation: (
+    conversationId: string,
+    feedback: string,
+  ) => Promise<DesktopResult<null>>;
 
   // ─── Runs ────────────────────────────────────────────────────────
   getRunsByOrgId: (orgId: string) => Promise<DesktopResult<RunRecord[]>>;

@@ -21,7 +21,7 @@ interface WorkItemType {
   canDecompose?: boolean;
 }
 
-type PlanningMode = 'layered' | 'eager' | 'preview';
+type PlanningMode = 'eager' | 'preview';
 
 interface TaskCreateModalProps {
   orgId: string;
@@ -36,7 +36,7 @@ interface TaskCreateModalProps {
     title: string;
     description: string;
     assigneeRoleId: string;
-    planningMode: PlanningMode;
+    planningMode?: PlanningMode;
   }) => void;
 }
 
@@ -54,14 +54,14 @@ export function TaskCreateModal({
   const [description, setDescription] = useState('');
   const [type, setType] = useState(defaultType);
   const [assigneeRoleId, setAssigneeRoleId] = useState<string | null>(null);
-  const [planningMode, setPlanningMode] = useState<PlanningMode>('layered');
+  const [planningMode, setPlanningMode] = useState<PlanningMode>('preview');
   const [error, setError] = useState<string | null>(null);
 
   const currentTypeDef = allowedTypes.find((t) => t.name === type);
   const canDecompose = currentTypeDef?.canDecompose ?? false;
 
   useEffect(() => {
-    setPlanningMode('layered');
+    setPlanningMode('preview');
   }, [type]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -82,7 +82,7 @@ export function TaskCreateModal({
       title: title.trim(),
       description: description.trim(),
       assigneeRoleId,
-      planningMode: canDecompose ? planningMode : 'layered',
+      ...(canDecompose ? { planningMode } : {}),
     });
   };
 
@@ -192,11 +192,6 @@ function PlanningModeSelector({
   onChange: (v: PlanningMode) => void;
 }) {
   const options: Array<{ id: PlanningMode; title: string; hint: string; disabled?: boolean }> = [
-    {
-      id: 'layered',
-      title: 'Layered',
-      hint: 'Propose & approve at each level (default).',
-    },
     {
       id: 'preview',
       title: 'Preview Tree',

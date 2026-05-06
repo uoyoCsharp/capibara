@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildNarrative } from '@renderer/components/dashboard/narrative';
+import { enUS } from '@shared/locale/en-US';
 import type { TaskRecord, RunRecord, ConversationRecord, RoleRecord } from '@core/shared/types';
+
+const t = enUS;
 
 function task(id: string, overrides?: Partial<TaskRecord>): TaskRecord {
   return {
@@ -35,12 +38,13 @@ function role(id: string, overrides?: Partial<RoleRecord>): RoleRecord {
 
 describe('buildNarrative', () => {
   it('produces a getting-started headline when project is empty', () => {
-    const n = buildNarrative({ orgName: 'Acme', tasks: [], runs: [], conversations: [], roles: [] });
+    const n = buildNarrative({ t, orgName: 'Acme', tasks: [], runs: [], conversations: [], roles: [] });
     expect(n.headline).toContain('ready to start');
   });
 
   it('reports active work when tasks are in progress', () => {
     const n = buildNarrative({
+      t,
       orgName: 'Acme',
       tasks: [task('1', { status: 'in_progress' }), task('2', { status: 'in_progress' })],
       runs: [],
@@ -48,12 +52,13 @@ describe('buildNarrative', () => {
       roles: [role('r1')],
     });
     expect(n.headline).toMatch(/task\(s\) progressing/);
-    const whereWeAre = n.sections.find((s) => s.heading === 'Where we are');
+    const whereWeAre = n.sections.find((s) => s.heading === t.narrative.sections.whereWeAre);
     expect(whereWeAre?.body).toContain('in progress');
   });
 
   it('surfaces attention when inquiry waits for a human', () => {
     const n = buildNarrative({
+      t,
       orgName: 'Acme',
       tasks: [],
       runs: [],
@@ -61,49 +66,52 @@ describe('buildNarrative', () => {
       roles: [role('r1')],
     });
     expect(n.headline).toContain('attention');
-    const attention = n.sections.find((s) => s.heading === 'Needs your attention');
+    const attention = n.sections.find((s) => s.heading === t.narrative.sections.attention);
     expect(attention).toBeDefined();
     expect(attention?.tone).toBe('warning');
   });
 
   it('combines awaiting-review tasks and human-waiting inquiries', () => {
     const n = buildNarrative({
+      t,
       orgName: 'Acme',
       tasks: [task('1', { status: 'awaiting_review' })],
       runs: [],
       conversations: [conv('c1', { state: 'waiting', respondentType: 'human' })],
       roles: [role('r1')],
     });
-    const attention = n.sections.find((s) => s.heading === 'Needs your attention');
+    const attention = n.sections.find((s) => s.heading === t.narrative.sections.attention);
     expect(attention?.body).toContain('inquiry');
     expect(attention?.body).toContain('approval');
   });
 
   it('warns when no AI roles exist', () => {
-    const n = buildNarrative({ orgName: 'Acme', tasks: [], runs: [], conversations: [], roles: [] });
-    const team = n.sections.find((s) => s.heading === 'Team');
+    const n = buildNarrative({ t, orgName: 'Acme', tasks: [], runs: [], conversations: [], roles: [] });
+    const team = n.sections.find((s) => s.heading === t.narrative.sections.team);
     expect(team?.tone).toBe('warning');
     expect(team?.body).toContain('No AI roles');
   });
 
   it('ignores system roles in the AI role count', () => {
     const n = buildNarrative({
+      t,
       orgName: 'Acme', tasks: [], runs: [], conversations: [],
       roles: [role('sys', { isSystemRole: true })],
     });
-    const team = n.sections.find((s) => s.heading === 'Team');
+    const team = n.sections.find((s) => s.heading === t.narrative.sections.team);
     expect(team?.tone).toBe('warning');
   });
 
   it('reports failed runs in the budget section', () => {
     const n = buildNarrative({
+      t,
       orgName: 'Acme',
       tasks: [],
       runs: [run('1', { status: 'failed' }), run('2', { tokenCount: 1000, costUsd: 0.05 })],
       conversations: [],
       roles: [role('r1')],
     });
-    const budget = n.sections.find((s) => s.heading === 'Budget & reliability');
+    const budget = n.sections.find((s) => s.heading === t.narrative.sections.budget);
     expect(budget).toBeDefined();
     expect(budget?.tone).toBe('warning');
     expect(budget?.body).toContain('failed');
@@ -111,14 +119,16 @@ describe('buildNarrative', () => {
 
   it('does not produce a budget section when no runs have been made', () => {
     const n = buildNarrative({
+      t,
       orgName: 'Acme', tasks: [task('1')], runs: [], conversations: [], roles: [role('r1')],
     });
-    const budget = n.sections.find((s) => s.heading === 'Budget & reliability');
+    const budget = n.sections.find((s) => s.heading === t.narrative.sections.budget);
     expect(budget).toBeUndefined();
   });
 
   it('reports completed tasks in headline when nothing active', () => {
     const n = buildNarrative({
+      t,
       orgName: 'Acme',
       tasks: [task('1', { status: 'done' }), task('2', { status: 'done' })],
       runs: [],

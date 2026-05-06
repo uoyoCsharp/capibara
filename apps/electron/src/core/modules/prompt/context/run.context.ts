@@ -10,6 +10,7 @@ import type { PromptContext, ConversationPromptContext, WakeReason } from '../ty
 
 export interface IPlanTreeFeedbackProvider {
   consumePendingFeedback(rootTaskId: string): string | null;
+  consumePendingFeedbackByConversation?(conversationId: string): string | null;
 }
 
 @injectable()
@@ -180,11 +181,15 @@ export class RunContext {
       .filter((s): s is NonNullable<typeof s> => s !== null)
       .map((s) => ({ name: s.name, command: s.command, description: s.description }));
 
-    return {
+    const conv = this.convRepo.findById(conversationId);
+    const orgId = conv?.orgId ?? '';
+
+    const ctx: ConversationPromptContext = {
       conversation: {
         id: convContext.conversationId,
         type: convContext.type,
         state: convContext.state,
+        orgId,
         messageHistory: convContext.messageHistory,
       },
       task: taskData,
@@ -197,6 +202,40 @@ export class RunContext {
       skills,
       locale,
     };
+
+    // Planning conversations need type schema + roster of available roles so
+    // the AI can submit a concrete tree with valid types and assignees.
+    if (convContext.type === 'planning' && orgId) {
+      const schema = this.processEngine.getSchema(orgId);
+      if (schema) {
+        ctx.typeSchema = {
+          allTypes: schema.workItemTypes.map((t) => ({
+            name: t.name,
+            label: t.label,
+            isLeaf: t.isLeaf,
+            canDecompose: t.canDecompose,
+            allowedChildren: t.allowedChildren,
+            allowedAtRoot: t.allowedAtRoot,
+          })),
+        };
+      }
+
+      const orgRoles = this.roleRepo.findByOrgId(orgId).filter((r) => !r.isSystemRole);
+      ctx.orgRoles = orgRoles.map((r) => ({
+        id: r.id,
+        name: r.name,
+        skillDescriptions: r.skillIds
+          .map((sid) => this.skillRepo.findById(sid))
+          .filter((s): s is NonNullable<typeof s> => s !== null)
+          .map((s) => s.description),
+      }));
+
+      if (this.feedbackProvider?.consumePendingFeedbackByConversation) {
+        ctx.pendingFeedback = this.feedbackProvider.consumePendingFeedbackByConversation(conversationId);
+      }
+    }
+
+    return ctx;
   }
 
   private getParentChain(taskId: string): Array<{ id: string; type: string; title: string; status: string }> {

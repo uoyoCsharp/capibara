@@ -80,6 +80,7 @@ export function registerOrchestratorModule(
     eventBus,
     logger,
     convRepo,
+    pendingWakeRepo,
     wakeGateValidator,
     runCoordinator,
     taskOrchestrator,

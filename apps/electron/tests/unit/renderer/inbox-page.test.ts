@@ -35,11 +35,15 @@ describe('partitionConversations', () => {
     expect(monitoring).toHaveLength(1);
   });
 
-  it('planning conversations always block for human confirmation', () => {
-    const { blocked } = partitionConversations([
+  it('planning conversations are excluded from the inbox entirely (they have their own PlanningPage)', () => {
+    const { blocked, monitoring, resolved } = partitionConversations([
       conv('1', { type: 'planning', respondentType: 'ai', state: 'active' }),
+      conv('2', { type: 'planning', respondentType: 'ai', state: 'waiting' }),
+      conv('3', { type: 'planning', respondentType: 'ai', state: 'resolved' }),
     ]);
-    expect(blocked).toHaveLength(1);
+    expect(blocked).toHaveLength(0);
+    expect(monitoring).toHaveLength(0);
+    expect(resolved).toHaveLength(0);
   });
 
   it('adhoc conversations always block for human', () => {
@@ -74,15 +78,15 @@ describe('partitionConversations', () => {
     expect(blocked).toHaveLength(1);
   });
 
-  it('mixed workload partitions correctly', () => {
+  it('mixed workload partitions correctly (planning conversations are filtered out)', () => {
     const input: ConversationRecord[] = [
-      conv('1', { state: 'waiting', respondentType: 'human' }),
-      conv('2', { state: 'waiting', respondentType: 'ai' }),
-      conv('3', { type: 'planning', state: 'active' }),
-      conv('4', { state: 'resolved' }),
+      conv('1', { state: 'waiting', respondentType: 'human' }),         // inquiry human-blocked → blocked
+      conv('2', { state: 'waiting', respondentType: 'ai' }),             // inquiry AI respondent → monitoring
+      conv('3', { type: 'planning', state: 'active' }),                  // planning → excluded entirely
+      conv('4', { state: 'resolved' }),                                   // resolved → resolved
     ];
     const { blocked, monitoring, resolved } = partitionConversations(input);
-    expect(blocked).toHaveLength(2);
+    expect(blocked).toHaveLength(1);
     expect(monitoring).toHaveLength(1);
     expect(resolved).toHaveLength(1);
   });

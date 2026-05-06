@@ -11,7 +11,8 @@ import type { PlanTreeNode } from '@core/foundation/events';
 
 interface PendingPlanTreeRow {
   id: string;
-  root_task_id: string;
+  root_task_id: string | null;
+  source_conversation_id: string | null;
   org_id: string;
   role_id: string;
   mode: string;
@@ -31,6 +32,7 @@ function toEntity(row: PendingPlanTreeRow): PendingPlanTree {
   return {
     id: row.id,
     rootTaskId: row.root_task_id,
+    sourceConversationId: row.source_conversation_id,
     orgId: row.org_id,
     roleId: row.role_id,
     mode: row.mode as PendingPlanTree['mode'],
@@ -71,6 +73,18 @@ export class SqlitePendingPlanTreeRepository implements IPendingPlanTreeReposito
     return row ? toEntity(row) : null;
   }
 
+  findActiveBySourceConversationId(conversationId: string): PendingPlanTree | null {
+    const row = this.connection
+      .getDb()
+      .prepare(
+        `SELECT * FROM pending_plan_trees
+         WHERE source_conversation_id = ? AND status IN ('active', 'refining')
+         LIMIT 1`,
+      )
+      .get(conversationId) as PendingPlanTreeRow | undefined;
+    return row ? toEntity(row) : null;
+  }
+
   findByOrgId(orgId: string): PendingPlanTree[] {
     const rows = this.connection
       .getDb()
@@ -90,16 +104,16 @@ export class SqlitePendingPlanTreeRepository implements IPendingPlanTreeReposito
     return rows.map(toEntity);
   }
 
-  upsertByRootTaskId(input: UpsertPendingPlanTreeInput): PendingPlanTree {
+  upsert(input: UpsertPendingPlanTreeInput): PendingPlanTree {
     const db = this.connection.getDb();
     const now = new Date().toISOString();
     const treeJson = JSON.stringify(input.tree);
 
-    // Check for existing active/refining entry
-    const existing = this.findActiveByRootTaskId(input.rootTaskId);
+    const existing = input.rootTaskId
+      ? this.findActiveByRootTaskId(input.rootTaskId)
+      : this.findActiveBySourceConversationId(input.sourceConversationId!);
 
     if (existing) {
-      // Update: bump version, replace tree, clear feedback, reset status to active
       const nextVersion = existing.version + 1;
       db.prepare(
         `UPDATE pending_plan_trees
@@ -111,15 +125,17 @@ export class SqlitePendingPlanTreeRepository implements IPendingPlanTreeReposito
       return this.findById(existing.id)!;
     }
 
-    // Insert new
     const id = randomUUID();
     db.prepare(
       `INSERT INTO pending_plan_trees
-       (id, root_task_id, org_id, role_id, mode, tree_json, version, status,
+       (id, root_task_id, source_conversation_id, org_id, role_id, mode, tree_json, version, status,
         pending_feedback, conversation_id, submitted_at, expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, 'active', NULL, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'active', NULL, ?, ?, ?, ?, ?)`,
     ).run(
-      id, input.rootTaskId, input.orgId, input.roleId, input.mode,
+      id,
+      input.rootTaskId ?? null,
+      input.sourceConversationId ?? null,
+      input.orgId, input.roleId, input.mode,
       treeJson, input.conversationId ?? null,
       input.submittedAt, input.expiresAt, now, now,
     );

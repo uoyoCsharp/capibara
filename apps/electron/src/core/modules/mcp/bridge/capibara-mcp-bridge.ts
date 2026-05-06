@@ -79,22 +79,34 @@ const TOOLS = [
   {
     name: 'capibara_plan_submit_tree',
     description:
-      'Submit the complete decomposition tree for the current task in a single call. ' +
-      'The server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, ' +
-      'node count ≤500, depth ≤10) before accepting. In preview mode the tree waits for human approval; ' +
-      'in eager mode it is persisted immediately.',
+      'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
+      '(rootTaskId) or a planning conversation (conversationId) — provide EXACTLY ONE, never both. ' +
+      'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
+      '(preview waits for approval, eager persists immediately). ' +
+      'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
+      'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
+      'are created as root-level tasks. ' +
+      'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
     inputSchema: {
       type: 'object',
       properties: {
-        rootTaskId: { type: 'string', description: 'The current task ID (must be the root of the submitted tree)' },
+        rootTaskId: {
+          type: 'string',
+          description: 'Task anchor — the current task ID. Provide this OR conversationId, not both.',
+        },
+        conversationId: {
+          type: 'string',
+          description: 'Conversation anchor — the planning conversation ID (for conversational planning sessions). Provide this OR rootTaskId, not both.',
+        },
         tree: {
           type: 'object',
           description:
-            'The decomposition tree. The root node must match the current task type. ' +
+            'The decomposition tree. For task anchor: root type must match the task type. ' +
+            'For conversation anchor: root must be an allowedAtRoot type. ' +
             'Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
         },
       },
-      required: ['rootTaskId', 'tree'],
+      required: ['tree'],
     },
   },
 ];

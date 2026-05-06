@@ -3,7 +3,6 @@ import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { ProcessTemplateService } from '@core/modules/workflow/services/process-template.service';
-import type { PlanningService } from '@core/modules/planning/planning.service';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }
@@ -13,7 +12,6 @@ export function registerWorkflowHandlers(
   taskStateMachine: TaskStateMachine,
   processEngine: ProcessEngine,
   processTemplateService: ProcessTemplateService,
-  planningService: PlanningService,
 ): void {
   ipcMain.handle('capibara:task:list', async (_ev, orgId: string) => {
     try { return ok(taskService.findByOrgId(orgId)); }
@@ -40,22 +38,6 @@ export function registerWorkflowHandlers(
   ipcMain.handle('capibara:task:transition', async (_ev, taskId: string, newStatus: string) => {
     try { return ok(taskStateMachine.transition(taskId, newStatus)); }
     catch (e) { return err('INVALID_TRANSITION', String(e)); }
-  });
-
-  ipcMain.handle('capibara:task:start', async (_ev, taskId: string) => {
-    try {
-      const task = taskService.findById(taskId);
-      if (!task) return err('NOT_FOUND', `Task not found: ${taskId}`);
-      if (planningService.getPendingTree(taskId)) {
-        return err('PENDING_PLAN_TREE', 'This task has a pending decomposition plan awaiting review. Approve or discard it first.');
-      }
-      const category = processEngine.getStatusCategory(task.orgId, task.status);
-      if (category !== 'initial') return err('INVALID_TRANSITION', `Task is not in initial status (current: ${task.status})`);
-      const transitions = processEngine.getAvailableTransitions(task.orgId, task.status);
-      const activeTarget = transitions.find((t) => processEngine.getStatusCategory(task.orgId, t.to) === 'active');
-      if (!activeTarget) return err('INVALID_TRANSITION', 'No active status transition available');
-      return ok(taskStateMachine.transition(taskId, activeTarget.to));
-    } catch (e) { return err('INVALID_TRANSITION', String(e)); }
   });
 
   ipcMain.handle('capibara:task:cancel', async (_ev, taskId: string) => {

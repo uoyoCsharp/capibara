@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { GearSix, FolderOpen, Trash, FloppyDisk } from '@phosphor-icons/react';
 import { useAppSnapshot } from '../../hooks/use-app-snapshot';
 import { useOrganizationStore } from '../../store/organization.store';
+import { useT } from '../../hooks/use-locale';
+
+function interpolate(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
+}
 
 interface OrgSettingsPageProps {
   orgId: string | null;
@@ -9,6 +14,7 @@ interface OrgSettingsPageProps {
 }
 
 export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
+  const t = useT();
   const { organizations, refresh } = useAppSnapshot();
   const updateOrganization = useOrganizationStore((s) => s.updateOrganization);
   const deleteOrganization = useOrganizationStore((s) => s.deleteOrganization);
@@ -43,7 +49,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
         <GearSix size={48} weight="duotone" />
-        <p>Select an organization to view settings</p>
+        <p>{t.orgSettings.noOrgSelected}</p>
       </div>
     );
   }
@@ -81,14 +87,14 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <GearSix size={28} weight="duotone" />
-          Organization Settings
+          {t.orgSettings.title}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">{org.name}</p>
       </div>
 
       <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium">Name</label>
+          <label className="text-sm font-medium">{t.orgSettings.nameLabel}</label>
           <input
             type="text"
             value={form.name}
@@ -98,7 +104,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
         </div>
 
         <div>
-          <label className="text-sm font-medium">Description</label>
+          <label className="text-sm font-medium">{t.orgSettings.descriptionLabel}</label>
           <textarea
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -108,7 +114,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
         </div>
 
         <div>
-          <label className="text-sm font-medium">Custom Instructions</label>
+          <label className="text-sm font-medium">{t.orgSettings.customInstructionsLabel}</label>
           <textarea
             value={form.customInstructions}
             onChange={(e) => setForm((f) => ({ ...f, customInstructions: e.target.value }))}
@@ -119,7 +125,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-sm font-medium">Budget Limit ($)</label>
+            <label className="text-sm font-medium">{t.orgSettings.budgetLabel}</label>
             <input
               type="number"
               value={form.budgetLimit}
@@ -128,24 +134,24 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
             />
           </div>
           <div>
-            <label className="text-sm font-medium">Status</label>
+            <label className="text-sm font-medium">{t.orgSettings.statusLabel}</label>
             <select
               value={form.status}
               onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
               className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
             >
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="archived">Archived</option>
+              <option value="active">{t.orgSettings.statusActive}</option>
+              <option value="paused">{t.orgSettings.statusPaused}</option>
+              <option value="archived">{t.orgSettings.statusArchived}</option>
             </select>
           </div>
         </div>
 
         <div className="flex items-center justify-between py-2">
           <div>
-            <label className="text-sm font-medium">Auto-start tasks on create</label>
+            <label className="text-sm font-medium">{t.orgSettings.autoStartLabel}</label>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Automatically begin execution when a root task is created
+              {t.orgSettings.autoStartDescription}
             </p>
           </div>
           <button
@@ -164,10 +170,10 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
         </div>
 
         <div>
-          <label className="text-sm font-medium">Workspace Path</label>
+          <label className="text-sm font-medium">{t.orgSettings.workspacePathLabel}</label>
           <div className="mt-1 flex items-center gap-2">
             <span className="flex-1 px-3 py-2 rounded-lg border border-border bg-muted text-sm text-muted-foreground truncate">
-              {org.workspacePath || 'Not set'}
+              {org.workspacePath || t.orgSettings.workspacePathNotSet}
             </span>
             {org.workspacePath && (
               <button onClick={openFolder} className="p-2 rounded-lg border border-border hover:bg-accent transition-colors">
@@ -185,7 +191,7 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <FloppyDisk size={16} />
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t.orgSettings.saving : t.orgSettings.save}
         </button>
 
         <button
@@ -193,29 +199,29 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-destructive/30 text-destructive text-sm hover:bg-destructive/10 transition-colors"
         >
           <Trash size={16} />
-          Delete Organization
+          {t.orgSettings.deleteBtn}
         </button>
       </div>
 
       {showDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-background rounded-xl p-6 w-96 space-y-4 shadow-xl border border-border">
-            <h3 className="text-lg font-semibold">Delete Organization</h3>
+            <h3 className="text-lg font-semibold">{t.orgSettings.deleteTitle}</h3>
             <p className="text-sm text-muted-foreground">
-              This will permanently delete <strong>{org.name}</strong> and all its data. This cannot be undone.
+              {interpolate(t.orgSettings.deleteMessage, { name: org.name })}
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowDelete(false)}
                 className="px-3 py-1.5 rounded-lg border border-border text-sm hover:bg-accent transition-colors"
               >
-                Cancel
+                {t.common.cancel}
               </button>
               <button
                 onClick={handleDelete}
                 className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-sm hover:bg-destructive/90 transition-colors"
               >
-                Delete
+                {t.common.delete}
               </button>
             </div>
           </div>

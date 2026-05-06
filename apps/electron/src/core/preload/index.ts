@@ -32,7 +32,6 @@ const api = {
   getTaskChildren: (parentId: string) => ipcRenderer.invoke('capibara:task:children', parentId),
   createTask: (input: unknown) => ipcRenderer.invoke('capibara:task:create', input),
   updateTaskStatus: (taskId: string, status: string) => ipcRenderer.invoke('capibara:task:transition', taskId, status),
-  startTask: (taskId: string) => ipcRenderer.invoke('capibara:task:start', taskId),
   cancelTask: (taskId: string) => ipcRenderer.invoke('capibara:task:cancel', taskId),
   deleteTask: (id: string) => ipcRenderer.invoke('capibara:task:delete', id),
 
@@ -57,6 +56,20 @@ const api = {
     ipcRenderer.invoke('capibara:conversation:create-inquiry', orgId, roleId, taskId, question),
   createAdhocConversation: (orgId: string, roleId: string, message: string) =>
     ipcRenderer.invoke('capibara:conversation:create-adhoc', orgId, roleId, message),
+
+  // Conversational Planning
+  startPlanning: (orgId: string, agentRoleId: string, firstMessage: string) =>
+    ipcRenderer.invoke('capibara:planning:start', orgId, agentRoleId, firstMessage),
+  getActivePlanning: (orgId: string) =>
+    ipcRenderer.invoke('capibara:planning:active', orgId),
+  getPlanTreeByConversation: (conversationId: string) =>
+    ipcRenderer.invoke('capibara:plan-tree:get-by-conversation', conversationId),
+  approvePlanTreeByConversation: (conversationId: string, expectedVersion?: number) =>
+    ipcRenderer.invoke('capibara:plan-tree:approve-by-conversation', conversationId, expectedVersion),
+  discardPlanTreeByConversation: (conversationId: string, reason?: string) =>
+    ipcRenderer.invoke('capibara:plan-tree:discard-by-conversation', conversationId, reason),
+  refinePlanTreeByConversation: (conversationId: string, feedback: string) =>
+    ipcRenderer.invoke('capibara:plan-tree:refine-by-conversation', conversationId, feedback),
 
   // Runs
   getRunsByOrgId: (orgId: string) => ipcRenderer.invoke('capibara:run:list', orgId),

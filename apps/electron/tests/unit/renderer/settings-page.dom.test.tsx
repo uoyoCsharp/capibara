@@ -14,10 +14,11 @@ describe('<SettingsPage /> (DOM smoke)', () => {
   });
 
   it('renders language section and log management', async () => {
-    const { getByText } = renderWithProviders(<SettingsPage />, { controller });
+    const { getByText, queryByText } = renderWithProviders(<SettingsPage />, { controller });
     expect(getByText('Language')).toBeInTheDocument();
     expect(getByText('Execution Logs')).toBeInTheDocument();
-    expect(getByText('System')).toBeInTheDocument();
+    // "System" section was removed as it had no practical purpose.
+    expect(queryByText('System')).not.toBeInTheDocument();
   });
 
   it('loads persisted locale on mount', async () => {

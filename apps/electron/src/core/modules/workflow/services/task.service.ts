@@ -32,6 +32,10 @@ export class TaskService {
     return this.taskRepo.findChildren(parentId);
   }
 
+  hasChildren(parentId: string): boolean {
+    return this.taskRepo.hasChildren(parentId);
+  }
+
   getAncestors(taskId: string): Task[] {
     const ancestors: Task[] = [];
     let current = this.taskRepo.findById(taskId);
@@ -61,7 +65,7 @@ export class TaskService {
       throw new ValidationError(`Unknown task type: ${input.type}`);
     }
 
-    if (input.planningMode && input.planningMode !== 'layered') {
+    if (input.planningMode) {
       const typeDef = this.processEngine.getWorkItemType(input.orgId, input.type);
       if (!typeDef?.canDecompose) {
         throw new ValidationError(

@@ -37,22 +37,26 @@ export class TaskScheduler {
       return null;
     }
 
-    const category = this.processEngine.getStatusCategory(task.orgId, task.status);
-
-    if (category === 'initial' && task.assigneeRoleId) {
-      return { task, wakeReason: 'task_scheduled' };
+    // A task is a "container" only if it has actually grown children. The
+    // schema flag `typeDef.isLeaf=false` does NOT mean "always descend" — a
+    // non-leaf with no children yet is an as-yet-undecomposed node waiting
+    // to be dispatched so the assignee role can plan it. The prompt layer
+    // picks the correct scenario (preview/eager/propose decomposition) from
+    // task.planningMode + isDecomposable — see scenario.ts.
+    if (this.taskRepo.hasChildren(task.id)) {
+      return this.findInChildren(task.id, depth);
     }
 
-    if (category === 'initial' && !task.assigneeRoleId) {
+    // No children: task is the frontier. Dispatch it if initial+assignable.
+    const category = this.processEngine.getStatusCategory(task.orgId, task.status);
+    if (category !== 'initial') return null;
+
+    if (!task.assigneeRoleId) {
       this.logger.warn('Task blocked: no assigneeRoleId', { taskId: task.id });
       return null;
     }
 
-    if (category === 'terminal') {
-      return this.findInChildren(task.id, depth);
-    }
-
-    return null;
+    return { task, wakeReason: 'task_scheduled' };
   }
 
   private findInChildren(parentId: string, depth: number): ScheduleResult | null {

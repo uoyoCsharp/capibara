@@ -13,6 +13,7 @@ import type { Conversation, RespondentType } from '@core/modules/conversation/ty
 import type { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
 import type { RunCoordinator } from '@core/modules/orchestrator/run.coordinator';
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
+import type { IPendingWakeRepository } from '@core/modules/orchestrator/interfaces/i-pending-wake.repository';
 
 /**
  * End-to-end inquiry flow:
@@ -144,9 +145,18 @@ describe('Inquiry flow integration', () => {
       executeForConversation: vi.fn().mockResolvedValue({ runId: 'r', status: 'succeeded' }),
     } as unknown as RunCoordinator;
     const taskOrchestrator = { tryWake: vi.fn() } as unknown as TaskOrchestrator;
+    const pendingWakeRepo = {
+      findById: vi.fn(),
+      findByOrgId: vi.fn(),
+      findByRoleId: vi.fn(),
+      findNext: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+      deleteByRoleId: vi.fn(),
+    } as unknown as IPendingWakeRepository;
 
     conversationOrchestrator = new ConversationOrchestrator(
-      bus, logger, convRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
+      bus, logger, convRepo, pendingWakeRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
     );
     conversationOrchestrator.start();
   });

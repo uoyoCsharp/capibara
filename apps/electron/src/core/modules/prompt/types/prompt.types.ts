@@ -90,6 +90,7 @@ export interface ConversationPromptContext {
     id: string;
     type: string;
     state: string;
+    orgId: string;
     messageHistory: Array<{
       authorRoleId: string | null;
       authorType: string;
@@ -113,4 +114,25 @@ export interface ConversationPromptContext {
   };
   skills: Array<{ name: string; command: string; description: string }>;
   locale: string;
+  /** Present for 'planning' type conversations: lets the AI know which types
+   *  can be root and what the decomposition schema looks like. */
+  typeSchema?: {
+    allTypes: Array<{
+      name: string;
+      label: string;
+      isLeaf: boolean;
+      canDecompose: boolean;
+      allowedChildren: string[];
+      allowedAtRoot: boolean;
+    }>;
+  };
+  /** Present for 'planning' type conversations: AI needs to know the available
+   *  roles to populate `assigneeRoleId` on each tree node. */
+  orgRoles?: Array<{
+    id: string;
+    name: string;
+    skillDescriptions: string[];
+  }>;
+  /** Any pending feedback (refine loop) from a prior tree submission. Consumed once. */
+  pendingFeedback?: string | null;
 }

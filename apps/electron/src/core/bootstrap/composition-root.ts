@@ -58,7 +58,7 @@ export async function bootstrap(): Promise<void> {
   const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.js');
 
   const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));
-  const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'));
+  const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'), org.roleRepo);
   const conversation = registerConversationModule(sqliteConn, eventPublisher, logger);
   workflow.taskService.setConversationRepository(conversation.conversationRepo);
 
@@ -119,7 +119,7 @@ export async function bootstrap(): Promise<void> {
   const notification = registerNotificationModule(eventBus, logger);
 
   registerOrganizationHandlers(org.organizationService, org.roleService, org.skillService, org.orgTemplateService, logger);
-  registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService, planning.planningService);
+  registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService);
   registerConversationHandlers(conversation.conversationService);
   registerExecutionHandlers(
     execution.runRepo,

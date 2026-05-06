@@ -55,7 +55,6 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
     getTaskChildren: vi.fn().mockResolvedValue(ok([])),
     createTask: vi.fn(),
     updateTaskStatus: vi.fn(),
-    startTask: vi.fn(),
     cancelTask: vi.fn(),
     deleteTask: vi.fn().mockResolvedValue(ok(null)),
 
@@ -78,6 +77,14 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
     cancelConversation: vi.fn().mockResolvedValue(ok(null)),
     createInquiry: vi.fn(),
     createAdhocConversation: vi.fn(),
+
+    // Conversational Planning
+    startPlanning: vi.fn(),
+    getActivePlanning: vi.fn().mockResolvedValue(ok(null)),
+    getPlanTreeByConversation: vi.fn().mockResolvedValue(ok(null)),
+    approvePlanTreeByConversation: vi.fn().mockResolvedValue(ok(null)),
+    discardPlanTreeByConversation: vi.fn().mockResolvedValue(ok(null)),
+    refinePlanTreeByConversation: vi.fn().mockResolvedValue(ok(null)),
 
     // Runs
     getRunsByOrgId: vi.fn().mockResolvedValue(ok([])),

@@ -98,25 +98,32 @@ export const usePlanTreeStore = create<PlanTreeState>((set, get) => ({
     if (unsubscribe) unsubscribe();
     unsubscribe = subscribeToEvents({
       'plan-tree:ready': (e) => {
+        // Only task-anchored trees are handled by this store.
+        // Conversation-anchored trees are handled by a separate planning UI.
+        if (!e.rootTaskId) return;
         void get().loadPlanTree(e.rootTaskId);
       },
       'plan-tree:discarded': (e) => {
+        if (!e.rootTaskId) return;
+        const rootTaskId = e.rootTaskId;
         set((s) => {
           const nextByRoot = { ...s.byRootTaskId };
-          delete nextByRoot[e.rootTaskId];
+          delete nextByRoot[rootTaskId];
           return {
             byRootTaskId: nextByRoot,
-            refining: { ...s.refining, [e.rootTaskId]: false },
+            refining: { ...s.refining, [rootTaskId]: false },
           };
         });
       },
       'plan-tree:approved': (e) => {
+        if (!e.rootTaskId) return;
+        const rootTaskId = e.rootTaskId;
         set((s) => {
           const nextByRoot = { ...s.byRootTaskId };
-          delete nextByRoot[e.rootTaskId];
+          delete nextByRoot[rootTaskId];
           return {
             byRootTaskId: nextByRoot,
-            refining: { ...s.refining, [e.rootTaskId]: false },
+            refining: { ...s.refining, [rootTaskId]: false },
           };
         });
       },

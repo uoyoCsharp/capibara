@@ -120,6 +120,23 @@ export class ConversationService {
     });
   }
 
+  /**
+   * Start a conversation-only planning session. No task is created — the
+   * conversation stands alone. The AI agent (respondentRoleId) is woken via
+   * the `conversation:response-needed` event published here.
+   *
+   * This is the entry point for the "Conversational Task Planning" feature:
+   * user describes an idea, AI guides discovery, eventually AI submits a
+   * plan tree anchored to this conversation id.
+   */
+  createPlanning(
+    orgId: string,
+    agentRoleId: string,
+    firstHumanMessage: string,
+  ): Conversation {
+    return this.createPlanningOrAdhoc(orgId, 'planning', agentRoleId, agentRoleId, firstHumanMessage);
+  }
+
   createPlanningOrAdhoc(
     orgId: string,
     type: 'planning' | 'adhoc',

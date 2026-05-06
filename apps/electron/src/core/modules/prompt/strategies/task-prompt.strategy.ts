@@ -85,8 +85,6 @@ function buildIdBindings(ctx: PromptContext): string {
 function buildToolGuidance(scenario: PromptScenario): string {
   const tools: Record<PromptScenario, string[]> = {
     terminal_noop: ['capibara_context'],
-    propose_decomposition: ['capibara_ask_question', 'capibara_context'],
-    execute_decomposition: ['capibara_task_create_child', 'capibara_task_transition', 'capibara_context'],
     preview_decomposition: ['capibara_plan_submit_tree', 'capibara_context'],
     eager_decomposition: ['capibara_plan_submit_tree', 'capibara_context'],
     execute_leaf: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
@@ -99,7 +97,6 @@ function buildToolGuidance(scenario: PromptScenario): string {
 
   const toolDescriptions: Record<string, string> = {
     capibara_task_transition: 'Transition the current task to a new status (see Workflow Status section for available transitions)',
-    capibara_task_create_child: 'Create a child task under the current task',
     capibara_plan_submit_tree: 'Submit the full decomposition tree for this task in a single call (root + all descendants). The tool validates structure server-side.',
     capibara_ask_question: 'Ask a question to your supervisor or a peer',
     capibara_context: 'Query additional context about tasks, roles, or the organization',
@@ -153,17 +150,8 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
   const instructions: Record<PromptScenario, string> = {
     terminal_noop:
       'This task is already in a terminal status. ' +
-      'Do NOT call `capibara_plan_submit_tree`, `capibara_task_create_child`, or `capibara_task_transition`. ' +
+      'Do NOT call `capibara_plan_submit_tree` or `capibara_task_transition`. ' +
       'Treat this run as a no-op and provide a brief completion note only.',
-    propose_decomposition:
-      'Analyze the task requirements and create a decomposition proposal. ' +
-      'Use `capibara_ask_question` to submit your proposal to your supervisor for review. ' +
-      'In the proposal, describe the sub-tasks you plan to create: their types, titles, assigned roles, and execution order. ' +
-      'Do NOT create child tasks yet — wait for approval.',
-    execute_decomposition:
-      'Your decomposition proposal has been approved. ' +
-      'Use `capibara_task_create_child` to create all planned child tasks. ' +
-      'Then use `capibara_task_transition` to advance this task to the next appropriate status (refer to the Workflow Status section for available transitions).',
     preview_decomposition:
       'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
       'Structural rules:\n' +
@@ -173,7 +161,7 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
-      'Do NOT call `capibara_task_create_child`. The user will review the tree and approve it before any task is persisted.',
+      'The user will review the tree and approve it before any task is persisted.',
     eager_decomposition:
       'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
       'Structural rules:\n' +
@@ -183,8 +171,7 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
-      'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct. ' +
-      'Do NOT call `capibara_task_create_child`.',
+      'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct.',
     execute_leaf:
       'Execute this task directly. ' +
       'When finished, use `capibara_task_transition` to advance to the next status (refer to the Workflow Status section). ' +
@@ -231,8 +218,6 @@ function buildOrgContext(ctx: PromptContext, scenario: PromptScenario): string |
   if (!parentRole && subordinates.length === 0 && peers.length === 0) return null;
 
   const showSkills =
-    scenario === 'propose_decomposition' ||
-    scenario === 'execute_decomposition' ||
     scenario === 'preview_decomposition' ||
     scenario === 'eager_decomposition';
   const lines: string[] = [];
@@ -285,8 +270,6 @@ function buildExecutionSequence(ctx: PromptContext): string | null {
 
 function buildTypeSchema(ctx: PromptContext, scenario: PromptScenario): string | null {
   const needsSchema =
-    scenario === 'propose_decomposition' ||
-    scenario === 'execute_decomposition' ||
     scenario === 'preview_decomposition' ||
     scenario === 'eager_decomposition';
   if (!needsSchema) return null;

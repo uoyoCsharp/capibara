@@ -2,11 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { CaretDown, CaretRight, Check, Trash, ChatCircle, CircleNotch } from '@phosphor-icons/react';
 import type { PlanDraftNodeRecord, PendingTreeRecord, RoleRecord } from '@core/shared/types';
 import { usePlanTreeStore } from '../../store/plan-tree.store';
+import { useT } from '../../hooks/use-locale';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
+
+function interpolate(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
+}
 
 const COLLAPSE_THRESHOLD = 100;
 
@@ -34,11 +39,15 @@ function tallyAssignees(node: PlanDraftNodeRecord, acc: Record<string, number>):
 }
 
 export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeReviewProps) {
+  const t = useT();
   const approve = usePlanTreeStore((s) => s.approve);
   const discard = usePlanTreeStore((s) => s.discard);
   const refine = usePlanTreeStore((s) => s.refine);
-  const refining = usePlanTreeStore((s) => s.refining[pending.rootTaskId] ?? false);
-  const lastError = usePlanTreeStore((s) => s.lastError[pending.rootTaskId] ?? null);
+  // This component is used only for the task-anchored review flow.
+  // Conversation-anchored planning has its own UI (PlanningPage in Slice 3).
+  const rootTaskId = pending.rootTaskId!;
+  const refining = usePlanTreeStore((s) => s.refining[rootTaskId] ?? false);
+  const lastError = usePlanTreeStore((s) => s.lastError[rootTaskId] ?? null);
 
   const [showDiscardForm, setShowDiscardForm] = useState(false);
   const [discardReason, setDiscardReason] = useState('');
@@ -66,21 +75,21 @@ export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeR
 
   const handleApprove = async () => {
     setBusy(true);
-    const ok = await approve(pending.rootTaskId);
+    const ok = await approve(rootTaskId);
     setBusy(false);
     if (ok) onClose?.();
   };
 
   const handleDiscard = async () => {
     setBusy(true);
-    const ok = await discard(pending.rootTaskId, discardReason.trim() || undefined);
+    const ok = await discard(rootTaskId, discardReason.trim() || undefined);
     setBusy(false);
     if (ok) onClose?.();
   };
 
   const handleRefine = async () => {
     if (!refineFeedback.trim()) return;
-    const ok = await refine(pending.rootTaskId, refineFeedback.trim());
+    const ok = await refine(rootTaskId, refineFeedback.trim());
     if (ok) {
       setShowRefineForm(false);
       setRefineFeedback('');
@@ -92,22 +101,22 @@ export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeR
       {/* Header */}
       <div className="flex items-start justify-between border-b px-4 py-3">
         <div>
-          <h2 className="text-base font-semibold">Review Decomposition Plan</h2>
+          <h2 className="text-base font-semibold">{t.planTreeReview.title}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {pending.mode === 'preview' ? 'Preview mode — approve to persist.' : 'Eager mode.'}
-            &nbsp;·&nbsp;version {pending.version}
+            {pending.mode === 'preview' ? t.planTreeReview.previewModeHint : t.planTreeReview.eagerModeHint}
+            &nbsp;·&nbsp;{interpolate(t.planPreview.summaryVersion, { n: pending.version })}
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{nodeCount} nodes</span>
+          <span>{interpolate(t.planTreeReview.nodes, { count: nodeCount })}</span>
           <span>·</span>
-          <span>depth {maxDepth}</span>
+          <span>{interpolate(t.planTreeReview.depth, { n: maxDepth })}</span>
         </div>
       </div>
 
       {/* Summary */}
       <div className="border-b px-4 py-3 space-y-2">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Role distribution</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t.planTreeReview.roleDistribution}</p>
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(assigneeTally).map(([roleId, count]) => (
             <Badge key={roleId} variant="secondary" className="text-xs">
@@ -138,17 +147,17 @@ export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeR
       {/* Refine form */}
       {showRefineForm && (
         <div className="border-t px-4 py-3 space-y-2 bg-muted/20">
-          <p className="text-xs font-medium">What should change?</p>
+          <p className="text-xs font-medium">{t.planTreeReview.refineTitle}</p>
           <Textarea
             value={refineFeedback}
             onChange={(e) => setRefineFeedback(e.target.value)}
-            placeholder="e.g. split authentication into login / logout / session management..."
+            placeholder={t.planTreeReview.refinePlaceholder}
             rows={3}
             disabled={refining}
           />
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setShowRefineForm(false)} disabled={refining}>
-              Close
+              {t.planTreeReview.refineClose}
             </Button>
             <Button
               size="sm"
@@ -156,9 +165,9 @@ export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeR
               disabled={refining || !refineFeedback.trim()}
             >
               {refining ? (
-                <><CircleNotch size={14} className="mr-1.5 animate-spin" />Waiting for AI…</>
+                <><CircleNotch size={14} className="mr-1.5 animate-spin" />{t.planTreeReview.refineWaiting}</>
               ) : (
-                'Send feedback'
+                t.planTreeReview.refineSend
               )}
             </Button>
           </div>
@@ -168,20 +177,20 @@ export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeR
       {/* Discard form */}
       {showDiscardForm && (
         <div className="border-t px-4 py-3 space-y-2 bg-muted/20">
-          <p className="text-xs font-medium">Discard reason (optional)</p>
+          <p className="text-xs font-medium">{t.planTreeReview.discardReason}</p>
           <Textarea
             value={discardReason}
             onChange={(e) => setDiscardReason(e.target.value)}
             rows={2}
             disabled={busy}
-            placeholder="Optional note for the audit log..."
+            placeholder={t.planTreeReview.discardPlaceholder}
           />
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setShowDiscardForm(false)} disabled={busy}>
-              Cancel
+              {t.planTreeReview.cancelBtn}
             </Button>
             <Button variant="destructive" size="sm" onClick={handleDiscard} disabled={busy}>
-              Discard plan
+              {t.planTreeReview.discardPlan}
             </Button>
           </div>
         </div>
@@ -199,7 +208,7 @@ export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeR
             disabled={busy || refining}
           >
             <ChatCircle size={14} className="mr-1.5" />
-            Refine
+            {t.planTreeReview.refineBtn}
           </Button>
           <Button
             variant="ghost"
@@ -209,20 +218,20 @@ export function PlanTreeReview({ pending, roles, typeLabel, onClose }: PlanTreeR
             className="text-destructive hover:text-destructive"
           >
             <Trash size={14} className="mr-1.5" />
-            Discard
+            {t.planTreeReview.discardBtn}
           </Button>
         </div>
         <div className="flex items-center gap-2">
           {onClose && (
             <Button variant="outline" size="sm" onClick={onClose} disabled={busy || refining}>
-              Close
+              {t.planTreeReview.closeBtn}
             </Button>
           )}
           <Button onClick={handleApprove} size="sm" disabled={busy || refining}>
             {busy ? (
-              <><CircleNotch size={14} className="mr-1.5 animate-spin" />Committing…</>
+              <><CircleNotch size={14} className="mr-1.5 animate-spin" />{t.planTreeReview.approveCommitting}</>
             ) : (
-              <><Check size={14} className="mr-1.5" />Approve &amp; Commit</>
+              <><Check size={14} className="mr-1.5" />{t.planTreeReview.approveBtn}</>
             )}
           </Button>
         </div>

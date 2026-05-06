@@ -7,6 +7,7 @@ export type SectionId =
   | 'tasks'
   | 'inbox'
   | 'team'
+  | 'planning'
   | 'settings'
   | 'workspace';
 
@@ -67,7 +68,7 @@ export interface TaskRecord {
   depth: number;
   artifactPaths: string[] | null;
   pausedReason: 'approval' | null;
-  planningMode: 'layered' | 'eager' | 'preview';
+  planningMode: 'eager' | 'preview';
   createdAt: string;
   updatedAt: string;
 }
@@ -134,7 +135,8 @@ export interface PlanDraftNodeRecord {
 
 export interface PendingTreeRecord {
   id: string;
-  rootTaskId: string;
+  rootTaskId: string | null;
+  sourceConversationId: string | null;
   orgId: string;
   roleId: string;
   mode: 'preview' | 'eager';
@@ -164,8 +166,7 @@ export type DesktopEvent =
   | { type: 'conversation:response-needed'; orgId: string; conversationId: string }
   | { type: 'scheduler:paused'; cancelledRunCount: number }
   | { type: 'scheduler:resumed' }
-  | { type: 'plan-tree:ready'; orgId: string; rootTaskId: string; nodeCount: number; maxDepth: number }
-  | { type: 'plan-tree:discarded'; orgId: string; rootTaskId: string }
-  | { type: 'plan-tree:approved'; orgId: string; rootTaskId: string }
-  | { type: 'notification'; title: string; body: string }
-  | { type: 'settings:locale-changed'; locale: string };
+  | { type: 'plan-tree:ready'; orgId: string; rootTaskId: string | null; sourceConversationId: string | null; nodeCount: number; maxDepth: number }
+  | { type: 'plan-tree:discarded'; orgId: string; rootTaskId: string | null; sourceConversationId: string | null }
+  | { type: 'plan-tree:approved'; orgId: string; rootTaskId: string | null; sourceConversationId: string | null }
+  | { type: 'notification'; title: string; body: string };

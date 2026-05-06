@@ -34,12 +34,15 @@ export class McpToolRegistry {
       throw new Error(`Unknown MCP tool: ${toolName}`);
     }
 
-    this.logger.debug('MCP tool call started', { toolName, runId, params });
+    // MCP calls are AI-facing contract boundaries — keep at info so they
+    // surface by default in dev. Set CAPIBARA_LOG_LEVEL=debug to see full params.
+    this.logger.info('MCP tool call started', { toolName, runId });
+    this.logger.debug('MCP tool call params', { toolName, runId, params });
     const start = Date.now();
 
     try {
       const result = await tool.handler(params, runId);
-      this.logger.debug('MCP tool call completed', { toolName, runId, durationMs: Date.now() - start });
+      this.logger.info('MCP tool call completed', { toolName, runId, durationMs: Date.now() - start });
       return result;
     } catch (err) {
       this.logger.error('MCP tool call failed', {

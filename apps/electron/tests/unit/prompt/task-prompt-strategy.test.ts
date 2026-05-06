@@ -11,6 +11,8 @@ const defaultTask: PromptContext['task'] = {
   orgId: 'org-1',
   hasChildren: false,
   isDecomposable: false,
+  planningMode: 'preview',
+  pendingFeedback: null,
   allowedChildTypes: [],
   isTerminal: false,
   parentChain: [],
@@ -164,24 +166,24 @@ describe('buildTaskPrompt — new sections', () => {
     expect(result).not.toContain('capibara_task_create_child');
   });
 
-  it('propose_decomposition: instructs to submit proposal via ask_question', () => {
+  it('preview_decomposition (default): instructs to submit tree via plan_submit_tree', () => {
     const ctx = createCtx({
       wakeReason: 'task_assigned',
-      task: { ...defaultTask, isDecomposable: true },
+      task: { ...defaultTask, isDecomposable: true, planningMode: 'preview' },
     });
     const result = buildTaskPrompt(ctx);
-    expect(result).toContain('capibara_ask_question');
+    expect(result).toContain('capibara_plan_submit_tree');
     expect(result).not.toContain('capibara_task_create_child');
   });
 
-  it('execute_decomposition: instructs to create children and transition', () => {
+  it('eager_decomposition: instructs to submit tree via plan_submit_tree', () => {
     const ctx = createCtx({
-      wakeReason: 'conversation_reply',
-      task: { ...defaultTask, isDecomposable: true },
+      wakeReason: 'task_assigned',
+      task: { ...defaultTask, isDecomposable: true, planningMode: 'eager' },
     });
     const result = buildTaskPrompt(ctx);
-    expect(result).toContain('capibara_task_create_child');
-    expect(result).toContain('capibara_task_transition');
+    expect(result).toContain('capibara_plan_submit_tree');
+    expect(result).not.toContain('capibara_task_create_child');
   });
 
   it('revision: instructs to address feedback', () => {
@@ -198,10 +200,10 @@ describe('buildTaskPrompt — new sections', () => {
     }));
     const decompResult = buildTaskPrompt(createCtx({
       wakeReason: 'task_assigned',
-      task: { ...defaultTask, isDecomposable: true },
+      task: { ...defaultTask, isDecomposable: true, planningMode: 'preview' },
     }));
-    expect(leafResult).not.toContain('capibara_task_create_child');
-    expect(decompResult).toContain('capibara_ask_question');
+    expect(leafResult).not.toContain('capibara_plan_submit_tree');
+    expect(decompResult).toContain('capibara_plan_submit_tree');
   });
 
   it('terminal task uses noop instructions and avoids execution tools', () => {

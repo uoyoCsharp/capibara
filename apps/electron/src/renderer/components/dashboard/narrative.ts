@@ -1,6 +1,8 @@
 import type { TaskRecord, RunRecord, ConversationRecord, RoleRecord } from '@core/shared/types';
+import type { LocaleMessages } from '@shared/locale/types';
 
 export interface NarrativeInput {
+  t: LocaleMessages;
   orgName: string;
   tasks: TaskRecord[];
   runs: RunRecord[];
@@ -19,18 +21,23 @@ export interface Narrative {
   sections: NarrativeSection[];
 }
 
+function interpolate(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
+}
+
 /**
  * Template-based narrative builder — no AI call, just composed phrases.
  * Produces a human-readable project-status story from snapshot counts.
  */
 export function buildNarrative(input: NarrativeInput): Narrative {
-  const { orgName, tasks, runs, conversations, roles } = input;
+  const { t, orgName, tasks, runs, conversations, roles } = input;
+  const nt = t.narrative;
 
-  const activeTasks = tasks.filter((t) => !['done', 'cancelled'].includes(t.status));
-  const completedTasks = tasks.filter((t) => t.status === 'done');
-  const approvalTasks = tasks.filter((t) => t.status === 'awaiting_review');
-  const blockedTasks = tasks.filter((t) => t.status === 'blocked');
-  const inProgressTasks = tasks.filter((t) => t.status === 'in_progress');
+  const activeTasks = tasks.filter((x) => !['done', 'cancelled'].includes(x.status));
+  const completedTasks = tasks.filter((x) => x.status === 'done');
+  const approvalTasks = tasks.filter((x) => x.status === 'awaiting_review');
+  const blockedTasks = tasks.filter((x) => x.status === 'blocked');
+  const inProgressTasks = tasks.filter((x) => x.status === 'in_progress');
 
   const activeRuns = runs.filter((r) => ['queued', 'running'].includes(r.status));
   const failedRuns = runs.filter((r) => r.status === 'failed').slice(0, 5);
@@ -50,10 +57,10 @@ export function buildNarrative(input: NarrativeInput): Narrative {
 
   // Current state
   sections.push({
-    heading: 'Where we are',
+    heading: nt.sections.whereWeAre,
     body: activeTasks.length === 0
-      ? `No active work. ${completedTasks.length} task(s) completed so far.`
-      : summarizeActivity({
+      ? interpolate(nt.whereWeAre.noActiveWork, { completed: completedTasks.length })
+      : summarizeActivity(nt, {
           inProgress: inProgressTasks.length,
           blocked: blockedTasks.length,
           awaitingReview: approvalTasks.length,
@@ -64,10 +71,13 @@ export function buildNarrative(input: NarrativeInput): Narrative {
 
   // Team
   sections.push({
-    heading: 'Team',
+    heading: nt.sections.team,
     body: aiRoles.length === 0
-      ? 'No AI roles configured yet. Add roles in the Team page to start delegating work.'
-      : `${aiRoles.length} AI role(s) available. ` + (aiRoles.length > 1 ? 'They can collaborate via inquiries and escalations.' : 'Consider adding more roles for richer collaboration.'),
+      ? nt.team.noRoles
+      : interpolate(
+          aiRoles.length > 1 ? nt.team.multipleRoles : nt.team.singleRole,
+          { n: aiRoles.length },
+        ),
     tone: aiRoles.length === 0 ? 'warning' : 'positive',
   });
 
@@ -75,32 +85,36 @@ export function buildNarrative(input: NarrativeInput): Narrative {
   if (humanWaitingInquiries.length > 0 || approvalTasks.length > 0) {
     const parts: string[] = [];
     if (humanWaitingInquiries.length > 0) {
-      parts.push(`${humanWaitingInquiries.length} inquiry(ies) waiting for a human reply`);
+      parts.push(interpolate(nt.attention.inquiriesWaiting, { n: humanWaitingInquiries.length }));
     }
     if (approvalTasks.length > 0) {
-      parts.push(`${approvalTasks.length} task(s) awaiting your approval`);
+      parts.push(interpolate(nt.attention.tasksAwaitingApproval, { n: approvalTasks.length }));
     }
     sections.push({
-      heading: 'Needs your attention',
-      body: `You have ${parts.join(' and ')}. Check the Inbox and Tasks pages.`,
+      heading: nt.sections.attention,
+      body: interpolate(nt.attention.body, { parts: parts.join(nt.attention.separator) }),
       tone: 'warning',
     });
   }
 
   // Budget & reliability
   if (totalTokens > 0 || failedRuns.length > 0) {
-    const budgetNote = `${totalTokens.toLocaleString()} token(s) used across ${runs.length} run(s), totalling $${totalCost.toFixed(2)}.`;
-    const reliabilityNote = failedRuns.length > 0
-      ? ` ${failedRuns.length} recent run(s) failed — review the Runs panel for details.`
+    const usage = interpolate(nt.budget.usage, {
+      tokens: totalTokens.toLocaleString(),
+      runs: runs.length,
+      cost: totalCost.toFixed(2),
+    });
+    const reliability = failedRuns.length > 0
+      ? interpolate(nt.budget.failedRuns, { n: failedRuns.length })
       : '';
     sections.push({
-      heading: 'Budget & reliability',
-      body: budgetNote + reliabilityNote,
+      heading: nt.sections.budget,
+      body: usage + reliability,
       tone: failedRuns.length > 0 ? 'warning' : 'info',
     });
   }
 
-  const headline = buildHeadline({
+  const headline = buildHeadline(nt, {
     orgName,
     activeTasks: activeTasks.length,
     completedTasks: completedTasks.length,
@@ -110,34 +124,41 @@ export function buildNarrative(input: NarrativeInput): Narrative {
   return { headline, sections };
 }
 
-function summarizeActivity(counts: {
+function summarizeActivity(nt: LocaleMessages['narrative'], counts: {
   inProgress: number;
   blocked: number;
   awaitingReview: number;
   activeRuns: number;
 }): string {
   const parts: string[] = [];
-  if (counts.inProgress > 0) parts.push(`${counts.inProgress} task(s) in progress`);
-  if (counts.blocked > 0) parts.push(`${counts.blocked} blocked`);
-  if (counts.awaitingReview > 0) parts.push(`${counts.awaitingReview} awaiting review`);
-  if (counts.activeRuns > 0) parts.push(`${counts.activeRuns} active AI run(s)`);
-  return parts.length === 0 ? 'Quiet moment — no immediate activity.' : parts.join(', ') + '.';
+  if (counts.inProgress > 0) parts.push(interpolate(nt.whereWeAre.inProgress, { n: counts.inProgress }));
+  if (counts.blocked > 0) parts.push(interpolate(nt.whereWeAre.blocked, { n: counts.blocked }));
+  if (counts.awaitingReview > 0) parts.push(interpolate(nt.whereWeAre.awaitingReview, { n: counts.awaitingReview }));
+  if (counts.activeRuns > 0) parts.push(interpolate(nt.whereWeAre.activeRuns, { n: counts.activeRuns }));
+  return parts.length === 0 ? nt.whereWeAre.quietMoment : parts.join(', ') + '.';
 }
 
-function buildHeadline(input: {
+function buildHeadline(nt: LocaleMessages['narrative'], input: {
   orgName: string;
   activeTasks: number;
   completedTasks: number;
   needsAttention: number;
 }): string {
   if (input.needsAttention > 0) {
-    return `${input.orgName} — ${input.needsAttention} item(s) need your attention.`;
+    return interpolate(nt.headline.needsAttention, { orgName: input.orgName, n: input.needsAttention });
   }
   if (input.activeTasks > 0) {
-    return `${input.orgName} — ${input.activeTasks} task(s) progressing, ${input.completedTasks} completed.`;
+    return interpolate(nt.headline.activeProgress, {
+      orgName: input.orgName,
+      active: input.activeTasks,
+      completed: input.completedTasks,
+    });
   }
   if (input.completedTasks > 0) {
-    return `${input.orgName} — all clear. ${input.completedTasks} task(s) completed.`;
+    return interpolate(nt.headline.allClear, {
+      orgName: input.orgName,
+      completed: input.completedTasks,
+    });
   }
-  return `${input.orgName} — ready to start. Create a task to kick things off.`;
+  return interpolate(nt.headline.readyToStart, { orgName: input.orgName });
 }

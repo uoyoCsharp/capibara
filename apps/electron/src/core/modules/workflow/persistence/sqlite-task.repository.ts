@@ -66,6 +66,13 @@ export class SqliteTaskRepository implements ITaskRepository {
     return rows.map(toTask);
   }
 
+  hasChildren(parentId: string): boolean {
+    const row = this.connection.getDb()
+      .prepare('SELECT 1 FROM tasks WHERE parent_id = ? LIMIT 1')
+      .get(parentId) as { 1: number } | undefined;
+    return row !== undefined;
+  }
+
   findByAssigneeRoleId(roleId: string): Task[] {
     const rows = this.connection.getDb()
       .prepare('SELECT * FROM tasks WHERE assignee_role_id = ? ORDER BY created_at')
@@ -76,7 +83,7 @@ export class SqliteTaskRepository implements ITaskRepository {
   create(input: CreateTaskInput, depth: number): Task {
     const id = randomUUID();
     const now = new Date().toISOString();
-    const planningMode: PlanningMode = input.planningMode ?? 'layered';
+    const planningMode: PlanningMode = input.planningMode ?? 'preview';
     this.connection.getDb()
       .prepare(`
         INSERT INTO tasks (id, org_id, parent_id, type, title, description, status, assignee_role_id, depth, planning_mode, created_at, updated_at)
