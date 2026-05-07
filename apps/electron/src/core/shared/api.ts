@@ -168,4 +168,9 @@ export interface CapibaraApi {
 
   // ─── Events ──────────────────────────────────────────────────────
   subscribe: (callback: (event: DesktopEvent) => void) => () => void;
+
+  // ─── Auto-update (main-pushed events only) ───────────────────────
+  onUpdateEvent: (
+    callback: (payload: { channel: string; payload?: unknown }) => void,
+  ) => () => void;
 }

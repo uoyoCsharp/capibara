@@ -368,6 +368,17 @@ export const enUS: LocaleMessages = {
     deleteMessage: 'This will permanently delete {name} and all its data. This cannot be undone.',
   },
 
+  autoUpdate: {
+    availableWithVersion: 'New version {version} detected — downloading in the background',
+    availableNoVersion: 'New version detected — downloading in the background',
+    readyToInstall: 'Update ready — it will be installed next time you launch the app',
+    dialogTitle: 'Update ready',
+    dialogMessage: 'Capibara {version} has been downloaded',
+    dialogDetail: 'Click "Restart now" to apply the update; choose "Later" to install automatically on next launch.',
+    restartNow: 'Restart now',
+    later: 'Later',
+  },
+
   narrative: {
     sections: {
       whereWeAre: 'Where we are',

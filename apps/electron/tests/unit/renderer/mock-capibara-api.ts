@@ -130,6 +130,9 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
       subscribers.add(cb);
       return () => subscribers.delete(cb);
     }),
+
+    // Auto-update events (not exercised in these tests — noop unsub)
+    onUpdateEvent: vi.fn(() => () => {}),
   };
 
   return {

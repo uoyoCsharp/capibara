@@ -365,6 +365,17 @@ export const zhCN: LocaleMessages = {
     deleteMessage: '将永久删除 {name} 及其所有数据，操作不可撤销。',
   },
 
+  autoUpdate: {
+    availableWithVersion: '检测到新版本 {version}，正在后台下载',
+    availableNoVersion: '检测到新版本，正在后台下载',
+    readyToInstall: '更新已就绪，将在下次启动生效',
+    dialogTitle: '更新已就绪',
+    dialogMessage: 'Capibara {version} 已下载完成',
+    dialogDetail: '点击"立即重启"完成更新；选择"稍后"将在下次启动时自动安装。',
+    restartNow: '立即重启',
+    later: '稍后',
+  },
+
   narrative: {
     sections: {
       whereWeAre: '项目现状',

@@ -372,6 +372,17 @@ export interface LocaleMessages {
     deleteMessage: string;
   };
 
+  autoUpdate: {
+    availableWithVersion: string;  // contains {version}
+    availableNoVersion: string;
+    readyToInstall: string;
+    dialogTitle: string;
+    dialogMessage: string;  // contains {version}
+    dialogDetail: string;
+    restartNow: string;
+    later: string;
+  };
+
   narrative: {
     sections: {
       whereWeAre: string;

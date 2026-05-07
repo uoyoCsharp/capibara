@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { LocaleProvider, useT } from './hooks/use-locale';
 import { useOnboardingGate } from './hooks/use-onboarding-gate';
 import { useCrossCuttingToasts } from './hooks/use-cross-cutting-toasts';
+import { useAutoUpdateToasts } from './hooks/use-auto-update-toasts';
 import { useSectionShortcuts } from './hooks/use-section-shortcuts';
 import { useAppStore } from './store/app.store';
 import { useTaskStore } from './store/task.store';
@@ -53,6 +54,7 @@ function AppContent() {
   }, [currentOrgId]);
 
   useCrossCuttingToasts(activeSection, setActiveSection);
+  useAutoUpdateToasts();
   useSectionShortcuts(setActiveSection);
 
   if (isLoading || showOnboarding === null) {

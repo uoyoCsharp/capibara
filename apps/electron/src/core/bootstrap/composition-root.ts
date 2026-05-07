@@ -178,3 +178,7 @@ export async function shutdown(): Promise<void> {
 export function getEventBroadcaster(): EventBroadcaster {
   return eventBroadcaster;
 }
+
+export function getSqliteConnection(): SqliteConnection {
+  return sqliteConn;
+}

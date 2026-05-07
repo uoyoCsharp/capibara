@@ -119,6 +119,13 @@ const api = {
     ipcRenderer.on('capibara:desktop-event', handler);
     return () => ipcRenderer.removeListener('capibara:desktop-event', handler);
   },
+
+  // Auto-update events (main → renderer one-way push; no invoke surface yet)
+  onUpdateEvent: (callback: (payload: { channel: string; payload?: unknown }) => void) => {
+    const handler = (_event: unknown, data: { channel: string; payload?: unknown }) => callback(data);
+    ipcRenderer.on('capibara:auto-update', handler);
+    return () => ipcRenderer.removeListener('capibara:auto-update', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('capibara', api);

@@ -5,6 +5,7 @@
 import { app, BrowserWindow, Menu } from 'electron';
 import { join } from 'node:path';
 import { bootstrap, shutdown, getEventBroadcaster } from './bootstrap/composition-root';
+import { registerAutoUpdater } from './infrastructure/auto-updater';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -30,6 +31,8 @@ async function createWindow(): Promise<void> {
   } else {
     await mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
+
+  registerAutoUpdater(mainWindow);
 }
 
 app.whenReady().then(async () => {
