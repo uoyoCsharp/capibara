@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "build:dir": "electron-vite build && electron-builder --dir",
     "build:dist": "electron-vite build && electron-builder",
+    "build:dist:win:x64": "electron-vite build && electron-builder --win --x64",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

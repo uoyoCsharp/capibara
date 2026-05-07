@@ -11,6 +11,7 @@
     "dev": "pnpm --filter @capibara/electron dev",
     "build": "pnpm -r build",
     "build:electron": "pnpm --filter @capibara/electron build",
+    "build:electron:dist:win:x64": "pnpm --filter @capibara/electron build:dist:win:x64",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",

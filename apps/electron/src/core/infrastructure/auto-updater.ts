@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog } from 'electron';
-import { autoUpdater, type UpdateInfo, type ProgressInfo } from 'electron-updater';
+import pkg from 'electron-updater';
+import type { UpdateInfo, ProgressInfo } from 'electron-updater';
+const { autoUpdater } = pkg;
 import log from 'electron-log';
 import { getMessages, isSupportedLocale, DEFAULT_LOCALE } from '@shared/locale/index.js';
 import type { SupportedLocale } from '@shared/locale/types.js';

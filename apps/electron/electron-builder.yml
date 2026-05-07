@@ -7,20 +7,30 @@ files:
   - out/**
   - package.json
   - assets/icon.png
+  - "!**/node_modules/**/{CHANGELOG,README,readme,changelog}*"
+  - "!**/node_modules/**/{test,tests,__tests__,powered-test,example,examples}/**"
+  - "!**/node_modules/**/*.{md,ts,map}"
 extraResources:
   - from: resources/templates
     to: templates
     filter:
       - "**/*.json"
 asar: true
+asarUnpack:
+  - "**/*.node"
+
+# Only keep English and Chinese locale .pak files
+electronLanguages:
+  - en
+  - zh-CN
 
 win:
   icon: assets/icon.ico
+  signAndEditExecutable: false
   target:
     - target: nsis
       arch:
         - x64
-        - arm64
 
 linux:
   icon: assets/icon.png
@@ -37,6 +47,7 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  unicode: true
 
 publish:
   provider: github
