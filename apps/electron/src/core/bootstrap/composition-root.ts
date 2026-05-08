@@ -57,7 +57,10 @@ export async function bootstrap(): Promise<void> {
   const resourcesDir = app.isPackaged
     ? process.resourcesPath
     : join(app.getAppPath(), 'resources');
-  const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.js');
+  const workerBasePath = app.isPackaged
+    ? app.getAppPath().replace('app.asar', 'app.asar.unpacked')
+    : app.getAppPath();
+  const workerPath = join(workerBasePath, 'out', 'main', 'capibara-worker.js');
 
   const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));
   const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'), org.roleRepo);

@@ -74,6 +74,29 @@ export const enUS: LocaleMessages = {
     noSkillsFound: 'No skills found',
   },
 
+  tasks: {
+    title: 'Tasks',
+    countLabel: '{n} tasks',
+    createBtn: 'Create Task',
+    noOrgSelected: 'Select an organization to view tasks',
+    empty: 'No tasks yet. Create one or start a planning session.',
+    approve: 'Approve',
+    reject: 'Reject',
+    cancelHint: 'Cancel task',
+    approveFailed: 'Approve failed',
+    approveNoTransition: 'No approval transition available from "{status}"',
+    rejectFailed: 'Reject failed',
+    rejectNoTransition: 'No rejection transition available from "{status}"',
+    cancelSuccess: 'Task cancelled',
+    cancelFailed: 'Failed to cancel task',
+    createSuccess: 'Task created',
+    createFailed: 'Failed to create task',
+    createFailedWith: 'Failed to create task: {error}',
+    deleteSuccess: 'Task deleted',
+    deleteFailed: 'Failed to delete task',
+    defaultTypeLabel: 'Task',
+  },
+
   taskCreate: {
     createChild: 'Create Child Task',
     createNew: 'Create New Task',
@@ -84,8 +107,16 @@ export const enUS: LocaleMessages = {
     descriptionLabel: 'Description',
     descriptionPlaceholder: 'Describe the task...',
     assigneeLabel: 'Assignee Role',
+    assigneePlaceholder: 'Select assignee...',
     assigneeRequired: 'Assignee role is required',
     createTask: 'Create Task',
+    planningMode: {
+      label: 'Decomposition Mode',
+      previewTitle: 'Preview Tree',
+      previewHint: 'AI drafts the full tree in one pass, you review then commit.',
+      eagerTitle: 'Eager',
+      eagerHint: 'AI decomposes all the way to leaves and persists immediately. NO human review.',
+    },
   },
 
   taskDetail: {
@@ -98,6 +129,35 @@ export const enUS: LocaleMessages = {
     updated: 'Updated',
     deleteConfirmTitle: 'Delete Task?',
     deleteConfirmMessage: 'This action cannot be undone. The task and its data will be permanently removed.',
+    srDescription: 'Task details',
+    tabs: {
+      details: 'Details',
+      runOutput: 'Run Output',
+    },
+  },
+
+  runOutput: {
+    noRuns: 'No runs yet for this task.',
+    runNumber: 'Run #{n}',
+    tokensLabel: '{n} tokens',
+    summary: 'Summary',
+    error: 'Error',
+    aiOutput: 'AI Output',
+    executionLog: 'Execution Log',
+    linesSuffix: '({n} lines)',
+    openLogs: 'Open Logs',
+    openLogsTitle: 'Open log directory',
+    loading: 'Loading...',
+    truncated: '... {n} lines truncated — open log file for full output ...',
+    noLogsRecorded: 'No log output recorded.',
+    waitingForOutput: 'Waiting for output...',
+    statusLabels: {
+      succeeded: 'Succeeded',
+      failed: 'Failed',
+      running: 'Running',
+      queued: 'Queued',
+      cancelled: 'Cancelled',
+    },
   },
 
   runs: {

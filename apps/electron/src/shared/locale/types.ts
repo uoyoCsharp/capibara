@@ -82,6 +82,29 @@ export interface LocaleMessages {
     noSkillsFound: string;
   };
 
+  tasks: {
+    title: string;
+    countLabel: string;
+    createBtn: string;
+    noOrgSelected: string;
+    empty: string;
+    approve: string;
+    reject: string;
+    cancelHint: string;
+    approveFailed: string;
+    approveNoTransition: string;
+    rejectFailed: string;
+    rejectNoTransition: string;
+    cancelSuccess: string;
+    cancelFailed: string;
+    createSuccess: string;
+    createFailed: string;
+    createFailedWith: string;
+    deleteSuccess: string;
+    deleteFailed: string;
+    defaultTypeLabel: string;
+  };
+
   taskCreate: {
     createChild: string;
     createNew: string;
@@ -92,8 +115,16 @@ export interface LocaleMessages {
     descriptionLabel: string;
     descriptionPlaceholder: string;
     assigneeLabel: string;
+    assigneePlaceholder: string;
     assigneeRequired: string;
     createTask: string;
+    planningMode: {
+      label: string;
+      previewTitle: string;
+      previewHint: string;
+      eagerTitle: string;
+      eagerHint: string;
+    };
   };
 
   taskDetail: {
@@ -106,6 +137,35 @@ export interface LocaleMessages {
     updated: string;
     deleteConfirmTitle: string;
     deleteConfirmMessage: string;
+    srDescription: string;
+    tabs: {
+      details: string;
+      runOutput: string;
+    };
+  };
+
+  runOutput: {
+    noRuns: string;
+    runNumber: string;
+    tokensLabel: string;
+    summary: string;
+    error: string;
+    aiOutput: string;
+    executionLog: string;
+    linesSuffix: string;
+    openLogs: string;
+    openLogsTitle: string;
+    loading: string;
+    truncated: string;
+    noLogsRecorded: string;
+    waitingForOutput: string;
+    statusLabels: {
+      succeeded: string;
+      failed: string;
+      running: string;
+      queued: string;
+      cancelled: string;
+    };
   };
 
   runs: {

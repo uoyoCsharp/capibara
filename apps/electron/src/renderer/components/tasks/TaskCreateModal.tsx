@@ -153,7 +153,7 @@ export function TaskCreateModal({
               onValueChange={(value) => { setAssigneeRoleId(value || null); setError(null); }}
             >
               <SelectTrigger className={cn(!assigneeRoleId && error ? 'border-destructive' : '')}>
-                <SelectValue placeholder={t.taskCreate?.assigneeLabel ?? 'Select assignee...'} />
+                <SelectValue placeholder={t.taskCreate?.assigneePlaceholder ?? 'Select assignee...'} />
               </SelectTrigger>
               <SelectContent>
                 {roles.map((role) => (
@@ -191,22 +191,24 @@ function PlanningModeSelector({
   value: PlanningMode;
   onChange: (v: PlanningMode) => void;
 }) {
+  const t = useT();
+  const pm = t.taskCreate?.planningMode;
   const options: Array<{ id: PlanningMode; title: string; hint: string; disabled?: boolean }> = [
     {
       id: 'preview',
-      title: 'Preview Tree',
-      hint: 'AI drafts the full tree in one pass, you review then commit.',
+      title: pm?.previewTitle ?? 'Preview Tree',
+      hint: pm?.previewHint ?? 'AI drafts the full tree in one pass, you review then commit.',
     },
     {
       id: 'eager',
-      title: 'Eager',
-      hint: 'AI decomposes all the way to leaves and persists immediately. NO human review.',
+      title: pm?.eagerTitle ?? 'Eager',
+      hint: pm?.eagerHint ?? 'AI decomposes all the way to leaves and persists immediately. NO human review.',
     },
   ];
 
   return (
     <div className="space-y-2">
-      <Label>Decomposition Mode</Label>
+      <Label>{pm?.label ?? 'Decomposition Mode'}</Label>
       <div className="space-y-1.5">
         {options.map((opt) => (
           <label

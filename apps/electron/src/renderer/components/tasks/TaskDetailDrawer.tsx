@@ -69,14 +69,14 @@ export function TaskDetailDrawer({
         <SheetContent side="right" className="w-[560px] flex flex-col p-0 sm:max-w-[560px]">
           <SheetHeader className="px-5 py-4 border-b border-border space-y-0">
             <SheetTitle className="text-base truncate">{task.title}</SheetTitle>
-            <SheetDescription className="sr-only">Task details</SheetDescription>
+            <SheetDescription className="sr-only">{t.taskDetail?.srDescription ?? 'Task details'}</SheetDescription>
           </SheetHeader>
 
           <div className="flex-1 overflow-auto px-5 py-5">
             <Tabs defaultValue="details" className="space-y-4">
               <TabsList className="w-full">
-                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-                <TabsTrigger value="output" className="flex-1">Run Output</TabsTrigger>
+                <TabsTrigger value="details" className="flex-1">{t.taskDetail?.tabs?.details ?? 'Details'}</TabsTrigger>
+                <TabsTrigger value="output" className="flex-1">{t.taskDetail?.tabs?.runOutput ?? 'Run Output'}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="details" className="space-y-6">

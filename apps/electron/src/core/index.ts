@@ -14,6 +14,7 @@ async function createWindow(): Promise<void> {
     width: 1280,
     height: 800,
     autoHideMenuBar: true,
+    icon: join(__dirname, '../../assets/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       sandbox: false,

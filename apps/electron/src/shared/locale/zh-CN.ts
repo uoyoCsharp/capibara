@@ -74,6 +74,29 @@ export const zhCN: LocaleMessages = {
     noSkillsFound: '未找到技能',
   },
 
+  tasks: {
+    title: '任务',
+    countLabel: '{n} 个任务',
+    createBtn: '新建任务',
+    noOrgSelected: '请选择一个工作空间以查看任务',
+    empty: '暂无任务。新建一个或开启规划会话。',
+    approve: '批准',
+    reject: '拒绝',
+    cancelHint: '取消任务',
+    approveFailed: '批准失败',
+    approveNoTransition: '状态 "{status}" 下没有可用的批准流转',
+    rejectFailed: '拒绝失败',
+    rejectNoTransition: '状态 "{status}" 下没有可用的拒绝流转',
+    cancelSuccess: '任务已取消',
+    cancelFailed: '取消任务失败',
+    createSuccess: '任务已创建',
+    createFailed: '创建任务失败',
+    createFailedWith: '创建任务失败：{error}',
+    deleteSuccess: '任务已删除',
+    deleteFailed: '删除任务失败',
+    defaultTypeLabel: '任务',
+  },
+
   taskCreate: {
     createChild: '创建子任务',
     createNew: '新建任务',
@@ -84,8 +107,16 @@ export const zhCN: LocaleMessages = {
     descriptionLabel: '描述',
     descriptionPlaceholder: '描述任务...',
     assigneeLabel: '指派角色',
+    assigneePlaceholder: '选择负责人...',
     assigneeRequired: '负责人为必填项',
     createTask: '创建任务',
+    planningMode: {
+      label: '拆解模式',
+      previewTitle: '预览树',
+      previewHint: 'AI 一次性起草完整任务树，由你审核后提交。',
+      eagerTitle: '即时模式',
+      eagerHint: 'AI 直接拆解到叶子节点并立即保存，不经过人工审核。',
+    },
   },
 
   taskDetail: {
@@ -98,6 +129,35 @@ export const zhCN: LocaleMessages = {
     updated: '更新时间',
     deleteConfirmTitle: '删除任务？',
     deleteConfirmMessage: '此操作不可撤销。任务及其数据将被永久删除。',
+    srDescription: '任务详情',
+    tabs: {
+      details: '详情',
+      runOutput: '运行输出',
+    },
+  },
+
+  runOutput: {
+    noRuns: '此任务暂无运行记录。',
+    runNumber: '运行 #{n}',
+    tokensLabel: '{n} tokens',
+    summary: '摘要',
+    error: '错误',
+    aiOutput: 'AI 输出',
+    executionLog: '执行日志',
+    linesSuffix: '（{n} 行）',
+    openLogs: '打开日志',
+    openLogsTitle: '打开日志目录',
+    loading: '加载中...',
+    truncated: '... 已截断 {n} 行 — 打开日志文件查看完整输出 ...',
+    noLogsRecorded: '未记录日志输出。',
+    waitingForOutput: '等待输出...',
+    statusLabels: {
+      succeeded: '已成功',
+      failed: '已失败',
+      running: '运行中',
+      queued: '排队中',
+      cancelled: '已取消',
+    },
   },
 
   runs: {

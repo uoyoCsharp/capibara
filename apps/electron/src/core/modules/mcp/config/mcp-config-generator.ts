@@ -14,7 +14,10 @@ export class McpConfigGenerator {
   }
 
   getBridgePath(): string {
-    return join(app.getAppPath(), 'out', 'main', 'capibara-mcp-bridge.js');
+    const basePath = app.isPackaged
+      ? app.getAppPath().replace('app.asar', 'app.asar.unpacked')
+      : app.getAppPath();
+    return join(basePath, 'out', 'main', 'capibara-mcp-bridge.js');
   }
 
   getConfigPath(): string | null {

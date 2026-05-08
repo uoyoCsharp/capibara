@@ -4,6 +4,11 @@ import { MarkdownContent } from '../ui/markdown-content';
 import type { RunRecord } from '@core/shared/types';
 import { useRunLogs } from '../../hooks/use-run-logs';
 import { Badge } from '../ui/badge';
+import { useT } from '../../hooks/use-locale';
+
+function format(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? ''));
+}
 
 const api = () => window.capibara;
 
@@ -16,6 +21,7 @@ interface RunOutputPanelProps {
 }
 
 export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
+  const t = useT();
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [historicLogs, setHistoricLogs] = useState<string[]>([]);
@@ -91,10 +97,22 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
         <Terminal size={32} weight="duotone" />
-        <p className="text-sm">No runs yet for this task.</p>
+        <p className="text-sm">{t.runOutput.noRuns}</p>
       </div>
     );
   }
+
+  const statusLabel = (status: string): string => {
+    const labels = t.runOutput.statusLabels;
+    switch (status) {
+      case 'succeeded': return labels.succeeded;
+      case 'failed': return labels.failed;
+      case 'running': return labels.running;
+      case 'queued': return labels.queued;
+      case 'cancelled': return labels.cancelled;
+      default: return status;
+    }
+  };
 
   const statusIcon = (status: string) => {
     switch (status) {
@@ -122,7 +140,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
               }`}
             >
               {statusIcon(run.status)}
-              Run #{runs.length - idx}
+              {format(t.runOutput.runNumber, { n: runs.length - idx })}
             </button>
           ))}
         </div>
@@ -134,11 +152,11 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {statusIcon(selectedRun.status)}
-              <span className="text-sm font-medium capitalize">{selectedRun.status}</span>
+              <span className="text-sm font-medium">{statusLabel(selectedRun.status)}</span>
             </div>
             <div className="flex items-center gap-2">
               {selectedRun.tokenCount > 0 && (
-                <Badge variant="secondary" className="text-xs">{selectedRun.tokenCount} tokens</Badge>
+                <Badge variant="secondary" className="text-xs">{format(t.runOutput.tokensLabel, { n: selectedRun.tokenCount })}</Badge>
               )}
               {selectedRun.startedAt && (
                 <span className="text-xs text-muted-foreground">
@@ -150,14 +168,14 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
 
           {selectedRun.summary && (
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Summary</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t.runOutput.summary}</p>
               <MarkdownContent content={selectedRun.summary} />
             </div>
           )}
 
           {selectedRun.errorMessage && (
             <div className="space-y-1">
-              <p className="text-xs font-medium text-red-500 uppercase tracking-wider">Error</p>
+              <p className="text-xs font-medium text-red-500 uppercase tracking-wider">{t.runOutput.error}</p>
               <p className="text-sm text-red-600 whitespace-pre-wrap">{selectedRun.errorMessage}</p>
             </div>
           )}
@@ -167,7 +185,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
       {/* Real-time assistant text (while running) */}
       {isRunning && assistantText && (
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">AI Output</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t.runOutput.aiOutput}</p>
           <div className="rounded-lg border border-border bg-background p-3 max-h-[300px] overflow-auto">
             <MarkdownContent content={assistantText} />
           </div>
@@ -179,26 +197,26 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <Terminal size={12} />
-            Execution Log
+            {t.runOutput.executionLog}
             {!isRunning && historicLogs.length > MAX_DISPLAY_LINES && (
-              <span className="font-normal normal-case">({historicLogs.length} lines)</span>
+              <span className="font-normal normal-case">{format(t.runOutput.linesSuffix, { n: historicLogs.length })}</span>
             )}
           </p>
           {selectedRunId && (
             <button
               onClick={handleOpenLogDir}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Open log directory"
+              title={t.runOutput.openLogsTitle}
             >
               <FolderOpen size={12} />
-              Open Logs
+              {t.runOutput.openLogs}
             </button>
           )}
         </div>
         <div ref={logContainerRef} className="rounded-lg border border-border bg-zinc-950 p-3 max-h-[400px] overflow-auto font-mono text-xs">
           {loadingLogs && (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <CircleNotch size={12} className="animate-spin" /> Loading...
+              <CircleNotch size={12} className="animate-spin" /> {t.runOutput.loading}
             </div>
           )}
 
@@ -210,7 +228,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
               ))}
               {truncatedHistoricLogs.skipped > 0 && (
                 <div className="text-zinc-500 py-1 my-1 border-y border-zinc-800 text-center">
-                  ... {truncatedHistoricLogs.skipped} lines truncated — open log file for full output ...
+                  {format(t.runOutput.truncated, { n: truncatedHistoricLogs.skipped })}
                 </div>
               )}
               {truncatedHistoricLogs.tail.map((line, i) => (
@@ -227,12 +245,12 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
           ))}
 
           {!loadingLogs && !isRunning && historicLogs.length === 0 && (
-            <span className="text-zinc-500">No log output recorded.</span>
+            <span className="text-zinc-500">{t.runOutput.noLogsRecorded}</span>
           )}
 
           {isRunning && entries.length === 0 && (
             <span className="text-zinc-500 flex items-center gap-2">
-              <CircleNotch size={12} className="animate-spin" /> Waiting for output...
+              <CircleNotch size={12} className="animate-spin" /> {t.runOutput.waitingForOutput}
             </span>
           )}
 

@@ -3,13 +3,60 @@ productName: Capibara
 directories:
   buildResources: assets
   output: build/release
+compression: maximum
+afterPack: ./scripts/strip-unused.cjs
 files:
   - out/**
   - package.json
   - assets/icon.png
-  - "!**/node_modules/**/{CHANGELOG,README,readme,changelog}*"
-  - "!**/node_modules/**/{test,tests,__tests__,powered-test,example,examples}/**"
-  - "!**/node_modules/**/*.{md,ts,map}"
+  # Renderer-only deps are already bundled into out/renderer by Vite.
+  # Exclude their node_modules copies to shrink the asar.
+  - "!**/node_modules/@phosphor-icons/**"
+  - "!**/node_modules/@radix-ui/**"
+  - "!**/node_modules/@floating-ui/**"
+  - "!**/node_modules/@fontsource-variable/**"
+  - "!**/node_modules/framer-motion/**"
+  - "!**/node_modules/motion-dom/**"
+  - "!**/node_modules/motion-utils/**"
+  - "!**/node_modules/react/**"
+  - "!**/node_modules/react-dom/**"
+  - "!**/node_modules/react-markdown/**"
+  - "!**/node_modules/remark-gfm/**"
+  - "!**/node_modules/remark-*/**"
+  - "!**/node_modules/rehype-*/**"
+  - "!**/node_modules/sonner/**"
+  - "!**/node_modules/zustand/**"
+  - "!**/node_modules/clsx/**"
+  - "!**/node_modules/class-variance-authority/**"
+  - "!**/node_modules/tailwind-merge/**"
+  - "!**/node_modules/mdast-util-**/**"
+  - "!**/node_modules/micromark*/**"
+  - "!**/node_modules/hast-util-**/**"
+  - "!**/node_modules/unist-util-**/**"
+  - "!**/node_modules/property-information/**"
+  - "!**/node_modules/space-separated-tokens/**"
+  - "!**/node_modules/comma-separated-tokens/**"
+  - "!**/node_modules/ccount/**"
+  - "!**/node_modules/character-entities*/**"
+  - "!**/node_modules/decode-named-character-reference/**"
+  - "!**/node_modules/devlop/**"
+  - "!**/node_modules/html-url-attributes/**"
+  - "!**/node_modules/vfile*/**"
+  - "!**/node_modules/bail/**"
+  - "!**/node_modules/trough/**"
+  - "!**/node_modules/unified/**"
+  - "!**/node_modules/is-plain-obj/**"
+  # better-sqlite3: keep only the compiled .node binary
+  - "!**/node_modules/better-sqlite3/deps/**"
+  - "!**/node_modules/better-sqlite3/src/**"
+  - "!**/node_modules/better-sqlite3/docs/**"
+  - "!**/node_modules/better-sqlite3/benchmark/**"
+  # Generic cleanup
+  - "!**/node_modules/**/{CHANGELOG,README,readme,changelog,HISTORY,history,AUTHORS,authors}*"
+  - "!**/node_modules/**/{test,tests,__tests__,powered-test,example,examples,docs,doc}/**"
+  - "!**/node_modules/**/*.{md,ts,map,flow,markdown}"
+  - "!**/node_modules/**/.{github,npmignore,editorconfig,eslintrc,prettierrc,babelrc}*"
+  - "!**/node_modules/**/{.bin,.github}/**"
 extraResources:
   - from: resources/templates
     to: templates
@@ -26,6 +73,8 @@ extraResources:
 asar: true
 asarUnpack:
   - "**/*.node"
+  - "out/main/capibara-mcp-bridge.js"
+  - "out/main/capibara-worker.js"
 
 # Only keep English and Chinese locale .pak files
 electronLanguages:

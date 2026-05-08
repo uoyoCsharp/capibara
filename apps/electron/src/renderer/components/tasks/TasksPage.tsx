@@ -7,6 +7,11 @@ import type { TaskRecord, RoleRecord, RunRecord } from '@core/shared/types';
 import { TaskCreateModal } from './TaskCreateModal';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
 import { toast } from '../../store/toast.store';
+import { useT } from '../../hooks/use-locale';
+
+function format(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? ''));
+}
 
 const api = () => window.capibara;
 
@@ -35,7 +40,7 @@ function buildTaskTree(tasks: TaskRecord[]): TaskNode[] {
 }
 
 function TaskRow({
-  node, depth, typeLabel, statusLabel, isTerminal, isApproval, isInitial, selectedId, onSelect, onApprove, onReject, onCancel, runningTaskIds,
+  node, depth, typeLabel, statusLabel, isTerminal, isApproval, isInitial, selectedId, onSelect, onApprove, onReject, onCancel, runningTaskIds, labels,
 }: {
   node: TaskNode;
   depth: number;
@@ -50,6 +55,7 @@ function TaskRow({
   onReject: (taskId: string) => void;
   onCancel: (taskId: string) => void;
   runningTaskIds: Set<string>;
+  labels: { approve: string; reject: string; cancelHint: string };
 }) {
   const [expanded, setExpanded] = useState(true);
   const { task } = node;
@@ -86,13 +92,13 @@ function TaskRow({
               onClick={(e) => { e.stopPropagation(); onApprove(task.id); }}
               className="text-xs px-2 py-0.5 rounded bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-colors"
             >
-              Approve
+              {labels.approve}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onReject(task.id); }}
               className="text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors"
             >
-              Reject
+              {labels.reject}
             </button>
           </div>
         )}
@@ -101,7 +107,7 @@ function TaskRow({
           <button
             onClick={(e) => { e.stopPropagation(); onCancel(task.id); }}
             className="text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors opacity-0 group-hover:opacity-100"
-            title="Cancel task"
+            title={labels.cancelHint}
           >
             <XCircle size={14} />
           </button>
@@ -137,6 +143,7 @@ function TaskRow({
           onReject={onReject}
           onCancel={onCancel}
           runningTaskIds={runningTaskIds}
+          labels={labels}
         />
       ))}
     </div>
@@ -144,6 +151,7 @@ function TaskRow({
 }
 
 export function TasksPage({ orgId }: TasksPageProps) {
+  const t = useT();
   const tasks = useTaskStore((s) => s.tasks);
   const isLoading = useTaskStore((s) => s.isLoading);
   const loadTasks = useTaskStore((s) => s.loadTasks);
@@ -192,50 +200,50 @@ export function TasksPage({ orgId }: TasksPageProps) {
   }, [orgId, loadTasks]));
 
   const handleApprove = useCallback(async (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId);
+    const task = tasks.find((x) => x.id === taskId);
     if (!task) return;
     const transitions = getAvailableTransitions(task.status);
-    const next = transitions.find((t) => !isApprovalStatus(t)) ?? transitions[0];
+    const next = transitions.find((x) => !isApprovalStatus(x)) ?? transitions[0];
     if (!next) {
-      toast.error(`No approval transition available from "${task.status}"`);
+      toast.error(format(t.tasks.approveNoTransition, { status: task.status }));
       return;
     }
     const res = await api().confirmApproval(taskId, next);
     if (!res.ok) {
-      toast.error(res.error?.message ?? 'Approve failed');
+      toast.error(res.error?.message ?? t.tasks.approveFailed);
       return;
     }
     if (orgId) void loadTasks(orgId);
-  }, [orgId, tasks, loadTasks, getAvailableTransitions, isApprovalStatus]);
+  }, [orgId, tasks, loadTasks, getAvailableTransitions, isApprovalStatus, t]);
 
   const handleReject = useCallback(async (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId);
+    const task = tasks.find((x) => x.id === taskId);
     if (!task) return;
     const transitions = getAvailableTransitions(task.status);
-    const revert = transitions.find((t) => t === 'revision')
-      ?? transitions.find((t) => !isApprovalStatus(t))
+    const revert = transitions.find((x) => x === 'revision')
+      ?? transitions.find((x) => !isApprovalStatus(x))
       ?? transitions[0];
     if (!revert) {
-      toast.error(`No rejection transition available from "${task.status}"`);
+      toast.error(format(t.tasks.rejectNoTransition, { status: task.status }));
       return;
     }
     const res = await api().rejectApproval(taskId, revert);
     if (!res.ok) {
-      toast.error(res.error?.message ?? 'Reject failed');
+      toast.error(res.error?.message ?? t.tasks.rejectFailed);
       return;
     }
     if (orgId) void loadTasks(orgId);
-  }, [orgId, tasks, loadTasks, getAvailableTransitions, isApprovalStatus]);
+  }, [orgId, tasks, loadTasks, getAvailableTransitions, isApprovalStatus, t]);
 
   const handleCancel = useCallback(async (taskId: string) => {
     const res = await api().cancelTask(taskId);
     if (res.ok) {
-      toast.success('Task cancelled');
+      toast.success(t.tasks.cancelSuccess);
       if (orgId) void loadTasks(orgId);
     } else {
-      toast.error(res.error?.message ?? 'Failed to cancel task');
+      toast.error(res.error?.message ?? t.tasks.cancelFailed);
     }
-  }, [orgId, loadTasks]);
+  }, [orgId, loadTasks, t]);
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
   const tree = buildTaskTree(tasks);
@@ -244,10 +252,16 @@ export function TasksPage({ orgId }: TasksPageProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
         <ListChecks size={48} weight="duotone" />
-        <p>Select an organization to view tasks</p>
+        <p>{t.tasks.noOrgSelected}</p>
       </div>
     );
   }
+
+  const rowLabels = {
+    approve: t.tasks.approve,
+    reject: t.tasks.reject,
+    cancelHint: t.tasks.cancelHint,
+  };
 
   return (
     <div className="p-[var(--page-padding)] space-y-[var(--section-gap)]">
@@ -255,16 +269,16 @@ export function TasksPage({ orgId }: TasksPageProps) {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <ListChecks size={28} weight="duotone" />
-            Tasks
+            {t.tasks.title}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">{tasks.length} tasks</p>
+          <p className="text-sm text-muted-foreground mt-1">{format(t.tasks.countLabel, { n: tasks.length })}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus size={16} weight="bold" />
-          Create Task
+          {t.tasks.createBtn}
         </button>
       </div>
 
@@ -275,7 +289,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
       ) : tree.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
           <ListChecks size={48} weight="duotone" />
-          <p>No tasks yet. Create one or start a planning session.</p>
+          <p>{t.tasks.empty}</p>
         </div>
       ) : (
         <div className="space-y-0.5">
@@ -295,6 +309,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
               onReject={handleReject}
               onCancel={handleCancel}
               runningTaskIds={runningTaskIds}
+              labels={rowLabels}
             />
           ))}
         </div>
@@ -307,7 +322,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
           roles={roles}
           allowedTypes={getAllowedTypes(null).length > 0
             ? getAllowedTypes(null)
-            : [{ name: 'task', label: 'Task' }]}
+            : [{ name: 'task', label: t.tasks.defaultTypeLabel }]}
           onClose={() => setShowCreateModal(false)}
           onSubmit={async (input) => {
             try {
@@ -315,12 +330,12 @@ export function TasksPage({ orgId }: TasksPageProps) {
               if (res.ok) {
                 setShowCreateModal(false);
                 if (orgId) void loadTasks(orgId);
-                toast.success('Task created');
+                toast.success(t.tasks.createSuccess);
               } else {
-                toast.error(res.error?.message ?? 'Failed to create task');
+                toast.error(res.error?.message ?? t.tasks.createFailed);
               }
             } catch (e) {
-              toast.error(`Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
+              toast.error(format(t.tasks.createFailedWith, { error: e instanceof Error ? e.message : String(e) }));
             }
           }}
         />
@@ -339,9 +354,9 @@ export function TasksPage({ orgId }: TasksPageProps) {
             const ok = await useTaskStore.getState().deleteTask(taskId);
             if (ok) {
               setSelectedTaskId(null);
-              toast.success('Task deleted');
+              toast.success(t.tasks.deleteSuccess);
             } else {
-              toast.error('Failed to delete task');
+              toast.error(t.tasks.deleteFailed);
             }
           }}
           onClose={() => setSelectedTaskId(null)}
