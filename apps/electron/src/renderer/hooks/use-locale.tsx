@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import type { SupportedLocale, LocaleMessages } from '@shared/locale/types.js';
-import { getMessages, DEFAULT_LOCALE, isSupportedLocale } from '@shared/locale/index.js';
+import { getMessages, DEFAULT_LOCALE, isSupportedLocale, detectLocaleFromOS } from '@shared/locale/index.js';
 
 const api = () => window.capibara;
 
@@ -26,7 +26,11 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       if (result.ok && result.data && isSupportedLocale(result.data)) {
         setLocaleState(result.data);
         setMessages(getMessages(result.data));
+        return;
       }
+      const osLocale = detectLocaleFromOS(navigator.language || '');
+      setLocaleState(osLocale);
+      setMessages(getMessages(osLocale));
     }).catch(() => {});
   }, []);
 

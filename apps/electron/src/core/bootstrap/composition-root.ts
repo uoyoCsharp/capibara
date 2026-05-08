@@ -54,7 +54,9 @@ export async function bootstrap(): Promise<void> {
   const outboxRepo = new SqliteOutboxRepository(sqliteConn);
   const eventPublisher = new OutboxEventPublisher(outboxRepo, eventBus, logger);
 
-  const resourcesDir = join(app.getAppPath(), 'resources');
+  const resourcesDir = app.isPackaged
+    ? process.resourcesPath
+    : join(app.getAppPath(), 'resources');
   const workerPath = join(app.getAppPath(), 'out', 'main', 'capibara-worker.js');
 
   const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));

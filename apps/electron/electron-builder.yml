@@ -15,6 +15,14 @@ extraResources:
     to: templates
     filter:
       - "**/*.json"
+  - from: resources/workflows
+    to: workflows
+    filter:
+      - "**/*.json"
+  - from: resources/roles
+    to: roles
+    filter:
+      - "**/*.json"
 asar: true
 asarUnpack:
   - "**/*.node"
