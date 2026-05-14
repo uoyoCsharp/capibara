@@ -1,882 +1,804 @@
 ---
-version: '2.0'
+version: '3.0'
 project_name: 'capibara'
 user_name: 'uoyo'
-date: '2026-03-31'
+date: '2026-05-14'
 status: 'approved'
+workflowType: 'architecture'
+stepsCompleted:
+  - tech_stack
+  - process_model
+  - layered_architecture
+  - foundation_layer
+  - persistence_layer
+  - configuration
+  - bootstrap_di
+  - domain_modules
+  - orchestration
+  - execution_engine
+  - mcp_protocol
+  - ipc_layer
+  - renderer_architecture
+  - notification_layer
+  - testing_strategy
 inputDocuments:
-  - _bmad-output/planning-artifacts/prd.md
-  - docs/functional-analysis.md
+  - apps/electron/src/core/bootstrap/composition-root.ts
+  - apps/electron/src/core/foundation/events.ts
+  - apps/electron/src/core/modules/conversation/services/conversation.service.ts
+  - apps/electron/src/core/modules/orchestrator/orchestrators/*.ts
+  - apps/electron/src/core/modules/coordination/routing/inquiry.router.ts
+  - apps/electron/src/core/modules/execution/engines/run.engine.ts
+  - apps/electron/src/core/modules/mcp/server/mcp-ipc.server.ts
+  - apps/electron/src/core/modules/mcp/bridge/capibara-mcp-bridge.ts
+  - apps/electron/src/core/infrastructure/persistence/sqlite/migrations.ts
   - _bmad-output/project-context.md
 ---
 
 # Capibara Architecture Document
 
-> **Capibara** — Company-grade AI Organization Orchestration Platform
+> **Capibara** — AI-Powered Organization Orchestration Platform
 >
-> This document defines the authoritative architecture for implementation. All AI agents and human developers MUST follow these decisions.
+> Authoritative architecture for implementation. Single source of truth.
+> When this document conflicts with older planning artifacts, **this wins**.
+
+This document is self-contained. All older documents under `_bmad-output/planning-artifacts/` are superseded and may be deleted.
 
 ---
 
 ## 1. System Overview
 
-### 1.1 Architecture Vision
+Capibara is an Electron desktop application that simulates a real company:
 
-Capibara is an Electron desktop application that simulates a company's organizational structure. Users input requirements, and the system automatically coordinates AI roles through requirement analysis, task decomposition, execution, review, and approval — driven by an event-based wake-up loop and discussion-driven consensus.
+- Users build an **organization** of AI **roles** (parent/child hierarchy, persona, skills).
+- Roles execute **tasks** in a typed, variable-depth tree.
+- A wake-loop dispatches one role at a time as a **Run** — a Claude CLI subprocess driven by a generated prompt and an MCP tool surface.
+- Roles can **ask each other questions** (inquiry conversations), **plan together with the user** (planning conversations), or **submit decomposition trees** for review. Each is modelled as a `Conversation`.
+- All state lives in a single local SQLite database. All cross-component communication flows through a typed event bus backed by a transactional outbox.
 
-### 1.2 Four Architecture Pillars
+### 1.1 Architectural Pillars
 
 | # | Pillar | Description |
 |---|--------|-------------|
-| 1 | **Variable-Depth Task Tree** | Flexible tree with type labels (epic/story/task/subtask/spike/bug/chore), not fixed layers |
-| 2 | **Discussion-Driven Consensus** | DiscussionGroup is both the communication channel and the decision mechanism |
-| 3 | **Narrative Engine** | System generates human-readable status reports (DB query → template → LLM polish) |
-| 4 | **Pluggable Skill System** | External prompt frameworks (BMAD, etc.) integrated via `/command` references, not content management |
+| 1 | **Single SQLite + Outbox** | Synchronous local DB, transactional outbox publishes events on commit; renderer is a read-only mirror via desktop events. |
+| 2 | **Event-driven domain** | Modules talk through `DomainEventMap` events, never via direct cross-module calls. Layer-2 coordinators (routing, escalation) live outside the domains they orchestrate. |
+| 3 | **One active Run per org** | `WakeGateValidator` enforces a unique active run per org; queued wakes are persisted as `pending_wakes` rows and drained on run-end. |
+| 4 | **Asynchronous mailbox model** | Asking a question terminates the asker's Run; the asker is woken later by a fresh CLI when the answer arrives. No coroutines, no in-process waiting. |
+| 5 | **Schema-driven workflow** | `ProcessSchema` defines statuses, transitions, work-item types, and behavior rules per org. The state machine is data, not code. |
+| 6 | **Variable-depth task tree** | No fixed epic→story→task layers. Types declare `allowedChildren`, `isLeaf`, `allowedAtRoot`. |
+| 7 | **MCP as the AI-facing contract** | Roles act on the system only through MCP tools (`capibara_*`); the bridge is a separate Node process spoken to over JSON-RPC stdio + HTTP. |
 
-### 1.3 Unified Agent Model
+### 1.2 Repository Layout
 
-Every role in the organization tree is a single Agent entity. There are no separate Worker/Evaluator/Conductor/Messenger types. Behavior is determined by:
+```
+capibara/
+├── apps/electron/                 # the only active workspace package
+│   ├── src/
+│   │   ├── core/                  # main process — all backend logic
+│   │   │   ├── bootstrap/         # composition root + per-module wiring
+│   │   │   ├── config/            # Zod-validated config (defaults + user file)
+│   │   │   ├── foundation/        # events, errors, logger, event bus interfaces
+│   │   │   ├── infrastructure/    # adapters (CLI, observability), SQLite
+│   │   │   ├── ipc-handlers/      # one file per domain
+│   │   │   ├── modules/           # 10 domain modules
+│   │   │   └── preload/           # contextBridge surface (built to .cjs)
+│   │   ├── renderer/              # React 19 + Zustand + Tailwind v4
+│   │   └── shared/                # locale + constants only (no contracts.ts here)
+│   └── tests/                     # vitest, mirrors src/
+└── _bmad-output/                  # planning artifacts (this file lives here)
+```
 
-- **Persona** — Identity, expertise, communication style (user-editable)
-- **Skills** — `/command` references to Claude Code installed skills (user-selectable)
-- **Organization Position** — Who to report to, who to delegate to
-- **Task Type** — Which skill to activate for a specific task
+### 1.3 Three-Process Model
 
-A single Agent can: execute tasks, decompose tasks, review others' work, vote in discussions, delegate new tasks, and escalate issues — all driven by prompt composition and MCP tool invocation.
+Electron's main / preload / renderer split is augmented by **two additional Node child processes** spawned from main:
+
+| Process | Entry | Purpose |
+|---------|-------|---------|
+| **Main** | `apps/electron/src/core/index.ts` | DI root, IPC handlers, SQLite, MCP HTTP server, orchestrators. Has full Node API. |
+| **Renderer** | `apps/electron/src/renderer/main.tsx` | React UI. No Node API. All backend access via `window.capibara`. |
+| **Preload** | `apps/electron/src/core/preload/index.ts` | `contextBridge.exposeInMainWorld('capibara', api)`. Built as CommonJS. |
+| **Worker** (utilityProcess) | `apps/electron/src/core/modules/execution/workers/worker.ts` | Hosts `ICliAdapter` instances. Spawns `claude` CLI children. Communicates with main via `parentPort.postMessage`. One per app session. |
+| **MCP Bridge** (child_process, spawned by claude CLI) | `apps/electron/src/core/modules/mcp/bridge/capibara-mcp-bridge.ts` | Independent Node process. JSON-RPC 2.0 stdio ↔ HTTP POST to main. One per Run. |
 
 ---
 
 ## 2. Technology Stack
 
-| Category | Technology | Version |
-|----------|-----------|---------|
-| Platform | Electron | 41.1.0 |
-| Language | TypeScript (strict, ESM) | 5.x |
-| Runtime | Node.js | >= 22 LTS |
-| Build | electron-vite | 5.0.0 |
-| Packaging | electron-builder | 26.8.1 |
-| UI Framework | React | 19.x |
-| State Management | Zustand | 5.x |
-| Styling | TailwindCSS | 4.x |
-| Database | SQLite (better-sqlite3) | 12.8.0 |
-| Validation | Zod | 4.x |
-| DI Container | tsyringe | 4.8.x |
-| Event Bus | Emittery | 1.x |
-| Logging | Pino | 9.x |
-| Testing | Vitest (V8 coverage) | latest |
-| E2E Testing | Playwright | latest |
-| Package Manager | pnpm (monorepo) | latest |
+| Layer | Choice | Notes |
+|-------|--------|-------|
+| Platform | Electron 41.1.0 | Three-process model + utilityProcess. |
+| Runtime | Node ≥ 22, ESM (`"type": "module"`) | Bundler module resolution — no `.js` import suffixes. |
+| Language | TypeScript 5.8 strict, ES2022 | `experimentalDecorators` + `emitDecoratorMetadata` for tsyringe. |
+| DI | tsyringe 4.8 + reflect-metadata | All `@injectable()`; **no decorators on services constructed manually in composition-root**. |
+| DB | better-sqlite3 12.8 | **Synchronous** — never wrap in `await`. WAL + FK on. |
+| Validation | Zod 3.24 | Config + IPC inputs + outbox payloads. |
+| Logging | pino 9 | Structured JSON. Levels: trace/debug/info/warn/error/fatal. |
+| Frontend | React 19.2, Tailwind v4, Radix UI primitives, framer-motion | functional components, named exports. |
+| State (renderer) | Zustand 5 | one store per domain, fine-grained selectors. |
+| Build | electron-vite 5 + Vite 7 | three entry points: `index.ts`, `capibara-mcp-bridge.ts`, `capibara-worker.ts`. |
+| Packaging | electron-builder 26 | NSIS / DMG / AppImage. |
+| Test | Vitest 4.1 (v8 coverage) | Unit + integration. |
+| Format | Prettier 3.4 only (no ESLint) | 100/120 width, single quotes, trailing commas. |
+| Package mgr | pnpm 10 (workspace) | Currently only `apps/electron` is active. |
 
 ---
 
-## 3. Process Architecture
-
-Capibara follows Electron's three-layer process model with an additional UtilityProcess layer for AI execution isolation.
+## 3. Layered Architecture (Main Process)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Electron Main Process                     │
-│                                                              │
-│  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐ │
-│  │ Org      │  │ Consensus │  │ Narrative │  │ IPC       │ │
-│  │Orchestr. │  │ Detector  │  │ Engine    │  │ Handlers  │ │
-│  └────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘ │
-│       │               │              │              │        │
-│  ┌────┴───────────────┴──────────────┴──────────────┘        │
-│  │              EventBus (Emittery)                           │
-│  └────┬──────────────────────────────────────────────┐       │
-│       │                                               │       │
-│  ┌────┴─────────┐                              ┌─────┴─────┐ │
-│  │ SQLite DB    │                              │ MCP Tool  │ │
-│  │ (Repositories)│                              │ Handlers  │ │
-│  └──────────────┘                              └─────┬─────┘ │
-│                                                       │       │
-└───────────────┬───────────────────────────────────────┼───────┘
-                │ IPC (contextBridge)                   │ stdio
-                ▼                                       ▼
-┌───────────────────────┐          ┌────────────────────────────┐
-│    Renderer Process   │          │     UtilityProcess(es)     │
-│  ┌─────────────────┐  │          │  ┌──────────────────────┐  │
-│  │ React + Zustand │  │          │  │  Claude Code CLI     │  │
-│  │ + TailwindCSS   │  │          │  │  + MCP Bridge (stdio)│  │
-│  └─────────────────┘  │          │  └──────────────────────┘  │
-│                        │          │                            │
-│  window.capibara.api   │          │  Agent invokes:            │
-│  (Zod-validated RPC)   │          │  • /bmad-xxx (Skills)      │
-│                        │          │  • MCP Tools (System Ops)  │
-└───────────────────────┘          └────────────────────────────┘
+                ┌──────────────────────────────────────────────────────┐
+                │                  ipc-handlers/                       │  ← thin: validate → call service → wrap DesktopResult
+                └────────────────────────────┬─────────────────────────┘
+                                             │ uses
+                ┌────────────────────────────▼─────────────────────────┐
+                │                  modules/                            │  ← 10 domain modules; services + state machines
+                │  conversation │ coordination │ execution │ mcp       │
+                │  notification │ orchestrator │ organization         │
+                │  planning     │ prompt       │ workflow              │
+                └─────────────┬──────────────────────────┬─────────────┘
+                              │ depend only on           │ publish events
+                ┌─────────────▼─────────────┐  ┌─────────▼──────────────┐
+                │       foundation/         │  │   infrastructure/      │
+                │  events.ts (DomainEventMap│  │  sqlite, adapters,     │
+                │  + payloads), errors,     │  │  observability         │
+                │  ILogger, IEventBus,      │  │                        │
+                │  IEventPublisher          │  └────────────────────────┘
+                └───────────────────────────┘
 ```
 
-### 3.1 Process Responsibilities
+**Hard rules:**
 
-| Process | Responsibilities | Constraint |
-|---------|-----------------|------------|
-| **Main** | Business logic, SQLite, EventBus, IPC handlers, MCP tool routing | No LLM/CLI execution |
-| **Preload** | ContextBridge whitelist, Zod-validated RPC, subscription relay | No business logic |
-| **Renderer** | React UI, Zustand state slices, snapshot rendering | No Node.js APIs, no direct DB |
-| **UtilityProcess** | Claude Code CLI execution, MCP bridge, stream processing | Isolated per Run |
-
-### 3.2 Why UtilityProcess
-
-Running LLM CLI tools blocks the Node.js event loop. In Main Process, this freezes IPC, rendering, and window interactions. UtilityProcess provides a separate V8 isolate with `parentPort` messaging, ensuring Main Process stays responsive.
+- `modules/<X>/services/...` may NOT import `infrastructure/...` directly. They depend on `foundation/interfaces/` or `modules/<X>/interfaces/`.
+- `foundation/` is contract-only — no runtime state, no DB.
+- No barrel `index.ts` files anywhere. Always import the concrete file.
+- No relative paths cross process boundaries. Use the path aliases `@core/*`, `@renderer/*`, `@preload/*`, `@shared/*`.
 
 ---
 
-## 4. Layered Architecture
+## 4. Foundation
 
-```
-┌────────────────────────────────────────────────┐
-│                  shared/                        │  ← IPC contracts, Zod schemas, locale
-├────────────────────────────────────────────────┤
-│            Renderer (React UI)                  │  ← Components, hooks, Zustand stores
-├────────────────────────────────────────────────┤
-│              Preload (Bridge)                   │  ← contextBridge whitelist
-├────────────────────────────────────────────────┤
-│                                                 │
-│   ┌─────────────┐     ┌──────────────────┐     │
-│   │ application/ │ ──► │     core/        │     │  core = interfaces, types,
-│   │ (use cases)  │     │  (contracts)     │     │         constants, errors
-│   └──────┬──────┘     └────────▲─────────┘     │
-│          │                      │                │
-│          ╳ FORBIDDEN            │ implements     │
-│          │                      │                │
-│   ┌──────▼──────────────────────┴──────────┐    │
-│   │          infrastructure/                │    │  = SQLite repos, MCP bridge,
-│   │   (persistence, executors, mcp, etc.)   │    │    executors, event bus impl
-│   └─────────────────────────────────────────┘    │
-│                                                  │
-│                Main Process                      │
-└──────────────────────────────────────────────────┘
-```
+### 4.1 Domain Events (`foundation/events.ts`)
 
-### 4.1 Layer Rules
+Events are the only sanctioned cross-module integration. `DomainEventMap` is the single source of truth — every type is mapped to its payload interface and validated by Zod schemas in `event-schemas.ts` before re-emission from the outbox.
 
-| Layer | Can Import | CANNOT Import | Contains |
-|-------|-----------|---------------|----------|
-| `core/` | Nothing (leaf) | application/, infrastructure/ | Interfaces, types, constants, errors, DI tokens |
-| `application/` | `core/` only | `infrastructure/` | Use cases, orchestrator, state machine, consensus, prompt builder |
-| `infrastructure/` | `core/` only | `application/` | SQLite repos, MCP bridge, executors, event bus impl |
-| `ipc-handlers/` | `application/`, `core/` | `infrastructure/` | Zod-validated IPC entry points |
-| `shared/` | Nothing (leaf) | All main layers | IPC channel enums, Zod payload schemas, locale strings |
+Categories (full table at the file):
 
-### 4.2 Dependency Injection
+- **Organization** — `org:created|updated|deleted`, `role:created|updated|deleted`
+- **Task** — `task:created`, `task:status-changed`, `task:entered-approval`, `task:auto-approved`, `task:approval-confirmed`, `task:approval-rejected`, `task:completed`
+- **Conversation** — `conversation:created`, `conversation:message-added`, `conversation:response-needed`, `conversation:needs-routing`, `conversation:respondent-assigned`, `conversation:resolved`, `conversation:escalated`, `conversation:timed-out`, `conversation:cancelled`, `conversation:completed`
+- **Run** — `run:queued|started|succeeded|failed|cancelled|log|assistant-text|status`
+- **Plan tree** — `plan-tree:submitted|ready|discarded|approved`
 
-All service wiring happens in `composition-root.ts` via tsyringe:
+`run:log`, `run:assistant-text`, `run:status` are **streaming events**: ephemeral, high-volume, never go through the outbox — they are emitted directly via `IEventBus` (`run.engine.ts:229-231`). Everything else flows through the outbox.
 
-- Every injectable class MUST have `@injectable()` decorator
-- Services are NEVER instantiated with `new` outside `composition-root.ts`
-- DI Tokens defined as `Symbol` in `tokens.ts` using `SCREAMING_SNAKE_CASE` + `_TOKEN` suffix
-- `reflect-metadata` imported at entry point before any DI resolution
+### 4.2 EventBus vs EventPublisher
+
+| Interface | Implementation | Use |
+|-----------|----------------|-----|
+| `IEventBus` | `EmitteryEventBus` (`infrastructure/observability/emittery-event-bus.ts`) | In-process pub/sub for subscribers within main. |
+| `IEventPublisher` | `OutboxEventPublisher` (`infrastructure/observability/outbox.publisher.ts`) | What domain services call. Inserts into `outbox` table; drains on microtask. |
+
+**Why both exist:**
+- Domain code calls `eventPublisher.publish(...)` so the event is durable and atomic with its DB writes.
+- Layer-2 coordinators / orchestrators subscribe via `eventBus.on(...)` because they only react to commits.
+- The outbox publisher uses `IEventBus.emit(...)` after marking rows published.
+
+### 4.3 Errors (`foundation/errors/capibara.errors.ts`)
+
+Single `CapibaraError` base with structured `code` + `cause`. All domain errors extend it: `NotFoundError`, `ValidationError`, `TaskStateError`, `ConversationStateError`, `BudgetExceededError`, `ExecutionError`. Never throw plain `Error` or strings.
+
+### 4.4 Logger
+
+`ILogger` with `trace/debug/info/warn/error/fatal`. Backed by `PinoLogger`. Always pass a structured second argument; log messages are not f-strings.
 
 ---
 
-## 5. Data Architecture
+## 5. Persistence Layer
 
-### 5.1 Database Strategy
+### 5.1 Connection
 
-**MVP:** SQLite via better-sqlite3 (synchronous, WAL mode)
-**Future:** PostgreSQL support via Repository Pattern swap
+`SqliteConnection` (`infrastructure/persistence/sqlite/sqlite-connection.ts`) is a singleton lazily opening the DB with:
 
-**Key Decision (ADR-01):** All Repository interfaces use `Promise<T>` return types — even though SQLite is synchronous internally. This enables future PostgreSQL migration without breaking the application layer.
+```sql
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+PRAGMA busy_timeout = 5000;
+```
 
-```typescript
-// core/interfaces/i-task.repository.ts
-interface ITaskRepository {
-  findById(id: string): Promise<TaskNode | null>;
-  findByParentId(parentId: string): Promise<TaskNode[]>;
-  create(task: CreateTaskInput): Promise<TaskNode>;
-  updateStatus(id: string, status: TaskStatus): Promise<void>;
-  // ...
+`better-sqlite3` is **synchronous**. Never wrap in `async/await`. Never call `getDb()` inside hot loops — cache the prepared statements at the repo level.
+
+### 5.2 Migrations
+
+`migrations.ts` — single greenfield baseline (v1) that creates 14 tables in one transaction:
+
+| # | Table | Purpose |
+|---|-------|---------|
+| 1 | `organizations` | tenant boundary, budget, workspacePath, autoStart, planningRoleId |
+| 2 | `settings` | key/value system settings |
+| 3 | `roles` | hierarchical (parent_id self-FK), persona, skills, can_approve, requires_human_approval, status |
+| 4 | `skills` | builtin/template/custom skill metadata + `command` (`/foo`) |
+| 5 | `tasks` | type, parent_id, status, assignee, depth, paused_reason, planning_mode (`preview`/`eager`) |
+| 6 | `process_schemas` | per-org JSON schema with unique index on `is_active` |
+| 7 | `conversations` | unified for `inquiry|planning|adhoc|plan_review`; state machine; `external_session_id` for CLI session resume |
+| 8 | `conversation_messages` | author_role_id|author_type, intent (`question|reply|escalation|resolution|general`) |
+| 9 | `conversation_events` | append-only audit log (separate from `outbox`) |
+| 10 | `runs` | task_id OR conversation_id (CHECK), status, wake_reason, tokens, summary, error |
+| 11 | `cost_entries` | per-run cost tracking |
+| 12 | `pending_wakes` | queued wakes when WakeGate blocks; task_id OR conversation_id |
+| 13 | `outbox` | event_type + JSON payload + published_at |
+| 14 | `pending_plan_trees` | persistent decomposition trees with `version` (optimistic lock) and `status` |
+
+**Critical indexes:**
+- `idx_runs_active_per_role` UNIQUE WHERE status IN ('queued','running') → enforces 1 active Run per role at the DB level.
+- `idx_pending_plan_trees_active_task|conv` UNIQUE WHERE status IN ('active','refining') → at most one in-flight tree per anchor.
+- `idx_conversations_timeout` partial WHERE state='waiting' → fast escalation scans.
+
+Migrations run inside a `db.transaction(...)` block. Pre-migration backup is written by `MigrationBackupService` if a real DB path is provided.
+
+### 5.3 Repository Convention
+
+- Interface in `modules/<X>/interfaces/i-<thing>.repository.ts` (or in `foundation/interfaces/` for cross-cutting like `IOutboxRepository`).
+- Implementation in `modules/<X>/persistence/sqlite-<thing>.repository.ts` with `@injectable()` + an injected `ISqliteConnection`.
+- Names follow `I{Entity}Repository`. One interface per file.
+- DB row → domain object mapping is the repo's job — services never see `_id`/snake_case columns.
+
+### 5.4 Transactional Outbox
+
+The flow that makes events durable and atomic with state changes:
+
+```
+Domain service:
+  db.transaction(() => {
+     run.start(...);                 ← repo writes
+     outboxRepo.enqueue('run:started', payload);   ← INSERT INTO outbox
+  })()
+                                ↓ on commit
+            queueMicrotask drains unpublished rows
+                                ↓
+       eventBus.emit({type, timestamp, payload})
+                                ↓
+       Subscribers (orchestrators, coordinators, broadcaster) react
+                                ↓
+       outbox.markPublished(ids)
+```
+
+Properties:
+- If the enclosing transaction rolls back, the outbox row vanishes — no subscriber sees the event.
+- Microtask drain runs on the same tick after commit — UI-perceived latency is negligible.
+- Drain is idempotent and re-entrant; `drainScheduled` flag prevents reentry.
+- `BATCH_SIZE = 100`. Drain loops until empty.
+- Streaming run events bypass this and emit directly on `IEventBus` — they have no transactional partner.
+
+---
+
+## 6. Configuration
+
+`core/config/` —
+
+- `config.types.ts` — `CapibaraConfig` shape.
+- `config.schema.ts` — Zod schema with defaults for every field.
+- `config.defaults.ts` — `DEFAULT_CONFIG` object.
+- `config.loader.ts` — load order:
+  1. `DEFAULT_CONFIG`
+  2. Deep-merge `<userData>/capibara/config.json` if exists.
+  3. Deep-merge `<projectDir>/capibara.config.json` if a `projectDir` is passed.
+  4. Inject `database.sqlitePath`, `logging.logDir` if missing.
+  5. Apply `CAPIBARA_LOG_LEVEL` / `LOG_LEVEL` env override.
+  6. `configSchema.parse(merged)` (throws on invalid).
+
+Top-level keys: `organization`, `execution`, `skills`, `database`, `cli`, `logging`.
+
+`execution` block holds the wake-loop limits: `maxReviseAttempts`, `maxRetryOnFailure`, `maxConsecutiveWakes`, `budgetLimit`, `maxDecompositionDepth`, `retryBackoffMs`.
+
+**Config is immutable after load.** Don't mutate `config.*` at runtime.
+
+---
+
+## 7. Bootstrap & DI Composition
+
+`core/bootstrap/composition-root.ts` is the one place where services are wired. The pattern is **manual instantiation** (constructor injection by hand) rather than the tsyringe container's `resolve()`. tsyringe is still used for `@injectable()` metadata, but services are `new`'d in a deterministic order.
+
+### 7.1 Order
+
+```
+1. config = loadConfig()
+2. logger = new PinoLogger(level)
+3. sqliteConn = new SqliteConnection(path) ; runMigrations()
+4. eventBus = new EmitteryEventBus()
+5. outboxRepo = new SqliteOutboxRepository(conn)
+6. eventPublisher = new OutboxEventPublisher(outboxRepo, eventBus, logger)
+7. registerOrganizationModule(...)
+8. registerWorkflowModule(...)
+9. registerConversationModule(...)
+10. registerCoordinationModule(...)
+11. registerExecutionModule(...)
+12. registerPlanningModule(...)
+13. registerMcpModule(...) → start MCP HTTP server, generate mcp config file → wire path into runEngine
+14. registerPromptModule(...)
+15. registerOrchestratorModule(...)
+16. registerNotificationModule(...)
+17. register*Handlers(...) for each IPC domain
+18. wire late dependencies (planning.setWaker, runContext.setFeedbackProvider, orgTemplateService.setProcessSchemaProvider)
+19. seed (skills + org templates + workflow templates)
+20. start orchestrators (taskOrchestrator, conversationOrchestrator, runOrchestrator, eventBroadcaster, inquiryRouter, planningService.init)
+21. eventPublisher.start()  ← finally drain pending outbox rows (e.g. seed events)
+```
+
+### 7.2 Per-module registration files
+
+Each `bootstrap/<module>.module.ts` exports a `register<Name>Module(...)` function that:
+- constructs the module's repos with the injected `SqliteConnection`,
+- constructs services with their dependencies,
+- returns a flat object with the public surface needed by other modules.
+
+This avoids circular imports and gives a clear "what does each module own" contract.
+
+### 7.3 Late binding
+
+Two cycles are broken with property setters wired after both sides exist:
+
+- `PlanningService.setWaker(taskOrchestrator)` — planning needs to wake roles; `TaskOrchestrator` needs planning's events to drive scheduling.
+- `RunContext.setFeedbackProvider(planningService.consumePendingFeedback)` — prompts need pending tree feedback.
+- `OrgTemplateService.setProcessSchemaProvider(processEngine)` — templates seed schemas.
+
+---
+
+## 8. Domain Modules
+
+Each module owns a slice of domain logic, repos for its tables, and an explicit set of events it publishes / subscribes to. Modules **never import each other's implementations** — they cross only through `foundation/events.ts` and `modules/<X>/interfaces/`.
+
+### 8.1 organization
+
+Tables: `organizations`, `roles`, `skills`.
+Services: `OrganizationService`, `RoleService`, `SkillService`, `OrgTemplateService`, `SkillSeeder`.
+Key shapes: `Organization { id, name, budgetLimit, workspacePath, autoStartOnCreate, planningRoleId, ... }`, `Role { parentId, persona, skillIds, canApprove, canDelegate, requiresHumanApproval, isSystemRole, status, consecutiveWakeCount, ... }`.
+Org templates load YAML/JSON from `resources/templates/`. A seeded org gets:
+- a `ProcessSchema` (default workflow),
+- a tree of roles (parentId edges encode hierarchy),
+- a `planning_role_id` (the role used for conversational planning).
+
+### 8.2 workflow
+
+Tables: `tasks`, `process_schemas`.
+Services: `TaskService`, `ProcessTemplateService`.
+Engines:
+- **`ProcessEngine`** — caches `ProcessSchema` per org; validates types/statuses/transitions; computes status category (`initial|active|approval|terminal`); persists schema with `validateSchema()`.
+- **`TaskStateMachine`** — `transition(taskId, newStatus)` validates against `ProcessEngine`, blocks non-leaf tasks from approval states, writes the row, emits `task:status-changed` / `task:entered-approval` / `task:completed`. Auto-approval logic: AI roles whose role does not require human approval are advanced past approval statuses automatically (`task:auto-approved`).
+- **`BehaviorEngine`** — schema-defined rules (`on_status_enter`, `on_all_children_terminal`) with `all/any/not/eq/neq/in/not_in/gt/lt` operators. Action `transition` calls back into `TaskStateMachine`. A re-entrancy `evaluating` set prevents infinite cascades.
+
+Key invariants:
+- A task in an `approval`-category status must be a leaf (`hasChildren = false`).
+- `paused_reason='approval'` is the persistent flag that suppresses wakes; `TaskOrchestrator` reads this in `onTaskStatusChanged`.
+
+### 8.3 conversation
+
+Tables: `conversations`, `conversation_messages`, `conversation_events`.
+Service: `ConversationService` (`modules/conversation/services/conversation.service.ts`).
+Types: `inquiry | planning | adhoc | plan_review`.
+States: `active → waiting → resolved | escalated | timed_out | cancelled`, plus `escalated → resolved|cancelled`, `timed_out → escalated|cancelled`, `active → completed`. Transition table is enforced by `CONVERSATION_TRANSITIONS`.
+Message intents: `question | reply | escalation | resolution | general`.
+
+Key methods:
+- `createInquiry(orgId, askingRoleId, taskId, content)` — writes conv (state=`active`, no respondent yet) + first message + emits `conversation:needs-routing`. Returns the conversation. The respondent is **not** decided here — Layer-2 `InquiryRouter` writes it back.
+- `assignRespondent(...)` — write-back from `InquiryRouter`. Sets `respondent_role_id`, transitions to `waiting`, emits `conversation:respondent-assigned` + `conversation:response-needed`.
+- `createPlanning(orgId, agentRoleId, firstHumanMessage)` — for the conversational planning flow. State stays `active`; the agent role is woken via `conversation:response-needed`.
+- `createPlanReview(...)` — opens a plan_review conversation (respondentType='human') so the user can review a submitted plan tree.
+- `addMessage(...)` — emits `conversation:message-added` and conditionally `conversation:response-needed` per `determineResponseNeeded`:
+  - inquiry + human author → wake the **initiator** (asker is unblocked).
+  - inquiry + ai author + intent='question' + state='waiting' → wake the respondent.
+  - inquiry + ai author + intent='reply' → no wake (the reply itself does not loop).
+  - non-inquiry + human author → wake the respondent.
+- `resolve / cancel / complete / escalate` — state transitions with matching events.
+
+Conversation prompt (`prompt/strategies/conversation-prompt.strategy.ts`) feeds the full message history, role persona, optional task context, and (for planning) the type schema + available roles.
+
+### 8.4 coordination — Layer 2 routing
+
+Two services that orchestrate cross-domain decisions but **own no domain data**:
+
+- **`InquiryRouter`** (`modules/coordination/routing/inquiry.router.ts`)
+  Subscribes to `conversation:needs-routing`. Routing strategy:
+  1. If the asking role doesn't exist or `requiresHumanApproval` → **human fallback**.
+  2. Else if it has an active `parentId` → route to **parent**.
+  3. Else search **siblings** under the same parent (or org root if no parent) for an active non-system role.
+  4. Else human fallback.
+  Calls back into `ConversationService.assignRespondent(...)`.
+
+- **`InquiryEscalationService`** — periodic scan that fetches `findTimedOutInquiries()`, marks them `timed_out`, and walks the role hierarchy upward to escalate.
+
+The conversation module has zero knowledge of these classes — coupling is event-only.
+
+### 8.5 orchestrator — wake loop
+
+The runtime brain. Three orchestrators + supporting helpers:
+
+- **`TaskOrchestrator`** (`task.orchestrator.ts`) — subscribes to `task:created`, `task:status-changed`, `task:entered-approval`, `task:approval-confirmed`, `task:completed`, `plan-tree:approved`. Drives:
+  - **root auto-start** on org creation (if `autoStartOnCreate`).
+  - **wake gating** on every status transition into an `active`-category status, skipping paused tasks.
+  - **scheduleNext(orgId)**: ask `TaskScheduler` for the next eligible task and transition it into the first `active` status (this fires `task:status-changed`, which itself triggers a wake via the same handler).
+  - **tryWake(roleId, orgId, reason, taskId)** — the public wake API. If `WakeGateValidator` denies, persists a `pending_wakes` row.
+- **`ConversationOrchestrator`** — subscribes to `conversation:response-needed` and `conversation:resolved`.
+  - On response-needed: validate the wake gate, dispatch via `RunCoordinator.executeForConversation`. If gate blocks (i.e. another run is active), persist a `pending_wakes` row anchored to the conversation. **Without this, AI→AI inquiries silently vanish during the asker's run.**
+  - On resolved: if the conversation has both `taskId` and `initiatorRoleId`, call `taskOrchestrator.tryWake(initiator, org, 'conversation_reply', taskId)`. This is the unblocking step that lets Role-A continue after Role-B answers.
+- **`RunOrchestrator`** — subscribes to `run:succeeded|failed|cancelled`. On any run end:
+  - If failed → schedule retry via `RetryScheduler`.
+  - **`drainPendingWakes(orgId)`** — fetch `pending_wakes.findNext(orgId)`, delete it, re-validate the wake gate, dispatch by target (conversation or task). If gate still blocks, re-enqueue.
+  - Also kicks `taskOrchestrator.scheduleNext(orgId)` so any eligible task moves forward.
+
+Helpers:
+- **`WakeGateValidator`** — central admission control:
+  1. role exists and `status !== 'paused'`.
+  2. `runRepo.findActiveByOrgId(orgId)` returns null. **Single concurrency boundary.**
+  3. budget not exceeded (only if `budgetLimit > 0`).
+  4. `consecutiveWakeCount < maxConsecutiveWakes` (circuit breaker).
+- **`RunCoordinator`** — translates a wake into a Run:
+  - `executeForTask`: builds task prompt, looks up `org.workspacePath` for cwd, calls `runEngine.execute(...)`.
+  - `executeForConversation`: builds conversation prompt, threads `externalSessionId` (Claude session resume), calls `runEngine.execute(...)`. After a successful run, **writes the run summary as a `reply` message** with `intent='reply'` — that is how Role-B's answer reaches the conversation.
+- **`TaskScheduler`** — chooses the next pending root task per org (depth-first, oldest first).
+- **`RetryScheduler`** — exponential backoff retry wired to `retryBackoffMs` and `maxRetryOnFailure`.
+
+### 8.6 execution
+
+Tables: `runs`, `cost_entries`.
+Services: `CostTracker`, `FileLogService`.
+Engine: **`RunEngine`** (`modules/execution/engines/run.engine.ts`).
+Workers: `WorkerService`, `UtilityProcessExecutor`, `worker.ts`, `StreamJsonParser`.
+Adapters: `ClaudeCliAdapter`.
+
+Run lifecycle inside `RunEngine.execute`:
+
+1. Budget check + DB-level "no other active run for this org" assertion (`findActiveByOrgId`).
+2. Insert `runs` row (status='queued') keyed on either taskId, conversationId, or both.
+3. Emit `run:queued`, write input log file (`fileLogService.writeInput`).
+4. Update status='running', emit `run:started`.
+5. Call `executor.execute(...)` (`UtilityProcessExecutor` → `WorkerService.enqueueRun`).
+6. Worker spawns the CLI via `ClaudeCliAdapter` with `claude --print --output-format stream-json --verbose --dangerously-skip-permissions [--mcp-config <path> --strict-mcp-config] [--model X] [--max-turns N] [--effort E] [--resume sessionId]`. The prompt is piped via stdin.
+7. CLI streams JSON lines to stdout. `StreamJsonParser` parses them into:
+   - `onText(text)` → emit `run:assistant-text` (streaming).
+   - `onStatus(status)` → emit `run:status` (streaming).
+8. Stderr / stdout chunks → `run:log` streaming events + appended to a per-run file log.
+9. CLI exits → adapter returns `{ exitCode, status, summary, sessionId, inputTokens, outputTokens, errorMessage, ... }`.
+10. `runRepo.finish(runId, status, tokens, ..., sessionId, summary, errorMessage)`.
+11. Cost accrued via `costTracker.recordCost(...)`.
+12. Emit `run:succeeded | run:failed | run:cancelled` (lifecycle, **outbox**).
+13. `cleanupRun(runId)` — flush parser, log file, in-memory ctx.
+
+`StreamJsonParser` is line-buffered, line-by-line JSON-decoded, and tolerates non-JSON lines (CLI debug noise) by routing them to `onParseError`.
+
+`WorkerService` is a singleton `utilityProcess`. The `worker.ts` enforces **one active run per role** in-process via `activeByRole: Map<roleId, runId>`. Anything queued behind a busy role is held until that role's run finishes — but the org-level "one active run" constraint at `WakeGateValidator` is the primary boundary; the worker's per-role queue is a defense-in-depth.
+
+Cancel path: `runEngine.cancelRun(runId)` → `executor.abort(runId)` → worker → adapter → `taskkill /T /F /PID` on Windows or `SIGTERM` then `SIGKILL` on Unix.
+
+`ClaudeCliAdapter.isSessionError()` detects "unknown session" / "session not found" responses and **automatically retries once without `--resume`** (`doExecute(ctx, true)`), so a corrupted session id is recoverable.
+
+### 8.7 mcp — AI's tool surface
+
+Three pieces:
+
+- **`McpToolRegistry`** — tool name → `{description, inputSchema, handler}` map. `dispatch(name, params, runId)` is what the HTTP server calls. Logs every dispatch.
+- **`McpIpcServer`** — local HTTP server bound to `127.0.0.1:0` (dynamic free port). Single route `POST /tool-call` accepts `{toolName, arguments}` and returns `{success, data}` or `{success: false, error}`. Body limit 1 MB.
+- **`McpConfigGenerator`** — writes a temporary MCP configuration file containing the bridge command + port. Returns the path; `RunEngine.setMcpConfigPath(...)` stores it for every Run's `--mcp-config`.
+
+**MCP bridge** (`mcp/bridge/capibara-mcp-bridge.ts`) is its own Node entry point. Claude CLI spawns it as a stdio MCP server. It speaks JSON-RPC 2.0 on stdin/stdout. On `tools/list` it returns the static tool list (kept in sync with the registry). On `tools/call` it HTTP-POSTs `{toolName, arguments}` to the main process and pipes back the result.
+
+Why a bridge process instead of in-process tools? Claude CLI's MCP plumbing only speaks stdio. The bridge converts stdio JSON-RPC ↔ HTTP, while letting the actual handlers live in the main Electron process where domain services exist. The bridge holds **no state**.
+
+Tool handlers (`mcp/handlers/`):
+
+- **`task-tools.ts`** — `capibara_task_transition`, `capibara_task_create_child`.
+- **`conversation-tools.ts`** — `capibara_ask_question` (calls `ConversationService.createInquiry`, returns `{conversationId, respondentRoleId, state}` immediately — non-blocking).
+- **`context-tools.ts`** — `capibara_context` (read-only queries: tasks/roles/task_detail/role_detail).
+- **`plan-tree-tools.ts`** — `capibara_plan_submit_tree` with full server-side validation (type compatibility, leaf rules, assignee roles, ≤500 nodes, ≤10 depth, exactly one of `rootTaskId | conversationId`).
+
+### 8.8 prompt
+
+Two strategies + a context aggregator:
+
+- **`RunContext`** (`modules/prompt/context/run.context.ts`) — assembles the data prompt strategies need: role, role's skills, current task with parent chain + siblings, workflow schema info, conversation history, etc. Reads from repos; never writes.
+- **`buildTaskPrompt`** (`modules/prompt/strategies/task-prompt.strategy.ts`) — composes prompt sections (role, skills, org instructions, current task, execution sequence, type schema, knowledge base, workflow schema, system context, ID bindings, tool guidance, scenario instructions, language). Scenario is one of: `terminal_noop | preview_decomposition | eager_decomposition | execute_leaf | revision | review_approve | task_completed | conversation_reply | retry_failed`.
+- **`buildConversationPrompt`** (`modules/prompt/strategies/conversation-prompt.strategy.ts`) — sections for role, skills, task context (if any), full conversation history (`[author] (intent): content`), context label (Inquiry / Planning Session / Conversation), and for `planning` type, an additional sub-prompt with the work-item type schema, available roles, pending feedback, and structural rules for `capibara_plan_submit_tree`.
+
+The wake reason determines which prompt scenario fires. `'conversation_reply'` on a non-decomposable task produces:
+
+> "You previously started a conversation and have received a reply. Read the reply, then continue your work. If you need more information, continue the conversation; otherwise, use `capibara_task_transition` to advance."
+
+### 8.9 planning
+
+Tables: `pending_plan_trees`.
+Service: `PlanningService` (`modules/planning/planning.service.ts`).
+
+Two anchoring modes:
+
+| Anchor | When | Behaviour |
+|--------|------|-----------|
+| **Task-anchored** (`rootTaskId`) | Decomposition during normal execution. `planning_mode='preview'` requires user approval; `planning_mode='eager'` persists immediately. | On approve, children are created under the existing root task; root's status advances post-decomposition. On preview-mode submit, a `plan_review` conversation is opened in the user's inbox. |
+| **Conversation-anchored** (`sourceConversationId`) | Conversational planning sessions. Always `preview` mode. | On approve, the tree's top-level children become **root tasks** (parentId=null), the planning conversation is resolved. |
+
+Optimistic locking: `pending_plan_trees.version`. Approve / refine / discard accept an `expectedVersion` and return `VERSION_MISMATCH` if a concurrent submission already replaced the tree.
+
+`refine` → writes feedback into the row + posts a `human` message into the relevant conversation + wakes the AI to re-submit.
+
+`MAX_AGE_MS = 24h` — older `active|refining` trees are considered expired.
+
+Subscribes to `plan-tree:submitted` (emitted by `capibara_plan_submit_tree` MCP handler) and persists the tree.
+
+### 8.10 notification
+
+Two pieces:
+
+- **`EventBroadcaster`** — a domain → desktop event mapping table. Subscribes to selected `DomainEvent`s and emits the user-facing `DesktopEvent` (defined inline in `event-broadcaster.ts`). Sends via the `sendFn` injected at runtime (the IPC `webContents.send('capibara:desktop-event', evt)` callback).
+- **`NotificationService`** — OS toast / native notifications.
+
+Mapping highlights:
+- `org:*` / `role:*` / `task:*` → `org:changed | role:changed | task:changed` (orgId only — renderer reloads).
+- `task:entered-approval` → keeps `taskId` (renderer pops the approval card directly).
+- `run:queued|started` → `run:changed`.
+- `run:succeeded|failed|cancelled` → `run:completed` (with status + tokenCount).
+- `run:log|assistant-text|status` → forwarded as-is for live UI streaming.
+- `conversation:created|message-added|completed` → `conversation:changed` (orgId only).
+- `conversation:response-needed` with `roleId=null` (i.e. waiting for the human) → `conversation:response-needed` (notify the user).
+- `plan-tree:ready|discarded|approved` → corresponding desktop events.
+
+This single mapping is the only place that decides which renderer-visible refreshes happen for which domain change.
+
+---
+
+## 9. Async Inquiry Execution Model
+
+This is the core behaviour to internalise.
+
+When an AI role asks a question via `capibara_ask_question`, **its CLI process keeps running until that role's overall Run ends naturally**. Role-A is then **awakened later** by a fresh CLI when Role-B's answer is delivered. There is no in-process waiting, no coroutine, no resumed handle.
+
+### 9.1 Full timeline (Role-A asks Role-B)
+
+```
+T0   Role-A is mid-Run for taskId=t1.
+     CLI invokes capibara_ask_question(orgId, A, t1, "...?").
+T1   MCP bridge HTTP-POSTs to main → ConversationService.createInquiry()
+       inserts conversation conv-1 (state='active', respondent=null)
+       inserts first message (intent='question', author=A, type='ai')
+       emits conversation:needs-routing (outbox)
+T2   capibara_ask_question handler returns {conversationId, respondentRoleId=null, state='active'}.
+     Role-A's CLI receives the result. Role-A is free to call more tools or finish.
+     (typically Role-A finishes its turn — there is no answer yet.)
+T3   InquiryRouter (subscribed) routes conv-1 to Role-B (parent role typically).
+       ConversationService.assignRespondent(conv-1, B, 'ai', reason)
+         updateRespondent + transition to 'waiting'
+         emits conversation:respondent-assigned + conversation:response-needed (outbox)
+T4   ConversationOrchestrator handles response-needed.
+       wakeGate.validate(B, org) — denied because Role-A's Run is still active.
+       Persists pending_wakes(roleId=B, conversationId=conv-1, reason='respondent_woken').
+T5   Role-A's CLI exits (turn ended). RunEngine emits run:succeeded.
+T6   RunOrchestrator.onRunEnded(orgId) → drainPendingWakes(orgId)
+       finds the queued wake for B → wakeGate now allows
+       runCoordinator.executeForConversation(conv-1, B, org, locale)
+         → builds conversation prompt with full history
+         → runEngine.execute → spawns a NEW Claude CLI for B.
+T7   Role-B's CLI runs. Produces a reply. CLI exits.
+       runCoordinator writes the run summary as a 'reply' message:
+         conversationService.addMessage(conv-1, {author=B, type='ai', intent='reply'})
+       inside addMessage:
+         determineResponseNeeded → false (waiting + ai author + intent='reply')
+       so no further wake fires from the reply itself.
+T8   Either:
+       - Role-B's CLI also called resolve via tooling, OR
+       - downstream code calls conversationService.resolve(conv-1).
+       → emits conversation:resolved (outbox).
+T9   ConversationOrchestrator.onResolved
+       conv has taskId=t1 + initiatorRoleId=A
+       taskOrchestrator.tryWake(A, org, 'conversation_reply', t1)
+       wakeGate now permits (no active run).
+T10  RunCoordinator.executeForTask(t1, A, org, 'conversation_reply', locale)
+       → buildTaskPrompt with scenario='conversation_reply'
+       → spawns a new Claude CLI for A. Role-A continues, sees the reply
+         in the conversation history, and uses capibara_task_transition.
+```
+
+### 9.2 Why this model
+
+- **One process per turn** keeps memory + cost bounded. Long waits would lock a CLI for hours.
+- **Stateless wakes** mean a crash mid-conversation is recoverable: the event log + `pending_wakes` table reconstruct the queue.
+- **Single-active-run constraint** means we never burn budget on parallel fights for the same workspace.
+- The **prompt history** carries the entire conversation back into Role-A's next CLI, so Role-A reads what Role-B said as plain context. No special protocol.
+
+---
+
+## 10. IPC Layer
+
+### 10.1 Channels
+
+Channel names follow `capibara:{domain}:{action}` (e.g. `capibara:org:create`, `capibara:conversation:add-message`). Defined inline in `core/preload/index.ts` and corresponding handler files in `core/ipc-handlers/`. **There is no `contracts.ts` in the current code** — the preload `api` object is the de-facto schema.
+
+### 10.2 Result type
+
+All `ipcMain.handle` handlers return a `DesktopResult<T>`:
+
+```ts
+type DesktopResult<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
+```
+
+Renderer code always `if (result.ok) ... else ...`.
+
+### 10.3 Handlers
+
+Files in `core/ipc-handlers/`:
+- `organization.handlers.ts` — orgs / roles / skills / templates.
+- `workflow.handlers.ts` — tasks / process schemas / approvals.
+- `conversation.handlers.ts` — list/get/messages/resolve/cancel/createInquiry/createAdhoc.
+- `execution.handlers.ts` — runs/logs/cost.
+- `plan-tree.handlers.ts` — task-anchored + conversation-anchored approve/discard/refine + planning start.
+- `system.handlers.ts` — health, dep checks, dialogs, scheduler pause/resume.
+
+Handlers must:
+1. Validate input (Zod or shape checks).
+2. Call exactly one service method.
+3. Wrap into `DesktopResult`.
+4. Never contain business logic.
+
+### 10.4 Renderer event channel
+
+`capibara:desktop-event` — single channel, payload is a `DesktopEvent` discriminated union. Renderer subscribes via `window.capibara.subscribe(callback)` which returns an unsubscribe function.
+
+### 10.5 Auto-update channel
+
+`capibara:auto-update` — one-way push from main to renderer for `electron-updater` events. No invoke surface.
+
+---
+
+## 11. Renderer Architecture
+
+### 11.1 React 19 + Tailwind v4 + Radix
+
+- Functional components, named exports (`export function ComponentName(...)`).
+- Tailwind utility classes; conditional classes via `cn()` (clsx + tailwind-merge).
+- Radix primitives wrapped in `src/renderer/components/ui/` with project styling.
+- Phosphor icons exclusively.
+
+### 11.2 Zustand stores (`src/renderer/store/`)
+
+One store per domain:
+- `app.store.ts` — global app state (sidebar, current org).
+- `organization.store.ts` — orgs/roles/skills.
+- `task.store.ts` — tasks for current org.
+- `conversation.store.ts` — conversations + messages + waiting flags.
+- `run.store.ts` — runs, live log buffers, assistant text.
+- `plan-tree.store.ts` — pending trees for both anchoring modes.
+- `toast.store.ts` — toast queue.
+
+Pattern:
+- State + actions on the same interface; actions are async, call `window.capibara.*`, then `set(...)`.
+- Each store has `init()` that calls `subscribeToEvents({ ... })` once and stores the unsubscribe in a module-scope variable.
+- `init()` is invoked from a top-level hook (`useAppSnapshot` etc.) guarded by `useRef` so React Strict Mode double-renders don't double-subscribe.
+- **Always use fine-grained selectors** (`useStore((s) => s.field)`). Never destructure the whole store.
+
+### 11.3 `subscribeToEvents` (`renderer/lib/subscribe-to-events.ts`)
+
+Type-safe map from `DesktopEvent.type` to handler. Internally calls `window.capibara.subscribe`, filters by event type, dispatches to the registered handler. Returns the underlying unsubscribe.
+
+Stores use the pattern:
+```ts
+init: () => {
+  if (get().isInitialized) return;
+  conversationUnsubscribe = subscribeToEvents({
+    'conversation:changed': (e) => { if (e.orgId === get().currentOrgId) get().loadConversations(e.orgId); },
+    'conversation:response-needed': (e) => get().markWaitingForUser(e.conversationId),
+  });
+  set({ isInitialized: true });
 }
-
-// infrastructure/persistence/sqlite/sqlite-task.repository.ts
-@injectable()
-class SqliteTaskRepository implements ITaskRepository {
-  async findById(id: string): Promise<TaskNode | null> {
-    // better-sqlite3 is sync, wrapped in Promise.resolve()
-    const row = this.db.prepare('SELECT * FROM task_nodes WHERE id = ?').get(id);
-    return Promise.resolve(row ? this.mapToEntity(row) : null);
-  }
-}
 ```
 
-**DI Switching:**
-```typescript
-// composition-root.ts
-if (config.database.driver === 'sqlite') {
-  container.register(TASK_REPO_TOKEN, { useClass: SqliteTaskRepository });
-}
-// future: else if (config.database.driver === 'postgres') { ... }
-```
+### 11.4 Hooks (`src/renderer/hooks/`)
 
-### 5.2 Data Model (Core Entities)
+- `useAppSnapshot` — top-level boot hook called once in `App.tsx`. Triggers all stores' `init()`.
+- `useEventSubscription` — generic subscriber for one-off feature components.
+- `useRunLogs` — bounded log buffer per runId.
+- `useLocale` — i18n provider hook.
+- `useOnboardingGate` — first-launch redirect logic.
+- `useSectionShortcuts` / `useAutoUpdateToasts` / `useCrossCuttingToasts` / `useWorkflowSchema` — feature-specific.
 
-| Entity | Table | Purpose | Key Fields |
-|--------|-------|---------|------------|
-| Organization | `organizations` | Project root | id, name, description, status, budget_limit, org_template_id, workspace_path |
-| Role | `roles` | Org tree node | id, org_id, name, parent_id, persona, skill_ids (JSON), can_approve, can_delegate, requires_human_approval, status |
-| Skill | `skills` | Skill reference | id, name, command, description, category, source, org_template_id, custom_prompt_content (NULL for non-custom) |
-| TaskNode | `task_nodes` | Variable-depth task tree | id, org_id, parent_id, type, title, description, status, assignee_role_id, depth |
-| DiscussionGroup | `discussion_groups` | Epic-bound discussion | id, task_node_id (epic), org_id, status, summary, last_summary_at |
-| DiscussionMessage | `discussion_messages` | Message with vote tag | id, group_id, author_role_id, author_type (ai/human), content, vote_tag (APPROVE/REVISE/CONCERN/DELEGATE/null), created_at |
-| Run | `runs` | Execution instance | id, org_id, task_node_id, role_id, status, trigger, started_at, finished_at, cost_usd |
-| CostEntry | `cost_entries` | Token cost tracking | id, run_id, role_id, org_id, token_count, cost_usd |
-| Narrative | `narratives` | Generated status snapshot | id, org_id, template_data (JSON), rendered_text, generated_at |
-| PendingWake | `pending_wakes` | Wake event queue | id, role_id, org_id, trigger, created_at |
+### 11.5 i18n
 
-### 5.3 Database Conventions
-
-- Table names: plural `snake_case` (e.g., `task_nodes`, `discussion_messages`)
-- Column names: `snake_case` (e.g., `assignee_role_id`, `created_at`)
-- All SQL hand-written — no ORM auto-naming
-- WAL mode enabled for concurrent read/write safety
-- Foreign keys enforced
-- Migrations via version table + `CREATE TABLE IF NOT EXISTS` pattern (SQLite)
-
-### 5.4 Snapshot Strategy (Sparse ProfileSnapshot)
-
-Frontend never queries the database directly. Main Process builds **sparse snapshots** at three levels:
-
-| Level | Content | Trigger |
-|-------|---------|---------|
-| L1 Skeleton | Epic list with status counts only | Dashboard load |
-| L2 Branch | Expanded task tree for one Epic | User clicks to expand |
-| L3 Detail | Full discussion messages for one group | User opens discussion panel |
-
-Discussion data in L1/L2 is always aggregated (e.g., `{ APPROVE: 2, REVISE: 1 }`), never full message lists.
+`src/shared/locale/types.ts` defines the `LocaleMessages` interface. `en-US` and `zh-CN` files implement it; missing keys are compile errors. Access via `useT()`.
 
 ---
 
-## 6. Core Engine Architecture
+## 12. Testing Strategy
 
-### 6.1 Event-Driven Wake-Up Loop
-
-The orchestration engine is fully event-driven. No polling, no hardcoded step sequences.
-
-```
-Event Source                    EventBus                  OrgOrchestrator
-─────────────                  ────────                  ───────────────
-MCP: task_complete ──────►  task:completed  ──────►  calculateWakeTargets()
-MCP: discussion_post ────►  discussion:vote-added ─►  checkConsensus()
-Run: succeeded ──────────►  run:succeeded  ────────►  processRunResult()
-Run: failed ─────────────►  run:failed  ───────────►  retryOrEscalate()
-Timer: timeout ──────────►  run:timed-out  ────────►  handleTimeout()
-```
-
-### 6.2 Wake-Up Flow
-
-```
-Event arrives
-  │
-  ▼
-OrgOrchestrator.handleEvent(event)
-  │
-  ├── Calculate wake target role(s) based on event type
-  │
-  ▼
-wakeRoleIfPossible(roleId, trigger)
-  │
-  ├── Gate checks:
-  │   ├── 1. Role status === 'active'
-  │   ├── 2. Budget not exceeded
-  │   ├── 3. CLI connector available
-  │   ├── 4. No active Run for this role
-  │   └── 5. Self-wake count < MAX_CONSECUTIVE_WAKES (circuit breaker)
-  │
-  ├── All pass + role idle → createRun() + execute()
-  ├── All pass + role busy → enqueuePendingWake() (don't lose signal)
-  └── Gate fail → log reason, skip
-  │
-  ▼
-Run completes
-  │
-  ├── Consume pending wakes for this role
-  └── Emit next event → cycle continues
-```
-
-### 6.3 Wake Trigger Types (MVP)
-
-| Trigger | Source | Wake Target |
-|---------|--------|-------------|
-| `task_assigned` | Subtask creation | Assignee role |
-| `task_completed` | MCP tool call | Parent role (reviewer) |
-| `review_approve` | Consensus detected | Parent task assignee (if all siblings done) |
-| `review_revise` | Vote with REVISE tag | Original assignee role |
-| `review_delegate` | Vote with DELEGATE tag | Delegated target role |
-| `delegation_completed` | Delegated task done | Original blocked task's reviewer |
-| `retry_failed` | Retry limit exhausted | Parent role (escalation) |
-| `dispute_detected` | N CONCERNs + 0 APPROVEs | Parent role (intervention) |
-
-### 6.4 Consensus State Machine
-
-```
-pending ────► in_progress ────► awaiting_review ────► approved ────► done
-                  ▲                    │
-                  │                    ▼
-                  └──────────── revision (REVISE vote)
-
-awaiting_review ────► blocked (DELEGATE vote, waiting for delegated task)
-```
-
-Transitions are **computed results** of DiscussionMessage votes, not direct status writes:
-
-1. Agent completes task → calls `capibara_task_complete` (MCP) → task moves to `awaiting_review`
-2. Reviewer executes → posts `capibara_discussion_post` with `voteTag=APPROVE` (MCP)
-3. ConsensusDetector scans all `canApprove` role votes → unanimous APPROVE → task moves to `approved`
-4. If all sibling tasks `approved`/`done` → parent role awakened for summarization
-
-### 6.5 Circuit Breakers
-
-| Mechanism | Threshold | Action |
-|-----------|-----------|--------|
-| Self-wake limit | `MAX_CONSECUTIVE_WAKES` (default 5) | Escalate to parent role |
-| REVISE cycle | `maxReviseAttempts` (default 3) | Escalate to parent role |
-| Run failure retry | `maxRetryOnFailure` (default 3) | Escalate to parent role |
-| Top-level escalation | parentId === null | **Mandatory** human notification (regardless of requiresHumanApproval) |
-| Global budget | `budgetLimit` per org | Pause all roles |
+- **Framework**: Vitest 4.1, v8 coverage.
+- **Layout**: `apps/electron/tests/{unit,integration,diagnostic}/...` mirrors `src/`.
+- **Mocking DI**: provide fake objects implementing the relevant `core/foundation/interfaces/` or module-local `interfaces/`. Never mock the tsyringe container.
+- **Integration tests**: build a `Harness` that wires the real domain services (`ConversationService`, `InquiryRouter`, `ConversationOrchestrator`) with in-memory fakes for repos, an in-memory `EventBus`, and stub `RunCoordinator` / `TaskOrchestrator`. Pattern is established in `tests/integration/inquiry-happy-path.test.ts` — full ask → route → respond → resolve → wake-initiator loop with assertion of event ordering.
+- **Diagnostic tests**: non-automated scripts under `tests/diagnostic/` for manual external-integration smoke tests (real `claude` CLI, real DB).
+- **Coverage exclusions**: `core/index.ts` and `core/bootstrap/composition-root.ts`.
 
 ---
 
-## 7. Agent Execution & Communication
+## 13. Critical Implementation Rules (must-follow)
 
-### 7.1 Dual Action Channels
+These are derived from `_bmad-output/project-context.md` and the current code. They override personal preference:
 
-AI Agents running in Claude Code have two categories of actions:
-
-| Channel | Mechanism | Examples |
-|---------|-----------|---------|
-| **Prompt Framework Skills** | `/command` instructions in Claude Code | `/bmad-create-architecture`, `/bmad-dev-story`, `/bmad-code-review` |
-| **System Operations** | MCP Tools (auto-discovered by Claude Code) | `capibara_task_complete`, `capibara_task_create_subtask`, `capibara_discussion_post` |
-
-**Key Distinction:**
-- `/bmad-xxx` skills are managed by the prompt framework (BMAD). Capibara only stores `command` + `description` as references. BMAD autonomously retrieves knowledge, artifacts, and project files.
-- MCP Tools are Capibara system operations. They allow the Agent to interact with the orchestration engine in real-time during execution.
-
-### 7.2 MCP Server Bridge (ADR-04)
-
-**Transport:** stdio (not SSE/HTTP)
-
-```
-Run Created
-  │
-  ├── 1. McpConfigGenerator creates temp config file:
-  │     {
-  │       "mcpServers": {
-  │         "capibara": {
-  │           "command": "node",
-  │           "args": ["capibara-mcp-bridge.js", "--run-id=<id>", "--token=<jwt>"]
-  │         }
-  │       }
-  │     }
-  │
-  ├── 2. UtilityProcess spawns Claude Code CLI with MCP config
-  │     claude --mcp-config /tmp/capibara-mcp-<runId>.json ...
-  │
-  ├── 3. Claude Code auto-discovers capibara MCP tools
-  │
-  ├── 4. Agent calls MCP tools as needed during execution
-  │     (real-time, not post-execution)
-  │
-  └── 5. Run ends → MCP bridge terminates → temp config cleaned up
-```
-
-**Workspace:** McpConfigGenerator resolves `workspace_path` from the Run's associated organization (via orgId). The CLI execution working directory is set to the organization's `workspace_path`.
-
-**Security:** Every MCP tool call validates `runId` + JWT token. Only the active Run can invoke tools.
-
-### 7.3 MCP Tools (MVP)
-
-| Tool | Input Schema | Description |
-|------|-------------|-------------|
-| `capibara_task_complete` | `{ taskId, summary, artifactPaths? }` | Mark task completed with deliverables |
-| `capibara_task_create_subtask` | `{ parentTaskId, title, description, type, assigneeRoleId }` | Create and assign a subtask |
-| `capibara_discussion_post` | `{ discussionGroupId, content, voteTag? }` | Post message/vote to discussion group |
-| `capibara_context_get_task` | `{ taskId }` | Query task details, status, artifacts |
-| `capibara_context_get_org_tree` | `{ orgId }` | Query organization tree with role statuses |
-| `capibara_context_get_discussion_summary` | `{ discussionGroupId }` | Get discussion summary + vote stats |
-| `capibara_escalate` | `{ taskId, reason }` | Escalate task to parent role |
-
-### 7.4 Prompt Construction (ADR-02)
-
-PromptBuilder is a lightweight service. It does NOT inject knowledge base content or upstream artifacts — those are handled autonomously by the prompt framework (BMAD).
-
-**What Capibara constructs:**
-
-```markdown
-[System Prompt]
-You are {role.name}. {role.persona}
-
-## Organization Context
-- Your superior: {parentRole.name} ({parentRole.persona summary})
-- Your subordinates: {subordinates list}
-- Your peers: {peer roles list}
-
-## Current Task
-- Task: {task.title}
-- Type: {task.type}
-- Description: {task.description}
-- Status: {task.status}
-
-## Available Skills (invoke via / command)
-{role.skills.map(s => `- ${s.command}: ${s.description}`)}
-
-## System Tools (available as MCP tools)
-- capibara_task_complete: Mark your task as completed
-- capibara_task_create_subtask: Decompose work to subordinates
-- capibara_discussion_post: Post to discussion group / vote
-- capibara_escalate: Escalate to your superior
-
-## Discussion Context (if any)
-{discussionSummary: last 3 messages + vote statistics}
-
-## Instructions
-Complete your task, then use capibara_task_complete to submit results.
-If you need to decompose work, use capibara_task_create_subtask.
-For review tasks, use capibara_discussion_post with the appropriate voteTag.
-```
-
-### 7.5 UtilityProcess Executor
-
-All LLM/CLI execution runs in Electron's UtilityProcess:
-
-- Inherits from reference project's WorkerService pattern
-- CLI process working directory (`cwd`) is set to the organization's `workspace_path`
-- Communicates with Main Process via `parentPort` messaging
-- Stream processing: stdout/stderr via StringDecoder with chunked splitting
-- GBK encoding fallback for CJK environments
-- Full output logged and stored per Run
+- **ESM only**, no `.js` extensions, use path aliases.
+- **No `any`, no implicit returns, strict null checks.**
+- **All interfaces** prefix with `I`, one per file, in `modules/<X>/interfaces/` or `foundation/interfaces/`.
+- **All DI tokens** as `Symbol` constants in `foundation/tokens.ts`, `SCREAMING_SNAKE_CASE_TOKEN`.
+- **No default exports.** No barrel `index.ts`.
+- **Validate at boundaries** with Zod (config + IPC + outbox).
+- **Custom errors** extending `CapibaraError` with `code` + `cause`.
+- **Domain code → application layer**: `application/` (handlers + module registration) may depend on `modules/` and `foundation/`. `modules/` may not depend on `application/`. Nothing in `modules/` may import `infrastructure/` directly — go through `foundation/interfaces/`.
+- **No `new`** outside `composition-root.ts` and `bootstrap/<x>.module.ts`.
+- **No Node API in renderer.** Always `window.capibara`.
+- **No business logic in IPC handlers.** Validate → service → wrap.
+- **No store-wide destructuring.** Fine-grained selectors only.
+- **Add new IPC channels in three places**: preload (`api` map) + `ipc-handlers/<domain>.handlers.ts` + the matching service. Update `event-broadcaster.ts` if it triggers a renderer refresh.
+- **Add new domain events**: payload interface + `DomainEventMap` entry + Zod parser in `event-schemas.ts` + (if user-visible) mapping in `event-broadcaster.ts`.
+- **Add new MCP tools**: handler in `mcp/handlers/`, registration in `mcp.module.ts`, **and** mirror the static list in `mcp/bridge/capibara-mcp-bridge.ts` (the bridge does not auto-discover).
+- **i18n keys**: add to BOTH `en-US.ts` and `zh-CN.ts`. The `LocaleMessages` interface enforces it.
+- **Config is immutable after load.** No runtime mutation.
+- **Preload builds to CommonJS (`.cjs`).** Don't use ESM-only deps in preload unless externalised.
+- **better-sqlite3 is synchronous.** No `await`.
+- **Native modules** (better-sqlite3): rebuild via `pnpm --filter @capibara/electron postinstall` if rebuild errors appear.
 
 ---
 
-## 8. Skill System (ADR-05, ADR-06)
+## 14. End-to-End Reference Flows
 
-### 8.1 Skill Model: Command Reference
+### 14.1 New org → first task running
 
-Capibara does NOT manage the actual prompt content of framework skills. The `skills` table stores only references:
+1. User imports an org template → `OrgTemplateService` writes `organizations`, `roles`, `process_schemas`, then publishes `org:created`, `role:created`s, etc.
+2. The template seeds a root task → `task:created`.
+3. `TaskOrchestrator.onTaskCreated` sees `parentId=null` and `org.autoStartOnCreate=true` → `scheduleNext(orgId)`.
+4. `TaskScheduler` returns the root pending task; orchestrator transitions it to the first `active` status.
+5. `task:status-changed` → `onTaskStatusChanged` → `tryWake(assignee, org, 'task_scheduled', taskId)`.
+6. Gate ok → `RunCoordinator.executeForTask` → `RunEngine` → `WorkerService` → `ClaudeCliAdapter` → live CLI.
+7. CLI runs to completion → `run:succeeded` → `RunOrchestrator.onRunEnded` → drain pending wakes (none) + `scheduleNext` (no further work).
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | TEXT PK | Unique identifier |
-| `name` | TEXT | Human-readable name |
-| `command` | TEXT | Trigger command (e.g., `/bmad-create-architecture`) |
-| `description` | TEXT | What the skill does (injected into agent prompt) |
-| `category` | TEXT | `analysis` / `design` / `implementation` / `review` / `test` / `general` |
-| `source` | TEXT | `builtin` / `template` / `custom` |
-| `org_template_id` | TEXT NULL | Which org template installed this |
-| `custom_prompt_content` | TEXT NULL | Only for `source='custom'` — actual prompt text |
+### 14.2 Decomposition — preview mode (human-approved)
 
-### 8.2 Skill Sources
+1. Role's CLI calls `capibara_plan_submit_tree({rootTaskId, tree})`.
+2. Handler validates structure, persists `pending_plan_trees` with `status='active'`, version=1.
+3. Emits `plan-tree:submitted` → `PlanningService.onTreeSubmitted` opens a `plan_review` conversation in the inbox.
+4. `EventBroadcaster` fires `plan-tree:ready` to the renderer; the user sees the inbox card.
+5. User approves → IPC `capibara:plan-tree:approve` → `PlanningService.approvePlanTree(rootTaskId, expectedVersion)`:
+   - inserts child tasks with the existing rootTaskId as parent,
+   - updates pending status to `approved`,
+   - completes the `plan_review` conversation,
+   - emits `plan-tree:approved`.
+6. `TaskOrchestrator.onPlanTreeApproved` → `scheduleNext(orgId)` to start the first child.
 
-| Source | Content Storage | Invocation Method |
-|--------|----------------|-------------------|
-| `builtin` | Command + description only | Agent uses `/command` in Claude Code |
-| `template` | Command + description, installed with org template | Agent uses `/command` in Claude Code |
-| `custom` | Full prompt text in `custom_prompt_content` | PromptBuilder injects content into agent prompt directly |
+### 14.3 Conversational planning (no task yet)
 
-### 8.3 Skill Selection
+1. User opens the planning composer → IPC `capibara:planning:start(orgId, agentRoleId, firstMessage)`.
+2. `ConversationService.createPlanning(...)` writes the `planning` conversation, emits `conversation:created` + `conversation:response-needed`.
+3. `ConversationOrchestrator` wakes the planning role → CLI runs with the conversation prompt that includes the type schema + available roles.
+4. AI replies via the conversation (`addMessage`) — possibly several rounds, with the user replying via the UI (each user message triggers `addMessage` with `authorType='human'`, which wakes the agent again).
+5. Eventually the AI calls `capibara_plan_submit_tree({conversationId, tree})`.
+6. `PlanningService` persists the pending tree anchored to the conversation. User reviews + approves.
+7. On approve, the tree's top-level children become root tasks; the planning conversation is `resolved`.
 
-SkillSelector maps task type → skill category → role's available skills:
+### 14.4 AI ↔ AI inquiry
 
-```
-Task type 'epic'     → category 'analysis'       → /bmad-analyst or /bmad-pm
-Task type 'story'    → category 'design'          → /bmad-create-story
-Task type 'task'     → category 'implementation'  → /bmad-dev-story
-Task type 'bug'      → category 'implementation'  → /bmad-dev-story (with fix context)
-Review action        → category 'review'          → /bmad-code-review
-```
+See **Section 9** for the full timeline.
 
-### 8.4 Framework Extensibility
+### 14.5 Failure + retry
 
-Adding a new prompt framework (e.g., "FrameworkX"):
-1. User installs FrameworkX as a Claude Code skill/extension
-2. User adds skill entries (command + description) via org template or UI
-3. Roles reference these skills via `skillIds`
-4. PromptBuilder lists them in agent prompt → Agent invokes via `/frameworkx-xxx`
-5. **Zero business code change** — OrgOrchestrator, ConsensusDetector, etc. are unaffected
-
-### 8.5 Skill Provider Interfaces (Future Advanced Use)
-
-For scenarios where Capibara itself needs to manage prompt construction:
-
-```typescript
-// L1: Simple prompt generation
-interface IPromptProvider {
-  buildPrompt(context: SkillContext): string;
-}
-
-// L2: Multi-step with validation
-interface ISkillProvider extends IPromptProvider {
-  execute(context: SkillContext): Promise<SkillResult>;
-  validate?(output: string): ValidationResult;
-}
-
-// L3: Full workflow orchestration
-interface IWorkflowProvider extends ISkillProvider {
-  getWorkflowDefinition(): WorkflowDefinition;
-  executeStep(stepId: string, context: SkillContext): Promise<StepResult>;
-  getNextStep(currentStep: string, result: StepResult): string | null;
-}
-```
-
-These interfaces are available for `custom` source skills and future advanced scenarios, but are NOT the primary integration path for framework-class providers like BMAD.
+1. CLI exits non-zero → `run:failed`.
+2. `RunOrchestrator.onRunFailed` schedules a retry via `RetryScheduler` with backoff.
+3. After `retryBackoffMs`, `RetryScheduler` calls `tryWake(roleId, orgId, 'retry_failed', taskId)`.
+4. Up to `maxRetryOnFailure` retries; afterwards the task remains in its current status and the user must intervene.
 
 ---
 
-## 9. Discussion System (ADR-03)
+## 15. Open Architectural Notes
 
-### 9.1 MVP: Structured Approval Container
+These are present in the code but worth flagging for future evolution:
 
-DiscussionGroup serves as the structured record of all approval actions within an Epic. It is NOT a free-form chat system in MVP.
-
-### 9.2 Lifecycle
-
-```
-Epic created
-  → DiscussionGroup auto-created (bound to epic task_node_id)
-  → Auto-members: epic assignee + direct subordinates
-
-Task assigned within Epic
-  → Assignee auto-joins discussion group
-
-Agent completes task
-  → Posts completion message (via MCP tool)
-
-Reviewer votes
-  → Posts message with voteTag (via MCP tool)
-  → ConsensusDetector evaluates
-
-All voting complete + Epic done
-  → DiscussionGroup archived
-```
-
-### 9.3 Discussion Summary for Prompt Injection
-
-When a role is awakened, it receives a **rule-based extract** (not LLM summary) of the discussion:
-- Last 3 messages with content
-- Vote statistics: `{ APPROVE: N, REVISE: N, CONCERN: N, DELEGATE: N }`
-- Latest REVISE feedback (if task is in revision state)
-
-### 9.4 V2 Forward Compatibility
-
-Data model already supports:
-- `voteTag=null` free-form messages
-- `authorType` field (`ai`/`human`)
-- No schema migration needed for V2 multi-round discussion expansion
+- **No global `contracts.ts`.** IPC channel strings live in two places (preload + handlers). Centralising them is a known clean-up — not a blocker.
+- **Process schema editor** is in the renderer but there is no in-app schema migration tool — schema changes require manual edits + reload.
+- **Single-active-run-per-org** is a deliberate constraint; concurrent execution within an org would require a richer scheduler and is out of scope for v1.
+- **MCP bridge** holds a hard-coded static tool list (`bridge/capibara-mcp-bridge.ts`). When tools are added, both the registry AND the bridge must be updated. Long term, the bridge could fetch tools from the HTTP server at startup.
+- **`external_session_id`** lets conversation runs resume a Claude CLI session, but session corruption is handled only with a one-shot retry without `--resume`. There is no quota / rotation for sessions.
+- **Outbox table is unbounded.** Published rows are never deleted. Add a periodic GC if storage becomes a concern.
+- **Workflow schema cache** in `ProcessEngine` is per-process, in-memory. If schemas were ever changed by another process, this cache would be stale — not currently possible since main is the only writer.
 
 ---
 
-## 10. IPC & Communication Patterns
-
-### 10.1 IPC Protocol
-
-All Renderer ↔ Main communication uses `DesktopResult<T>`:
-
-```typescript
-type DesktopResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: { code: string; message: string } };
-```
-
-### 10.2 IPC Channel Naming
-
-Format: `namespace:entity:action` (all lowercase)
-
-Examples:
-- `capibara:task:expand-branch`
-- `capibara:narrative:updated`
-- `capibara:org:snapshot`
-- `capibara:discussion:vote-added`
-- `capibara:settings:get`
-- `capibara:settings:update`
-- `capibara:settings:locale-changed`
-
-Defined in `shared/contracts.ts` as string enums with Zod payload schemas.
-
-### 10.3 Event Digester (IPC Batching)
-
-High-frequency events are aggregated before reaching the Renderer:
-
-- Time window: 200-500ms (configurable)
-- Events merged by Epic scope
-- Delta patches instead of full-tree serialization
-- Prevents notification storms during rapid parallel execution
-
-### 10.4 Frontend State Management
-
-- Zustand for snapshot-based state slices
-- No Redux-Saga/Thunk — all remote actions via `window.capibara.api`
-- IPC Batcher coalesces rapid domain-changed events before triggering Zustand updates
-- Pure slice-based state operations
-
-### 10.5 Internal Event Bus
-
-Main Process uses Emittery with typed events:
-
-Format: `entity:lifecycle` (e.g., `task:completed`, `discussion:vote-added`, `run:succeeded`)
-
-Most side effects (narrative generation, wake calculations, cost tracking) are triggered via event subscriptions.
-
----
-
-## 11. Project Structure
-
-```text
-capibara/
-├── src/
-│   ├── main/                           # Main Process (Node.js / Electron)
-│   │   ├── core/                       # Layer 1: Contracts (NO runtime state)
-│   │   │   ├── constants/              # vote-tag.constants.ts, run.constants.ts
-│   │   │   ├── errors/                 # organization.error.ts, task.error.ts
-│   │   │   ├── interfaces/            # All I-prefixed interfaces
-│   │   │   │   ├── i-organization.repository.ts
-│   │   │   │   ├── i-task.repository.ts
-│   │   │   │   ├── i-discussion.repository.ts
-│   │   │   │   ├── i-run.repository.ts
-│   │   │   │   ├── i-skill.repository.ts
-│   │   │   │   ├── i-prompt-builder.ts
-│   │   │   │   ├── i-mcp-tool-handler.ts
-│   │   │   │   ├── i-event-bus.ts
-│   │   │   │   └── i-executor.ts
-│   │   │   ├── types/                  # All shared type definitions
-│   │   │   └── tokens.ts              # DI tokens (SCREAMING_SNAKE_CASE_TOKEN)
-│   │   │
-│   │   ├── application/                # Layer 2: Business Logic
-│   │   │   ├── orchestrator/           # org.orchestrator.ts (core event loop)
-│   │   │   ├── state-machine/          # task.state-machine.ts
-│   │   │   ├── consensus/             # consensus.detector.ts
-│   │   │   ├── skills/                 # skill.selector.ts, prompt-builder.ts
-│   │   │   ├── context/               # org.context.ts, execution.context.ts
-│   │   │   └── progress/              # narrative.engine.ts, event.digester.ts
-│   │   │
-│   │   ├── infrastructure/             # Layer 3: Implementations
-│   │   │   ├── persistence/
-│   │   │   │   └── sqlite/
-│   │   │   │       ├── sqlite-connection.ts
-│   │   │   │       ├── sqlite-organization.repository.ts
-│   │   │   │       ├── sqlite-task.repository.ts
-│   │   │   │       ├── sqlite-discussion.repository.ts
-│   │   │   │       ├── sqlite-run.repository.ts
-│   │   │   │       ├── sqlite-skill.repository.ts
-│   │   │   │       └── migrations/
-│   │   │   ├── mcp/                    # MCP Server Bridge
-│   │   │   │   ├── capibara-mcp-bridge.ts
-│   │   │   │   ├── mcp-tool-registry.ts
-│   │   │   │   ├── mcp-tool-handlers.ts
-│   │   │   │   └── mcp-config-generator.ts
-│   │   │   ├── executors/              # UtilityProcess executor, adapter factory
-│   │   │   └── observability/          # emittery-event-bus.ts, cost-tracker.ts
-│   │   │
-│   │   ├── ipc-handlers/               # IPC Boundary (Zod-validated)
-│   │   ├── composition-root.ts         # tsyringe DI registry
-│   │   └── index.ts                    # Main process entry
-│   │
-│   ├── preload/
-│   │   └── index.ts                    # contextBridge whitelist + subscription relay
-│   │
-│   ├── renderer/
-│   │   ├── components/
-│   │   │   ├── dashboard/              # Narrative display, metrics
-│   │   │   ├── organization/           # Role tree visualization
-│   │   │   ├── execution/             # Run queue, approval UI
-│   │   │   └── discussion/            # Discussion group panel
-│   │   ├── hooks/                      # useCapibaraSnapshot.ts, etc.
-│   │   ├── store/                      # Zustand slices (.slice.ts)
-│   │   └── App.tsx
-│   │
-│   └── shared/                         # Cross-process shared (Main + Renderer)
-│       ├── contracts.ts                # IPC channel enums + Zod payload schemas
-│       └── locale/                     # i18n module
-│           ├── types.ts               # SupportedLocale, LocaleMessages interface
-│           ├── en-US.ts               # English translations
-│           ├── zh-CN.ts               # Chinese translations
-│           └── index.ts              # Locale registry + getMessages()
-│
-├── packages/                           # Monorepo adapter packages
-│   ├── adapter-claude-local/
-│   ├── adapter-codex-local/
-│   └── adapter-utils/
-│
-├── tests/                              # Mirror of src/ structure
-│   ├── unit/
-│   └── e2e/
-│
-├── electron.vite.config.ts
-├── vitest.config.ts
-└── package.json                        # pnpm workspaces
-```
-
----
-
-## 12. Implementation Rules
-
-### 12.1 Critical Rules (MUST Follow)
-
-| # | Rule | Violation Consequence |
-|---|------|-----------------------|
-| 1 | **All imports use `.js` extension** (even for `.ts` files) | Runtime `ERR_MODULE_NOT_FOUND` |
-| 2 | **Never import `infrastructure/` from `application/`** | Breaks dependency inversion |
-| 3 | **Every DI-registered class has `@injectable()`** | Cryptic tsyringe resolution errors |
-| 4 | **Never `new` services outside `composition-root.ts`** | State divergence, unmockable |
-| 5 | **All IPC payloads Zod-validated** | Renderer can crash Main with bad data |
-| 6 | **No business logic in `src/main/index.ts`** | Entry point delegates to services only |
-| 7 | **No runtime state in `core/`** | Core is contracts only |
-| 8 | **All Repository methods return `Promise<T>`** | Breaks future PostgreSQL migration |
-
-### 12.2 Naming Conventions
-
-| Element | Convention | Example |
-|---------|-----------|---------|
-| Files | `kebab-case.ts` | `org.orchestrator.ts`, `sqlite-task.repository.ts` |
-| Classes | `PascalCase` | `OrgOrchestrator`, `SqliteTaskRepository` |
-| Interfaces | `I`-prefix `PascalCase` | `ITaskRepository`, `IPromptBuilder` |
-| DI Tokens | `SCREAMING_SNAKE_CASE_TOKEN` | `TASK_REPO_TOKEN`, `EVENT_BUS_TOKEN` |
-| DB tables | plural `snake_case` | `task_nodes`, `discussion_messages` |
-| DB columns | `snake_case` | `assignee_role_id`, `created_at` |
-| IPC channels | `namespace:entity:action` | `capibara:task:completed` |
-| Events | `entity:lifecycle` | `task:completed`, `run:failed` |
-
-### 12.3 Forbidden Patterns
-
-- **No barrel exports** (`index.ts` re-exports) — import directly from specific files
-- **No default exports** — named exports throughout
-- **No ORM** — all SQL hand-written
-- **No Redux-Saga/Thunk** in Renderer — Zustand + IPC only
-- **No `contextBridge` write-back capabilities** — Renderer cannot mutate Main state directly
-- **No inline type definitions in implementation files** — types go in `core/types/`
-
-### 12.4 Code Quality
-
-- Prettier: 100 char width (markdown/JSON: 120), single quotes, trailing commas, 2-space indent, LF
-- No ESLint configured — Prettier only
-- Minimal comments — code should be self-documenting
-- Test files: `tests/unit/{feature}.test.ts` mirroring `src/` structure
-- Vitest with V8 coverage provider
-
----
-
-## 13. Configuration
-
-### 13.1 Config Hierarchy
-
-```
-Default values (config.defaults.ts)
-  ← Global config (~/.capibara/config.yaml)
-    ← Project config (<projectDir>/capibara.config.yaml)
-```
-
-Loaded via `config.loader.ts`, validated with Zod schemas in `config.schema.ts`, accessed through DI token. Config is **immutable after load**.
-
-### 13.2 Key Configuration Fields
-
-```yaml
-organization:
-  template: software-team              # Preset template name
-  customFile: null                     # Custom org YAML path (overrides template)
-
-execution:
-  maxReviseAttempts: 3                 # REVISE cycle limit per task
-  maxRetryOnFailure: 3                 # Run failure retry limit
-  maxConsecutiveWakes: 5               # Self-wake circuit breaker
-  budgetLimit: 50.0                    # Project budget cap (USD)
-
-skills:
-  provider: bmad                       # Primary skill framework
-  bmadRoot: ./_bmad                    # BMAD installation directory
-
-database:
-  driver: sqlite                       # sqlite | postgres (future)
-  sqlitePath: ~/.capibara/capibara.sqlite
-
-cli:
-  defaultExecutor: claude-cli
-  # projectDir removed — workspace path is now per-organization, stored in organizations.workspace_path
-
-logging:
-  level: info
-```
-
----
-
-## 14. Security
-
-| Concern | Measure |
-|---------|---------|
-| Process isolation | Renderer has no `nodeIntegration`, strict `contextIsolation` |
-| IPC validation | All payloads Zod-validated at entry point |
-| MCP authentication | JWT token + runId per-tool-call validation |
-| MCP network | stdio transport only, no network ports exposed |
-| API tokens | SecretVault with encrypted `vault.key` |
-| Data access | Organization-scoped queries (orgId filtering) |
-| Preload safety | contextBridge whitelist — no write-back to Main state |
-
----
-
-## 15. Architecture Decision Record Index
-
-| ADR | Decision | Rationale |
-|-----|----------|-----------|
-| ADR-01 | Repository Pattern with async `Promise<T>` interfaces | Future PostgreSQL migration without application layer changes |
-| ADR-02 | Lightweight prompt construction — no artifact/knowledge injection | BMAD autonomously retrieves context; reduces token budget complexity |
-| ADR-03 | Discussion Group as MVP approval container, V2 full communication | Simplifies MVP while preserving forward-compatible data model |
-| ADR-04 | MCP Server (stdio) for Agent ↔ Capibara system operations | Native Claude Code integration, typed schemas, real-time tool calls |
-| ADR-05 | Skill model stores command + description, not content | BMAD manages its own prompts; Capibara only needs references |
-| ADR-06 | Framework extensibility via Skill Registration model | Zero business code change when adding new prompt frameworks |
-
----
-
-## 16. Internationalization (i18n)
-
-### 16.1 Strategy
-
-MVP uses a lightweight React Context-based i18n approach. No external i18n library required.
-
-### 16.2 Locale Module Structure
-
-`shared/locale/` replaces the single `shared/locale.ts` file:
-
-| File | Purpose |
-|------|---------|
-| `shared/locale/types.ts` | `SupportedLocale` type, `LocaleMessages` interface |
-| `shared/locale/en-US.ts` | English translation strings |
-| `shared/locale/zh-CN.ts` | Chinese translation strings |
-| `shared/locale/index.ts` | Locale registry, `getMessages(locale)` lookup |
-
-### 16.3 Architecture Layers
-
-| Layer | i18n Responsibility |
-|-------|-------------------|
-| **shared/** | Locale type definitions, translation message objects |
-| **Main Process** | Reads `locale` from Settings table, provides via IPC `capibara:settings:get` |
-| **Preload** | Bridges locale IPC methods |
-| **Renderer** | `LocaleProvider` React Context, `useLocale()` hook, `useT()` translation hook |
-
-### 16.4 OS Language Detection
-
-On first launch (no `locale` key in Settings):
-1. Main Process reads `app.getLocale()` (Electron API)
-2. Maps to supported locale: `zh` prefix → `zh-CN`, else → `en-US`
-3. Stores result in Settings table
-
-### 16.5 Language Switching Flow
-
-```
-User clicks language selector (Renderer)
-  → IPC call: capibara:settings:update { key: 'locale', value: 'zh-CN' }
-  → Main Process updates Settings table
-  → Main Process emits 'settings:locale-changed' on EventBus
-  → IPC push: capibara:settings:locale-changed { locale: 'zh-CN' }
-  → Renderer LocaleProvider updates context
-  → All components re-render with new locale
-```
-
-### 16.6 Narrative Engine Integration
-
-The Narrative Engine's Layer 3 (LLM Polish) receives the user's locale preference as a parameter. The LLM polish prompt includes an instruction like: "Generate the narrative in {locale_language}."
-
-### 16.7 IPC Channels
-
-| Channel | Direction | Payload |
-|---------|-----------|---------|
-| `capibara:settings:get` | Renderer → Main | `{ key: string }` |
-| `capibara:settings:update` | Renderer → Main | `{ key: string, value: string }` |
-| `capibara:settings:locale-changed` | Main → Renderer | `{ locale: SupportedLocale }` |
+*This is the authoritative architecture. All older `_bmad-output/planning-artifacts/*.md` files are superseded.*
