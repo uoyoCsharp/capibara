@@ -161,6 +161,7 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
+      'Granularity guidance: Each leaf is consumed by an AI agent, NOT a human. Prefer COARSE granularity — a leaf should represent a meaningful unit of work an AI agent can complete in one execution turn. Do NOT split into human-checklist-sized micro-steps (e.g. "open file", "write line", "save"). Produce the smallest tree that still respects the type hierarchy and assignment rules; only split further when a single agent genuinely cannot handle the scope or when different leaves require different roles.\n' +
       'The user will review the tree and approve it before any task is persisted.',
     eager_decomposition:
       'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
@@ -171,6 +172,7 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- Every node MUST include a non-empty `assigneeRoleId` selected from the subordinates listed in Org Hierarchy.\n' +
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
+      'Granularity guidance: Each leaf is consumed by an AI agent, NOT a human. Prefer COARSE granularity — a leaf should represent a meaningful unit of work an AI agent can complete in one execution turn. Do NOT split into human-checklist-sized micro-steps (e.g. "open file", "write line", "save"). Produce the smallest tree that still respects the type hierarchy and assignment rules; only split further when a single agent genuinely cannot handle the scope or when different leaves require different roles.\n' +
       'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct.',
     execute_leaf:
       'Execute this task directly. ' +
