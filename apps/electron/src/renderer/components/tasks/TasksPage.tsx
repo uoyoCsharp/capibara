@@ -265,7 +265,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
   };
 
   return (
-    <div className="p-[var(--page-padding)] space-y-[var(--section-gap)]">
+    <div className="p-(--page-padding) space-y-(--section-gap)">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">

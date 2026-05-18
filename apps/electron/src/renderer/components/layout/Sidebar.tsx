@@ -65,7 +65,7 @@ export function Sidebar({
   return (
     <aside className={cn(
       'flex h-full flex-col border-r bg-sidebar-background transition-[width] duration-200',
-      collapsed ? 'w-16' : 'w-[var(--sidebar-width)]',
+      collapsed ? 'w-16' : 'w-(--sidebar-width)',
     )}>
       <WorkspaceHeader collapsed={collapsed} currentOrg={currentOrg ?? null} onNavigate={onNavigate} />
 
