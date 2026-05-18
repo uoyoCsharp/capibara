@@ -480,19 +480,22 @@ describe('TaskScheduler', () => {
       expect(result).toEqual({ task: T2, wakeReason: 'task_scheduled' });
     });
 
-    it('22: approval child skipped, initial child returned', () => {
+    it('22: approval child blocks scheduling globally → null', () => {
+      // Updated semantics (org-wide approval gate): a sibling in approval
+      // halts the entire scheduler until a human resolves it. T2 must NOT
+      // be dispatched while T1 is awaiting review.
       const parent = createTask({ id: 'parent', status: 'done' });
       const T1 = createTask({ id: 'T1', parentId: 'parent', status: 'review', createdAt: '2026-01-01T00:00:00.000Z' });
       const T2 = createTask({ id: 'T2', parentId: 'parent', status: 'pending', assigneeRoleId: 'role-1', createdAt: '2026-01-02T00:00:00.000Z' });
 
-      taskRepo.findByOrgId.mockReturnValue([parent]);
+      taskRepo.findByOrgId.mockReturnValue([parent, T1, T2]);
       taskRepo.findChildren.mockImplementation((parentId: string) =>
         parentId === 'parent' ? [T1, T2] : [],
       );
 
       const result = scheduler.findNextTask('org-1');
 
-      expect(result).toEqual({ task: T2, wakeReason: 'task_scheduled' });
+      expect(result).toBeNull();
     });
 
     it('23: all children terminal, no grandchildren → null', () => {
@@ -852,6 +855,87 @@ describe('TaskScheduler', () => {
       });
 
       taskRepo.findByOrgId.mockReturnValue([epic]);
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // 2.10 Org-wide approval gate
+  // =========================================================================
+  //
+  // An approval-category task anywhere in the org pauses the whole scheduler.
+  // Independent subtrees (different roots) MUST also stop until the human
+  // resolves the approval. This guarantees a human-in-the-loop checkpoint is
+  // never bypassed by parallel work.
+
+  describe('2.10 Org-wide approval gate', () => {
+    it('40: approval task in one root blocks schedulable task in a sibling root', () => {
+      const rootA = createTask({
+        id: 'root-A',
+        status: 'review',
+        assigneeRoleId: 'role-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      const rootB = createTask({
+        id: 'root-B',
+        status: 'pending',
+        assigneeRoleId: 'role-1',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      });
+
+      taskRepo.findByOrgId.mockReturnValue([rootA, rootB]);
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toBeNull();
+    });
+
+    it('41: approval resolved → scheduler resumes returning the next pending task', () => {
+      // Same shape as #40 but rootA is now `done` instead of `review`. The
+      // gate should clear and rootB should be dispatched.
+      const rootA = createTask({
+        id: 'root-A',
+        status: 'done',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      const rootB = createTask({
+        id: 'root-B',
+        status: 'pending',
+        assigneeRoleId: 'role-1',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      });
+
+      taskRepo.findByOrgId.mockReturnValue([rootA, rootB]);
+
+      const result = scheduler.findNextTask('org-1');
+
+      expect(result).toEqual({ task: rootB, wakeReason: 'task_scheduled' });
+    });
+
+    it('42: deep approval descendant in one tree blocks unrelated root', () => {
+      // Approval can be buried anywhere — the scheduler must scan the whole
+      // org, not only roots.
+      const rootA = createTask({ id: 'root-A', status: 'done', createdAt: '2026-01-01T00:00:00.000Z' });
+      const childA = createTask({
+        id: 'child-A',
+        parentId: 'root-A',
+        status: 'review',
+        assigneeRoleId: 'role-1',
+      });
+      const rootB = createTask({
+        id: 'root-B',
+        status: 'pending',
+        assigneeRoleId: 'role-1',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      });
+
+      taskRepo.findByOrgId.mockReturnValue([rootA, childA, rootB]);
+      taskRepo.findChildren.mockImplementation((parentId: string) =>
+        parentId === 'root-A' ? [childA] : [],
+      );
 
       const result = scheduler.findNextTask('org-1');
 

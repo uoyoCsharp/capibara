@@ -112,6 +112,64 @@ describe('InquiryRouter', () => {
     expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-parent', 'ai', expect.any(String));
   });
 
+  it('walks up to grandparent when direct parent is paused', () => {
+    const parent = createRole({ id: 'role-parent', status: 'paused', parentId: 'role-grand' });
+    const grand = createRole({ id: 'role-grand', name: 'Director' });
+    vi.mocked(roleRepo.findById).mockImplementation((id) => {
+      if (id === TEST_ROLE_ID) return createRole({ parentId: 'role-parent' });
+      if (id === 'role-parent') return parent;
+      if (id === 'role-grand') return grand;
+      return null;
+    });
+    vi.mocked(roleRepo.findChildren).mockReturnValue([]);
+
+    emitNeedsRouting(bus);
+
+    expect(assignRespondent).toHaveBeenCalledWith(
+      'conv-1',
+      'role-grand',
+      'ai',
+      expect.stringContaining('ancestor'),
+    );
+  });
+
+  it('skips system-role ancestors when walking up', () => {
+    const parent = createRole({ id: 'role-parent', status: 'paused', parentId: 'role-system' });
+    const systemAncestor = createRole({ id: 'role-system', isSystemRole: true, parentId: 'role-grand' });
+    const grand = createRole({ id: 'role-grand', name: 'Director' });
+    vi.mocked(roleRepo.findById).mockImplementation((id) => {
+      if (id === TEST_ROLE_ID) return createRole({ parentId: 'role-parent' });
+      if (id === 'role-parent') return parent;
+      if (id === 'role-system') return systemAncestor;
+      if (id === 'role-grand') return grand;
+      return null;
+    });
+    vi.mocked(roleRepo.findChildren).mockReturnValue([]);
+
+    emitNeedsRouting(bus);
+
+    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-grand', 'ai', expect.any(String));
+  });
+
+  it('breaks ancestor cycles without infinite loop', () => {
+    const parent = createRole({ id: 'role-parent', status: 'paused', parentId: TEST_ROLE_ID });
+    vi.mocked(roleRepo.findById).mockImplementation((id) => {
+      if (id === TEST_ROLE_ID) return createRole({ parentId: 'role-parent', status: 'paused' });
+      if (id === 'role-parent') return parent;
+      return null;
+    });
+    vi.mocked(roleRepo.findChildren).mockReturnValue([]);
+
+    emitNeedsRouting(bus);
+
+    expect(assignRespondent).toHaveBeenCalledWith(
+      'conv-1',
+      null,
+      'human',
+      expect.stringContaining('Human fallback'),
+    );
+  });
+
   it('falls back to peer when parent is paused', () => {
     const parent = createRole({ id: 'role-parent', status: 'paused' });
     const peer = createRole({ id: 'role-peer', name: 'Peer' });

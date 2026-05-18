@@ -155,6 +155,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       wakeGateValidator,
       runCoordinator,
       taskOrchestrator,
+      { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
     );
     runOrchestrator = new RunOrchestrator(
       eventBus,

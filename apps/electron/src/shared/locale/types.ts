@@ -103,6 +103,8 @@ export interface LocaleMessages {
     deleteSuccess: string;
     deleteFailed: string;
     defaultTypeLabel: string;
+    blockedBannerOne: string;
+    blockedBannerMany: string;
   };
 
   taskCreate: {
@@ -239,6 +241,12 @@ export interface LocaleMessages {
     resumeAll: string;
     pausedToast: string;
     resumedToast: string;
+    statusPaused: string;
+    statusAwaitingReview: string;
+    statusAwaitingReviewN: string;
+    statusRunning: string;
+    statusIdle: string;
+    idleHint: string;
   };
 
   settings: {

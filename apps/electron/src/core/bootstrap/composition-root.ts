@@ -105,6 +105,8 @@ export async function bootstrap(): Promise<void> {
     org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
   );
 
+  const notification = registerNotificationModule(eventBus, logger);
+
   const orchestratorModule = registerOrchestratorModule(
     sqliteConn, eventBus, logger, config,
     workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
@@ -119,9 +121,8 @@ export async function bootstrap(): Promise<void> {
     workflow.processEngine,
     workflow.taskStateMachine,
     workflow.behaviorEngine,
+    notification.notificationService,
   );
-
-  const notification = registerNotificationModule(eventBus, logger);
 
   registerOrganizationHandlers(org.organizationService, org.roleService, org.skillService, org.orgTemplateService, logger);
   registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService);

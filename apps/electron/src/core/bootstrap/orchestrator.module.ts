@@ -22,6 +22,7 @@ import type { CostTracker } from '@core/modules/execution/services/cost-tracker'
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
+import type { NotificationService } from '@core/modules/notification/notification.service';
 import { SqlitePendingWakeRepository } from '@core/modules/orchestrator/persistence/sqlite-pending-wake.repository';
 import { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
 import { RetryScheduler } from '@core/modules/orchestrator/retry.scheduler';
@@ -55,6 +56,7 @@ export function registerOrchestratorModule(
   processEngine: ProcessEngine,
   taskStateMachine: TaskStateMachine,
   behaviorEngine: BehaviorEngine,
+  notificationService: NotificationService,
 ): OrchestratorModule {
   const pendingWakeRepo = new SqlitePendingWakeRepository(connection);
   const wakeGateValidator = new WakeGateValidator(roleRepo, runRepo, costTracker, config, logger);
@@ -84,6 +86,7 @@ export function registerOrchestratorModule(
     wakeGateValidator,
     runCoordinator,
     taskOrchestrator,
+    notificationService,
   );
 
   const runOrchestrator = new RunOrchestrator(

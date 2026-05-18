@@ -247,6 +247,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
   const tree = buildTaskTree(tasks);
+  const approvalCount = tasks.filter((task) => isApprovalStatus(task.status)).length;
 
   if (!orgId) {
     return (
@@ -281,6 +282,17 @@ export function TasksPage({ orgId }: TasksPageProps) {
           {t.tasks.createBtn}
         </button>
       </div>
+
+      {approvalCount > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 text-sm">
+          <ShieldWarning size={18} weight="fill" />
+          <span>
+            {approvalCount === 1
+              ? t.tasks.blockedBannerOne
+              : format(t.tasks.blockedBannerMany, { n: approvalCount })}
+          </span>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-12">

@@ -89,7 +89,7 @@ export function Sidebar({
 
       <Separator />
       <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
-        <SchedulerControlButton collapsed={collapsed} />
+        <SchedulerControlButton collapsed={collapsed} orgId={currentOrgId} />
       </div>
 
       <Separator />

@@ -348,6 +348,7 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
     wakeGateValidator,
     runCoordinator,
     taskOrchestrator,
+    { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
   );
 
   const runOrchestrator = new RunOrchestrator(

@@ -157,6 +157,7 @@ describe('Inquiry flow integration', () => {
 
     conversationOrchestrator = new ConversationOrchestrator(
       bus, logger, convRepo, pendingWakeRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
+      { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
     );
     conversationOrchestrator.start();
   });

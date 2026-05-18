@@ -85,8 +85,8 @@ function buildIdBindings(ctx: PromptContext): string {
 function buildToolGuidance(scenario: PromptScenario): string {
   const tools: Record<PromptScenario, string[]> = {
     terminal_noop: ['capibara_context'],
-    preview_decomposition: ['capibara_plan_submit_tree', 'capibara_context'],
-    eager_decomposition: ['capibara_plan_submit_tree', 'capibara_context'],
+    preview_decomposition: ['capibara_plan_submit_tree', 'capibara_ask_question', 'capibara_context'],
+    eager_decomposition: ['capibara_plan_submit_tree', 'capibara_ask_question', 'capibara_context'],
     execute_leaf: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
     revision: ['capibara_task_transition', 'capibara_ask_question', 'capibara_context'],
     review_approve: ['capibara_task_transition', 'capibara_context'],
@@ -98,7 +98,7 @@ function buildToolGuidance(scenario: PromptScenario): string {
   const toolDescriptions: Record<string, string> = {
     capibara_task_transition: 'Transition the current task to a new status (see Workflow Status section for available transitions)',
     capibara_plan_submit_tree: 'Submit the full decomposition tree for this task in a single call (root + all descendants). The tool validates structure server-side.',
-    capibara_ask_question: 'Ask a question to your supervisor or a peer',
+    capibara_ask_question: 'Open an inquiry conversation with your supervisor or a peer role. The system routes the question, wakes the respondent, and resumes you with their reply.',
     capibara_context: 'Query additional context about tasks, roles, or the organization',
   };
 
@@ -147,6 +147,19 @@ function buildWorkflowSchema(ctx: PromptContext): string | null {
 }
 
 function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string {
+  const collaborationGuide =
+    '\n\n## Collaboration via `capibara_ask_question`\n\n' +
+    'You are part of a multi-role organization, not a solo agent. When another role is better positioned to answer or decide, ' +
+    'PREFER asking over guessing. Calling `capibara_ask_question` opens an inquiry conversation, the system routes it to ' +
+    'your supervisor or a peer, that role wakes up and replies, and you are resumed with the answer.\n\n' +
+    '**Ask proactively when ANY of the following hold:**\n' +
+    '- A decision crosses role boundaries (e.g. an implementer needs an architecture call, a designer needs a product call).\n' +
+    '- Acceptance criteria, scope, or priorities are ambiguous and a wrong guess would cost rework.\n' +
+    '- You depend on an artifact, contract, or convention owned by another role (API shape, schema, design token, naming).\n' +
+    '- You hit a constraint (budget, deadline, compliance) and cannot independently judge the trade-off.\n' +
+    '- A peer\'s recent output conflicts with your task and you need them to confirm or reconcile.\n\n' +
+    '**Do NOT ask** for things you can determine yourself by reading code, running a search, or following the spec already in this prompt. ' +
+    'A well-formed question states: (1) what you are trying to do, (2) what is blocking you, (3) what answer would unblock you.';
   const instructions: Record<PromptScenario, string> = {
     terminal_noop:
       'This task is already in a terminal status. ' +
@@ -162,7 +175,9 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
       'Granularity guidance: Each leaf is consumed by an AI agent, NOT a human. Prefer COARSE granularity — a leaf should represent a meaningful unit of work an AI agent can complete in one execution turn. Do NOT split into human-checklist-sized micro-steps (e.g. "open file", "write line", "save"). Produce the smallest tree that still respects the type hierarchy and assignment rules; only split further when a single agent genuinely cannot handle the scope or when different leaves require different roles.\n' +
-      'The user will review the tree and approve it before any task is persisted.',
+      'The user will review the tree and approve it before any task is persisted.\n' +
+      'If the parent goal, scope, or assignee selection is genuinely ambiguous (not just under-specified detail you can decide), call `capibara_ask_question` to clarify with your supervisor before submitting the tree.' +
+      collaborationGuide,
     eager_decomposition:
       'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
       'Structural rules:\n' +
@@ -173,15 +188,18 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- Total node count MUST NOT exceed 500 and depth MUST NOT exceed 10.\n' +
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
       'Granularity guidance: Each leaf is consumed by an AI agent, NOT a human. Prefer COARSE granularity — a leaf should represent a meaningful unit of work an AI agent can complete in one execution turn. Do NOT split into human-checklist-sized micro-steps (e.g. "open file", "write line", "save"). Produce the smallest tree that still respects the type hierarchy and assignment rules; only split further when a single agent genuinely cannot handle the scope or when different leaves require different roles.\n' +
-      'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct.',
+      'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct.\n' +
+      'Because there is no human review, the cost of guessing is high — if scope, ownership, or acceptance is genuinely ambiguous, call `capibara_ask_question` to confirm with your supervisor before submitting.' +
+      collaborationGuide,
     execute_leaf:
       'Execute this task directly. ' +
-      'When finished, use `capibara_task_transition` to advance to the next status (refer to the Workflow Status section). ' +
-      'If the description is unclear or missing details, use `capibara_ask_question` to clarify with your supervisor first.',
+      'When finished, use `capibara_task_transition` to advance to the next status (refer to the Workflow Status section).' +
+      collaborationGuide,
     revision:
       'Your previous work needs revision. ' +
       'Review the latest feedback, address each point, then use `capibara_task_transition` to advance to the next status. ' +
-      'If the feedback is unclear, use `capibara_ask_question` to clarify first.',
+      'If any feedback point is ambiguous or appears to conflict with a peer\'s output, use `capibara_ask_question` to clarify before reworking.' +
+      collaborationGuide,
     review_approve:
       'Your previous work has been approved. ' +
       'Continue with any remaining steps or use `capibara_task_transition` to advance to the next status.',
@@ -192,11 +210,14 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
     conversation_reply:
       'You previously started a conversation and have received a reply. ' +
       'Read the reply, then continue your work. ' +
-      'If you need more information, continue the conversation; otherwise, use `capibara_task_transition` to advance.',
+      'If the reply leaves a follow-up unanswered, ask again via `capibara_ask_question`; otherwise use `capibara_task_transition` to advance.' +
+      collaborationGuide,
     retry_failed:
       'Your previous execution failed. ' +
       'Review the error, simplify your approach or try a different strategy, and retry. ' +
-      'Use `capibara_task_transition` to advance when ready.',
+      'If the failure points to a cross-role decision (unclear contract, missing artifact from a peer, supervisor-level trade-off), use `capibara_ask_question` instead of looping on the same approach. ' +
+      'Use `capibara_task_transition` to advance when ready.' +
+      collaborationGuide,
   };
 
   const feedback = ctx.task.pendingFeedback;

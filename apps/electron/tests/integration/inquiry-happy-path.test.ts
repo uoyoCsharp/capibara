@@ -215,6 +215,7 @@ function buildHarness(): Harness {
     wakeGateValidator,
     runCoordinator,
     taskOrchestrator,
+    { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
   );
   conversationOrchestrator.start();
 

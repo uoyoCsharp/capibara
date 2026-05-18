@@ -3,6 +3,7 @@ import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { DomainEvent } from '@core/foundation/events';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
+import type { NotificationService } from '@core/modules/notification/notification.service';
 import type { IPendingWakeRepository } from '../interfaces/i-pending-wake.repository';
 import type { WakeGateValidator } from '../wake-gate.validator';
 import type { RunCoordinator } from '../run.coordinator';
@@ -26,6 +27,7 @@ export class ConversationOrchestrator {
     private readonly wakeGateValidator: WakeGateValidator,
     private readonly runCoordinator: RunCoordinator,
     private readonly taskOrchestrator: TaskOrchestrator,
+    private readonly notificationService: NotificationService,
   ) {}
 
   start(): void {
@@ -36,7 +38,10 @@ export class ConversationOrchestrator {
 
   private onResponseNeeded(event: DomainEvent<'conversation:response-needed'>): void {
     const { conversationId, orgId, roleId } = event.payload;
-    if (!roleId) return;
+    if (!roleId) {
+      this.notifyHumanFallback(conversationId);
+      return;
+    }
 
     const gate = this.wakeGateValidator.validate(roleId, orgId);
     if (!gate.allowed) {
@@ -68,5 +73,17 @@ export class ConversationOrchestrator {
     if (!conv?.taskId || !conv.initiatorRoleId) return;
 
     this.taskOrchestrator.tryWake(conv.initiatorRoleId, conv.orgId, 'conversation_reply', conv.taskId);
+  }
+
+  private notifyHumanFallback(conversationId: string): void {
+    const conv = this.convRepo.findById(conversationId);
+    const title = conv?.type === 'inquiry'
+      ? 'AI inquiry needs your answer'
+      : 'Conversation needs your reply';
+    const body = conv?.type === 'inquiry'
+      ? 'An AI role asked a question and routing fell back to human. Open the inbox to reply.'
+      : 'A conversation is waiting for your input. Open the inbox to reply.';
+    this.notificationService.send(title, body);
+    this.logger.info('Conversation routed to human, notification sent', { conversationId, type: conv?.type });
   }
 }

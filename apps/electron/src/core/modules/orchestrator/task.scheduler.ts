@@ -19,8 +19,19 @@ export class TaskScheduler {
   ) {}
 
   findNextTask(orgId: string): ScheduleResult | null {
-    const roots = this.taskRepo
-      .findByOrgId(orgId)
+    const all = this.taskRepo.findByOrgId(orgId);
+    const blockingTask = all.find(
+      (t) => this.processEngine.getStatusCategory(orgId, t.status) === 'approval',
+    );
+    if (blockingTask) {
+      this.logger.debug('Scheduling blocked: org has approval-pending task', {
+        orgId,
+        blockingTaskId: blockingTask.id,
+      });
+      return null;
+    }
+
+    const roots = all
       .filter((t) => t.parentId === null)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 

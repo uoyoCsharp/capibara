@@ -95,6 +95,8 @@ export const zhCN: LocaleMessages = {
     deleteSuccess: '任务已删除',
     deleteFailed: '删除任务失败',
     defaultTypeLabel: '任务',
+    blockedBannerOne: '调度已暂停 — 1 个任务等待审批',
+    blockedBannerMany: '调度已暂停 — {n} 个任务等待审批',
   },
 
   taskCreate: {
@@ -231,6 +233,12 @@ export const zhCN: LocaleMessages = {
     resumeAll: '恢复全部',
     pausedToast: '执行已暂停 — 所有运行已停止',
     resumedToast: '执行已恢复',
+    statusPaused: '已暂停',
+    statusAwaitingReview: '等待审批',
+    statusAwaitingReviewN: '等待审批（{n}）',
+    statusRunning: '运行中',
+    statusIdle: '空闲',
+    idleHint: '当前没有可暂停的活动任务',
   },
 
   settings: {

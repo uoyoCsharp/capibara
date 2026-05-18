@@ -95,6 +95,8 @@ export const enUS: LocaleMessages = {
     deleteSuccess: 'Task deleted',
     deleteFailed: 'Failed to delete task',
     defaultTypeLabel: 'Task',
+    blockedBannerOne: 'Scheduling paused — 1 task awaiting review',
+    blockedBannerMany: 'Scheduling paused — {n} tasks awaiting review',
   },
 
   taskCreate: {
@@ -231,6 +233,12 @@ export const enUS: LocaleMessages = {
     resumeAll: 'Resume All',
     pausedToast: 'Execution paused — all runs stopped',
     resumedToast: 'Execution resumed',
+    statusPaused: 'Paused',
+    statusAwaitingReview: 'Awaiting review',
+    statusAwaitingReviewN: 'Awaiting review ({n})',
+    statusRunning: 'Running',
+    statusIdle: 'Idle',
+    idleHint: 'No active tasks to pause',
   },
 
   settings: {

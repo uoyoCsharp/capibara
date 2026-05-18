@@ -60,16 +60,17 @@ export class InquiryRouter {
       };
     }
 
-    if (askingRole.parentId) {
-      const parent = this.roleRepo.findById(askingRole.parentId);
-      if (parent && parent.status === 'active') {
-        return {
-          respondentRoleId: parent.id,
-          respondentType: 'ai',
-          priority: 0,
-          auditReason: `Routed to parent role: ${parent.name}`,
-        };
-      }
+    const ancestor = this.findActiveAncestor(askingRole.parentId);
+    if (ancestor) {
+      const isDirectParent = ancestor.id === askingRole.parentId;
+      return {
+        respondentRoleId: ancestor.id,
+        respondentType: 'ai',
+        priority: 0,
+        auditReason: isDirectParent
+          ? `Routed to parent role: ${ancestor.name}`
+          : `Routed to ancestor role (parent unavailable): ${ancestor.name}`,
+      };
     }
 
     const siblings = askingRole.parentId
@@ -90,6 +91,25 @@ export class InquiryRouter {
     }
 
     return this.humanFallback('No available AI role found for routing');
+  }
+
+  // Walks up the role tree until it finds an active, non-system ancestor.
+  // Falling through paused/missing parents lets inquiries reach a real
+  // decision-maker instead of dropping to human whenever the direct
+  // supervisor happens to be paused.
+  private findActiveAncestor(parentId: string | null): { id: string; name: string } | null {
+    const seen = new Set<string>();
+    let currentId = parentId;
+    while (currentId && !seen.has(currentId)) {
+      seen.add(currentId);
+      const role = this.roleRepo.findById(currentId);
+      if (!role) return null;
+      if (role.status === 'active' && !role.isSystemRole) {
+        return { id: role.id, name: role.name };
+      }
+      currentId = role.parentId;
+    }
+    return null;
   }
 
   private humanFallback(reason: string): RoutingDecision {

@@ -134,6 +134,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
     );
     const conversationOrchestrator = new ConversationOrchestrator(
       bus, logger, convRepo, pendingWakeRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
+      { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
     );
     const runOrchestrator = new RunOrchestrator(
       bus, logger, pendingWakeRepo, wakeGateValidator, retryScheduler, runCoordinator, taskOrchestrator,
