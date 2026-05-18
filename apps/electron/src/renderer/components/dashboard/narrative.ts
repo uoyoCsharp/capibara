@@ -97,18 +97,18 @@ export function buildNarrative(input: NarrativeInput): Narrative {
     });
   }
 
-  // Budget & reliability
+  // Usage & reliability
   if (totalTokens > 0 || failedRuns.length > 0) {
-    const usage = interpolate(nt.budget.usage, {
+    const usage = interpolate(nt.usage.summary, {
       tokens: totalTokens.toLocaleString(),
       runs: runs.length,
       cost: totalCost.toFixed(2),
     });
     const reliability = failedRuns.length > 0
-      ? interpolate(nt.budget.failedRuns, { n: failedRuns.length })
+      ? interpolate(nt.usage.failedRuns, { n: failedRuns.length })
       : '';
     sections.push({
-      heading: nt.sections.budget,
+      heading: nt.sections.usage,
       body: usage + reliability,
       tone: failedRuns.length > 0 ? 'warning' : 'info',
     });

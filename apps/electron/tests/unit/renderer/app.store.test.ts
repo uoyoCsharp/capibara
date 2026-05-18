@@ -18,7 +18,6 @@ describe('useAppStore', () => {
     description: '',
     customInstructions: '',
     status: 'active',
-    budgetLimit: 50,
     autoStartOnCreate: true,
     orgTemplateId: null,
     planningRoleId: null,

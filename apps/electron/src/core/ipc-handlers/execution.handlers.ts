@@ -36,7 +36,7 @@ export function registerExecutionHandlers(
   });
 
   ipcMain.handle('capibara:cost:summary', async (_ev, orgId: string) => {
-    try { return ok(costTracker.getBudgetUsage(orgId)); }
+    try { return ok(costTracker.getCostUsage(orgId)); }
     catch (e) { return err('INTERNAL', String(e)); }
   });
 

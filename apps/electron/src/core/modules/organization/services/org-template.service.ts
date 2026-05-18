@@ -4,12 +4,15 @@ import { injectable } from 'tsyringe';
 import type { IOrganizationRepository } from '../interfaces/i-organization.repository';
 import type { IRoleRepository } from '../interfaces/i-role.repository';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { SupportedLocale } from '@shared/locale/types';
+import { resolveLocalized } from '@shared/locale/index';
 import type { Organization, OrgTemplate, TemplateRoleDefinition } from '../types/organization.types';
 import type { SkillService } from './skill.service';
 
 export interface ProcessSchemaProvider {
   saveSchema(orgId: string, schema: unknown): void;
   getDefaultSchema(): unknown | null;
+  getSchemaById(id: string): unknown | null;
 }
 
 @injectable()
@@ -57,6 +60,8 @@ export class OrgTemplateService {
     templateId: string,
     orgName: string,
     workspacePath: string,
+    processTemplateId: string | null = null,
+    locale: SupportedLocale = 'en-US',
   ): Organization {
     const template = this.templates.find((t) => t.id === templateId);
     if (!template) {
@@ -65,17 +70,18 @@ export class OrgTemplateService {
 
     const org = this.orgRepo.create({
       name: orgName,
-      description: template.description,
+      description: resolveLocalized(template.description, locale),
       customInstructions: '',
-      budgetLimit: 50.0,
       orgTemplateId: template.id,
       workspacePath,
     });
 
     if (this.processSchemaProvider) {
-      const defaultSchema = this.processSchemaProvider.getDefaultSchema();
-      if (defaultSchema) {
-        this.processSchemaProvider.saveSchema(org.id, defaultSchema);
+      const schema = processTemplateId
+        ? this.processSchemaProvider.getSchemaById(processTemplateId)
+        : this.processSchemaProvider.getDefaultSchema();
+      if (schema) {
+        this.processSchemaProvider.saveSchema(org.id, schema);
       }
     }
 

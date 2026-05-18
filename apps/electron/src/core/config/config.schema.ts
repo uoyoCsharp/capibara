@@ -9,7 +9,6 @@ export const configSchema = z.object({
     maxReviseAttempts: z.number().int().min(1).default(3),
     maxRetryOnFailure: z.number().int().min(1).default(3),
     maxConsecutiveWakes: z.number().int().min(1).default(5),
-    budgetLimit: z.number().min(0).default(50.0),
     maxDecompositionDepth: z.number().int().min(1).max(10).default(4),
     retryBackoffMs: z.number().int().min(100).default(2000),
   }).default({}),

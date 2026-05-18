@@ -7,7 +7,6 @@ export interface CapibaraConfig {
     maxReviseAttempts: number;
     maxRetryOnFailure: number;
     maxConsecutiveWakes: number;
-    budgetLimit: number;
     maxDecompositionDepth: number;
     retryBackoffMs: number;
   };

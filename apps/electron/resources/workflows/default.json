@@ -1,7 +1,14 @@
 {
   "id": "default",
   "name": "Default (Scrum-like)",
-  "description": "Classic Capibara workflow with epics, stories, tasks, and a full review cycle. Suitable for structured software teams.",
+  "summary": {
+    "en-US": "Epics → stories → tasks with a full review cycle.",
+    "zh-CN": "史诗 → 故事 → 任务，附完整评审环节。"
+  },
+  "description": {
+    "en-US": "Classic Capibara workflow with epics, stories, tasks, and a full review cycle. Work items move through pending, in-progress, awaiting-review, revision, and done states. Includes auto-completion rules: leaf tasks auto-complete on terminal entry, and parents auto-complete when all children reach a terminal state. Suitable for structured software teams that need explicit hand-offs between authors and reviewers.",
+    "zh-CN": "经典的 Capibara 工作流，包含史诗（Epic）、故事（Story）、任务（Task）以及完整的评审环节。工作项依次经过 待处理 → 进行中 → 待评审 → 修订 → 完成 等状态。自动化规则：叶子任务进入终态时自动完成；父任务在所有子任务都进入终态时自动完成。适用于需要在作者与评审者之间进行明确交接的结构化软件团队。"
+  },
   "schema": {
     "workItemTypes": [
       { "name": "epic", "label": "Epic", "isLeaf": false, "allowedChildren": ["story"], "allowedAtRoot": true, "canDecompose": true },

@@ -12,7 +12,7 @@ function createMockOrg(overrides?: Partial<Organization>): Organization {
     description: 'Test description',
     customInstructions: '',
     status: 'active',
-    budgetLimit: 50,
+    autoStartOnCreate: true,
     orgTemplateId: null,
     planningRoleId: null,
     workspacePath: '/tmp/test',

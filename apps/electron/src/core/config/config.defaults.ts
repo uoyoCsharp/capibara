@@ -9,7 +9,6 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
     maxReviseAttempts: 3,
     maxRetryOnFailure: 3,
     maxConsecutiveWakes: 5,
-    budgetLimit: 50.0,
     maxDecompositionDepth: 4,
     retryBackoffMs: 2000,
   },

@@ -16,7 +16,6 @@ function org(): OrganizationRecord {
     description: '',
     customInstructions: '',
     status: 'active',
-    budgetLimit: 50,
     autoStartOnCreate: true,
     orgTemplateId: null,
     planningRoleId: null,

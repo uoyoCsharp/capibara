@@ -17,7 +17,6 @@ export interface OrganizationRecord {
   description: string;
   customInstructions: string;
   status: 'active' | 'paused' | 'archived';
-  budgetLimit: number;
   autoStartOnCreate: boolean;
   orgTemplateId: string | null;
   planningRoleId: string | null;

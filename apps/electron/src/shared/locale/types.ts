@@ -1,6 +1,13 @@
 export type SupportedLocale = 'en-US' | 'zh-CN';
 
 /**
+ * Locale-keyed text bag used by data files (templates, workflows, etc.).
+ * Open-ended Record so future locales can be added without code changes;
+ * `resolveLocalized()` falls back to en-US, then any first available value.
+ */
+export type LocalizedText = Record<string, string>;
+
+/**
  * Strictly typed locale message shape.
  *
  * Every key here is statically referenced by renderer code (verified via
@@ -211,6 +218,9 @@ export interface LocaleMessages {
     spaceName: string;
     spaceNamePlaceholder: string;
     chooseTemplate: string;
+    chooseRoleTemplate: string;
+    chooseWorkflowTemplate: string;
+    viewDetails: string;
     recommended: string;
     agents: string;
     letsGo: string;
@@ -424,7 +434,8 @@ export interface LocaleMessages {
     nameLabel: string;
     descriptionLabel: string;
     customInstructionsLabel: string;
-    budgetLabel: string;
+    customInstructionsHelpTitle: string;
+    customInstructionsHelpBody: string;
     statusLabel: string;
     statusActive: string;
     statusPaused: string;
@@ -456,7 +467,7 @@ export interface LocaleMessages {
       whereWeAre: string;
       team: string;
       attention: string;
-      budget: string;
+      usage: string;
     };
     whereWeAre: {
       noActiveWork: string;
@@ -477,8 +488,8 @@ export interface LocaleMessages {
       body: string;
       separator: string;
     };
-    budget: {
-      usage: string;
+    usage: {
+      summary: string;
       failedRuns: string;
     };
     headline: {

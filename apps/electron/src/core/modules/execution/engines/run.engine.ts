@@ -8,7 +8,6 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import type { CapibaraConfig } from '@core/config/config.types';
 import type { RunExecutionParams, RunResult, WakeReason } from '../types/execution.types';
-import { BudgetExceededError } from '@core/foundation/errors/capibara.errors';
 import { ExecutionError } from '@core/foundation/errors/capibara.errors';
 import { StreamJsonParser } from '../workers/stream-json-parser';
 import { CostTracker } from '../services/cost-tracker';
@@ -45,11 +44,6 @@ export class RunEngine implements IRunEngine {
   }
 
   async execute(params: RunExecutionParams): Promise<RunResult> {
-    const { totalCost } = this.costTracker.getBudgetUsage(params.orgId);
-    if (this.config.execution.budgetLimit > 0 && totalCost >= this.config.execution.budgetLimit) {
-      throw new BudgetExceededError(params.orgId, this.config.execution.budgetLimit, totalCost);
-    }
-
     const activeRun = this.runRepo.findActiveByOrgId(params.orgId);
     if (activeRun) {
       throw new ExecutionError('', `Org ${params.orgId} already has an active run: ${activeRun.id}`);

@@ -36,14 +36,14 @@ describe.skipIf(!canUseSqlite)('Organization SQLite Repositories', () => {
     });
 
     it('creates organization with all fields', () => {
-      const org = repo.create({ name: 'My Org', description: 'Desc', customInstructions: 'Do', budgetLimit: 100, orgTemplateId: null, workspacePath: '/workspace' });
+      const org = repo.create({ name: 'My Org', description: 'Desc', customInstructions: 'Do', orgTemplateId: null, workspacePath: '/workspace' });
       expect(org.id).toBeDefined();
       expect(org.name).toBe('My Org');
       expect(org.status).toBe('active');
     });
 
     it('findById returns org when exists', () => {
-      const created = repo.create({ name: 'Org', description: '', customInstructions: '', budgetLimit: 50, orgTemplateId: null, workspacePath: '/tmp' });
+      const created = repo.create({ name: 'Org', description: '', customInstructions: '', orgTemplateId: null, workspacePath: '/tmp' });
       expect(repo.findById(created.id)).not.toBeNull();
     });
 
@@ -52,20 +52,20 @@ describe.skipIf(!canUseSqlite)('Organization SQLite Repositories', () => {
     });
 
     it('findAll returns all organizations', () => {
-      repo.create({ name: 'Org1', description: '', customInstructions: '', budgetLimit: 50, orgTemplateId: null, workspacePath: '/a' });
-      repo.create({ name: 'Org2', description: '', customInstructions: '', budgetLimit: 50, orgTemplateId: null, workspacePath: '/b' });
+      repo.create({ name: 'Org1', description: '', customInstructions: '', orgTemplateId: null, workspacePath: '/a' });
+      repo.create({ name: 'Org2', description: '', customInstructions: '', orgTemplateId: null, workspacePath: '/b' });
       expect(repo.findAll()).toHaveLength(2);
     });
 
     it('update changes fields', () => {
-      const org = repo.create({ name: 'Old', description: '', customInstructions: '', budgetLimit: 50, orgTemplateId: null, workspacePath: '/tmp' });
+      const org = repo.create({ name: 'Old', description: '', customInstructions: '', orgTemplateId: null, workspacePath: '/tmp' });
       const updated = repo.update({ id: org.id, name: 'New', status: 'paused' });
       expect(updated.name).toBe('New');
       expect(updated.status).toBe('paused');
     });
 
     it('delete removes organization', () => {
-      const org = repo.create({ name: 'Del', description: '', customInstructions: '', budgetLimit: 50, orgTemplateId: null, workspacePath: '/tmp' });
+      const org = repo.create({ name: 'Del', description: '', customInstructions: '', orgTemplateId: null, workspacePath: '/tmp' });
       repo.delete(org.id);
       expect(repo.findById(org.id)).toBeNull();
     });
@@ -81,7 +81,7 @@ describe.skipIf(!canUseSqlite)('Organization SQLite Repositories', () => {
       const connection = { getDb: () => db, close: () => db.close() };
       const orgRepo = new SqliteOrganizationRepository(connection);
       repo = new SqliteRoleRepository(connection);
-      const org = orgRepo.create({ name: 'Org', description: '', customInstructions: '', budgetLimit: 50, orgTemplateId: null, workspacePath: '/tmp' });
+      const org = orgRepo.create({ name: 'Org', description: '', customInstructions: '', orgTemplateId: null, workspacePath: '/tmp' });
       orgId = org.id;
     });
 

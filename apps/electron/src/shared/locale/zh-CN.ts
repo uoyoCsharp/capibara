@@ -203,6 +203,9 @@ export const zhCN: LocaleMessages = {
     spaceName: '空间名称',
     spaceNamePlaceholder: '例如：新一代 MVP 项目',
     chooseTemplate: '选择工作流模版',
+    chooseRoleTemplate: '选择团队模板',
+    chooseWorkflowTemplate: '选择工作流模板',
+    viewDetails: '查看详情',
     recommended: '推荐',
     agents: '智能体',
     letsGo: '开始吧',
@@ -417,7 +420,8 @@ export const zhCN: LocaleMessages = {
     nameLabel: '名称',
     descriptionLabel: '描述',
     customInstructionsLabel: '自定义指令',
-    budgetLabel: '预算上限（$）',
+    customInstructionsHelpTitle: '关于自定义指令',
+    customInstructionsHelpBody: '"自定义指令" 是工作空间级别的指导，会以 "Organization Instructions" 的形式注入到本工作空间内每个智能体的系统提示词中。适合写下对所有角色都生效的约束 —— 例如代码规范、沟通语气、安全规则、目标框架、首选语言、需要避免的内容等。\n\n它不会替换角色自身的人格设定。每个角色依然拥有独立的 persona 与 skills；这些指令只是叠加在其之上，让所有智能体都遵守工作空间级别的统一规则。\n\n请保持精简、具体 —— 冗长含糊的文本会稀释提示词、增加成本，却无助于改善智能体的行为。',
     statusLabel: '状态',
     statusActive: '运行中',
     statusPaused: '已暂停',
@@ -449,7 +453,7 @@ export const zhCN: LocaleMessages = {
       whereWeAre: '项目现状',
       team: '团队',
       attention: '需要你关注',
-      budget: '预算与可靠性',
+      usage: '使用与可靠性',
     },
     whereWeAre: {
       noActiveWork: '暂无进行中的任务。累计已完成 {completed} 个任务。',
@@ -470,8 +474,8 @@ export const zhCN: LocaleMessages = {
       body: '你有 {parts}。请查看"收件箱"和"任务"页面。',
       separator: '，以及 ',
     },
-    budget: {
-      usage: '{runs} 次执行共使用 {tokens} 个 token，累计费用 ${cost}。',
+    usage: {
+      summary: '{runs} 次执行共使用 {tokens} 个 token，累计费用 ${cost}。',
       failedRuns: ' 最近有 {n} 次执行失败 — 请前往"执行"面板查看详情。',
     },
     headline: {

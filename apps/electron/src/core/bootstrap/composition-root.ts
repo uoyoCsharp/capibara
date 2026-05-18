@@ -161,6 +161,7 @@ export async function bootstrap(): Promise<void> {
       const defaultTpl = workflow.processTemplateService.getTemplates().find((t) => t.id === 'default');
       return defaultTpl?.schema ?? null;
     },
+    getSchemaById: (id) => workflow.processTemplateService.getTemplate(id)?.schema ?? null,
   });
 
   taskOrchestrator.start();

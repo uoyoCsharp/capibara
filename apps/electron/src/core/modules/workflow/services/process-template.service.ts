@@ -2,12 +2,16 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { injectable } from 'tsyringe';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { LocalizedText } from '@shared/locale/types';
 import type { ProcessSchema } from '../types/workflow.types';
 
 export interface ProcessTemplate {
   id: string;
   name: string;
-  description: string;
+  /** Short one-line hook shown on template cards. Localized. */
+  summary: LocalizedText;
+  /** Long-form description shown in the info dialog. Localized. */
+  description: LocalizedText;
   schema: ProcessSchema;
 }
 

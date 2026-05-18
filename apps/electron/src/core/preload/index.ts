@@ -23,8 +23,21 @@ const api = {
 
   // Templates
   getTemplates: () => ipcRenderer.invoke('capibara:template:list'),
-  loadTemplate: (templateId: string, orgName: string, workspacePath: string) =>
-    ipcRenderer.invoke('capibara:template:load', templateId, orgName, workspacePath),
+  loadTemplate: (
+    templateId: string,
+    orgName: string,
+    workspacePath: string,
+    processTemplateId?: string | null,
+    locale?: string,
+  ) =>
+    ipcRenderer.invoke(
+      'capibara:template:load',
+      templateId,
+      orgName,
+      workspacePath,
+      processTemplateId ?? null,
+      locale ?? 'en-US',
+    ),
 
   // Tasks
   getTasksByOrgId: (orgId: string) => ipcRenderer.invoke('capibara:task:list', orgId),

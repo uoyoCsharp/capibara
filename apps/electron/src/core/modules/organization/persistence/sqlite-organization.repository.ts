@@ -11,7 +11,6 @@ interface OrgRow {
   description: string;
   custom_instructions: string;
   status: string;
-  budget_limit: number;
   auto_start_on_create: number;
   org_template_id: string | null;
   planning_role_id: string | null;
@@ -27,7 +26,6 @@ function toOrganization(row: OrgRow): Organization {
     description: row.description,
     customInstructions: row.custom_instructions,
     status: row.status as Organization['status'],
-    budgetLimit: row.budget_limit,
     autoStartOnCreate: row.auto_start_on_create === 1,
     orgTemplateId: row.org_template_id,
     planningRoleId: row.planning_role_id,
@@ -60,10 +58,10 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     const now = new Date().toISOString();
     this.connection.getDb()
       .prepare(`
-        INSERT INTO organizations (id, name, description, custom_instructions, budget_limit, org_template_id, workspace_path, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO organizations (id, name, description, custom_instructions, org_template_id, workspace_path, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `)
-      .run(id, input.name, input.description, input.customInstructions, input.budgetLimit, input.orgTemplateId, input.workspacePath, now, now);
+      .run(id, input.name, input.description, input.customInstructions, input.orgTemplateId, input.workspacePath, now, now);
     return this.findById(id)!;
   }
 
@@ -76,7 +74,6 @@ export class SqliteOrganizationRepository implements IOrganizationRepository {
     if (input.description !== undefined) { fields.push('description = ?'); values.push(input.description); }
     if (input.customInstructions !== undefined) { fields.push('custom_instructions = ?'); values.push(input.customInstructions); }
     if (input.status !== undefined) { fields.push('status = ?'); values.push(input.status); }
-    if (input.budgetLimit !== undefined) { fields.push('budget_limit = ?'); values.push(input.budgetLimit); }
     if (input.autoStartOnCreate !== undefined) { fields.push('auto_start_on_create = ?'); values.push(input.autoStartOnCreate ? 1 : 0); }
     if (input.workspacePath !== undefined) { fields.push('workspace_path = ?'); values.push(input.workspacePath); }
     if (input.planningRoleId !== undefined) { fields.push('planning_role_id = ?'); values.push(input.planningRoleId); }

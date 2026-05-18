@@ -1,7 +1,14 @@
 {
   "id": "bmad-software-team",
   "name": "BMAD Software Team",
-  "description": "A hierarchical software development team following the BMAD methodology. Each role dynamically loads its BMAD agent persona via skill invocation, ensuring rich personality-driven collaboration across analysis, planning, solutioning, and implementation phases.",
+  "summary": {
+    "en-US": "Hierarchical CTO → PM → Analyst → Dev team using the BMAD methodology.",
+    "zh-CN": "基于 BMAD 方法论的层级化研发团队：CTO → PM → 分析师 → 开发。"
+  },
+  "description": {
+    "en-US": "A hierarchical software development team following the BMAD (Business-Modular-Agile-Driven) methodology. The team is organized as CTO → Product Manager → Business Analyst → Developer, with each role dynamically loading its BMAD agent persona (architect, pm, analyst, dev, qa, etc.) via skill invocation. This ensures rich, personality-driven collaboration across analysis, planning, solutioning, and implementation phases. Best suited for complex software projects where structured requirement discovery, architectural rigor, and explicit review hand-offs add value.",
+    "zh-CN": "遵循 BMAD（业务-模块-敏捷-驱动）方法论的层级化软件研发团队。团队结构为 CTO → 产品经理 → 业务分析师 → 开发人员，每个角色通过 skill 调用动态加载对应的 BMAD 智能体人格（架构师、PM、分析师、开发、QA 等），从而在分析、规划、方案设计、实现各阶段都能保持鲜明的角色驱动协作风格。适合需要结构化需求挖掘、严谨架构推演、以及明确评审交接的复杂软件项目。"
+  },
   "planningRole": {
     "roleRef": "Product Manager"
   },

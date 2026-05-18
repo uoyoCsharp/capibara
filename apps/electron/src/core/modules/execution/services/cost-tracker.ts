@@ -10,7 +10,7 @@ export class CostTracker {
     this.costEntryRepo.create({ runId, roleId, orgId, tokenCount, costUsd });
   }
 
-  getBudgetUsage(orgId: string): { totalTokens: number; totalCost: number } {
+  getCostUsage(orgId: string): { totalTokens: number; totalCost: number } {
     return {
       totalTokens: this.costEntryRepo.getTotalTokensByOrgId(orgId),
       totalCost: this.costEntryRepo.getTotalCostByOrgId(orgId),

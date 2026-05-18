@@ -22,7 +22,6 @@ const migrations: Migration[] = [
           description TEXT NOT NULL DEFAULT '',
           custom_instructions TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'archived')),
-          budget_limit REAL NOT NULL DEFAULT 50.0,
           org_template_id TEXT,
           planning_role_id TEXT,
           workspace_path TEXT NOT NULL DEFAULT '',

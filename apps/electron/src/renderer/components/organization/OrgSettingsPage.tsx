@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
-import { GearSix, FolderOpen, Trash, FloppyDisk } from '@phosphor-icons/react';
+import { GearSix, FolderOpen, Trash, FloppyDisk, Info } from '@phosphor-icons/react';
 import { useAppSnapshot } from '../../hooks/use-app-snapshot';
 import { useOrganizationStore } from '../../store/organization.store';
 import { useT } from '../../hooks/use-locale';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 
 function interpolate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
@@ -25,12 +32,12 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
     name: '',
     description: '',
     customInstructions: '',
-    budgetLimit: 50,
     autoStartOnCreate: true,
     status: 'active' as string,
   });
   const [saving, setSaving] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showCustomInstructionsHelp, setShowCustomInstructionsHelp] = useState(false);
 
   useEffect(() => {
     if (org) {
@@ -38,7 +45,6 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
         name: org.name,
         description: org.description,
         customInstructions: org.customInstructions,
-        budgetLimit: org.budgetLimit,
         autoStartOnCreate: org.autoStartOnCreate ?? true,
         status: org.status,
       });
@@ -61,7 +67,6 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
       name: form.name,
       description: form.description,
       customInstructions: form.customInstructions,
-      budgetLimit: form.budgetLimit,
       autoStartOnCreate: form.autoStartOnCreate,
       status: form.status,
     });
@@ -114,7 +119,18 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
         </div>
 
         <div>
-          <label className="text-sm font-medium">{t.orgSettings.customInstructionsLabel}</label>
+          <div className="flex items-center gap-1.5">
+            <label className="text-sm font-medium">{t.orgSettings.customInstructionsLabel}</label>
+            <button
+              type="button"
+              aria-label={t.orgSettings.customInstructionsHelpTitle}
+              title={t.orgSettings.customInstructionsHelpTitle}
+              onClick={() => setShowCustomInstructionsHelp(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Info size={14} />
+            </button>
+          </div>
           <textarea
             value={form.customInstructions}
             onChange={(e) => setForm((f) => ({ ...f, customInstructions: e.target.value }))}
@@ -123,28 +139,17 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">{t.orgSettings.budgetLabel}</label>
-            <input
-              type="number"
-              value={form.budgetLimit}
-              onChange={(e) => setForm((f) => ({ ...f, budgetLimit: parseFloat(e.target.value) || 0 }))}
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">{t.orgSettings.statusLabel}</label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            >
-              <option value="active">{t.orgSettings.statusActive}</option>
-              <option value="paused">{t.orgSettings.statusPaused}</option>
-              <option value="archived">{t.orgSettings.statusArchived}</option>
-            </select>
-          </div>
+        <div>
+          <label className="text-sm font-medium">{t.orgSettings.statusLabel}</label>
+          <select
+            value={form.status}
+            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+            className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+          >
+            <option value="active">{t.orgSettings.statusActive}</option>
+            <option value="paused">{t.orgSettings.statusPaused}</option>
+            <option value="archived">{t.orgSettings.statusArchived}</option>
+          </select>
         </div>
 
         <div className="flex items-center justify-between py-2">
@@ -202,6 +207,17 @@ export function OrgSettingsPage({ orgId, onDeleted }: OrgSettingsPageProps) {
           {t.orgSettings.deleteBtn}
         </button>
       </div>
+
+      <Dialog open={showCustomInstructionsHelp} onOpenChange={setShowCustomInstructionsHelp}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t.orgSettings.customInstructionsHelpTitle}</DialogTitle>
+            <DialogDescription className="whitespace-pre-line text-sm leading-relaxed">
+              {t.orgSettings.customInstructionsHelpBody}
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
 
       {showDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

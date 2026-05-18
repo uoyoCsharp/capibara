@@ -8,7 +8,7 @@ import { FileLogService } from '@core/modules/execution/logging/file-log.service
 import { MockEventBus } from '../../helpers/mock-event-bus';
 import { MockLogger } from '../../helpers/mock-logger';
 import { createTestConfig, createRunExecutionParams, TEST_ORG_ID, TEST_ROLE_ID } from '../../helpers/fixtures';
-import { BudgetExceededError, ExecutionError } from '@core/foundation/errors/capibara.errors';
+import { ExecutionError } from '@core/foundation/errors/capibara.errors';
 
 function createMockRun(overrides?: Partial<Run>): Run {
   return {
@@ -210,31 +210,6 @@ describe('RunEngine', () => {
       expect(executor.abort).toHaveBeenCalledWith('run-1');
       expect(runRepo.finish).toHaveBeenCalledWith('run-1', 'cancelled');
       eventBus.assertEmitted('run:cancelled');
-    });
-  });
-
-  describe('budget guard', () => {
-    it('throws BudgetExceededError when budget exceeded', async () => {
-      costEntryRepo.getTotalCostByOrgId.mockReturnValue(150);
-
-      await expect(engine.execute(createRunExecutionParams()))
-        .rejects.toThrow(BudgetExceededError);
-    });
-
-    it('allows execution when budget is within limit', async () => {
-      costEntryRepo.getTotalCostByOrgId.mockReturnValue(50);
-
-      const result = await engine.execute(createRunExecutionParams());
-      expect(result.status).toBe('succeeded');
-    });
-
-    it('skips budget check when budgetLimit is 0', async () => {
-      costEntryRepo.getTotalCostByOrgId.mockReturnValue(9999);
-      const config = createTestConfig({ execution: { ...createTestConfig().execution, budgetLimit: 0 } });
-      engine = new RunEngine(runRepo, executor, eventBus, eventBus, logger, config, costTracker, fileLogService);
-
-      const result = await engine.execute(createRunExecutionParams());
-      expect(result.status).toBe('succeeded');
     });
   });
 

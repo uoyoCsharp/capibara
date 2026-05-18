@@ -25,7 +25,13 @@ interface OrganizationState {
   updateOrganization: (input: unknown) => Promise<OrganizationRecord | null>;
   deleteOrganization: (id: string) => Promise<boolean>;
 
-  loadTemplate: (templateId: string, orgName: string, workspacePath: string) => Promise<OrganizationRecord | null>;
+  loadTemplate: (
+    templateId: string,
+    orgName: string,
+    workspacePath: string,
+    processTemplateId?: string | null,
+    locale?: string,
+  ) => Promise<OrganizationRecord | null>;
 
   init: () => void;
 }
@@ -112,8 +118,8 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
     return result.ok;
   },
 
-  loadTemplate: async (templateId, orgName, workspacePath) => {
-    const result = await api().loadTemplate(templateId, orgName, workspacePath);
+  loadTemplate: async (templateId, orgName, workspacePath, processTemplateId, locale) => {
+    const result = await api().loadTemplate(templateId, orgName, workspacePath, processTemplateId, locale);
     if (result.ok) return result.data;
     return null;
   },

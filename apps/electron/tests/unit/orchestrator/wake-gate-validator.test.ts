@@ -4,7 +4,6 @@ import { MockLogger } from '../../helpers/mock-logger';
 import { createTestConfig, TEST_ORG_ID, TEST_ROLE_ID } from '../../helpers/fixtures';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
-import type { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import type { Role } from '@core/modules/organization/types/organization.types';
 
 function createRole(overrides?: Partial<Role>): Role {
@@ -32,7 +31,6 @@ describe('WakeGateValidator', () => {
   let validator: WakeGateValidator;
   let roleRepo: IRoleRepository;
   let runRepo: IRunRepository;
-  let costTracker: CostTracker;
   let config: ReturnType<typeof createTestConfig>;
   let logger: MockLogger;
 
@@ -54,17 +52,12 @@ describe('WakeGateValidator', () => {
       updateStatus: vi.fn(),
       finish: vi.fn(),
     } as unknown as IRunRepository;
-    costTracker = {
-      getBudgetUsage: vi.fn().mockReturnValue({ totalCost: 0, totalTokens: 0 }),
-      recordCost: vi.fn(),
-    } as unknown as CostTracker;
     config = createTestConfig();
     logger = new MockLogger();
 
     validator = new WakeGateValidator(
       roleRepo,
       runRepo,
-      costTracker,
       config,
       logger,
     );
@@ -95,20 +88,6 @@ describe('WakeGateValidator', () => {
     const result = validator.validate(TEST_ROLE_ID, TEST_ORG_ID);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('Active run exists');
-  });
-
-  it('blocks when budget exceeded', () => {
-    vi.mocked(costTracker.getBudgetUsage).mockReturnValue({ totalCost: 200, totalTokens: 5000 });
-    const result = validator.validate(TEST_ROLE_ID, TEST_ORG_ID);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toBe('Budget exceeded');
-  });
-
-  it('allows when budget limit is 0 (disabled)', () => {
-    config.execution.budgetLimit = 0;
-    vi.mocked(costTracker.getBudgetUsage).mockReturnValue({ totalCost: 9999, totalTokens: 0 });
-    const result = validator.validate(TEST_ROLE_ID, TEST_ORG_ID);
-    expect(result.allowed).toBe(true);
   });
 
   it('blocks when circuit breaker triggered (max consecutive wakes)', () => {

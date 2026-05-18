@@ -59,7 +59,7 @@ export function registerOrchestratorModule(
   notificationService: NotificationService,
 ): OrchestratorModule {
   const pendingWakeRepo = new SqlitePendingWakeRepository(connection);
-  const wakeGateValidator = new WakeGateValidator(roleRepo, runRepo, costTracker, config, logger);
+  const wakeGateValidator = new WakeGateValidator(roleRepo, runRepo, config, logger);
   const retryScheduler = new RetryScheduler(runRepo, pendingWakeRepo, config, logger);
   const runCoordinator = new RunCoordinator(runEngine, promptBuilder, convRepo, conversationService, orgRepo, logger);
   const taskScheduler = new TaskScheduler(taskRepo, processEngine, logger);

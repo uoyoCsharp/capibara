@@ -1,7 +1,14 @@
 {
   "id": "kanban",
   "name": "Kanban",
-  "description": "Simplified Kanban board with To Do / In Progress / Done columns. Flat task structure, no review cycle. Best for small teams or rapid prototyping.",
+  "summary": {
+    "en-US": "Flat To-Do / In-Progress / Done board, no review cycle.",
+    "zh-CN": "扁平的 待办 / 进行中 / 完成 看板，无评审环节。"
+  },
+  "description": {
+    "en-US": "Simplified Kanban board with To Do, In Progress, and Done columns. Flat work-item hierarchy (Feature, Task, Bug — all roots) with no awaiting-review or revision states. Status transitions are user-driven, with auto-completion of parents when all children are done. Best for small teams, rapid prototyping, or solo workflows where the overhead of explicit review hand-offs would slow you down.",
+    "zh-CN": "简化版的看板模板，包含 待办、进行中、完成 三列。扁平的工作项层级（功能、任务、缺陷均可作为根节点），不包含 待评审 与 修订 状态。状态流转完全由用户驱动；当所有子项完成后，父项自动完成。适合小团队、快速原型，或不需要显式评审交接的个人工作流。"
+  },
   "schema": {
     "workItemTypes": [
       { "name": "feature", "label": "Feature", "isLeaf": false, "allowedChildren": ["task", "bug"], "allowedAtRoot": true, "canDecompose": true },

@@ -50,6 +50,8 @@ export interface CapibaraApi {
     templateId: string,
     orgName: string,
     workspacePath: string,
+    processTemplateId?: string | null,
+    locale?: string,
   ) => Promise<DesktopResult<OrganizationRecord>>;
 
   // ─── Tasks ───────────────────────────────────────────────────────

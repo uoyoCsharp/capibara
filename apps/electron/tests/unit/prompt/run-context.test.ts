@@ -302,7 +302,7 @@ describe('RunContext', () => {
     it('populates organization when org found', () => {
       vi.mocked(orgRepo.findById).mockReturnValue({
         id: TEST_ORG_ID, name: 'TestOrg', description: '', customInstructions: 'Always TDD',
-        status: 'active', budgetLimit: 100, orgTemplateId: null, planningRoleId: null,
+        status: 'active', autoStartOnCreate: true, orgTemplateId: null, planningRoleId: null,
         workspacePath: '/tmp', createdAt: '', updatedAt: '',
       });
       const ctx = runContext.buildForTask(TEST_TASK_ID, TEST_ROLE_ID, 'en', 'task_assigned');

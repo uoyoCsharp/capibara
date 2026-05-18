@@ -96,8 +96,22 @@ export function registerOrganizationHandlers(
     catch (e) { return err('INTERNAL', String(e)); }
   });
 
-  ipcMain.handle('capibara:template:load', async (_ev, templateId: string, orgName: string, workspacePath: string) => {
-    try { return ok(orgTemplateService.loadTemplate(templateId, orgName, workspacePath)); }
-    catch (e) { return err('VALIDATION_ERROR', String(e)); }
+  ipcMain.handle('capibara:template:load', async (
+    _ev,
+    templateId: string,
+    orgName: string,
+    workspacePath: string,
+    processTemplateId?: string | null,
+    locale?: string,
+  ) => {
+    try {
+      return ok(orgTemplateService.loadTemplate(
+        templateId,
+        orgName,
+        workspacePath,
+        processTemplateId ?? null,
+        (locale === 'zh-CN' ? 'zh-CN' : 'en-US'),
+      ));
+    } catch (e) { return err('VALIDATION_ERROR', String(e)); }
   });
 }

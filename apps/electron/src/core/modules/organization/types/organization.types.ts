@@ -9,7 +9,6 @@ export interface Organization {
   description: string;
   customInstructions: string;
   status: OrgStatus;
-  budgetLimit: number;
   autoStartOnCreate: boolean;
   orgTemplateId: string | null;
   planningRoleId: string | null;
@@ -52,7 +51,6 @@ export interface CreateOrganizationInput {
   name: string;
   description: string;
   customInstructions: string;
-  budgetLimit: number;
   orgTemplateId: string | null;
   workspacePath: string;
 }
@@ -63,7 +61,6 @@ export interface UpdateOrganizationInput {
   description?: string;
   customInstructions?: string;
   status?: OrgStatus;
-  budgetLimit?: number;
   autoStartOnCreate?: boolean;
   workspacePath?: string;
   planningRoleId?: string | null;
@@ -119,7 +116,10 @@ export interface TemplateRoleDefinition {
 export interface OrgTemplate {
   id: string;
   name: string;
-  description: string;
+  /** Short one-line hook shown on template cards. Localized. */
+  summary: import('@shared/locale/types').LocalizedText;
+  /** Long-form description shown in the info dialog. Localized. */
+  description: import('@shared/locale/types').LocalizedText;
   planningRole?: { roleRef: string };
   rootRoles: TemplateRoleDefinition[];
 }

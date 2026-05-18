@@ -43,9 +43,9 @@ describe('CostTracker', () => {
     });
   });
 
-  describe('getBudgetUsage', () => {
+  describe('getCostUsage', () => {
     it('returns aggregated tokens and cost for org', () => {
-      const usage = tracker.getBudgetUsage('org-1');
+      const usage = tracker.getCostUsage('org-1');
 
       expect(usage.totalTokens).toBe(5000);
       expect(usage.totalCost).toBe(1.5);

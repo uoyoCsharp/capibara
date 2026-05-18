@@ -203,6 +203,9 @@ export const enUS: LocaleMessages = {
     spaceName: 'Space Name',
     spaceNamePlaceholder: 'e.g., Acme Corp Next-Gen MVP',
     chooseTemplate: 'Choose a Workflow Template',
+    chooseRoleTemplate: 'Choose a Team Template',
+    chooseWorkflowTemplate: 'Choose a Workflow Template',
+    viewDetails: 'View details',
     recommended: 'Recommended',
     agents: 'Agents',
     letsGo: "Let's Go",
@@ -420,7 +423,8 @@ export const enUS: LocaleMessages = {
     nameLabel: 'Name',
     descriptionLabel: 'Description',
     customInstructionsLabel: 'Custom Instructions',
-    budgetLabel: 'Budget Limit ($)',
+    customInstructionsHelpTitle: 'About Custom Instructions',
+    customInstructionsHelpBody: 'Custom Instructions are workspace-level guidance injected into every agent\'s system prompt under an "Organization Instructions" section. Use them to express constraints that apply to ALL roles in this workspace — coding conventions, tone, security rules, target frameworks, languages to prefer, things to avoid, etc.\n\nThey do NOT replace a role\'s persona. Each role still has its own persona and skills; these instructions are layered on top so every agent stays aligned with workspace-wide policy.\n\nKeep them concise and prescriptive — long, vague text dilutes the prompt and increases cost without improving behavior.',
     statusLabel: 'Status',
     statusActive: 'Active',
     statusPaused: 'Paused',
@@ -452,7 +456,7 @@ export const enUS: LocaleMessages = {
       whereWeAre: 'Where we are',
       team: 'Team',
       attention: 'Needs your attention',
-      budget: 'Budget & reliability',
+      usage: 'Usage & reliability',
     },
     whereWeAre: {
       noActiveWork: 'No active work. {completed} task(s) completed so far.',
@@ -473,8 +477,8 @@ export const enUS: LocaleMessages = {
       body: 'You have {parts}. Check the Inbox and Tasks pages.',
       separator: ' and ',
     },
-    budget: {
-      usage: '{tokens} token(s) used across {runs} run(s), totalling ${cost}.',
+    usage: {
+      summary: '{tokens} token(s) used across {runs} run(s), totalling ${cost}.',
       failedRuns: ' {n} recent run(s) failed — review the Runs panel for details.',
     },
     headline: {

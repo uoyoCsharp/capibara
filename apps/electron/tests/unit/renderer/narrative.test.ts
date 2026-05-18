@@ -102,7 +102,7 @@ describe('buildNarrative', () => {
     expect(team?.tone).toBe('warning');
   });
 
-  it('reports failed runs in the budget section', () => {
+  it('reports failed runs in the usage section', () => {
     const n = buildNarrative({
       t,
       orgName: 'Acme',
@@ -111,19 +111,19 @@ describe('buildNarrative', () => {
       conversations: [],
       roles: [role('r1')],
     });
-    const budget = n.sections.find((s) => s.heading === t.narrative.sections.budget);
-    expect(budget).toBeDefined();
-    expect(budget?.tone).toBe('warning');
-    expect(budget?.body).toContain('failed');
+    const usage = n.sections.find((s) => s.heading === t.narrative.sections.usage);
+    expect(usage).toBeDefined();
+    expect(usage?.tone).toBe('warning');
+    expect(usage?.body).toContain('failed');
   });
 
-  it('does not produce a budget section when no runs have been made', () => {
+  it('does not produce a usage section when no runs have been made', () => {
     const n = buildNarrative({
       t,
       orgName: 'Acme', tasks: [task('1')], runs: [], conversations: [], roles: [role('r1')],
     });
-    const budget = n.sections.find((s) => s.heading === t.narrative.sections.budget);
-    expect(budget).toBeUndefined();
+    const usage = n.sections.find((s) => s.heading === t.narrative.sections.usage);
+    expect(usage).toBeUndefined();
   });
 
   it('reports completed tasks in headline when nothing active', () => {
