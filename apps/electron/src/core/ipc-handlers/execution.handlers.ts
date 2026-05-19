@@ -3,6 +3,8 @@ import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.re
 import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
 import type { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import type { FileLogService } from '@core/modules/execution/logging/file-log.service';
+import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
+import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }
@@ -11,6 +13,8 @@ export function registerExecutionHandlers(
   runRepo: IRunRepository,
   runEngine: IRunEngine,
   costTracker: CostTracker,
+  taskOrchestrator: TaskOrchestrator,
+  taskRepo: ITaskRepository,
   fileLogService?: FileLogService,
 ): void {
   ipcMain.handle('capibara:run:list', async (_ev, orgId: string) => {
@@ -78,6 +82,29 @@ export function registerExecutionHandlers(
     try {
       if (!fileLogService) return ok({ deletedFiles: 0, freedMB: 0 });
       return ok(fileLogService.clearBeforeMonth(cutoffMonth));
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  // ─── Recovery: count tasks whose latest run was interrupted (and that
+  // are still in a runnable state). Drives the sidebar resume affordance.
+  ipcMain.handle('capibara:run:interrupted-count', async (_ev, orgId: string) => {
+    try {
+      const tasks = taskRepo.findByOrgId(orgId);
+      let count = 0;
+      for (const task of tasks) {
+        if (!task.assigneeRoleId || task.pausedReason) continue;
+        const runs = runRepo.findByTaskId(task.id);
+        if (runs.length === 0) continue;
+        if (runs[0].status === 'interrupted') count += 1;
+      }
+      return ok({ count });
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  ipcMain.handle('capibara:run:resume-interrupted', async (_ev, orgId: string) => {
+    try {
+      const resumed = taskOrchestrator.resumeInterruptedForOrg(orgId);
+      return ok({ resumed });
     } catch (e) { return err('INTERNAL', String(e)); }
   });
 }

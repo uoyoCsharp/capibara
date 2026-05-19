@@ -69,6 +69,7 @@ export function registerOrchestratorModule(
     logger,
     taskRepo,
     orgRepo,
+    runRepo,
     pendingWakeRepo,
     wakeGateValidator,
     runCoordinator,

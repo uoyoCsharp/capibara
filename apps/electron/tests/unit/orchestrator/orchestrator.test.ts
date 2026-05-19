@@ -9,6 +9,7 @@ import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.r
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IPendingWakeRepository } from '@core/modules/orchestrator/interfaces/i-pending-wake.repository';
+import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
 import type { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
 import type { RetryScheduler } from '@core/modules/orchestrator/retry.scheduler';
 import type { RunCoordinator } from '@core/modules/orchestrator/run.coordinator';
@@ -34,6 +35,7 @@ describe('Orchestrators (task + conversation + run)', () => {
   let orgRepo: IOrganizationRepository;
   let convRepo: IConversationRepository;
   let pendingWakeRepo: IPendingWakeRepository;
+  let runRepo: IRunRepository;
   let wakeGateValidator: WakeGateValidator;
   let retryScheduler: RetryScheduler;
   let runCoordinator: RunCoordinator;
@@ -105,6 +107,17 @@ describe('Orchestrators (task + conversation + run)', () => {
       delete: vi.fn(),
       deleteByRoleId: vi.fn(),
     };
+    runRepo = {
+      findById: vi.fn(),
+      findByOrgId: vi.fn().mockReturnValue([]),
+      findByTaskId: vi.fn().mockReturnValue([]),
+      findActiveByRoleId: vi.fn(),
+      findActiveByOrgId: vi.fn(),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      finish: vi.fn(),
+      markOrphanedAsInterrupted: vi.fn().mockReturnValue(0),
+    };
     wakeGateValidator = {
       validate: vi.fn().mockReturnValue({ allowed: true }),
     } as unknown as WakeGateValidator;
@@ -139,6 +152,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       logger,
       taskRepo,
       orgRepo,
+      runRepo,
       pendingWakeRepo,
       wakeGateValidator,
       runCoordinator,

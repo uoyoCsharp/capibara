@@ -93,6 +93,8 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
     getRunLogs: vi.fn().mockResolvedValue(ok([])),
     getRunLogDir: vi.fn().mockResolvedValue(ok('')),
     cancelRun: vi.fn().mockResolvedValue(ok(null)),
+    getInterruptedCount: vi.fn().mockResolvedValue(ok({ count: 0 })),
+    resumeInterrupted: vi.fn().mockResolvedValue(ok({ resumed: 0 })),
 
     // Logs
     getLogStats: vi.fn().mockResolvedValue(ok({ totalSizeMB: 0, fileCount: 0, oldestMonth: null, newestMonth: null })),

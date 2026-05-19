@@ -91,6 +91,8 @@ const api = {
   getRunLogs: (runId: string) => ipcRenderer.invoke('capibara:run:logs', runId),
   getRunLogDir: (runId: string) => ipcRenderer.invoke('capibara:run:log-dir', runId),
   cancelRun: (runId: string) => ipcRenderer.invoke('capibara:run:cancel', runId),
+  getInterruptedCount: (orgId: string) => ipcRenderer.invoke('capibara:run:interrupted-count', orgId),
+  resumeInterrupted: (orgId: string) => ipcRenderer.invoke('capibara:run:resume-interrupted', orgId),
 
   // Logs
   getLogStats: () => ipcRenderer.invoke('capibara:logs:stats'),

@@ -124,4 +124,22 @@ export class SqliteRunRepository implements IRunRepository {
       `)
       .run(status, now, tokenCount ?? null, costUsd ?? null, summary ?? null, errorMessage ?? null, id);
   }
+
+  markOrphanedAsInterrupted(): number {
+    // Runs left in 'running' or 'queued' across an app restart can never be the
+    // current process's work — the worker that owned them is gone. Flip them to
+    // 'interrupted' so the UI no longer shows them as active and the wake gate
+    // (findActiveByOrgId) stops blocking new schedules.
+    const now = new Date().toISOString();
+    const result = this.connection.getDb()
+      .prepare(`
+        UPDATE runs
+        SET status = 'interrupted',
+            finished_at = COALESCE(finished_at, ?),
+            error_message = COALESCE(error_message, 'Interrupted by app restart')
+        WHERE status IN ('queued', 'running')
+      `)
+      .run(now);
+    return result.changes;
+  }
 }

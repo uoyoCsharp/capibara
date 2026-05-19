@@ -19,6 +19,7 @@ import { Separator } from '../ui/separator';
 import { SidebarNavItem } from './SidebarNavItem';
 import { AvatarPopover } from './AvatarPopover';
 import { SchedulerControlButton } from './SchedulerControlButton';
+import { ResumeInterruptedButton } from './ResumeInterruptedButton';
 import { partitionConversations } from '../inbox/InboxPage';
 import logoImg from '../../assets/logo.png';
 
@@ -88,8 +89,9 @@ export function Sidebar({
       </nav>
 
       <Separator />
-      <div className={cn('py-2', collapsed ? 'px-2' : 'px-3')}>
+      <div className={cn('py-2 space-y-1.5', collapsed ? 'px-2' : 'px-3')}>
         <SchedulerControlButton collapsed={collapsed} orgId={currentOrgId} />
+        <ResumeInterruptedButton collapsed={collapsed} orgId={currentOrgId} />
       </div>
 
       <Separator />

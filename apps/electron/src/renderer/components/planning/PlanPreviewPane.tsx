@@ -7,6 +7,8 @@ import {
   ChatCircle,
   CircleNotch,
   Sparkle,
+  NoteBlank,
+  Note,
 } from '@phosphor-icons/react';
 import type {
   PlanDraftNodeRecord,
@@ -216,24 +218,26 @@ function PlanPreview({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between border-b border-border px-4 py-3">
-        <div>
-          <h2 className="text-base font-semibold">{t.planPreview.title}</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {interpolate(t.planPreview.summaryVersion, { n: pending.version })}
-            {' · '}
-            {interpolate(t.planPreview.summaryNodes, { count: nodeCount })}
-            {' · '}
-            {interpolate(t.planPreview.summaryDepth, { n: maxDepth })}
+      <div className="flex items-start justify-between border-b border-border px-5 py-4">
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold tracking-tight">{t.planPreview.title}</h2>
+          <p className="text-[11px] text-muted-foreground/80 flex items-center gap-1.5">
+            <span>{interpolate(t.planPreview.summaryVersion, { n: pending.version })}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>{interpolate(t.planPreview.summaryNodes, { count: nodeCount })}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>{interpolate(t.planPreview.summaryDepth, { n: maxDepth })}</span>
           </p>
         </div>
       </div>
 
-      <div className="border-b border-border px-4 py-3 space-y-2">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t.planPreview.summaryByType}</p>
+      <div className="border-b border-border px-5 py-3 space-y-2">
+        <p className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-wider">
+          {t.planPreview.summaryByType}
+        </p>
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(typeTally).map(([tk, count]) => (
-            <Badge key={tk} variant="secondary" className="text-xs">
+            <Badge key={tk} variant="secondary" className="text-[11px] font-normal">
               {typeLabel(tk)} · {count}
             </Badge>
           ))}
@@ -325,17 +329,30 @@ function PlanDraftNode({
   defaultCollapsed: boolean;
 }) {
   const [expanded, setExpanded] = useState<boolean>(() => !defaultCollapsed || depth < 1);
+  const [showDescription, setShowDescription] = useState(false);
   const hasChildren = node.children.length > 0;
+  const hasDescription = Boolean(node.description?.trim());
   const assigneeName = roleMap.get(node.assigneeRoleId) ?? node.assigneeRoleId;
 
   return (
-    <div className={cn('py-1', depth > 0 && 'border-l pl-3 ml-2')}>
-      <div className="flex items-start gap-1.5">
+    <div
+      className={cn(
+        'py-1.5',
+        depth > 0 && 'border-l border-border/60 pl-3 ml-2',
+      )}
+    >
+      <div
+        className={cn(
+          'group flex items-start gap-1.5 rounded-md px-1.5 py-1 transition-colors',
+          'hover:bg-muted/40',
+        )}
+      >
         {hasChildren ? (
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="mt-0.5 text-muted-foreground hover:text-foreground"
+            className="mt-1 text-muted-foreground/70 hover:text-foreground transition-colors"
+            aria-label={expanded ? 'Collapse' : 'Expand'}
           >
             {expanded ? <CaretDown size={14} /> : <CaretRight size={14} />}
           </button>
@@ -343,20 +360,47 @@ function PlanDraftNode({
           <span className="w-[14px] shrink-0" />
         )}
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Badge
+              variant="outline"
+              className="text-[10px] uppercase tracking-wider font-semibold border-border/70 text-muted-foreground"
+            >
               {typeLabel(node.type)}
             </Badge>
-            <span className="text-sm font-medium truncate">{node.title}</span>
-            <Badge variant="secondary" className="text-[10px]">@ {assigneeName}</Badge>
+            <span className="text-sm font-medium text-foreground truncate">{node.title}</span>
+            <Badge
+              variant="secondary"
+              className="text-[10px] font-normal text-muted-foreground"
+            >
+              @ {assigneeName}
+            </Badge>
             {hasChildren && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-muted-foreground/70">
                 {node.children.length} child{node.children.length === 1 ? '' : 'ren'}
               </span>
             )}
+            {hasDescription && (
+              <button
+                type="button"
+                onClick={() => setShowDescription((v) => !v)}
+                className={cn(
+                  'inline-flex items-center justify-center rounded p-0.5 transition-colors',
+                  showDescription
+                    ? 'text-foreground bg-muted'
+                    : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/60',
+                )}
+                aria-label={showDescription ? 'Hide description' : 'Show description'}
+                aria-expanded={showDescription}
+                title={showDescription ? 'Hide description' : 'Show description'}
+              >
+                {showDescription ? <Note size={13} weight="fill" /> : <NoteBlank size={13} />}
+              </button>
+            )}
           </div>
-          {node.description && (
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{node.description}</p>
+          {hasDescription && showDescription && (
+            <p className="text-xs leading-relaxed text-muted-foreground mt-1.5 border-l-2 border-border/60 pl-2.5 whitespace-pre-wrap">
+              {node.description}
+            </p>
           )}
         </div>
       </div>

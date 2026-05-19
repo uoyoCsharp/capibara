@@ -242,6 +242,11 @@ export const enUS: LocaleMessages = {
     statusRunning: 'Running',
     statusIdle: 'Idle',
     idleHint: 'No active tasks to pause',
+    resumeInterrupted: 'Resume interrupted',
+    resumeInterruptedN: 'Resume interrupted ({n})',
+    resumeInterruptedTooltip: '{n} task(s) were interrupted by a previous restart. Click to resume.',
+    resumeInterruptedToast: 'Resuming {n} interrupted task(s)',
+    resumeInterruptedNoneToast: 'No interrupted tasks to resume',
   },
 
   settings: {

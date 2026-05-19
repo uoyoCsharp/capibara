@@ -122,6 +122,8 @@ export interface CapibaraApi {
   getRunLogs: (runId: string) => Promise<DesktopResult<string[]>>;
   getRunLogDir: (runId: string) => Promise<DesktopResult<string>>;
   cancelRun: (runId: string) => Promise<DesktopResult<null>>;
+  getInterruptedCount: (orgId: string) => Promise<DesktopResult<{ count: number }>>;
+  resumeInterrupted: (orgId: string) => Promise<DesktopResult<{ resumed: number }>>;
 
   // ─── Logs ────────────────────────────────────────────────────────
   getLogStats: () => Promise<DesktopResult<{

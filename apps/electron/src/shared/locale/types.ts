@@ -257,6 +257,11 @@ export interface LocaleMessages {
     statusRunning: string;
     statusIdle: string;
     idleHint: string;
+    resumeInterrupted: string;
+    resumeInterruptedN: string;
+    resumeInterruptedTooltip: string;
+    resumeInterruptedToast: string;
+    resumeInterruptedNoneToast: string;
   };
 
   settings: {

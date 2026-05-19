@@ -78,6 +78,14 @@ export async function bootstrap(): Promise<void> {
 
   const execution = registerExecutionModule(sqliteConn, eventBus, eventPublisher, logger, config, workerPath);
 
+  // Sweep stale runs left over from a prior app session (worker is gone, so
+  // 'running'/'queued' rows can only be ghosts). Flipping them to 'interrupted'
+  // un-blocks the wake gate and lets the UI show the correct status.
+  const orphanedCount = execution.runRepo.markOrphanedAsInterrupted();
+  if (orphanedCount > 0) {
+    logger.info('Marked orphaned runs as interrupted on startup', { count: orphanedCount });
+  }
+
   const planning = registerPlanningModule(
     workflow.taskService,
     workflow.taskStateMachine, workflow.processEngine,
@@ -131,6 +139,8 @@ export async function bootstrap(): Promise<void> {
     execution.runRepo,
     execution.runEngine,
     execution.costTracker,
+    orchestratorModule.taskOrchestrator,
+    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);

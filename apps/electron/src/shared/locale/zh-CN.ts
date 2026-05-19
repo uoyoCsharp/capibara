@@ -242,6 +242,11 @@ export const zhCN: LocaleMessages = {
     statusRunning: '运行中',
     statusIdle: '空闲',
     idleHint: '当前没有可暂停的活动任务',
+    resumeInterrupted: '恢复中断任务',
+    resumeInterruptedN: '恢复中断任务（{n}）',
+    resumeInterruptedTooltip: '{n} 个任务在上次重启时被中断。点击以恢复。',
+    resumeInterruptedToast: '正在恢复 {n} 个中断任务',
+    resumeInterruptedNoneToast: '没有可恢复的中断任务',
   },
 
   settings: {

@@ -326,11 +326,24 @@ function buildHarness(schema: ProcessSchema = DEFAULT_SCHEMA): TestHarness {
     delete: vi.fn(),
   };
 
+  const runRepo = {
+    findById: vi.fn(),
+    findByOrgId: vi.fn().mockReturnValue([]),
+    findByTaskId: vi.fn().mockReturnValue([]),
+    findActiveByRoleId: vi.fn(),
+    findActiveByOrgId: vi.fn(),
+    create: vi.fn(),
+    updateStatus: vi.fn(),
+    finish: vi.fn(),
+    markOrphanedAsInterrupted: vi.fn().mockReturnValue(0),
+  };
+
   const taskOrchestrator = new TaskOrchestrator(
     eventBus,
     logger,
     taskRepo,
     orgRepo,
+    runRepo,
     pendingWakeRepo,
     wakeGateValidator,
     runCoordinator,

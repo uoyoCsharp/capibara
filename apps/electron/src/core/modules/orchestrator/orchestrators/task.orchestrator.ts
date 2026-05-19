@@ -4,6 +4,7 @@ import type { DomainEvent } from '@core/foundation/events';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
+import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
 import type { IPendingWakeRepository } from '../interfaces/i-pending-wake.repository';
 import type { WakeGateValidator } from '../wake-gate.validator';
 import type { RunCoordinator } from '../run.coordinator';
@@ -35,6 +36,7 @@ export class TaskOrchestrator {
     private readonly logger: ILogger,
     private readonly taskRepo: ITaskRepository,
     private readonly orgRepo: IOrganizationRepository,
+    private readonly runRepo: IRunRepository,
     private readonly pendingWakeRepo: IPendingWakeRepository,
     private readonly wakeGateValidator: WakeGateValidator,
     private readonly runCoordinator: RunCoordinator,
@@ -75,6 +77,37 @@ export class TaskOrchestrator {
 
     this.scheduledTaskIds.add(task.id);
     this.taskStateMachine.transition(task.id, activeTarget.to);
+  }
+
+  /**
+   * User-initiated recovery for tasks whose latest run was 'interrupted'
+   * (typically by an app restart). For each affected task we wake its
+   * assignee, which creates a fresh run — the old interrupted run stays as
+   * an audit record. Returns the number of tasks for which a wake was
+   * dispatched (queued or executing).
+   */
+  resumeInterruptedForOrg(orgId: string): number {
+    const tasks = this.taskRepo.findByOrgId(orgId);
+    let resumed = 0;
+
+    for (const task of tasks) {
+      if (!task.assigneeRoleId) continue;
+      if (task.pausedReason) continue;
+
+      const category = this.processEngine.getStatusCategory(orgId, task.status);
+      if (category === 'terminal' || category === 'approval') continue;
+
+      const runs = this.runRepo.findByTaskId(task.id);
+      if (runs.length === 0) continue;
+      // findByTaskId returns DESC by created_at, so [0] is the latest.
+      if (runs[0].status !== 'interrupted') continue;
+
+      this.logger.info('Resuming interrupted task', { taskId: task.id, roleId: task.assigneeRoleId });
+      this.tryWake(task.assigneeRoleId, orgId, 'task_assigned', task.id);
+      resumed += 1;
+    }
+
+    return resumed;
   }
 
   tryWake(roleId: string, orgId: string, reason: string, taskId: string | null): void {
