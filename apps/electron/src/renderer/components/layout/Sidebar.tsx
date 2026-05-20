@@ -100,7 +100,6 @@ export function Sidebar({
           collapsed={collapsed}
           organizations={organizations}
           currentOrgId={currentOrgId}
-          onNavigate={onNavigate}
           onCreateWorkspace={onCreateWorkspace}
         />
       </div>

@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { CaretUpDown, Check, Gear, Plus } from '@phosphor-icons/react';
-import type { SectionId } from '@core/shared/types';
+import { ArrowsLeftRight, CaretUpDown, Check, Plus } from '@phosphor-icons/react';
 import { useT } from '../../hooks/use-locale';
 import { useAppStore } from '../../store/app.store';
 import { cn } from '../../lib/utils';
-import { Avatar, AvatarFallback } from '../ui/avatar';
-import { Separator } from '../ui/separator';
 
 const api = () => window.capibara;
 
@@ -13,17 +10,10 @@ interface AvatarPopoverProps {
   collapsed: boolean;
   organizations: Array<{ id: string; name: string }>;
   currentOrgId: string | null;
-  onNavigate: (section: SectionId) => void;
   onCreateWorkspace?: () => void;
 }
 
-/**
- * Bottom-of-sidebar avatar + workspace switcher popover. Click-outside
- * handling is scoped to this component.
- */
-export function AvatarPopover({
-  collapsed, organizations, currentOrgId, onNavigate, onCreateWorkspace,
-}: AvatarPopoverProps) {
+export function AvatarPopover({ collapsed, organizations, currentOrgId, onCreateWorkspace }: AvatarPopoverProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const t = useT();
@@ -46,6 +36,8 @@ export function AvatarPopover({
     setOpen(false);
   };
 
+  const currentOrg = organizations.find((o) => o.id === currentOrgId);
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -55,16 +47,14 @@ export function AvatarPopover({
           'flex w-full items-center gap-2 rounded-md p-1.5 hover:bg-sidebar-accent transition-colors text-left',
           collapsed && 'justify-center',
         )}
+        title={t.workspace?.switchWorkspace ?? 'Switch Workspace'}
       >
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">U</AvatarFallback>
-        </Avatar>
+        <ArrowsLeftRight size={18} className="text-muted-foreground shrink-0" />
         {!collapsed && (
           <>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">uoyo</p>
-              <p className="text-[11px] text-muted-foreground truncate">Admin</p>
-            </div>
+            <span className="flex-1 text-sm text-muted-foreground truncate">
+              {currentOrg?.name ?? (t.workspace?.switchWorkspace ?? 'Switch Workspace')}
+            </span>
             <CaretUpDown size={14} className="text-muted-foreground shrink-0" />
           </>
         )}
@@ -95,16 +85,6 @@ export function AvatarPopover({
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
           >
             <Plus size={14} /> {t.workspace?.createNewSpace ?? 'Create New Workspace'}
-          </button>
-
-          <Separator className="my-1.5" />
-
-          <button
-            type="button"
-            onClick={() => { setOpen(false); onNavigate('settings'); }}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
-          >
-            <Gear size={14} /> {t.workspace?.userPreferences ?? 'Settings'}
           </button>
         </div>
       )}
