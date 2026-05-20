@@ -37,6 +37,7 @@ export interface OrchestratorModule {
   conversationOrchestrator: ConversationOrchestrator;
   runOrchestrator: RunOrchestrator;
   runCoordinator: RunCoordinator;
+  wakeGateValidator: WakeGateValidator;
 }
 
 export function registerOrchestratorModule(
@@ -106,5 +107,5 @@ export function registerOrchestratorModule(
   container.register(CONVERSATION_ORCHESTRATOR_TOKEN, { useValue: conversationOrchestrator });
   container.register(RUN_ORCHESTRATOR_TOKEN, { useValue: runOrchestrator });
 
-  return { taskOrchestrator, conversationOrchestrator, runOrchestrator, runCoordinator };
+  return { taskOrchestrator, conversationOrchestrator, runOrchestrator, runCoordinator, wakeGateValidator };
 }

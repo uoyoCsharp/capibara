@@ -163,7 +163,7 @@ Events are the only sanctioned cross-module integration. `DomainEventMap` is the
 Categories (full table at the file):
 
 - **Organization** — `org:created|updated|deleted`, `role:created|updated|deleted`
-- **Task** — `task:created`, `task:status-changed`, `task:entered-approval`, `task:auto-approved`, `task:approval-confirmed`, `task:approval-rejected`, `task:completed`
+- **Task** — `task:created`, `task:status-changed` (includes `triggeredBy: 'user' | 'system'`), `task:entered-approval`, `task:auto-approved`, `task:approval-confirmed`, `task:approval-rejected`, `task:completed`
 - **Conversation** — `conversation:created`, `conversation:message-added`, `conversation:response-needed`, `conversation:needs-routing`, `conversation:respondent-assigned`, `conversation:resolved`, `conversation:escalated`, `conversation:timed-out`, `conversation:cancelled`, `conversation:completed`
 - **Run** — `run:queued|started|succeeded|failed|cancelled|log|assistant-text|status`
 - **Plan tree** — `plan-tree:submitted|ready|discarded|approved`
@@ -361,11 +361,20 @@ Org templates load YAML/JSON from `resources/templates/`. A seeded org gets:
 Tables: `tasks`, `process_schemas`.
 Services: `TaskService`, `ProcessTemplateService`.
 Engines:
-- **`ProcessEngine`** — caches `ProcessSchema` per org; validates types/statuses/transitions; computes status category (`initial|active|approval|terminal`); persists schema with `validateSchema()`.
-- **`TaskStateMachine`** — `transition(taskId, newStatus)` validates against `ProcessEngine`, blocks non-leaf tasks from approval states, writes the row, emits `task:status-changed` / `task:entered-approval` / `task:completed`. Auto-approval logic: AI roles whose role does not require human approval are advanced past approval statuses automatically (`task:auto-approved`).
+- **`ProcessEngine`** — caches `ProcessSchema` per org; validates types/statuses/transitions; computes status category (`initial|active|approval|terminal`); persists schema with `validateSchema()`. Transition validation is **mode-aware**: `validateTransition(orgId, from, to, mode: 'manual'|'system')` and `getAvailableTransitions(orgId, from, mode)` filter edges by `TransitionDefinition.mode` (defaults to `'manual'` when omitted in the schema).
+- **`TaskStateMachine`** — `transition(taskId, newStatus, opts?: { triggeredBy })` validates against `ProcessEngine` using `mode = triggeredBy === 'system' ? 'system' : 'manual'`. Blocks non-leaf tasks from approval states, writes the row, emits `task:status-changed` (with `triggeredBy`) / `task:entered-approval` / `task:completed`. Auto-approval logic: AI roles whose role does not require human approval are advanced past approval statuses automatically (`task:auto-approved`).
 - **`BehaviorEngine`** — schema-defined rules (`on_status_enter`, `on_all_children_terminal`) with `all/any/not/eq/neq/in/not_in/gt/lt` operators. Action `transition` calls back into `TaskStateMachine`. A re-entrancy `evaluating` set prevents infinite cascades.
 
+Schema `TransitionMode`:
+- `'manual'` (default) — walkable by user/AI via MCP tools or the orchestrator.
+- `'system'` — walkable only by `RunEngine` (task lifecycle) or bootstrap reconcile. Hidden from AI tooling.
+
 Key invariants:
+- **R1**: For leaf tasks, `status.category === 'active'` is strictly equivalent to "has an active run". Non-leaf containers can be active without a run (their subtree is in flight).
+- **R2**: `RunEngine` is the sole authority on initial→active transitions for tasks.
+- **R3**: `RunEngine` rolls back active tasks to initial on run termination (unless the agent already moved the task to terminal/approval — R5).
+- **R4**: Bootstrap `reconcileOrphanedActiveTasks` handles cross-restart: any active task with no backing run is rolled back to initial.
+- **R5**: Approval/terminal transitions remain under AI/user control.
 - A task in an `approval`-category status must be a leaf (`hasChildren = false`).
 - `paused_reason='approval'` is the persistent flag that suppresses wakes; `TaskOrchestrator` reads this in `onTaskStatusChanged`.
 
@@ -413,8 +422,8 @@ The runtime brain. Three orchestrators + supporting helpers:
 
 - **`TaskOrchestrator`** (`task.orchestrator.ts`) — subscribes to `task:created`, `task:status-changed`, `task:entered-approval`, `task:approval-confirmed`, `task:completed`, `plan-tree:approved`. Drives:
   - **root auto-start** on org creation (if `autoStartOnCreate`).
-  - **wake gating** on every status transition into an `active`-category status, skipping paused tasks.
-  - **scheduleNext(orgId)**: ask `TaskScheduler` for the next eligible task and transition it into the first `active` status (this fires `task:status-changed`, which itself triggers a wake via the same handler).
+  - **wake gating** on every status transition into an `active`-category status, skipping paused tasks. Ignores `triggeredBy:'system'` echoes (avoids double-waking from RunEngine bookkeeping).
+  - **scheduleNext(orgId)**: ask `TaskScheduler` for the next eligible task and wake the assignee role via `tryWake`. Does **not** transition the task — `RunEngine` is the sole authority on initial→active (R2).
   - **tryWake(roleId, orgId, reason, taskId)** — the public wake API. If `WakeGateValidator` denies, persists a `pending_wakes` row.
 - **`ConversationOrchestrator`** — subscribes to `conversation:response-needed` and `conversation:resolved`.
   - On response-needed: validate the wake gate, dispatch via `RunCoordinator.executeForConversation`. If gate blocks (i.e. another run is active), persist a `pending_wakes` row anchored to the conversation. **Without this, AI→AI inquiries silently vanish during the asker's run.**
@@ -433,7 +442,7 @@ Helpers:
 - **`RunCoordinator`** — translates a wake into a Run:
   - `executeForTask`: builds task prompt, looks up `org.workspacePath` for cwd, calls `runEngine.execute(...)`.
   - `executeForConversation`: builds conversation prompt, threads `externalSessionId` (Claude session resume), calls `runEngine.execute(...)`. After a successful run, **writes the run summary as a `reply` message** with `intent='reply'` — that is how Role-B's answer reaches the conversation.
-- **`TaskScheduler`** — chooses the next pending root task per org (depth-first, oldest first).
+- **`TaskScheduler`** — chooses the next schedulable task per org (depth-first, oldest-root first). Descends through non-leaf containers regardless of their category (they aggregate in-flight subtrees), and only blocks on active **leaf** nodes (R1). Returns `{ task, wakeReason }` for initial-category leaves with an `assigneeRoleId`.
 - **`RetryScheduler`** — exponential backoff retry wired to `retryBackoffMs` and `maxRetryOnFailure`.
 
 ### 8.6 execution
@@ -450,7 +459,8 @@ Run lifecycle inside `RunEngine.execute`:
 2. Insert `runs` row (status='queued') keyed on either taskId, conversationId, or both.
 3. Emit `run:queued`, write input log file (`fileLogService.writeInput`).
 4. Update status='running', emit `run:started`.
-5. Call `executor.execute(...)` (`UtilityProcessExecutor` → `WorkerService.enqueueRun`).
+5. **R2 — `advanceTaskToActive(taskId, orgId)`**: if the task is in an initial-category status, transition it to the first active status via `taskStateMachine.transition(taskId, target.to, { triggeredBy: 'system' })`. Idempotent (no-op if already active, or if taskId is null / not found / in approval/terminal).
+6. Call `executor.execute(...)` (`UtilityProcessExecutor` → `WorkerService.enqueueRun`).
 6. Worker spawns the CLI via `ClaudeCliAdapter` with `claude --print --output-format stream-json --verbose --dangerously-skip-permissions [--mcp-config <path> --strict-mcp-config] [--model X] [--max-turns N] [--effort E] [--resume sessionId]`. The prompt is piped via stdin.
 7. CLI streams JSON lines to stdout. `StreamJsonParser` parses them into:
    - `onText(text)` → emit `run:assistant-text` (streaming).
@@ -459,14 +469,17 @@ Run lifecycle inside `RunEngine.execute`:
 9. CLI exits → adapter returns `{ exitCode, status, summary, sessionId, inputTokens, outputTokens, errorMessage, ... }`.
 10. `runRepo.finish(runId, status, tokens, ..., sessionId, summary, errorMessage)`.
 11. Cost accrued via `costTracker.recordCost(...)`.
-12. Emit `run:succeeded | run:failed | run:cancelled` (lifecycle, **outbox**).
-13. `cleanupRun(runId)` — flush parser, log file, in-memory ctx.
+12. **R3 — `rollbackTaskIfActive(taskId)`**: if the task is still in an active-category status (agent didn't advance it to terminal/approval itself), roll it back to the schema's first initial status via `taskStateMachine.transition(taskId, initial.name, { triggeredBy: 'system' })`. This frees the task for re-scheduling.
+13. Emit `run:succeeded | run:failed | run:cancelled` (lifecycle, **outbox**).
+14. `cleanupRun(runId)` — flush parser, log file, in-memory ctx.
 
 `StreamJsonParser` is line-buffered, line-by-line JSON-decoded, and tolerates non-JSON lines (CLI debug noise) by routing them to `onParseError`.
 
 `WorkerService` is a singleton `utilityProcess`. The `worker.ts` enforces **one active run per role** in-process via `activeByRole: Map<roleId, runId>`. Anything queued behind a busy role is held until that role's run finishes — but the org-level "one active run" constraint at `WakeGateValidator` is the primary boundary; the worker's per-role queue is a defense-in-depth.
 
-Cancel path: `runEngine.cancelRun(runId)` → `executor.abort(runId)` → worker → adapter → `taskkill /T /F /PID` on Windows or `SIGTERM` then `SIGKILL` on Unix.
+Cancel path: `runEngine.cancelRun(runId)` → `executor.abort(runId)` → worker → adapter → `taskkill /T /F /PID` on Windows or `SIGTERM` then `SIGKILL` on Unix. Also calls `rollbackTaskIfActive(taskId)`.
+
+**R4 — Bootstrap reconcile** (`composition-root.ts:reconcileOrphanedActiveTasks`): After `markOrphanedAsInterrupted` sweeps ghost runs at startup, any task still in an `active` status has no backing run. `reconcileOrphanedActiveTasks` iterates all orgs, finds active tasks, and rolls them back to the schema's initial status via `taskStateMachine.transition(id, initial, { triggeredBy: 'system' })`. This is the cross-restart counterpart of RunEngine's per-run rollback (R3).
 
 `ClaudeCliAdapter.isSessionError()` detects "unknown session" / "session not found" responses and **automatically retries once without `--resume`** (`doExecute(ctx, true)`), so a corrupted session id is recoverable.
 
@@ -746,10 +759,11 @@ These are derived from `_bmad-output/project-context.md` and the current code. T
 1. User imports an org template → `OrgTemplateService` writes `organizations`, `roles`, `process_schemas`, then publishes `org:created`, `role:created`s, etc.
 2. The template seeds a root task → `task:created`.
 3. `TaskOrchestrator.onTaskCreated` sees `parentId=null` and `org.autoStartOnCreate=true` → `scheduleNext(orgId)`.
-4. `TaskScheduler` returns the root pending task; orchestrator transitions it to the first `active` status.
-5. `task:status-changed` → `onTaskStatusChanged` → `tryWake(assignee, org, 'task_scheduled', taskId)`.
-6. Gate ok → `RunCoordinator.executeForTask` → `RunEngine` → `WorkerService` → `ClaudeCliAdapter` → live CLI.
-7. CLI runs to completion → `run:succeeded` → `RunOrchestrator.onRunEnded` → drain pending wakes (none) + `scheduleNext` (no further work).
+4. `TaskScheduler` returns the root pending task; orchestrator calls `tryWake(assignee, org, 'task_scheduled', taskId)`. The task stays in `pending`.
+5. Gate ok → `RunCoordinator.executeForTask` → `RunEngine.execute(...)`.
+6. RunEngine records the run as `running`, then **R2**: `advanceTaskToActive` transitions the task from `pending` → `in_progress` (`triggeredBy:'system'`). This emits `task:status-changed` with `triggeredBy:'system'`, which `TaskOrchestrator` ignores (no double-wake).
+7. CLI runs to completion → RunEngine **R3**: `rollbackTaskIfActive` — if the agent already moved the task to terminal/approval, no-op; otherwise rolls back to `pending`. Then emits `run:succeeded`.
+8. `RunOrchestrator.onRunEnded` → drain pending wakes (none) + `scheduleNext` (no further work).
 
 ### 14.2 Decomposition — preview mode (human-approved)
 

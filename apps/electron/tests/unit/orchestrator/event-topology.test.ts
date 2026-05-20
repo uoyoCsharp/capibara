@@ -171,6 +171,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
     'task:created': { taskId: TEST_TASK_ID, orgId: TEST_ORG_ID, type: 'task', parentId: null },
     'task:status-changed': {
       taskId: TEST_TASK_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress', assigneeRoleId: TEST_ROLE_ID,
+      triggeredBy: 'user',
     },
     'task:entered-approval': { taskId: TEST_TASK_ID, orgId: TEST_ORG_ID, from: 'a', to: 'awaiting_review' },
     'task:approval-confirmed': { taskId: TEST_TASK_ID, orgId: TEST_ORG_ID, from: 'awaiting_review', to: 'approved' },

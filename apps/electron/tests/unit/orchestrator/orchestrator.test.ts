@@ -191,7 +191,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       eventBus.emit({
         type: 'task:status-changed',
         timestamp: new Date().toISOString(),
-        payload: { taskId: TEST_TASK_ID, assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress' },
+        payload: { taskId: TEST_TASK_ID, assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress', triggeredBy: 'user' },
       });
 
       await vi.waitFor(() => {
@@ -205,7 +205,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       eventBus.emit({
         type: 'task:status-changed',
         timestamp: new Date().toISOString(),
-        payload: { taskId: TEST_TASK_ID, assigneeRoleId: null, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress' },
+        payload: { taskId: TEST_TASK_ID, assigneeRoleId: null, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress', triggeredBy: 'user' },
       });
       expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
     });
@@ -215,7 +215,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       eventBus.emit({
         type: 'task:status-changed',
         timestamp: new Date().toISOString(),
-        payload: { taskId: TEST_TASK_ID, assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress' },
+        payload: { taskId: TEST_TASK_ID, assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress', triggeredBy: 'user' },
       });
       expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
     });
@@ -225,7 +225,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       eventBus.emit({
         type: 'task:status-changed',
         timestamp: new Date().toISOString(),
-        payload: { taskId: TEST_TASK_ID, assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress' },
+        payload: { taskId: TEST_TASK_ID, assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress', triggeredBy: 'user' },
       });
       expect(pendingWakeRepo.create).toHaveBeenCalledWith(expect.objectContaining({
         roleId: TEST_ROLE_ID,
@@ -609,11 +609,9 @@ describe('Orchestrators (task + conversation + run)', () => {
   });
 
   describe('scheduleNext via run:succeeded', () => {
-    it('warns and takes no action when no active transition target exists', () => {
+    it('does not transition tasks — RunEngine is now the sole authority on initial→active', () => {
       const task = taskFixture({ id: 'task-s1' });
       vi.mocked(taskScheduler.findNextTask).mockReturnValue({ task, wakeReason: 'task_scheduled' });
-      vi.mocked(processEngine.getAvailableTransitions).mockReturnValue([{ from: 'pending', to: 'review' }]);
-      vi.mocked(processEngine.getStatusCategory).mockReturnValue('approval');
 
       eventBus.emit({
         type: 'run:succeeded',
@@ -622,14 +620,11 @@ describe('Orchestrators (task + conversation + run)', () => {
       });
 
       expect(taskStateMachine.transition).not.toHaveBeenCalled();
-      expect(logger.logs.some((l) => l.level === 'warn' && l.msg.includes('No active transition'))).toBe(true);
     });
 
-    it('adds taskId to scheduledTaskIds so next status-changed uses reason=task_scheduled', () => {
+    it('wakes the next schedulable task via runCoordinator (no transition)', async () => {
       const task = taskFixture({ id: 'task-s2' });
       vi.mocked(taskScheduler.findNextTask).mockReturnValue({ task, wakeReason: 'task_scheduled' });
-      vi.mocked(processEngine.getAvailableTransitions).mockReturnValue([{ from: 'pending', to: 'in_progress' }]);
-      vi.mocked(processEngine.getStatusCategory).mockReturnValue('active');
 
       eventBus.emit({
         type: 'run:succeeded',
@@ -637,19 +632,12 @@ describe('Orchestrators (task + conversation + run)', () => {
         payload: { runId: 'r', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
       });
 
-      expect(taskStateMachine.transition).toHaveBeenCalledWith('task-s2', 'in_progress');
-
-      vi.mocked(runCoordinator.executeForTask).mockClear();
-      vi.mocked(taskRepo.findById).mockReturnValue(taskFixture({ id: 'task-s2' }));
-      eventBus.emit({
-        type: 'task:status-changed',
-        timestamp: new Date().toISOString(),
-        payload: { taskId: 'task-s2', assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress' },
+      await vi.waitFor(() => {
+        expect(runCoordinator.executeForTask).toHaveBeenCalledWith(
+          'task-s2', TEST_ROLE_ID, TEST_ORG_ID, 'task_scheduled', 'en-US',
+        );
       });
-
-      expect(runCoordinator.executeForTask).toHaveBeenCalledWith(
-        'task-s2', TEST_ROLE_ID, TEST_ORG_ID, 'task_scheduled', 'en-US',
-      );
+      expect(taskStateMachine.transition).not.toHaveBeenCalled();
     });
   });
 
@@ -658,7 +646,7 @@ describe('Orchestrators (task + conversation + run)', () => {
       eventBus.emit({
         type: 'task:status-changed',
         timestamp: new Date().toISOString(),
-        payload: { taskId: 'task-w2', assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress' },
+        payload: { taskId: 'task-w2', assigneeRoleId: TEST_ROLE_ID, orgId: TEST_ORG_ID, from: 'pending', to: 'in_progress', triggeredBy: 'user' },
       });
 
       expect(runCoordinator.executeForTask).toHaveBeenCalledWith(
@@ -745,6 +733,84 @@ describe('Orchestrators (task + conversation + run)', () => {
       await vi.waitFor(() => {
         expect(logger.logs.some((l) => l.level === 'error' && l.msg.includes('Pending wake execution failed'))).toBe(true);
       });
+    });
+  });
+
+  // ─── resumeInterruptedForOrg ─────────────────────────────────
+  describe('resumeInterruptedForOrg', () => {
+    beforeEach(() => {
+      taskOrchestrator.start();
+    });
+
+    it('wakes exactly one task chosen by TaskScheduler priority', () => {
+      const scheduledTask = taskFixture({ id: 'task-first', assigneeRoleId: 'role-a' });
+      vi.mocked(taskScheduler.findNextTask).mockReturnValue({
+        task: scheduledTask,
+        wakeReason: 'task_scheduled',
+      });
+
+      const result = taskOrchestrator.resumeInterruptedForOrg(TEST_ORG_ID);
+
+      expect(result).toBe(1);
+      expect(taskScheduler.findNextTask).toHaveBeenCalledWith(TEST_ORG_ID);
+      expect(runCoordinator.executeForTask).toHaveBeenCalledWith(
+        'task-first', 'role-a', TEST_ORG_ID, 'task_assigned', 'en-US',
+      );
+    });
+
+    it('does not bulk-wake all interrupted tasks', () => {
+      const scheduledTask = taskFixture({ id: 'task-1', assigneeRoleId: 'role-a' });
+      vi.mocked(taskScheduler.findNextTask).mockReturnValue({
+        task: scheduledTask,
+        wakeReason: 'task_scheduled',
+      });
+
+      taskOrchestrator.resumeInterruptedForOrg(TEST_ORG_ID);
+
+      expect(runCoordinator.executeForTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 0 when no schedulable task exists', () => {
+      vi.mocked(taskScheduler.findNextTask).mockReturnValue(null);
+
+      const result = taskOrchestrator.resumeInterruptedForOrg(TEST_ORG_ID);
+
+      expect(result).toBe(0);
+      expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
+    });
+
+    it('returns 0 when schedulable task has no assigneeRoleId', () => {
+      const noAssignee = taskFixture({ id: 'task-orphan', assigneeRoleId: null });
+      vi.mocked(taskScheduler.findNextTask).mockReturnValue({
+        task: noAssignee,
+        wakeReason: 'task_scheduled',
+      });
+
+      const result = taskOrchestrator.resumeInterruptedForOrg(TEST_ORG_ID);
+
+      expect(result).toBe(0);
+      expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
+    });
+
+    it('queues wake via pending_wakes when gate blocks', () => {
+      const scheduledTask = taskFixture({ id: 'task-blocked', assigneeRoleId: 'role-a' });
+      vi.mocked(taskScheduler.findNextTask).mockReturnValue({
+        task: scheduledTask,
+        wakeReason: 'task_scheduled',
+      });
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: false, reason: 'Active run' });
+
+      const result = taskOrchestrator.resumeInterruptedForOrg(TEST_ORG_ID);
+
+      expect(result).toBe(1);
+      expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
+      expect(pendingWakeRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roleId: 'role-a',
+          orgId: TEST_ORG_ID,
+          taskId: 'task-blocked',
+        }),
+      );
     });
   });
 });

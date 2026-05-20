@@ -25,14 +25,32 @@ export class TaskStateMachine {
     this.behaviorEngine = engine;
   }
 
-  transition(taskId: string, newStatus: TaskStatus): Task {
+  /**
+   * @param opts.triggeredBy
+   *   - 'user' (default): user/AI-initiated. Validated against schema
+   *     transitions in 'manual' mode.
+   *   - 'system': orchestration-driven (RunEngine task lifecycle, bootstrap
+   *     reconcile). Validated against schema transitions in 'system' mode —
+   *     so the schema still gatekeeps which edges are walkable, just from a
+   *     different vocabulary.
+   *
+   * The flag is forwarded to `task:status-changed` so that orchestrators can
+   * distinguish "system finished setting up the run" from a real user/AI
+   * transition (and avoid double-waking).
+   */
+  transition(
+    taskId: string,
+    newStatus: TaskStatus,
+    opts: { triggeredBy?: 'user' | 'system' } = {},
+  ): Task {
+    const triggeredBy = opts.triggeredBy ?? 'user';
     const task = this.taskRepo.findById(taskId);
     if (!task) throw new NotFoundError('Task', taskId);
 
     const currentStatus = task.status;
     if (currentStatus === newStatus) return task;
 
-    this.logger.debug('Task transition attempt', { taskId, from: currentStatus, to: newStatus, orgId: task.orgId });
+    this.logger.debug('Task transition attempt', { taskId, from: currentStatus, to: newStatus, orgId: task.orgId, triggeredBy });
 
     if (!this.processEngine.validateTransition(task.orgId, currentStatus, newStatus)) {
       this.logger.debug('Task transition rejected', { taskId, from: currentStatus, to: newStatus });
@@ -51,7 +69,7 @@ export class TaskStateMachine {
     }
 
     this.taskRepo.updateStatus(taskId, newStatus);
-    this.logger.debug('Task transition completed', { taskId, from: currentStatus, to: newStatus, category });
+    this.logger.debug('Task transition completed', { taskId, from: currentStatus, to: newStatus, category, triggeredBy });
 
     if (category === 'approval') {
       const autoTarget = this.resolveAutoApprovalTarget(task, newStatus);
@@ -64,13 +82,20 @@ export class TaskStateMachine {
           via: newStatus,
           to: autoTarget,
         });
-        return this.transition(taskId, autoTarget);
+        return this.transition(taskId, autoTarget, opts);
       }
       this.taskRepo.updatePausedReason(taskId, 'approval');
       this.emitEvent('task:entered-approval', { taskId, orgId: task.orgId, from: currentStatus, to: newStatus });
     } else {
       if (task.pausedReason) this.taskRepo.updatePausedReason(taskId, null);
-      this.emitEvent('task:status-changed', { taskId, orgId: task.orgId, from: currentStatus, to: newStatus, assigneeRoleId: task.assigneeRoleId });
+      this.emitEvent('task:status-changed', {
+        taskId,
+        orgId: task.orgId,
+        from: currentStatus,
+        to: newStatus,
+        assigneeRoleId: task.assigneeRoleId,
+        triggeredBy,
+      });
     }
 
     if (category === 'terminal') {

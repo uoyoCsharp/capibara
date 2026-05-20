@@ -22,11 +22,11 @@
       { "name": "cancelled", "label": "Cancelled", "category": "terminal" }
     ],
     "transitions": [
-      { "from": "todo", "to": "in_progress", "mode": "manual" },
-      { "from": "in_progress", "to": "done", "mode": "manual" },
-      { "from": "in_progress", "to": "todo", "mode": "manual" },
-      { "from": "todo", "to": "cancelled", "mode": "system" },
-      { "from": "in_progress", "to": "cancelled", "mode": "system" }
+      { "from": "todo", "to": "in_progress" },
+      { "from": "in_progress", "to": "done" },
+      { "from": "in_progress", "to": "todo" },
+      { "from": "todo", "to": "cancelled" },
+      { "from": "in_progress", "to": "cancelled" }
     ],
     "behaviorRules": [
       {

@@ -54,12 +54,23 @@ export class TaskScheduler {
     // to be dispatched so the assignee role can plan it. The prompt layer
     // picks the correct scenario (preview/eager/propose decomposition) from
     // task.planningMode + isDecomposable — see scenario.ts.
+    //
+    // We descend through non-leaves regardless of their own category — a
+    // root epic that's already 'in_progress' (active) just means its subtree
+    // is in flight; the actual schedulable frontier sits below it.
     if (this.taskRepo.hasChildren(task.id)) {
       return this.findInChildren(task.id, depth);
     }
 
-    // No children: task is the frontier. Dispatch it if initial+assignable.
+    // No children: task is the frontier. R1 applies here — only leaves can
+    // hold the active⇄run identity, so an active leaf means "this leaf has
+    // an in-flight run" and must not be re-dispatched. Only initial leaves
+    // are dispatchable.
     const category = this.processEngine.getStatusCategory(task.orgId, task.status);
+    if (category === 'active') {
+      this.logger.debug('Skipping active leaf (has in-flight run)', { taskId: task.id, status: task.status });
+      return null;
+    }
     if (category !== 'initial') return null;
 
     if (!task.assigneeRoleId) {

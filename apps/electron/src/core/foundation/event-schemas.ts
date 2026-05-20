@@ -27,6 +27,7 @@ const TaskStatusChangedSchema = z.object({
   from: z.string(),
   to: z.string(),
   assigneeRoleId: z.string().nullable(),
+  triggeredBy: z.enum(['user', 'system']),
 });
 const TaskApprovalTransitionSchema = z.object({
   taskId: z.string(),

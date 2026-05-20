@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
 import { MockLogger } from '../../helpers/mock-logger';
 import { createTestConfig, TEST_ORG_ID, TEST_ROLE_ID } from '../../helpers/fixtures';
@@ -101,5 +101,38 @@ describe('WakeGateValidator', () => {
     vi.mocked(roleRepo.findById).mockReturnValue(createRole({ consecutiveWakeCount: 9 }));
     const result = validator.validate(TEST_ROLE_ID, TEST_ORG_ID);
     expect(result.allowed).toBe(true);
+  });
+
+  // ─── Scheduler pause ──────────────────────────────────────────────
+
+  describe('scheduler pause', () => {
+    it('blocks all wakes when scheduler is paused', () => {
+      validator.setSchedulerPaused(true);
+      const result = validator.validate(TEST_ROLE_ID, TEST_ORG_ID);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('Scheduler is paused');
+    });
+
+    it('allows wakes after scheduler is resumed', () => {
+      validator.setSchedulerPaused(true);
+      validator.setSchedulerPaused(false);
+      const result = validator.validate(TEST_ROLE_ID, TEST_ORG_ID);
+      expect(result.allowed).toBe(true);
+    });
+
+    it('isSchedulerPaused returns current state', () => {
+      expect(validator.isSchedulerPaused()).toBe(false);
+      validator.setSchedulerPaused(true);
+      expect(validator.isSchedulerPaused()).toBe(true);
+      validator.setSchedulerPaused(false);
+      expect(validator.isSchedulerPaused()).toBe(false);
+    });
+
+    it('scheduler pause takes priority over other checks', () => {
+      validator.setSchedulerPaused(true);
+      const result = validator.validate(TEST_ROLE_ID, TEST_ORG_ID);
+      expect(result.reason).toBe('Scheduler is paused');
+      expect(roleRepo.findById).not.toHaveBeenCalled();
+    });
   });
 });

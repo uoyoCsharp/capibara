@@ -93,8 +93,35 @@ describe('RunEngine', () => {
       readRaw: vi.fn().mockResolvedValue([]),
     } as unknown as FileLogService;
 
+    const taskRepo = {
+      findById: vi.fn().mockReturnValue(null),
+      findByOrgId: vi.fn().mockReturnValue([]),
+      findChildren: vi.fn().mockReturnValue([]),
+      hasChildren: vi.fn().mockReturnValue(false),
+      findByAssigneeRoleId: vi.fn().mockReturnValue([]),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      updatePausedReason: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    };
+    const taskStateMachine = {
+      transition: vi.fn(),
+      confirmApproval: vi.fn(),
+      rejectApproval: vi.fn(),
+      setBehaviorEngine: vi.fn(),
+    } as unknown as import('@core/modules/workflow/engines/task.state-machine').TaskStateMachine;
+    const processEngine = {
+      getStatusCategory: vi.fn().mockReturnValue(null),
+      getInitialStatus: vi.fn().mockReturnValue(null),
+      getAvailableTransitions: vi.fn().mockReturnValue([]),
+    } as unknown as import('@core/modules/workflow/engines/process.engine').ProcessEngine;
+
     const config = createTestConfig();
-    engine = new RunEngine(runRepo, executor, eventBus, eventBus, logger, config, costTracker, fileLogService);
+    engine = new RunEngine(
+      runRepo, executor, eventBus, eventBus, logger, config, costTracker, fileLogService,
+      taskRepo, taskStateMachine, processEngine,
+    );
   });
 
   describe('execute — golden path (succeeded)', () => {

@@ -38,7 +38,10 @@
       { "from": "revision", "to": "awaiting_review" },
       { "from": "pending", "to": "cancelled" },
       { "from": "in_progress", "to": "cancelled" },
-      { "from": "blocked", "to": "cancelled" }
+      { "from": "blocked", "to": "cancelled" },
+      { "from": "in_progress", "to": "pending" },
+      { "from": "revision", "to": "pending" },
+      { "from": "blocked", "to": "pending" }
     ],
     "behaviorRules": [
       {

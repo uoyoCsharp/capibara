@@ -12,6 +12,9 @@ import { ExecutionError } from '@core/foundation/errors/capibara.errors';
 import { StreamJsonParser } from '../workers/stream-json-parser';
 import { CostTracker } from '../services/cost-tracker';
 import { FileLogService } from '../logging/file-log.service';
+import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
+import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
+import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 
 type LogCallback = (runId: string, stream: 'stdout' | 'stderr', chunk: string) => void;
 type TextCallback = (runId: string, text: string) => void;
@@ -33,6 +36,9 @@ export class RunEngine implements IRunEngine {
     private readonly config: CapibaraConfig,
     private readonly costTracker: CostTracker,
     private readonly fileLogService: FileLogService,
+    private readonly taskRepo: ITaskRepository,
+    private readonly taskStateMachine: TaskStateMachine,
+    private readonly processEngine: ProcessEngine,
   ) {
     this.executor.onLog((runId, stream, chunk) => {
       this.handleLog(runId, stream, chunk);
@@ -77,6 +83,11 @@ export class RunEngine implements IRunEngine {
     this.publishEvent('run:started', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
     this.logger.info('Run started', { runId: run.id, orgId: params.orgId, roleId: params.roleId, projectDir: params.projectDir || this.config.cli.projectDir });
 
+    // R1 invariant — RunEngine is the single authority that flips a task into
+    // an active status. We do this AFTER run is recorded as 'running' so the
+    // wake gate sees a consistent "active run ⇄ active task" pair.
+    this.advanceTaskToActive(params.taskId, params.orgId);
+
     try {
       const result = await this.executor.execute({
         runId: run.id,
@@ -106,6 +117,14 @@ export class RunEngine implements IRunEngine {
       }
 
       this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount, exitCode: result.exitCode });
+
+      // Roll the task out of active BEFORE publishing the lifecycle event so
+      // that any handler (orchestrator scheduleNext) sees a consistent state.
+      // 'succeeded' tasks may already have advanced themselves to a terminal
+      // status via the transition tool, in which case rollbackTaskIfActive
+      // is a no-op (R5).
+      this.rollbackTaskIfActive(params.taskId);
+
       if (result.status === 'succeeded') {
         this.publishEvent('run:succeeded', { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
       } else if (result.status === 'cancelled') {
@@ -135,6 +154,7 @@ export class RunEngine implements IRunEngine {
       };
     } catch (err) {
       this.runRepo.finish(run.id, 'failed');
+      this.rollbackTaskIfActive(params.taskId);
       this.publishEvent('run:failed', {
         runId: run.id,
         orgId: params.orgId,
@@ -152,6 +172,7 @@ export class RunEngine implements IRunEngine {
     this.executor.abort(runId);
     this.runRepo.finish(runId, 'cancelled');
     if (run) {
+      this.rollbackTaskIfActive(run.taskId);
       this.publishEvent('run:cancelled', {
         runId,
         orgId: run.orgId,
@@ -216,6 +237,74 @@ export class RunEngine implements IRunEngine {
   // Lifecycle events go through outbox (transactional, durable)
   private publishEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
     this.eventPublisher.publish(type, payload);
+  }
+
+  /**
+   * R2 — Move the task into its first 'active' status when execute() begins.
+   * No-op for conversation-only runs (no taskId), or if the task is already
+   * active (idempotent), or if the schema has no 'initial → active' edge from
+   * the task's current status (e.g. user already advanced it manually).
+   */
+  private advanceTaskToActive(taskId: string | null | undefined, orgId: string): void {
+    if (!taskId) return;
+    const task = this.taskRepo.findById(taskId);
+    if (!task) return;
+
+    const currentCategory = this.processEngine.getStatusCategory(orgId, task.status);
+    if (currentCategory === 'active') return;
+    if (currentCategory !== 'initial') {
+      // Approval/terminal — RunEngine has no business overriding these.
+      this.logger.debug('Skipping advanceTaskToActive for non-initial status', {
+        taskId, status: task.status, category: currentCategory,
+      });
+      return;
+    }
+
+    const transitions = this.processEngine.getAvailableTransitions(orgId, task.status);
+    const target = transitions.find(
+      (t) => this.processEngine.getStatusCategory(orgId, t.to) === 'active',
+    );
+    if (!target) {
+      this.logger.warn('Schema has no initial→active transition; task left in initial state', {
+        taskId, status: task.status,
+      });
+      return;
+    }
+
+    try {
+      this.taskStateMachine.transition(taskId, target.to, { triggeredBy: 'system' });
+    } catch (err) {
+      this.logger.error('Failed to advance task to active', { taskId, target: target.to, error: String(err) });
+    }
+  }
+
+  /**
+   * R3 — When a run terminates and the task is still 'active' (i.e. the
+   * agent didn't advance it to a terminal/approval status itself), roll the
+   * task back to the schema's first initial status. The task can then be
+   * picked up again by the scheduler.
+   */
+  private rollbackTaskIfActive(taskId: string | null | undefined): void {
+    if (!taskId) return;
+    const task = this.taskRepo.findById(taskId);
+    if (!task) return;
+
+    const category = this.processEngine.getStatusCategory(task.orgId, task.status);
+    if (category !== 'active') return;
+
+    const initial = this.processEngine.getInitialStatus(task.orgId);
+    if (!initial) {
+      this.logger.warn('Schema has no initial status; cannot rollback active task', { taskId });
+      return;
+    }
+
+    try {
+      this.taskStateMachine.transition(taskId, initial.name, { triggeredBy: 'system' });
+    } catch (err) {
+      this.logger.error('Failed to rollback active task', {
+        taskId, from: task.status, to: initial.name, error: String(err),
+      });
+    }
   }
 
   // Streaming events (log, assistant-text, status) are ephemeral high-volume

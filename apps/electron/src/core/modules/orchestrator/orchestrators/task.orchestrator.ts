@@ -22,13 +22,14 @@ import type { WakeReason } from '@core/modules/execution/types/execution.types';
  *   - descent into next schedulable task after completion
  *
  * Paused state is persisted to tasks.paused_reason (no in-memory Set).
- * scheduledTaskIds is a transient in-memory hint to distinguish
- * "scheduler drove this transition" from "someone else did"; it is
- * acceptable to lose it on restart.
+ *
+ * Scheduling does NOT mutate task status here — that is the RunEngine's job.
+ * scheduleNext picks the next schedulable task and asks the wake-gate to
+ * dispatch a run; RunEngine then drives the initial→active transition with
+ * triggeredBy:'system' so this orchestrator can ignore that echo.
  */
 @injectable()
 export class TaskOrchestrator {
-  private scheduledTaskIds = new Set<string>();
   private locale = 'en-US';
 
   constructor(
@@ -63,51 +64,29 @@ export class TaskOrchestrator {
       return;
     }
 
-    const { task } = result;
-    const transitions = this.processEngine.getAvailableTransitions(orgId, task.status);
-    const activeTarget = transitions.find((t) => {
-      const cat = this.processEngine.getStatusCategory(orgId, t.to);
-      return cat === 'active';
-    });
-
-    if (!activeTarget) {
-      this.logger.warn('No active transition from initial status', { taskId: task.id, status: task.status });
+    const { task, wakeReason } = result;
+    if (!task.assigneeRoleId) {
+      this.logger.warn('Schedulable task has no assignee, skipping wake', { taskId: task.id });
       return;
     }
 
-    this.scheduledTaskIds.add(task.id);
-    this.taskStateMachine.transition(task.id, activeTarget.to);
+    // Wake gate decides whether to dispatch now or queue. RunEngine — once
+    // the gate clears — is the sole authority that flips the task into its
+    // active status (triggeredBy:'system'), so we don't transition here.
+    this.tryWake(task.assigneeRoleId, orgId, wakeReason, task.id);
   }
 
   /**
-   * User-initiated recovery for tasks whose latest run was 'interrupted'
-   * (typically by an app restart). For each affected task we wake its
-   * assignee, which creates a fresh run — the old interrupted run stays as
-   * an audit record. Returns the number of tasks for which a wake was
-   * dispatched (queued or executing).
+   * User-initiated recovery after app restart. Picks exactly one task via
+   * TaskScheduler priority (depth-first, oldest-root first) and wakes it.
+   * Subsequent tasks are handled by the normal run:succeeded → scheduleNext
+   * chain — no bulk enqueue.
    */
   resumeInterruptedForOrg(orgId: string): number {
-    const tasks = this.taskRepo.findByOrgId(orgId);
-    let resumed = 0;
-
-    for (const task of tasks) {
-      if (!task.assigneeRoleId) continue;
-      if (task.pausedReason) continue;
-
-      const category = this.processEngine.getStatusCategory(orgId, task.status);
-      if (category === 'terminal' || category === 'approval') continue;
-
-      const runs = this.runRepo.findByTaskId(task.id);
-      if (runs.length === 0) continue;
-      // findByTaskId returns DESC by created_at, so [0] is the latest.
-      if (runs[0].status !== 'interrupted') continue;
-
-      this.logger.info('Resuming interrupted task', { taskId: task.id, roleId: task.assigneeRoleId });
-      this.tryWake(task.assigneeRoleId, orgId, 'task_assigned', task.id);
-      resumed += 1;
-    }
-
-    return resumed;
+    const result = this.taskScheduler.findNextTask(orgId);
+    if (!result || !result.task.assigneeRoleId) return 0;
+    this.tryWake(result.task.assigneeRoleId, orgId, 'task_assigned', result.task.id);
+    return 1;
   }
 
   tryWake(roleId: string, orgId: string, reason: string, taskId: string | null): void {
@@ -141,8 +120,16 @@ export class TaskOrchestrator {
   }
 
   private onTaskStatusChanged(event: DomainEvent<'task:status-changed'>): void {
-    const { taskId, assigneeRoleId, orgId, from, to } = event.payload;
-    this.logger.info('Task status changed', { taskId, from, to, assigneeRoleId });
+    const { taskId, assigneeRoleId, orgId, from, to, triggeredBy } = event.payload;
+    this.logger.info('Task status changed', { taskId, from, to, assigneeRoleId, triggeredBy });
+
+    // System-driven transitions (RunEngine starting/rolling-back a run,
+    // bootstrap reconcile) are bookkeeping echoes — never re-wake from them.
+    if (triggeredBy === 'system') {
+      this.logger.debug('Skipping wake for system-driven transition', { taskId, from, to });
+      return;
+    }
+
     if (!assigneeRoleId) return;
 
     const category = this.processEngine.getStatusCategory(orgId, to);
@@ -161,10 +148,7 @@ export class TaskOrchestrator {
       return;
     }
 
-    const reason: WakeReason = this.scheduledTaskIds.has(taskId) ? 'task_scheduled' : 'task_assigned';
-    this.scheduledTaskIds.delete(taskId);
-
-    this.tryWake(assigneeRoleId, orgId, reason, taskId);
+    this.tryWake(assigneeRoleId, orgId, 'task_assigned', taskId);
   }
 
   private onTaskEnteredApproval(event: DomainEvent<'task:entered-approval'>): void {

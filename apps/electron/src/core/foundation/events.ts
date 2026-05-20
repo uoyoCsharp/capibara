@@ -43,6 +43,12 @@ export interface TaskStatusChangedPayload {
   from: string;
   to: string;
   assigneeRoleId: string | null;
+  // 'user' (default): user/AI initiated, e.g. transition tool, scheduler;
+  //                   orchestrators may react (wake assignee, etc.).
+  // 'system': RunEngine/bootstrap drove this transition for run-lifecycle
+  //          bookkeeping; orchestrators must NOT react to avoid feedback
+  //          loops with the run that's already in flight.
+  triggeredBy: 'user' | 'system';
 }
 export interface TaskEnteredApprovalPayload {
   taskId: string;

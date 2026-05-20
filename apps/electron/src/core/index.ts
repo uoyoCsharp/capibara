@@ -24,7 +24,9 @@ async function createWindow(): Promise<void> {
 
   const broadcaster = getEventBroadcaster();
   broadcaster.setSendFn((event) => {
-    mainWindow?.webContents.send('capibara:desktop-event', event);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('capibara:desktop-event', event);
+    }
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -54,6 +56,10 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', async () => {
-  await shutdown();
+let isShuttingDown = false;
+app.on('before-quit', (e) => {
+  if (isShuttingDown) return;
+  e.preventDefault();
+  isShuttingDown = true;
+  shutdown().finally(() => app.exit(0));
 });

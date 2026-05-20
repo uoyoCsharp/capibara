@@ -1,23 +1,84 @@
 import { ipcMain, dialog, shell } from 'electron';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
+import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
+import type { RunEngine } from '@core/modules/execution/engines/run.engine';
+import type { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
+import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
+import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
+import type { ILogger } from '@core/foundation/interfaces/i-logger';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }
 
-export function registerSystemHandlers(
-  connection: ISqliteConnection,
-): void {
-  // Scheduler control (execution pause/resume) — stub for now
+export interface SystemHandlersDeps {
+  connection: ISqliteConnection;
+  runRepo: IRunRepository;
+  runEngine: RunEngine;
+  wakeGateValidator: WakeGateValidator;
+  taskOrchestrator: TaskOrchestrator;
+  orgRepo: IOrganizationRepository;
+  logger: ILogger;
+}
+
+export function registerSystemHandlers(deps: SystemHandlersDeps): void {
+  const { connection, runRepo, runEngine, wakeGateValidator, taskOrchestrator, orgRepo, logger } = deps;
+
+  // Restore persisted pause state on registration
+  try {
+    const row = connection.getDb()
+      .prepare("SELECT value FROM settings WHERE key = 'scheduler_paused'")
+      .get() as { value: string } | undefined;
+    if (row?.value === 'true') {
+      wakeGateValidator.setSchedulerPaused(true);
+    }
+  } catch { /* first run — table may not have the row */ }
+
+  // Scheduler control (execution pause/resume)
   ipcMain.handle('capibara:scheduler:get-state', async () => {
-    return ok({ paused: false });
+    return ok({ paused: wakeGateValidator.isSchedulerPaused() });
   });
 
   ipcMain.handle('capibara:scheduler:pause', async () => {
-    return ok({ cancelledRunCount: 0 });
+    try {
+      wakeGateValidator.setSchedulerPaused(true);
+      connection.getDb()
+        .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('scheduler_paused', 'true')")
+        .run();
+
+      let cancelledRunCount = 0;
+      const orgs = orgRepo.findAll();
+      for (const org of orgs) {
+        const activeRun = runRepo.findActiveByOrgId(org.id);
+        if (activeRun) {
+          await runEngine.cancelRun(activeRun.id);
+          cancelledRunCount++;
+        }
+      }
+
+      logger.info('Scheduler paused', { cancelledRunCount });
+      return ok({ cancelledRunCount });
+    } catch (e) {
+      return err('INTERNAL', String(e));
+    }
   });
 
   ipcMain.handle('capibara:scheduler:resume', async () => {
-    return ok(null);
+    try {
+      wakeGateValidator.setSchedulerPaused(false);
+      connection.getDb()
+        .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('scheduler_paused', 'false')")
+        .run();
+
+      const orgs = orgRepo.findAll();
+      for (const org of orgs) {
+        taskOrchestrator.scheduleNext(org.id);
+      }
+
+      logger.info('Scheduler resumed');
+      return ok(null);
+    } catch (e) {
+      return err('INTERNAL', String(e));
+    }
   });
 
   // Dialogs

@@ -76,7 +76,12 @@ export async function bootstrap(): Promise<void> {
     conversation.conversationService,
   );
 
-  const execution = registerExecutionModule(sqliteConn, eventBus, eventPublisher, logger, config, workerPath);
+  const execution = registerExecutionModule(
+    sqliteConn, eventBus, eventPublisher, logger, config, workerPath,
+    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
+    workflow.taskStateMachine,
+    workflow.processEngine,
+  );
 
   // Sweep stale runs left over from a prior app session (worker is gone, so
   // 'running'/'queued' rows can only be ghosts). Flipping them to 'interrupted'
@@ -85,6 +90,19 @@ export async function bootstrap(): Promise<void> {
   if (orphanedCount > 0) {
     logger.info('Marked orphaned runs as interrupted on startup', { count: orphanedCount });
   }
+
+  // R4 — After sweeping ghost runs, any task still in an 'active' status has
+  // by definition no active run any more (the only thing that could keep a
+  // task active is its own running run; we just nuked those). Roll them back
+  // to the schema's first initial status so the scheduler can pick them up
+  // again on demand. This is the cross-restart counterpart of rollbackTaskIfActive.
+  reconcileOrphanedActiveTasks(
+    org.organizationService.findAll().map((o) => o.id),
+    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
+    workflow.processEngine,
+    workflow.taskStateMachine,
+    logger,
+  );
 
   const planning = registerPlanningModule(
     workflow.taskService,
@@ -144,7 +162,15 @@ export async function bootstrap(): Promise<void> {
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);
-  registerSystemHandlers(sqliteConn);
+  registerSystemHandlers({
+    connection: sqliteConn,
+    runRepo: execution.runRepo,
+    runEngine: execution.runEngine,
+    wakeGateValidator: orchestratorModule.wakeGateValidator,
+    taskOrchestrator: orchestratorModule.taskOrchestrator,
+    orgRepo: org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
+    logger,
+  });
 
   workerService = execution.workerService;
   taskOrchestrator = orchestratorModule.taskOrchestrator;
@@ -187,6 +213,7 @@ export async function bootstrap(): Promise<void> {
 
 export async function shutdown(): Promise<void> {
   logger?.info('Shutting down Capibara core...');
+  workerService?.stop();
   mcpConfigGen?.cleanup();
   mcpIpcServer?.stop();
   sqliteConn?.close();
@@ -198,4 +225,33 @@ export function getEventBroadcaster(): EventBroadcaster {
 
 export function getSqliteConnection(): SqliteConnection {
   return sqliteConn;
+}
+
+function reconcileOrphanedActiveTasks(
+  orgIds: string[],
+  taskRepo: import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
+  processEngine: import('@core/modules/workflow/engines/process.engine').ProcessEngine,
+  taskStateMachine: import('@core/modules/workflow/engines/task.state-machine').TaskStateMachine,
+  log: ILogger,
+): void {
+  let total = 0;
+  for (const orgId of orgIds) {
+    const initial = processEngine.getInitialStatus(orgId);
+    if (!initial) continue;
+
+    for (const task of taskRepo.findByOrgId(orgId)) {
+      if (processEngine.getStatusCategory(orgId, task.status) !== 'active') continue;
+      try {
+        taskStateMachine.transition(task.id, initial.name, { triggeredBy: 'system' });
+        total += 1;
+      } catch (err) {
+        log.error('Failed to reconcile orphaned active task on startup', {
+          taskId: task.id, from: task.status, to: initial.name, error: String(err),
+        });
+      }
+    }
+  }
+  if (total > 0) {
+    log.info('Reconciled orphaned active tasks on startup', { count: total });
+  }
 }

@@ -171,6 +171,9 @@ const DEFAULT_SCHEMA: ProcessSchema = {
     { from: 'pending', to: 'cancelled' },
     { from: 'in_progress', to: 'cancelled' },
     { from: 'blocked', to: 'cancelled' },
+    { from: 'in_progress', to: 'pending' },
+    { from: 'revision', to: 'pending' },
+    { from: 'blocked', to: 'pending' },
   ],
   behaviorRules: [
     {
@@ -616,10 +619,15 @@ describe('Cascade Execution Integration', () => {
       h.taskStateMachine.confirmApproval('task-appr-2', 'approved');
 
       // The Orchestrator receives task:approval-confirmed and calls scheduleNext
-      // scheduleNext should find task-next (pending + has assignee) and transition it
+      // scheduleNext now only wakes (RunEngine is the sole authority on
+      // initial→active transitions), so we assert runCoordinator was invoked
+      // for task-next instead of inspecting its status.
+      expect(h.runCoordinator.executeForTask).toHaveBeenCalledWith(
+        'task-next', ROLE, ORG, 'task_scheduled', 'en-US',
+      );
       const nextResult = h.store.get('task-next');
       expect(nextResult).not.toBeNull();
-      expect(nextResult!.status).toBe('in_progress');
+      expect(nextResult!.status).toBe('pending');
     });
 
     it('6 - Approval rejected -> no scheduling', () => {
@@ -1133,8 +1141,13 @@ describe('Cascade Execution Integration', () => {
         payload: { orgId: ORG },
       });
 
-      // orchestrator.scheduleNext transitions todo -> working
-      expect(ch.store.get('custom-t-1')!.status).toBe('working');
+      // scheduleNext now wakes the assignee instead of transitioning the
+      // task itself — RunEngine performs initial→active when execute() runs.
+      // The task stays at 'todo' here because runCoordinator is mocked.
+      expect(ch.runCoordinator.executeForTask).toHaveBeenCalledWith(
+        'custom-t-1', ROLE, ORG, 'task_scheduled', 'en-US',
+      );
+      expect(ch.store.get('custom-t-1')!.status).toBe('todo');
     });
   });
 
@@ -1278,7 +1291,47 @@ describe('Cascade Execution Integration', () => {
       expect(h.taskRepo.findByOrgId).toHaveBeenCalledWith(ORG);
     });
 
-    it('scheduleNext transitions initial task to active via orchestrator event', () => {
+    it('R1 invariant: active leaf sibling blocks only itself, not pending siblings', () => {
+      const parent = makeTask({
+        id: 'parent-r1',
+        orgId: ORG,
+        parentId: null,
+        type: 'story',
+        status: 'in_progress',
+        depth: 0,
+      });
+      h.store.add(parent);
+
+      const activeChild = makeTask({
+        id: 'child-active',
+        orgId: ORG,
+        parentId: 'parent-r1',
+        type: 'task',
+        status: 'in_progress',
+        assigneeRoleId: ROLE,
+        depth: 1,
+        createdAt: '2026-01-01T00:00:01.000Z',
+      });
+      h.store.add(activeChild);
+
+      const pendingChild = makeTask({
+        id: 'child-pending',
+        orgId: ORG,
+        parentId: 'parent-r1',
+        type: 'task',
+        status: 'pending',
+        assigneeRoleId: ROLE,
+        depth: 1,
+        createdAt: '2026-01-01T00:00:02.000Z',
+      });
+      h.store.add(pendingChild);
+
+      const result = h.taskScheduler.findNextTask(ORG);
+      expect(result).not.toBeNull();
+      expect(result!.task.id).toBe('child-pending');
+    });
+
+    it('scheduleNext wakes initial task via orchestrator event (RunEngine drives the transition later)', () => {
       // Add a schedulable task
       const task = makeTask({
         id: 'sched-1',
@@ -1298,8 +1351,13 @@ describe('Cascade Execution Integration', () => {
         payload: { orgId: ORG },
       });
 
-      // scheduleNext finds pending task with assignee -> transitions to in_progress
-      expect(h.store.get('sched-1')!.status).toBe('in_progress');
+      // scheduleNext now only wakes the assignee — RunEngine, not the
+      // orchestrator, advances the task to 'in_progress'. With a mocked
+      // runCoordinator the task stays 'pending'.
+      expect(h.runCoordinator.executeForTask).toHaveBeenCalledWith(
+        'sched-1', ROLE, ORG, 'task_scheduled', 'en-US',
+      );
+      expect(h.store.get('sched-1')!.status).toBe('pending');
     });
   });
 });

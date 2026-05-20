@@ -11,6 +11,8 @@ export interface WakeGateResult {
 
 @injectable()
 export class WakeGateValidator {
+  private schedulerPaused = false;
+
   constructor(
     private readonly roleRepo: IRoleRepository,
     private readonly runRepo: IRunRepository,
@@ -19,6 +21,8 @@ export class WakeGateValidator {
   ) {}
 
   validate(roleId: string, orgId: string): WakeGateResult {
+    if (this.schedulerPaused) return { allowed: false, reason: 'Scheduler is paused' };
+
     const role = this.roleRepo.findById(roleId);
     if (!role) return { allowed: false, reason: 'Role not found' };
     if (role.status === 'paused') return { allowed: false, reason: 'Role is paused' };
@@ -31,5 +35,14 @@ export class WakeGateValidator {
     }
 
     return { allowed: true };
+  }
+
+  setSchedulerPaused(paused: boolean): void {
+    this.schedulerPaused = paused;
+    this.logger.info('Scheduler pause state changed', { paused });
+  }
+
+  isSchedulerPaused(): boolean {
+    return this.schedulerPaused;
   }
 }

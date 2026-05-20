@@ -19,6 +19,9 @@ import { UtilityProcessExecutor } from '@core/modules/execution/workers/utility-
 import { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import { FileLogService } from '@core/modules/execution/logging/file-log.service';
 import { RunEngine } from '@core/modules/execution/engines/run.engine';
+import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
+import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
+import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 
 export interface ExecutionModule {
   runRepo: IRunRepository;
@@ -35,6 +38,9 @@ export function registerExecutionModule(
   logger: ILogger,
   config: CapibaraConfig,
   workerPath: string,
+  taskRepo: ITaskRepository,
+  taskStateMachine: TaskStateMachine,
+  processEngine: ProcessEngine,
 ): ExecutionModule {
   const runRepo = new SqliteRunRepository(connection);
   const costEntryRepo = new SqliteCostEntryRepository(connection);
@@ -42,7 +48,10 @@ export function registerExecutionModule(
   const fileLogService = new FileLogService(config.logging.logDir);
   const workerService = new WorkerService(workerPath, logger);
   const executor = new UtilityProcessExecutor(workerService);
-  const runEngine = new RunEngine(runRepo, executor, eventBus, eventPublisher, logger, config, costTracker, fileLogService);
+  const runEngine = new RunEngine(
+    runRepo, executor, eventBus, eventPublisher, logger, config, costTracker, fileLogService,
+    taskRepo, taskStateMachine, processEngine,
+  );
 
   container.register(RUN_REPO_TOKEN, { useValue: runRepo });
   container.register(COST_ENTRY_REPO_TOKEN, { useValue: costEntryRepo });

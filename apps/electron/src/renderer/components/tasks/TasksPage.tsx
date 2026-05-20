@@ -121,7 +121,9 @@ function TaskRow({
           approval ? 'bg-yellow-500/10 text-yellow-600' :
           isRunning ? 'bg-blue-500/10 text-blue-600 animate-pulse' :
           initial ? 'bg-gray-500/10 text-gray-600' :
-          'bg-blue-500/10 text-blue-600'
+          task.status === 'revision' ? 'bg-orange-500/10 text-orange-600' :
+          task.status === 'blocked' ? 'bg-red-500/10 text-red-600' :
+          'bg-gray-500/10 text-gray-600'
         }`}>
           {statusLabel(task.status)}
         </span>

@@ -363,6 +363,47 @@ describe('TaskStateMachine', () => {
       expect(emittedTypes).toContain('task:status-changed');
       expect(emittedTypes).toContain('task:completed');
     });
+
+    // ─── triggeredBy payload propagation ────────────────────────
+
+    it('validates transition without mode parameter', () => {
+      const task = createTask({ status: 'pending' });
+      const updated = createTask({ status: 'in_progress' });
+      vi.mocked(taskRepo.findById).mockReturnValueOnce(task).mockReturnValueOnce(updated);
+      vi.mocked(processEngine.getStatusCategory).mockReturnValue('active');
+
+      stateMachine.transition('task-1', 'in_progress');
+
+      expect(processEngine.validateTransition).toHaveBeenCalledWith('org-1', 'pending', 'in_progress');
+    });
+
+    it('task:status-changed payload includes triggeredBy:"system" when system-triggered', () => {
+      const task = createTask({ status: 'in_progress' });
+      const updated = createTask({ status: 'pending' });
+      vi.mocked(taskRepo.findById).mockReturnValueOnce(task).mockReturnValueOnce(updated);
+      vi.mocked(processEngine.getStatusCategory).mockReturnValue('initial');
+
+      stateMachine.transition('task-1', 'pending', { triggeredBy: 'system' });
+
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:status-changed',
+        expect.objectContaining({ triggeredBy: 'system' }),
+      );
+    });
+
+    it('task:status-changed payload includes triggeredBy:"user" by default', () => {
+      const task = createTask({ status: 'pending', assigneeRoleId: 'role-1' });
+      const updated = createTask({ status: 'in_progress' });
+      vi.mocked(taskRepo.findById).mockReturnValueOnce(task).mockReturnValueOnce(updated);
+      vi.mocked(processEngine.getStatusCategory).mockReturnValue('active');
+
+      stateMachine.transition('task-1', 'in_progress');
+
+      expect(eventPublisher.publish).toHaveBeenCalledWith(
+        'task:status-changed',
+        expect.objectContaining({ triggeredBy: 'user' }),
+      );
+    });
   });
 
   // ─── confirmApproval() ─────────────────────────────────────────
