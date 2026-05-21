@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RunEngine } from '@core/modules/execution/engines/run.engine';
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
-import type { IExecutor } from '@core/modules/execution/interfaces/i-executor';
+import type { IExecutor, ExecutorHandle, HandleLogCallback } from '@core/modules/execution/interfaces/i-executor';
 import type { Run, ExecutorOutput } from '@core/modules/execution/types/execution.types';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
@@ -20,7 +20,7 @@ function createMockRun(overrides?: Partial<Run>): Run {
     taskId: TEST_TASK_ID,
     conversationId: null,
     roleId: TEST_ROLE_ID,
-    status: 'queued',
+    status: 'running',
     wakeReason: 'task_assigned',
     startedAt: null,
     finishedAt: null,
@@ -67,6 +67,22 @@ function createMockOutput(overrides?: Partial<ExecutorOutput>): ExecutorOutput {
   };
 }
 
+interface MockHandle extends ExecutorHandle {
+  __logCallbacks: HandleLogCallback[];
+}
+
+function createMockHandle(output: Promise<ExecutorOutput>): MockHandle {
+  const logCallbacks: HandleLogCallback[] = [];
+  return {
+    runId: 'run-1',
+    pid: 1234,
+    complete: () => output,
+    cancel: vi.fn(),
+    onLog: (cb) => { logCallbacks.push(cb); },
+    __logCallbacks: logCallbacks,
+  };
+}
+
 describe('RunEngine — task lifecycle (R2/R3)', () => {
   let engine: RunEngine;
   let runRepo: IRunRepository;
@@ -75,6 +91,7 @@ describe('RunEngine — task lifecycle (R2/R3)', () => {
   let taskRepo: ITaskRepository;
   let taskStateMachine: TaskStateMachine;
   let processEngine: ProcessEngine;
+  let currentHandle: MockHandle;
 
   beforeEach(() => {
     eventBus = new MockEventBus();
@@ -89,12 +106,12 @@ describe('RunEngine — task lifecycle (R2/R3)', () => {
       create: vi.fn().mockReturnValue(createMockRun()),
       updateStatus: vi.fn(),
       finish: vi.fn(),
+      markOrphanedAsInterrupted: vi.fn().mockReturnValue(0),
     };
 
+    currentHandle = createMockHandle(Promise.resolve(createMockOutput()));
     executor = {
-      execute: vi.fn().mockResolvedValue(createMockOutput()),
-      abort: vi.fn(),
-      onLog: vi.fn(),
+      spawn: vi.fn().mockImplementation(async () => currentHandle),
     };
 
     taskRepo = {
@@ -138,6 +155,7 @@ describe('RunEngine — task lifecycle (R2/R3)', () => {
       writeInput: vi.fn(),
       append: vi.fn(),
       flush: vi.fn().mockResolvedValue(undefined),
+      readRaw: vi.fn().mockResolvedValue([]),
     } as unknown as FileLogService;
 
     const config = createTestConfig();
@@ -146,6 +164,18 @@ describe('RunEngine — task lifecycle (R2/R3)', () => {
       taskRepo, taskStateMachine, processEngine,
     );
   });
+
+  function setExecutorOutput(output: Partial<ExecutorOutput>): void {
+    currentHandle = createMockHandle(Promise.resolve(createMockOutput(output)));
+    (executor.spawn as ReturnType<typeof vi.fn>).mockImplementation(async () => currentHandle);
+  }
+
+  function setExecutorError(err: Error): void {
+    const next = Promise.reject(err);
+    next.catch(() => {});
+    currentHandle = createMockHandle(next);
+    (executor.spawn as ReturnType<typeof vi.fn>).mockImplementation(async () => currentHandle);
+  }
 
   // ─── R2: advanceTaskToActive ─────────────────────────────────
 
@@ -249,7 +279,7 @@ describe('RunEngine — task lifecycle (R2/R3)', () => {
     });
 
     it('rolls back active task to initial on run:failed', async () => {
-      vi.mocked(executor.execute).mockResolvedValue(createMockOutput({ status: 'failed' }));
+      setExecutorOutput({ status: 'failed' });
       vi.mocked(taskRepo.findById)
         .mockReturnValueOnce(createMockTask({ status: 'pending' }))
         .mockReturnValueOnce(createMockTask({ status: 'in_progress' }));
@@ -264,7 +294,7 @@ describe('RunEngine — task lifecycle (R2/R3)', () => {
     });
 
     it('rolls back active task on executor throw', async () => {
-      vi.mocked(executor.execute).mockRejectedValue(new Error('crash'));
+      setExecutorError(new Error('crash'));
       vi.mocked(taskRepo.findById)
         .mockReturnValueOnce(createMockTask({ status: 'pending' }))
         .mockReturnValueOnce(createMockTask({ status: 'in_progress' }));

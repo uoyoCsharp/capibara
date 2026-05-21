@@ -57,20 +57,11 @@ export class ClaudeCliAdapter implements ICliAdapter {
       shell: process.platform === 'win32',
     });
 
-    const pid = await new Promise<number>((resolve, reject) => {
-      const onError = (err: Error) => reject(err);
-      proc.once('error', onError);
-      if (proc.pid) {
-        proc.off('error', onError);
-        resolve(proc.pid);
-        return;
-      }
-      proc.once('spawn', () => {
-        proc.off('error', onError);
-        if (proc.pid) resolve(proc.pid);
-        else reject(new Error('Claude CLI spawned with no pid'));
-      });
-    });
+    if (!proc.pid) {
+      throw new Error('Claude CLI failed to spawn (no pid)');
+    }
+
+    const pid = proc.pid;
 
     proc.stdin!.write(ctx.prompt);
     proc.stdin!.end();

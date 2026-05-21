@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ClaudeCliAdapter } from '@core/infrastructure/adapters/claude-cli.adapter';
 import type { CliAdapterContext } from '@core/infrastructure/adapters/i-cli-adapter';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -105,13 +105,13 @@ describe('ClaudeCliAdapter', () => {
     vi.restoreAllMocks();
   });
 
-  describe('execute', () => {
+  describe('spawn / complete', () => {
     it('writes prompt to stdin instead of passing as arg', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       expect(mockProc.stdinChunks).toEqual([ctx.prompt]);
       expect(mockProc.stdinEnded).toBe(true);
@@ -122,9 +122,9 @@ describe('ClaudeCliAdapter', () => {
 
     it('includes --print flag without prompt value in args', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       const args = vi.mocked(spawn).mock.calls[0][1] as string[];
       expect(args).toContain('--print');
@@ -135,9 +135,9 @@ describe('ClaudeCliAdapter', () => {
 
     it('includes model, max-turns, effort, mcp-config in args', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       const args = vi.mocked(spawn).mock.calls[0][1] as string[];
       expect(args).toContain('--model');
@@ -152,9 +152,9 @@ describe('ClaudeCliAdapter', () => {
 
     it('includes --resume when sessionId provided', async () => {
       const ctx = createCtx({ sessionId: 'sess-abc' });
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       const args = vi.mocked(spawn).mock.calls[0][1] as string[];
       expect(args).toContain('--resume');
@@ -163,9 +163,9 @@ describe('ClaudeCliAdapter', () => {
 
     it('omits --resume when no sessionId', async () => {
       const ctx = createCtx({ sessionId: undefined });
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       const args = vi.mocked(spawn).mock.calls[0][1] as string[];
       expect(args).not.toContain('--resume');
@@ -181,9 +181,9 @@ describe('ClaudeCliAdapter', () => {
           extraArgs: ['--verbose', '--custom-flag', '--print', '--other'],
         },
       });
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       const args = vi.mocked(spawn).mock.calls[0][1] as string[];
       expect(args).toContain('--custom-flag');
@@ -194,12 +194,12 @@ describe('ClaudeCliAdapter', () => {
 
     it('returns succeeded when exit code is 0', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
       mockProc.simulateStdout('{"type":"result","session_id":"sess-1","usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10},"result":"Done"}\n');
       mockProc.simulateClose(0);
 
-      const result = await promise;
+      const result = await handle.complete();
       expect(result.status).toBe('succeeded');
       expect(result.exitCode).toBe(0);
       expect(result.sessionId).toBe('sess-1');
@@ -211,12 +211,12 @@ describe('ClaudeCliAdapter', () => {
 
     it('returns failed when exit code is non-zero', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
       mockProc.simulateStderr('Something went wrong\n');
       mockProc.simulateClose(1);
 
-      const result = await promise;
+      const result = await handle.complete();
       expect(result.status).toBe('failed');
       expect(result.exitCode).toBe(1);
       expect(result.errorMessage).toBe('Something went wrong');
@@ -225,12 +225,12 @@ describe('ClaudeCliAdapter', () => {
     it('streams stdout/stderr to onLog callback', async () => {
       const onLog = vi.fn();
       const ctx = createCtx({ onLog });
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
       mockProc.simulateStdout('chunk1');
       mockProc.simulateStderr('err1');
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       expect(onLog).toHaveBeenCalledWith('stdout', 'chunk1');
       expect(onLog).toHaveBeenCalledWith('stderr', 'err1');
@@ -238,11 +238,11 @@ describe('ClaudeCliAdapter', () => {
 
     it('rejects on spawn error', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
       mockProc.simulateError(new Error('ENOENT'));
 
-      await expect(promise).rejects.toThrow('ENOENT');
+      await expect(handle.complete()).rejects.toThrow('ENOENT');
     });
 
     it('retries with fresh session on session error', async () => {
@@ -253,18 +253,17 @@ describe('ClaudeCliAdapter', () => {
 
       const onLog = vi.fn();
       const ctx = createCtx({ sessionId: 'sess-old', onLog });
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
       mockProc.simulateStderr('unknown session error\n');
       mockProc.simulateClose(1);
 
-      // Second attempt should not include --resume
       setTimeout(() => {
         secondMock.simulateStdout('{"type":"result","session_id":"sess-new","usage":{"input_tokens":50,"output_tokens":25,"cache_read_input_tokens":0},"result":"OK"}\n');
         secondMock.simulateClose(0);
       }, 0);
 
-      const result = await promise;
+      const result = await handle.complete();
       expect(result.status).toBe('succeeded');
       expect(result.sessionId).toBe('sess-new');
       expect(result.clearSession).toBe(true);
@@ -275,12 +274,12 @@ describe('ClaudeCliAdapter', () => {
 
     it('does not retry session error when no sessionId', async () => {
       const ctx = createCtx({ sessionId: undefined });
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
       mockProc.simulateStderr('unknown session error\n');
       mockProc.simulateClose(1);
 
-      const result = await promise;
+      const result = await handle.complete();
       expect(result.status).toBe('failed');
       expect(spawn).toHaveBeenCalledTimes(1);
     });
@@ -290,9 +289,9 @@ describe('ClaudeCliAdapter', () => {
       process.env.CLAUDE_CODE_ENTRYPOINT = '/usr/bin/claude';
 
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       const spawnOpts = vi.mocked(spawn).mock.calls[0][2] as Record<string, unknown>;
       const env = spawnOpts.env as NodeJS.ProcessEnv;
@@ -305,27 +304,34 @@ describe('ClaudeCliAdapter', () => {
 
     it('uses shell:true on Windows', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
       mockProc.simulateClose(0);
-      await promise;
+      await handle.complete();
 
       const spawnOpts = vi.mocked(spawn).mock.calls[0][2] as Record<string, unknown>;
       expect(spawnOpts.shell).toBe(process.platform === 'win32');
     });
+
+    it('throws when spawn produces no pid', async () => {
+      const noPidProc = createMockProcess();
+      (noPidProc.proc as unknown as { pid: number | undefined }).pid = undefined;
+      vi.mocked(spawn).mockReturnValue(noPidProc.proc);
+
+      const ctx = createCtx();
+      await expect(adapter.spawn(ctx)).rejects.toThrow(/no pid/i);
+    });
   });
 
-  describe('abort', () => {
-    it('kills process by runId', async () => {
+  describe('cancel', () => {
+    it('kills process via handle.cancel()', async () => {
       const ctx = createCtx();
-      const promise = adapter.execute(ctx);
+      const handle = await adapter.spawn(ctx);
 
-      // Process is now tracked — abort it
-      adapter.abort('run-1');
+      handle.cancel();
 
-      // Simulate the process closing after being killed
       mockProc.simulateClose(null, 'SIGTERM');
 
-      const result = await promise;
+      const result = await handle.complete();
       expect(result.status).toBe('failed');
       if (process.platform === 'win32') {
         const { execSync } = await import('node:child_process');
@@ -333,10 +339,6 @@ describe('ClaudeCliAdapter', () => {
       } else {
         expect(mockProc.proc.kill).toHaveBeenCalled();
       }
-    });
-
-    it('does nothing for unknown runId', () => {
-      expect(() => adapter.abort('unknown')).not.toThrow();
     });
   });
 

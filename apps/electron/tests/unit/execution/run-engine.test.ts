@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('node:crypto', async () => {
+  const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
+  return { ...actual, randomUUID: () => 'run-1' };
+});
+
 import { RunEngine } from '@core/modules/execution/engines/run.engine';
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
-import type { IExecutor } from '@core/modules/execution/interfaces/i-executor';
+import type { IExecutor, ExecutorHandle, HandleLogCallback } from '@core/modules/execution/interfaces/i-executor';
 import type { Run, ExecutorOutput } from '@core/modules/execution/types/execution.types';
 import { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import { FileLogService } from '@core/modules/execution/logging/file-log.service';
@@ -17,7 +23,7 @@ function createMockRun(overrides?: Partial<Run>): Run {
     taskId: 'task-1',
     conversationId: null,
     roleId: TEST_ROLE_ID,
-    status: 'queued',
+    status: 'running',
     wakeReason: 'task_assigned',
     startedAt: null,
     finishedAt: null,
@@ -45,6 +51,22 @@ function createMockExecutorOutput(overrides?: Partial<ExecutorOutput>): Executor
   };
 }
 
+interface MockHandle extends ExecutorHandle {
+  __logCallbacks: HandleLogCallback[];
+}
+
+function createMockHandle(output: Promise<ExecutorOutput>): MockHandle {
+  const logCallbacks: HandleLogCallback[] = [];
+  return {
+    runId: 'run-1',
+    pid: 1234,
+    complete: () => output,
+    cancel: vi.fn(),
+    onLog: (cb) => { logCallbacks.push(cb); },
+    __logCallbacks: logCallbacks,
+  };
+}
+
 describe('RunEngine', () => {
   let engine: RunEngine;
   let runRepo: IRunRepository;
@@ -54,6 +76,10 @@ describe('RunEngine', () => {
   let costTracker: CostTracker;
   let fileLogService: FileLogService;
   let costEntryRepo: { create: ReturnType<typeof vi.fn>; getTotalTokensByOrgId: ReturnType<typeof vi.fn>; getTotalCostByOrgId: ReturnType<typeof vi.fn>; findByRunId: ReturnType<typeof vi.fn>; findByOrgId: ReturnType<typeof vi.fn> };
+  let currentHandle: MockHandle;
+  let outputPromise: Promise<ExecutorOutput>;
+  let resolveOutput: (out: ExecutorOutput) => void;
+  let rejectOutput: (err: Error) => void;
 
   beforeEach(() => {
     eventBus = new MockEventBus();
@@ -69,12 +95,18 @@ describe('RunEngine', () => {
       create: vi.fn().mockReturnValue(mockRun),
       updateStatus: vi.fn(),
       finish: vi.fn(),
+      markOrphanedAsInterrupted: vi.fn().mockReturnValue(0),
     };
 
+    outputPromise = new Promise<ExecutorOutput>((resolve, reject) => {
+      resolveOutput = resolve;
+      rejectOutput = reject;
+    });
+    currentHandle = createMockHandle(outputPromise);
+    resolveOutput!(createMockExecutorOutput());
+
     executor = {
-      execute: vi.fn().mockResolvedValue(createMockExecutorOutput()),
-      abort: vi.fn(),
-      onLog: vi.fn(),
+      spawn: vi.fn().mockImplementation(async () => currentHandle),
     };
 
     costEntryRepo = {
@@ -124,6 +156,23 @@ describe('RunEngine', () => {
     );
   });
 
+  function setExecutorOutput(output: Partial<ExecutorOutput>): void {
+    const next = new Promise<ExecutorOutput>((resolve) => resolve(createMockExecutorOutput(output)));
+    currentHandle = createMockHandle(next);
+    (executor.spawn as ReturnType<typeof vi.fn>).mockImplementation(async () => currentHandle);
+  }
+
+  function setExecutorError(err: Error): void {
+    const next = Promise.reject(err);
+    next.catch(() => {});
+    currentHandle = createMockHandle(next);
+    (executor.spawn as ReturnType<typeof vi.fn>).mockImplementation(async () => currentHandle);
+  }
+
+  function setSpawnError(err: Error): void {
+    (executor.spawn as ReturnType<typeof vi.fn>).mockRejectedValue(err);
+  }
+
   describe('execute — golden path (succeeded)', () => {
     it('creates run, executes, and returns successful result', async () => {
       const params = createRunExecutionParams();
@@ -136,28 +185,23 @@ describe('RunEngine', () => {
       expect(result.outputTokens).toBe(500);
     });
 
-    it('emits events in correct order: queued → started → succeeded', async () => {
+    it('emits events in correct order: started → succeeded', async () => {
       await engine.execute(createRunExecutionParams());
 
-      eventBus.assertOrder(['run:queued', 'run:started', 'run:succeeded']);
+      eventBus.assertOrder(['run:started', 'run:succeeded']);
     });
 
-    it('creates run record via repository', async () => {
+    it('creates run record via repository (after spawn succeeds)', async () => {
       await engine.execute(createRunExecutionParams());
 
-      expect(runRepo.create).toHaveBeenCalledWith({
+      expect(runRepo.create).toHaveBeenCalledWith(expect.objectContaining({
         orgId: TEST_ORG_ID,
         taskId: 'task-test-1',
         conversationId: null,
         roleId: TEST_ROLE_ID,
         wakeReason: 'task_assigned',
-      });
-    });
-
-    it('updates run status to running', async () => {
-      await engine.execute(createRunExecutionParams());
-
-      expect(runRepo.updateStatus).toHaveBeenCalledWith('run-1', 'running');
+      }));
+      expect((runRepo.create as ReturnType<typeof vi.fn>).mock.calls[0][0].id).toEqual(expect.any(String));
     });
 
     it('finishes run with token count and status', async () => {
@@ -192,9 +236,7 @@ describe('RunEngine', () => {
 
   describe('execute — failed', () => {
     it('emits run:failed when executor returns failed status', async () => {
-      (executor.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
-        createMockExecutorOutput({ status: 'failed', errorMessage: 'CLI error' }),
-      );
+      setExecutorOutput({ status: 'failed', errorMessage: 'CLI error' });
 
       const result = await engine.execute(createRunExecutionParams());
 
@@ -202,26 +244,35 @@ describe('RunEngine', () => {
       eventBus.assertEmitted('run:failed');
     });
 
-    it('emits run:failed when executor throws', async () => {
-      (executor.execute as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('crash'));
+    it('emits run:failed when executor throws during completion', async () => {
+      setExecutorError(new Error('crash'));
 
       await expect(engine.execute(createRunExecutionParams())).rejects.toThrow('crash');
-      eventBus.assertOrder(['run:queued', 'run:started', 'run:failed']);
+      eventBus.assertOrder(['run:started', 'run:failed']);
     });
 
-    it('finishes run with failed status on executor error', async () => {
-      (executor.execute as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('crash'));
+    it('finishes run with failed status on completion error', async () => {
+      setExecutorError(new Error('crash'));
 
       await expect(engine.execute(createRunExecutionParams())).rejects.toThrow();
       expect(runRepo.finish).toHaveBeenCalledWith('run-1', 'failed');
+    });
+
+    it('does not create run when spawn fails (zero side effects)', async () => {
+      setSpawnError(new Error('ENOENT'));
+
+      await expect(engine.execute(createRunExecutionParams())).rejects.toThrow('ENOENT');
+
+      expect(runRepo.create).not.toHaveBeenCalled();
+      expect(fileLogService.writeInput).not.toHaveBeenCalled();
+      eventBus.assertNotEmitted('run:started');
+      eventBus.assertNotEmitted('run:failed');
     });
   });
 
   describe('execute — cancelled', () => {
     it('emits run:cancelled when executor returns cancelled status', async () => {
-      (executor.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
-        createMockExecutorOutput({ status: 'cancelled' }),
-      );
+      setExecutorOutput({ status: 'cancelled' });
 
       const result = await engine.execute(createRunExecutionParams());
 
@@ -231,38 +282,58 @@ describe('RunEngine', () => {
   });
 
   describe('cancelRun', () => {
-    it('aborts executor and finishes run as cancelled', async () => {
-      await engine.cancelRun('run-1');
+    it('cancels active handle and finishes run as cancelled', async () => {
+      let release: (() => void) | null = null;
+      const blocking = new Promise<ExecutorOutput>((resolve) => {
+        release = () => resolve(createMockExecutorOutput({ status: 'cancelled' }));
+      });
+      currentHandle = createMockHandle(blocking);
+      (executor.spawn as ReturnType<typeof vi.fn>).mockImplementation(async () => currentHandle);
 
-      expect(executor.abort).toHaveBeenCalledWith('run-1');
+      const handlePromise = engine.execute(createRunExecutionParams());
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setImmediate(r));
+
+      await engine.cancelRun('run-1');
+      release!();
+      await handlePromise.catch(() => {});
+
+      expect(currentHandle.cancel).toHaveBeenCalled();
       expect(runRepo.finish).toHaveBeenCalledWith('run-1', 'cancelled');
       eventBus.assertEmitted('run:cancelled');
     });
   });
 
   describe('serial execution guard', () => {
-    it('throws ExecutionError when org already has active run', async () => {
-      (runRepo.findActiveByOrgId as ReturnType<typeof vi.fn>).mockReturnValue(createMockRun({ id: 'active-run' }));
+    it('throws ExecutionError when org already has an in-flight run', async () => {
+      let releaseFirst: (() => void) | null = null;
+      const blockingOutput = new Promise<ExecutorOutput>((resolve) => {
+        releaseFirst = () => resolve(createMockExecutorOutput());
+      });
+      const blockingHandle = createMockHandle(blockingOutput);
+      (executor.spawn as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => blockingHandle);
+
+      const first = engine.execute(createRunExecutionParams());
+      await new Promise((r) => setImmediate(r));
 
       await expect(engine.execute(createRunExecutionParams()))
         .rejects.toThrow(ExecutionError);
+
+      releaseFirst!();
+      await first;
     });
   });
 
   describe('edge cases', () => {
     it('does not record cost when tokenCount is 0', async () => {
-      (executor.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
-        createMockExecutorOutput({ inputTokens: 0, outputTokens: 0 }),
-      );
+      setExecutorOutput({ inputTokens: 0, outputTokens: 0 });
 
       await engine.execute(createRunExecutionParams());
       expect(costEntryRepo.create).not.toHaveBeenCalled();
     });
 
     it('handles null sessionId in executor output', async () => {
-      (executor.execute as ReturnType<typeof vi.fn>).mockResolvedValue(
-        createMockExecutorOutput({ sessionId: null }),
-      );
+      setExecutorOutput({ sessionId: null });
 
       const result = await engine.execute(createRunExecutionParams());
       expect(result.sessionId).toBeNull();
@@ -277,7 +348,7 @@ describe('RunEngine', () => {
 
       await engine.execute(params);
 
-      expect(executor.execute).toHaveBeenCalledWith(
+      expect(executor.spawn).toHaveBeenCalledWith(
         expect.objectContaining({ prompt: 'follow up message', sessionId: 'sess-existing' }),
       );
     });
@@ -294,19 +365,21 @@ describe('RunEngine', () => {
   });
 
   describe('log callbacks', () => {
-    it('invokes registered log callbacks on executor log', () => {
+    it('invokes registered log callbacks when handle emits log', async () => {
       const logCallback = vi.fn();
       engine.onLog(logCallback);
 
-      const onLogHandler = (executor.onLog as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      onLogHandler('run-1', 'stdout', 'test chunk');
+      await engine.execute(createRunExecutionParams());
+
+      currentHandle.__logCallbacks.forEach((cb) => cb('stdout', 'test chunk'));
 
       expect(logCallback).toHaveBeenCalledWith('run-1', 'stdout', 'test chunk');
     });
 
-    it('emits run:log event on executor log', () => {
-      const onLogHandler = (executor.onLog as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      onLogHandler('run-1', 'stderr', 'error output');
+    it('emits run:log event when handle emits log', async () => {
+      await engine.execute(createRunExecutionParams());
+
+      currentHandle.__logCallbacks.forEach((cb) => cb('stderr', 'error output'));
 
       eventBus.assertEmitted('run:log');
       const event = eventBus.getLastEmitted('run:log');
