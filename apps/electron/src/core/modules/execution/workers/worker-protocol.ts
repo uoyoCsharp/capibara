@@ -15,10 +15,12 @@ export interface RunJob {
 }
 
 export type ParentMessage =
-  | { type: 'enqueue-run'; payload: RunJob }
+  | { type: 'spawn-run'; payload: RunJob }
   | { type: 'cancel-run'; runId: string };
 
 export type ChildMessage =
+  | { type: 'run-spawned'; runId: string; pid: number }
+  | { type: 'run-spawn-failed'; runId: string; errorMessage: string }
   | { type: 'run-log'; runId: string; stream: 'stdout' | 'stderr'; chunk: string }
   | { type: 'run-status'; runId: string; status: RunStatus; message: string }
   | {

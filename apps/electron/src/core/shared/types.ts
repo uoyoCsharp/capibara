@@ -78,7 +78,7 @@ export interface RunRecord {
   taskId: string | null;
   conversationId: string | null;
   roleId: string;
-  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
   wakeReason: string;
   startedAt: string | null;
   finishedAt: string | null;

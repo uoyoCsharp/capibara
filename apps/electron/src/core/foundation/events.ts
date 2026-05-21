@@ -132,11 +132,6 @@ export interface ConversationCompletedPayload {
 }
 
 // Run ──────────────────────────────────────────────────────────
-export interface RunQueuedPayload {
-  runId: string;
-  orgId: string;
-  roleId: string;
-}
 export interface RunStartedPayload {
   runId: string;
   orgId: string;
@@ -260,7 +255,6 @@ export interface DomainEventMap {
   'conversation:completed': ConversationCompletedPayload;
 
   // Run
-  'run:queued': RunQueuedPayload;
   'run:started': RunStartedPayload;
   'run:succeeded': RunSucceededPayload;
   'run:failed': RunFailedPayload;

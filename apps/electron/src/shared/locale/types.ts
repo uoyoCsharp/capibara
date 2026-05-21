@@ -172,7 +172,6 @@ export interface LocaleMessages {
       succeeded: string;
       failed: string;
       running: string;
-      queued: string;
       cancelled: string;
     };
   };

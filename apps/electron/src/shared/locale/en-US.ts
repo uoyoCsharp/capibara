@@ -157,7 +157,6 @@ export const enUS: LocaleMessages = {
       succeeded: 'Succeeded',
       failed: 'Failed',
       running: 'Running',
-      queued: 'Queued',
       cancelled: 'Cancelled',
     },
   },

@@ -1,7 +1,15 @@
-import type { ExecutorInput, ExecutorOutput, ExecutorLogCallback } from '../types/execution.types';
+import type { ExecutorInput, ExecutorOutput } from '../types/execution.types';
+
+export type HandleLogCallback = (stream: 'stdout' | 'stderr', chunk: string) => void;
+
+export interface ExecutorHandle {
+  runId: string;
+  pid: number;
+  complete(): Promise<ExecutorOutput>;
+  cancel(): void;
+  onLog(callback: HandleLogCallback): void;
+}
 
 export interface IExecutor {
-  execute(input: ExecutorInput): Promise<ExecutorOutput>;
-  abort(runId: string): void;
-  onLog(callback: ExecutorLogCallback): void;
+  spawn(input: ExecutorInput): Promise<ExecutorHandle>;
 }

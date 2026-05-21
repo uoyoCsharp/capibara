@@ -1,5 +1,4 @@
 export type RunStatus =
-  | 'queued'
   | 'running'
   | 'succeeded'
   | 'failed'
@@ -97,12 +96,6 @@ export interface ExecutorOutput {
   cachedInputTokens: number;
 }
 
-export type ExecutorLogCallback = (
-  runId: string,
-  stream: 'stdout' | 'stderr',
-  chunk: string,
-) => void;
-
 export interface RunExecutionParams {
   roleId: string;
   orgId: string;
@@ -130,6 +123,7 @@ export interface RunResult {
 }
 
 interface CreateRunBase {
+  id: string;
   orgId: string;
   roleId: string;
   wakeReason: WakeReason;

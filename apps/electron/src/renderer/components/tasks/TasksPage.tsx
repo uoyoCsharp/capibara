@@ -188,7 +188,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
       if (res.ok && res.data) {
         const ids = new Set<string>();
         for (const run of res.data) {
-          if (run.taskId && (run.status === 'running' || run.status === 'queued')) {
+          if (run.taskId && run.status === 'running') {
             ids.add(run.taskId);
           }
         }

@@ -157,7 +157,6 @@ export const zhCN: LocaleMessages = {
       succeeded: '已成功',
       failed: '已失败',
       running: '运行中',
-      queued: '排队中',
       cancelled: '已取消',
     },
   },

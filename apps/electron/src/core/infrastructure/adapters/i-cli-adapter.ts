@@ -28,8 +28,13 @@ export interface CliAdapterResult {
   clearSession: boolean;
 }
 
+export interface CliAdapterHandle {
+  pid: number;
+  complete(): Promise<CliAdapterResult>;
+  cancel(): void;
+}
+
 export interface ICliAdapter {
   readonly name: string;
-  execute(ctx: CliAdapterContext): Promise<CliAdapterResult>;
-  abort(runId: string): void;
+  spawn(ctx: CliAdapterContext): Promise<CliAdapterHandle>;
 }

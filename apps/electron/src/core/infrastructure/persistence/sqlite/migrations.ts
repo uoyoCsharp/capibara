@@ -176,7 +176,7 @@ const migrations: Migration[] = [
           task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
           conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
           role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-          status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
+          status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
           wake_reason TEXT NOT NULL,
           started_at TEXT,
           finished_at TEXT,
@@ -190,7 +190,7 @@ const migrations: Migration[] = [
 
         CREATE UNIQUE INDEX idx_runs_active_per_role
           ON runs(role_id)
-          WHERE status IN ('queued', 'running');
+          WHERE status = 'running';
 
         -- ═══════════════════════════════════════════════
         -- 11. Cost Entries

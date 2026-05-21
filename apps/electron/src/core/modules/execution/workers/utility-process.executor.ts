@@ -1,39 +1,49 @@
 import { injectable } from 'tsyringe';
-import type { IExecutor } from '../interfaces/i-executor';
-import type { ExecutorInput, ExecutorOutput, ExecutorLogCallback } from '../types/execution.types';
+import type { IExecutor, ExecutorHandle, HandleLogCallback } from '../interfaces/i-executor';
+import type { ExecutorInput, ExecutorOutput } from '../types/execution.types';
 import type { WorkerService } from './worker-service';
 import type { ChildMessage } from './worker-protocol';
 
 @injectable()
 export class UtilityProcessExecutor implements IExecutor {
-  private logCallbacks: ExecutorLogCallback[] = [];
+  private logRouters = new Map<string, Set<HandleLogCallback>>();
 
   constructor(private readonly workerService: WorkerService) {
     this.workerService.onMessage((msg: ChildMessage) => {
       if (msg.type === 'run-log') {
-        for (const cb of this.logCallbacks) {
-          cb(msg.runId, msg.stream, msg.chunk);
+        const callbacks = this.logRouters.get(msg.runId);
+        if (callbacks) {
+          for (const cb of callbacks) cb(msg.stream, msg.chunk);
         }
       }
     });
   }
 
-  async execute(input: ExecutorInput): Promise<ExecutorOutput> {
-    const result = await this.workerService.enqueueRun({
-      runId: input.runId,
-      roleId: input.roleId,
-      orgId: input.orgId,
-      taskId: input.taskId,
-      wakeReason: input.wakeReason,
-      prompt: input.prompt,
-      mcpConfigPath: input.mcpConfigPath,
-      projectDir: input.projectDir,
-      executor: input.executor,
-      cliConfig: input.cliConfig,
-      sessionId: input.sessionId,
-    });
+  async spawn(input: ExecutorInput): Promise<ExecutorHandle> {
+    const callbacks = new Set<HandleLogCallback>();
+    this.logRouters.set(input.runId, callbacks);
 
-    return {
+    let spawned;
+    try {
+      spawned = await this.workerService.spawnRun({
+        runId: input.runId,
+        roleId: input.roleId,
+        orgId: input.orgId,
+        taskId: input.taskId,
+        wakeReason: input.wakeReason,
+        prompt: input.prompt,
+        mcpConfigPath: input.mcpConfigPath,
+        projectDir: input.projectDir,
+        executor: input.executor,
+        cliConfig: input.cliConfig,
+        sessionId: input.sessionId,
+      });
+    } catch (err) {
+      this.logRouters.delete(input.runId);
+      throw err;
+    }
+
+    const completion = spawned.finished.then((result): ExecutorOutput => ({
       exitCode: result.exitCode,
       status: result.status as ExecutorOutput['status'],
       summary: result.summary,
@@ -43,14 +53,16 @@ export class UtilityProcessExecutor implements IExecutor {
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       cachedInputTokens: result.cachedInputTokens,
+    })).finally(() => {
+      this.logRouters.delete(input.runId);
+    });
+
+    return {
+      runId: input.runId,
+      pid: spawned.pid,
+      complete: () => completion,
+      cancel: () => this.workerService.cancelRun(input.runId),
+      onLog: (cb) => { callbacks.add(cb); },
     };
-  }
-
-  abort(runId: string): void {
-    this.workerService.cancelRun(runId);
-  }
-
-  onLog(callback: ExecutorLogCallback): void {
-    this.logCallbacks.push(callback);
   }
 }

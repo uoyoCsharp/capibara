@@ -183,7 +183,6 @@ export const EVENT_SCHEMAS = {
   'conversation:cancelled': ConversationCancelledSchema,
   'conversation:completed': ConversationCompletedSchema,
 
-  'run:queued': RunLifecycleSchema,
   'run:started': RunLifecycleSchema,
   'run:succeeded': RunWithTokensSchema,
   'run:failed': RunFailedSchema,

@@ -1,5 +1,5 @@
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
-import type { ICliAdapter, CliAdapterContext, CliAdapterResult } from './i-cli-adapter';
+import type { ICliAdapter, CliAdapterContext, CliAdapterHandle, CliAdapterResult } from './i-cli-adapter';
 import { parseClaudeStreamJson } from './claude-stream-parser';
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -18,93 +18,102 @@ const MANAGED_FLAGS = [
   '-p',
 ];
 
+function killTree(proc: ChildProcess): void {
+  if (!proc.pid) return;
+  if (process.platform === 'win32') {
+    try {
+      execSync(`taskkill /T /F /PID ${proc.pid}`, { stdio: 'ignore' });
+    } catch {
+      // already exited
+    }
+  } else {
+    proc.kill('SIGTERM');
+    setTimeout(() => {
+      if (!proc.killed) proc.kill('SIGKILL');
+    }, 5000);
+  }
+}
+
 export class ClaudeCliAdapter implements ICliAdapter {
   readonly name = 'claude-cli';
-  private readonly children = new Map<string, ChildProcess>();
 
-  execute(ctx: CliAdapterContext): Promise<CliAdapterResult> {
-    return this.doExecute(ctx, false);
+  async spawn(ctx: CliAdapterContext): Promise<CliAdapterHandle> {
+    return this.doSpawn(ctx, false);
   }
 
-  abort(runId: string): void {
-    const child = this.children.get(runId);
-    if (!child || !child.pid) return;
-
-    if (process.platform === 'win32') {
-      try {
-        execSync(`taskkill /T /F /PID ${child.pid}`, { stdio: 'ignore' });
-      } catch {
-        // Process may have already exited
-      }
-    } else {
-      child.kill('SIGTERM');
-      setTimeout(() => {
-        if (!child.killed) child.kill('SIGKILL');
-      }, 5000);
-    }
-  }
-
-  private async doExecute(ctx: CliAdapterContext, isSessionRetry: boolean): Promise<CliAdapterResult> {
+  private async doSpawn(ctx: CliAdapterContext, isSessionRetry: boolean): Promise<CliAdapterHandle> {
     const args = this.buildArgs(ctx, isSessionRetry);
     const env = this.buildEnv();
     const timeoutMs = ctx.cliConfig?.timeoutMs ?? 0;
 
-    return new Promise((resolve, reject) => {
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-      let timer: ReturnType<typeof setTimeout> | null = null;
+    if (isDev) {
+      ctx.onLog('stderr', `[capibara:debug] Spawning Claude CLI: args=${JSON.stringify(args)} projectDir=${ctx.projectDir} sessionId=${ctx.sessionId ?? 'none'}\n`);
+    }
 
-      if (isDev) {
-        ctx.onLog('stderr', `[capibara:debug] Spawning Claude CLI: args=${JSON.stringify(args)} projectDir=${ctx.projectDir} sessionId=${ctx.sessionId ?? 'none'}\n`);
+    const proc = spawn('claude', args, {
+      cwd: ctx.projectDir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env,
+      shell: process.platform === 'win32',
+    });
+
+    const pid = await new Promise<number>((resolve, reject) => {
+      const onError = (err: Error) => reject(err);
+      proc.once('error', onError);
+      if (proc.pid) {
+        proc.off('error', onError);
+        resolve(proc.pid);
+        return;
       }
-
-      const proc = spawn('claude', args, {
-        cwd: ctx.projectDir,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env,
-        shell: process.platform === 'win32',
+      proc.once('spawn', () => {
+        proc.off('error', onError);
+        if (proc.pid) resolve(proc.pid);
+        else reject(new Error('Claude CLI spawned with no pid'));
       });
+    });
 
-      this.children.set(ctx.runId, proc);
+    proc.stdin!.write(ctx.prompt);
+    proc.stdin!.end();
 
-      proc.stdin!.write(ctx.prompt);
-      proc.stdin!.end();
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-      if (timeoutMs > 0) {
-        timer = setTimeout(() => {
-          timedOut = true;
-          proc.kill('SIGTERM');
-          setTimeout(() => { if (!proc.killed) proc.kill('SIGKILL'); }, 5000);
-        }, timeoutMs);
-      }
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        killTree(proc);
+      }, timeoutMs);
+    }
 
-      proc.stdout?.on('data', (data: Buffer) => {
-        const chunk = data.toString();
-        stdout += chunk;
-        ctx.onLog('stdout', chunk);
-      });
+    proc.stdout?.on('data', (data: Buffer) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      ctx.onLog('stdout', chunk);
+    });
 
-      proc.stderr?.on('data', (data: Buffer) => {
-        const chunk = data.toString();
-        stderr += chunk;
-        ctx.onLog('stderr', chunk);
-      });
+    proc.stderr?.on('data', (data: Buffer) => {
+      const chunk = data.toString();
+      stderr += chunk;
+      ctx.onLog('stderr', chunk);
+    });
 
+    const completion = new Promise<CliAdapterResult>((resolve, reject) => {
       proc.on('error', (err) => {
-        this.children.delete(ctx.runId);
         if (timer) clearTimeout(timer);
         reject(err);
       });
 
       proc.on('close', (code, signal) => {
-        this.children.delete(ctx.runId);
         if (timer) clearTimeout(timer);
 
         const sessionError = this.isSessionError(stderr, stdout);
         if (!isSessionRetry && ctx.sessionId && sessionError) {
           ctx.onLog('stderr', `[capibara] Session "${ctx.sessionId}" unavailable; retrying fresh.\n`);
-          this.doExecute(ctx, true).then(resolve, reject);
+          this.doSpawn(ctx, true)
+            .then((retry) => retry.complete())
+            .then(resolve, reject);
           return;
         }
 
@@ -139,6 +148,12 @@ export class ClaudeCliAdapter implements ICliAdapter {
         });
       });
     });
+
+    return {
+      pid,
+      complete: () => completion,
+      cancel: () => killTree(proc),
+    };
   }
 
   private buildArgs(ctx: CliAdapterContext, skipSession: boolean): string[] {

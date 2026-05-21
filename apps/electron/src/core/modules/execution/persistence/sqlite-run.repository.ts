@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { injectable } from 'tsyringe';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import type { IRunRepository } from '../interfaces/i-run.repository';
@@ -78,39 +77,33 @@ export class SqliteRunRepository implements IRunRepository {
 
   findActiveByRoleId(roleId: string): Run | null {
     const row = this.connection.getDb()
-      .prepare("SELECT * FROM runs WHERE role_id = ? AND status IN ('queued', 'running') LIMIT 1")
+      .prepare("SELECT * FROM runs WHERE role_id = ? AND status = 'running' LIMIT 1")
       .get(roleId) as RunRow | undefined;
     return row ? toRun(row) : null;
   }
 
   findActiveByOrgId(orgId: string): Run | null {
     const row = this.connection.getDb()
-      .prepare("SELECT * FROM runs WHERE org_id = ? AND status IN ('queued', 'running') LIMIT 1")
+      .prepare("SELECT * FROM runs WHERE org_id = ? AND status = 'running' LIMIT 1")
       .get(orgId) as RunRow | undefined;
     return row ? toRun(row) : null;
   }
 
   create(input: CreateRunInput): Run {
-    const id = randomUUID();
     const now = new Date().toISOString();
     this.connection.getDb()
       .prepare(`
-        INSERT INTO runs (id, org_id, task_id, conversation_id, role_id, status, wake_reason, created_at)
-        VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)
+        INSERT INTO runs (id, org_id, task_id, conversation_id, role_id, status, wake_reason, started_at, created_at)
+        VALUES (?, ?, ?, ?, ?, 'running', ?, ?, ?)
       `)
-      .run(id, input.orgId, input.taskId, input.conversationId, input.roleId, input.wakeReason, now);
-    return this.findById(id)!;
+      .run(input.id, input.orgId, input.taskId, input.conversationId, input.roleId, input.wakeReason, now, now);
+    return this.findById(input.id)!;
   }
 
   updateStatus(id: string, status: RunStatus): void {
-    const updates: Record<string, string | null> = { status };
-    if (status === 'running') {
-      updates.started_at = new Date().toISOString();
-    }
-    const setClauses = Object.keys(updates).map((k) => `${k} = ?`).join(', ');
     this.connection.getDb()
-      .prepare(`UPDATE runs SET ${setClauses} WHERE id = ?`)
-      .run(...Object.values(updates), id);
+      .prepare('UPDATE runs SET status = ? WHERE id = ?')
+      .run(status, id);
   }
 
   finish(id: string, status: RunStatus, tokenCount?: number, costUsd?: number, sessionId?: string | null, summary?: string | null, errorMessage?: string | null): void {
@@ -126,10 +119,6 @@ export class SqliteRunRepository implements IRunRepository {
   }
 
   markOrphanedAsInterrupted(): number {
-    // Runs left in 'running' or 'queued' across an app restart can never be the
-    // current process's work — the worker that owned them is gone. Flip them to
-    // 'interrupted' so the UI no longer shows them as active and the wake gate
-    // (findActiveByOrgId) stops blocking new schedules.
     const now = new Date().toISOString();
     const result = this.connection.getDb()
       .prepare(`
@@ -137,7 +126,7 @@ export class SqliteRunRepository implements IRunRepository {
         SET status = 'interrupted',
             finished_at = COALESCE(finished_at, ?),
             error_message = COALESCE(error_message, 'Interrupted by app restart')
-        WHERE status IN ('queued', 'running')
+        WHERE status = 'running'
       `)
       .run(now);
     return result.changes;

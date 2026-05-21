@@ -83,9 +83,6 @@ export async function bootstrap(): Promise<void> {
     workflow.processEngine,
   );
 
-  // Sweep stale runs left over from a prior app session (worker is gone, so
-  // 'running'/'queued' rows can only be ghosts). Flipping them to 'interrupted'
-  // un-blocks the wake gate and lets the UI show the correct status.
   const orphanedCount = execution.runRepo.markOrphanedAsInterrupted();
   if (orphanedCount > 0) {
     logger.info('Marked orphaned runs as interrupted on startup', { count: orphanedCount });

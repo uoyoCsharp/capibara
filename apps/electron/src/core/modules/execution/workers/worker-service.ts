@@ -3,13 +3,20 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { RunJob, ChildMessage } from './worker-protocol';
 
 type MessageHandler = (msg: ChildMessage) => void;
+type FinishedMessage = Extract<ChildMessage, { type: 'run-finished' }>;
+
+export interface SpawnedRun {
+  pid: number;
+  finished: Promise<FinishedMessage>;
+}
 
 @injectable()
 export class WorkerService {
   private worker: Electron.UtilityProcess | null = null;
   private messageHandlers: MessageHandler[] = [];
   private activeRunIds = new Set<string>();
-  private onFinishedCallbacks = new Map<string, (msg: Extract<ChildMessage, { type: 'run-finished' }>) => void>();
+  private spawnCallbacks = new Map<string, { resolve: (pid: number) => void; reject: (err: Error) => void }>();
+  private finishedCallbacks = new Map<string, (msg: FinishedMessage) => void>();
 
   constructor(
     private readonly workerPath: string,
@@ -27,11 +34,31 @@ export class WorkerService {
         handler(msg);
       }
 
+      if (msg.type === 'run-spawned') {
+        const cb = this.spawnCallbacks.get(msg.runId);
+        if (cb) {
+          this.spawnCallbacks.delete(msg.runId);
+          cb.resolve(msg.pid);
+        }
+        return;
+      }
+
+      if (msg.type === 'run-spawn-failed') {
+        const spawnCb = this.spawnCallbacks.get(msg.runId);
+        if (spawnCb) {
+          this.spawnCallbacks.delete(msg.runId);
+          spawnCb.reject(new Error(msg.errorMessage));
+        }
+        this.finishedCallbacks.delete(msg.runId);
+        this.activeRunIds.delete(msg.runId);
+        return;
+      }
+
       if (msg.type === 'run-finished') {
         this.activeRunIds.delete(msg.runId);
-        const cb = this.onFinishedCallbacks.get(msg.runId);
+        const cb = this.finishedCallbacks.get(msg.runId);
         if (cb) {
-          this.onFinishedCallbacks.delete(msg.runId);
+          this.finishedCallbacks.delete(msg.runId);
           cb(msg);
         }
       }
@@ -51,15 +78,22 @@ export class WorkerService {
     }
   }
 
-  enqueueRun(job: RunJob): Promise<Extract<ChildMessage, { type: 'run-finished' }>> {
+  spawnRun(job: RunJob): Promise<SpawnedRun> {
     if (!this.worker) {
       this.start();
     }
     this.activeRunIds.add(job.runId);
 
-    return new Promise((resolve) => {
-      this.onFinishedCallbacks.set(job.runId, resolve);
-      this.worker!.postMessage({ type: 'enqueue-run', payload: job });
+    const finished = new Promise<FinishedMessage>((resolve) => {
+      this.finishedCallbacks.set(job.runId, resolve);
+    });
+
+    return new Promise<SpawnedRun>((resolve, reject) => {
+      this.spawnCallbacks.set(job.runId, {
+        resolve: (pid) => resolve({ pid, finished }),
+        reject,
+      });
+      this.worker!.postMessage({ type: 'spawn-run', payload: job });
     });
   }
 
@@ -75,10 +109,15 @@ export class WorkerService {
 
   private failActiveRuns(errorMessage: string): void {
     for (const runId of this.activeRunIds) {
-      const cb = this.onFinishedCallbacks.get(runId);
-      if (cb) {
-        this.onFinishedCallbacks.delete(runId);
-        cb({
+      const spawnCb = this.spawnCallbacks.get(runId);
+      if (spawnCb) {
+        this.spawnCallbacks.delete(runId);
+        spawnCb.reject(new Error(errorMessage));
+      }
+      const finishedCb = this.finishedCallbacks.get(runId);
+      if (finishedCb) {
+        this.finishedCallbacks.delete(runId);
+        finishedCb({
           type: 'run-finished',
           runId,
           status: 'failed',

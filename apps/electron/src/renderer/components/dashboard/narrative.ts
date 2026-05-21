@@ -39,7 +39,7 @@ export function buildNarrative(input: NarrativeInput): Narrative {
   const blockedTasks = tasks.filter((x) => x.status === 'blocked');
   const inProgressTasks = tasks.filter((x) => x.status === 'in_progress');
 
-  const activeRuns = runs.filter((r) => ['queued', 'running'].includes(r.status));
+  const activeRuns = runs.filter((r) => r.status === 'running');
   const failedRuns = runs.filter((r) => r.status === 'failed').slice(0, 5);
   const totalTokens = runs.reduce((sum, r) => sum + (r.tokenCount ?? 0), 0);
   const totalCost = runs.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);

@@ -55,7 +55,7 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
   });
 
   const activeTasks = tasks.filter((t) => !['done', 'cancelled'].includes(t.status));
-  const activeRuns = runs.filter((r) => ['queued', 'running'].includes(r.status));
+  const activeRuns = runs.filter((r) => r.status === 'running');
   const aiRoles = roles.filter((r) => !r.isSystemRole);
 
   return (

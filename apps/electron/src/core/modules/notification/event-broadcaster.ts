@@ -49,7 +49,6 @@ const EVENT_MAPPINGS = [
     domain: 'task:entered-approval',
     map: (p) => ({ type: 'task:entered-approval', taskId: p.taskId, orgId: p.orgId }),
   }),
-  mapping({ domain: 'run:queued', map: (p) => ({ type: 'run:changed', orgId: p.orgId }) }),
   mapping({ domain: 'run:started', map: (p) => ({ type: 'run:changed', orgId: p.orgId }) }),
   mapping({
     domain: 'run:succeeded',

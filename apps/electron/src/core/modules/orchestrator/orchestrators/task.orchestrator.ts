@@ -28,9 +28,12 @@ import type { WakeReason } from '@core/modules/execution/types/execution.types';
  * dispatch a run; RunEngine then drives the initial→active transition with
  * triggeredBy:'system' so this orchestrator can ignore that echo.
  */
+const WAKE_DEBOUNCE_MS = 200;
+
 @injectable()
 export class TaskOrchestrator {
   private locale = 'en-US';
+  private recentWakes = new Map<string, number>();
 
   constructor(
     private readonly eventBus: IEventBus,
@@ -90,6 +93,15 @@ export class TaskOrchestrator {
   }
 
   tryWake(roleId: string, orgId: string, reason: string, taskId: string | null): void {
+    const dedupKey = `${taskId ?? 'none'}:${roleId}`;
+    const last = this.recentWakes.get(dedupKey) ?? 0;
+    const now = Date.now();
+    if (now - last < WAKE_DEBOUNCE_MS) {
+      this.logger.debug('Wake debounced', { taskId, roleId, reason, sinceLastMs: now - last });
+      return;
+    }
+    this.recentWakes.set(dedupKey, now);
+
     const gate = this.wakeGateValidator.validate(roleId, orgId);
     if (!gate.allowed) {
       this.pendingWakeRepo.create({ roleId, orgId, reason, taskId, conversationId: null, priority: 0 });

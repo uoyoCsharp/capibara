@@ -28,7 +28,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
   const [loadingLogs, setLoadingLogs] = useState(false);
 
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? null;
-  const isRunning = selectedRun?.status === 'running' || selectedRun?.status === 'queued';
+  const isRunning = selectedRun?.status === 'running';
 
   const { entries, assistantText } = useRunLogs(isRunning ? selectedRunId : null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -108,7 +108,6 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
       case 'succeeded': return labels.succeeded;
       case 'failed': return labels.failed;
       case 'running': return labels.running;
-      case 'queued': return labels.queued;
       case 'cancelled': return labels.cancelled;
       default: return status;
     }
@@ -119,7 +118,6 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
       case 'succeeded': return <CheckCircle size={14} className="text-green-500" weight="fill" />;
       case 'failed': return <XCircle size={14} className="text-red-500" weight="fill" />;
       case 'running': return <CircleNotch size={14} className="text-blue-500 animate-spin" />;
-      case 'queued': return <Clock size={14} className="text-yellow-500" />;
       default: return <Clock size={14} className="text-muted-foreground" />;
     }
   };
