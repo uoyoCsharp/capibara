@@ -7,6 +7,7 @@ function role(id: string, parentId: string | null = null): RoleRecord {
     id, orgId: 'org', name: id, parentId, persona: '', knowledgeBaseRefs: [],
     skillIds: [], canApprove: false, canDelegate: false, requiresHumanApproval: false,
     consecutiveWakeCount: 0, isSystemRole: false, status: 'active',
+    fileAccessPaths: null, toolPolicy: 'permissive',
     createdAt: '', updatedAt: '',
   };
 }

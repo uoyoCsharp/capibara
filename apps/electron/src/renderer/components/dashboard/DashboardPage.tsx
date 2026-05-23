@@ -7,6 +7,7 @@ import { useOrganizationStore } from '../../store/organization.store';
 import { useAppStore } from '../../store/app.store';
 import { useT } from '../../hooks/use-locale';
 import { buildNarrative, type NarrativeSection } from './narrative';
+import { SessionStatusPanel } from '../tasks/SessionStatusPanel';
 
 interface DashboardPageProps {
   orgId: string | null;
@@ -56,7 +57,9 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
 
   const activeTasks = tasks.filter((t) => !['done', 'cancelled'].includes(t.status));
   const activeRuns = runs.filter((r) => r.status === 'running');
+  const suspendedRuns = runs.filter((r) => r.status === 'suspended');
   const aiRoles = roles.filter((r) => !r.isSystemRole);
+  const roleNames = new Map(roles.map(r => [r.id, r.name]));
 
   return (
     <div className="p-[var(--page-padding)] space-y-[var(--section-gap)]">
@@ -98,6 +101,13 @@ export function DashboardPage({ orgId }: DashboardPageProps) {
         <StatCard icon={<ChatCircleDots size={20} weight="duotone" />} label={t.dashboard.stats.activeConversations} value={activeConversations.length} color="text-yellow-600" />
         <StatCard icon={<CurrencyDollar size={20} weight="duotone" />} label={t.dashboard.stats.activeRuns} value={activeRuns.length} color="text-green-600" />
       </div>
+
+      {/* Collaboration status — only shown when there are active suspensions */}
+      {suspendedRuns.length > 0 && (
+        <section className="rounded-xl border border-border p-[var(--card-padding)]">
+          <SessionStatusPanel orgId={orgId} roleNames={roleNames} />
+        </section>
+      )}
     </div>
   );
 }

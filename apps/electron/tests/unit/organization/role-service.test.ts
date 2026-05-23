@@ -20,6 +20,8 @@ function createMockRole(overrides?: Partial<Role>): Role {
     consecutiveWakeCount: 0,
     isSystemRole: false,
     status: 'active',
+    fileAccessPaths: null,
+    toolPolicy: 'permissive',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,

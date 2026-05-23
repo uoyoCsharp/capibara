@@ -31,4 +31,10 @@ export interface CapibaraConfig {
     level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
     logDir: string;
   };
+  collaboration: {
+    maxChainDepth: number;
+    maxBroadcastTargets: number;
+    maxResumeCount: number;
+    inquiryTimeoutMs: number;
+  };
 }

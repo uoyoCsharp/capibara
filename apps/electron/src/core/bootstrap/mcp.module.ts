@@ -7,6 +7,8 @@ import type { ProcessEngine } from '@core/modules/workflow/engines/process.engin
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { RoleService } from '@core/modules/organization/services/role.service';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
+import type { CollaborationConfig } from '@core/modules/acp/types/acp.types';
 import { McpToolRegistry } from '@core/modules/mcp/registry/mcp-tool.registry';
 import { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
 import { createTaskTools } from '@core/modules/mcp/handlers/task-tools';
@@ -22,6 +24,8 @@ export function registerMcpModule(
   conversationService: ConversationService,
   roleService: RoleService,
   eventPublisher: IEventPublisher,
+  suspensionManager?: ISessionSuspensionManager | null,
+  collaborationConfig?: CollaborationConfig | null,
 ): { mcpIpcServer: McpIpcServer; mcpToolRegistry: McpToolRegistry } {
   const toolRegistry = new McpToolRegistry(logger);
   const mcpIpcServer = new McpIpcServer(toolRegistry, logger);
@@ -29,7 +33,7 @@ export function registerMcpModule(
   for (const tool of createTaskTools(taskService, taskStateMachine, processEngine)) {
     toolRegistry.register(tool);
   }
-  for (const tool of createConversationTools(conversationService)) {
+  for (const tool of createConversationTools(conversationService, suspensionManager, collaborationConfig)) {
     toolRegistry.register(tool);
   }
   for (const tool of createPlanTreeTools(taskService, processEngine, roleService, conversationService, eventPublisher)) {

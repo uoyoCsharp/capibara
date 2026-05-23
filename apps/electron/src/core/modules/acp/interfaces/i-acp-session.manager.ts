@@ -42,6 +42,11 @@ export interface IAcpSessionManager {
   getActiveSession(roleId: string, orgId: string): AcpSession | null;
 
   /**
+   * Find a session by its ACP protocol session ID.
+   */
+  findByAcpSessionId(acpSessionId: string): AcpSession | null;
+
+  /**
    * Close all sessions and terminate Agent processes.
    */
   shutdown(): Promise<void>;

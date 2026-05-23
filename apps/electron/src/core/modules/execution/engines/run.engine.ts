@@ -135,12 +135,23 @@ export class RunEngine implements IRunEngine {
 
       this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount, exitCode: result.exitCode });
 
-      this.rollbackTaskIfActive(params.taskId);
+      // Don't rollback task when suspended — the task is still active
+      if (result.status !== 'suspended') {
+        this.rollbackTaskIfActive(params.taskId);
+      }
 
       if (result.status === 'succeeded') {
         this.publishEvent('run:succeeded', { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
       } else if (result.status === 'cancelled') {
         this.publishEvent('run:cancelled', { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
+      } else if (result.status === 'suspended') {
+        this.publishEvent('run:suspended', {
+          runId: run.id,
+          orgId: params.orgId,
+          roleId: params.roleId,
+          tokenCount,
+          sessionId: result.sessionId,
+        });
       } else {
         this.publishEvent('run:failed', {
           runId: run.id,

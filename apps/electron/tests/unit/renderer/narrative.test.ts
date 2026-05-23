@@ -16,7 +16,8 @@ function run(id: string, overrides?: Partial<RunRecord>): RunRecord {
   return {
     id, orgId: 'org', taskId: 't', conversationId: null, roleId: 'r', status: 'succeeded',
     wakeReason: 'task_assigned', startedAt: null, finishedAt: null, costUsd: 0, tokenCount: 0,
-    summary: null, errorMessage: null, createdAt: '', ...overrides,
+    summary: null, errorMessage: null, acpSessionId: null, agentId: null,
+    createdAt: '', ...overrides,
   };
 }
 function conv(id: string, overrides?: Partial<ConversationRecord>): ConversationRecord {
@@ -32,6 +33,7 @@ function role(id: string, overrides?: Partial<RoleRecord>): RoleRecord {
     id, orgId: 'org', name: id, parentId: null, persona: '', knowledgeBaseRefs: [],
     skillIds: [], canApprove: false, canDelegate: false, requiresHumanApproval: false,
     consecutiveWakeCount: 0, isSystemRole: false, status: 'active',
+    fileAccessPaths: null, toolPolicy: 'permissive',
     createdAt: '', updatedAt: '', ...overrides,
   };
 }

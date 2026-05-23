@@ -117,6 +117,12 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
     // System
     getSystemHealth: vi.fn().mockResolvedValue(ok({ status: 'ok', timestamp: '' })),
     checkSystemDeps: vi.fn(),
+    getAgentConfig: vi.fn().mockResolvedValue(ok({
+      defaultAgent: 'claude-agent',
+      registry: [{ id: 'claude-agent', name: 'Claude Agent', command: 'node' }],
+      globalFilePolicy: { denyPatterns: ['**/.env'] },
+      collaboration: { maxChainDepth: 5, maxBroadcastTargets: 5, maxResumeCount: 10, inquiryTimeoutMs: 300000 },
+    })),
 
     // Scheduler
     getExecutionState: vi.fn().mockResolvedValue(ok({ paused: false })),

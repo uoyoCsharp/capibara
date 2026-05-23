@@ -10,11 +10,19 @@ import type { LogCallback, TextCallback } from '../types/acp.types';
 export class AcpUpdateHandler {
   private logCallbacks = new Map<string, Set<LogCallback>>();
   private textCallbacks = new Map<string, Set<TextCallback>>();
+  private sessionRunMap = new Map<string, string>();
 
   constructor(
     private readonly eventBus: IEventBus,
     private readonly logger: ILogger,
   ) {}
+
+  /**
+   * Associate an ACP session with a run for domain event emission.
+   */
+  setRunId(acpSessionId: string, runId: string): void {
+    this.sessionRunMap.set(acpSessionId, runId);
+  }
 
   /**
    * Handle a notification from ACP session/update.
@@ -40,6 +48,7 @@ export class AcpUpdateHandler {
           status: update.status,
         });
         this.emitLog(sessionId, 'stdout', data);
+        this.emitToolCallEvent(sessionId, update.toolCallId, update.title, update.status ?? 'running', (update as { kind?: string }).kind ?? null);
         break;
       }
 
@@ -50,6 +59,7 @@ export class AcpUpdateHandler {
           status: update.status,
         });
         this.emitLog(sessionId, 'stdout', data);
+        this.emitToolCallEvent(sessionId, update.toolCallId, '', update.status ?? 'completed', null);
         break;
       }
 
@@ -92,10 +102,27 @@ export class AcpUpdateHandler {
   removeCallbacks(sessionId: string): void {
     this.logCallbacks.delete(sessionId);
     this.textCallbacks.delete(sessionId);
+    this.sessionRunMap.delete(sessionId);
   }
 
   private emitLog(sessionId: string, stream: 'stdout' | 'stderr', chunk: string): void {
     const logCbs = this.logCallbacks.get(sessionId);
     logCbs?.forEach(cb => cb(stream, chunk));
+  }
+
+  private emitToolCallEvent(
+    acpSessionId: string,
+    toolCallId: string,
+    title: string,
+    status: string,
+    kind: string | null,
+  ): void {
+    const runId = this.sessionRunMap.get(acpSessionId);
+    if (!runId) return;
+    this.eventBus.emit({
+      type: 'run:tool-call',
+      timestamp: new Date().toISOString(),
+      payload: { runId, toolCallId, title, status, kind },
+    });
   }
 }

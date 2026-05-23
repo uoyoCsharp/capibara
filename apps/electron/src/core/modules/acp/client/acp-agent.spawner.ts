@@ -99,8 +99,8 @@ export class AcpAgentSpawner {
           this.updateHandler.handleUpdate(params.sessionId, params.update);
         },
         requestPermission: async (params: acp.RequestPermissionRequest) => {
-          // Resolve session context for policy evaluation
-          const ctx = this.sessionContextResolver?.(params.toolCall.toolCallId);
+          // Resolve session context for policy evaluation via active session
+          const ctx = this.sessionContextResolver?.('__current__');
           if (ctx) {
             return this.permissionHandler.handlePermissionRequest(
               params,

@@ -3,6 +3,8 @@ import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { DomainEvent } from '@core/foundation/events';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
+import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { NotificationService } from '@core/modules/notification/notification.service';
 import type { IPendingWakeRepository } from '../interfaces/i-pending-wake.repository';
 import type { WakeGateValidator } from '../wake-gate.validator';
@@ -28,6 +30,8 @@ export class ConversationOrchestrator {
     private readonly runCoordinator: RunCoordinator,
     private readonly taskOrchestrator: TaskOrchestrator,
     private readonly notificationService: NotificationService,
+    private readonly suspensionManager: ISessionSuspensionManager | null = null,
+    private readonly conversationService: ConversationService | null = null,
   ) {}
 
   start(): void {
@@ -70,8 +74,47 @@ export class ConversationOrchestrator {
   private onResolved(event: DomainEvent<'conversation:resolved'>): void {
     const { conversationId } = event.payload;
     const conv = this.convRepo.findById(conversationId);
-    if (!conv?.taskId || !conv.initiatorRoleId) return;
+    if (!conv) return;
 
+    // Check if a session suspension is waiting for this inquiry to be resolved
+    if (this.suspensionManager && this.conversationService) {
+      const suspension = this.suspensionManager.findSuspensionByInquiry(conversationId);
+      if (suspension) {
+        // Extract the response text from the conversation
+        const messages = this.conversationService.getLatestMessages(conversationId, 10);
+        const lastReply = [...messages].reverse().find(m => m.intent === 'reply');
+        const response = lastReply?.content ?? '';
+
+        const decision = this.suspensionManager.onInquiryResolved(conversationId, response);
+        if (decision) {
+          // Publish run:resumed event before triggering the resume run
+          this.eventBus.emit({
+            type: 'run:resumed',
+            timestamp: new Date().toISOString(),
+            payload: {
+              runId: decision.runId,
+              orgId: decision.orgId,
+              roleId: decision.roleId,
+              resumedFromSuspensionId: decision.suspensionId,
+            },
+          });
+
+          // All inquiries resolved — resume the suspended session
+          this.runCoordinator
+            .executeResume(decision, this.locale)
+            .catch((err) => {
+              this.logger.error('Failed to resume suspended session', {
+                suspensionId: decision.suspensionId,
+                error: String(err),
+              });
+            });
+        }
+        return;
+      }
+    }
+
+    // Original behavior: wake the initiator to continue the task
+    if (!conv.taskId || !conv.initiatorRoleId) return;
     this.taskOrchestrator.tryWake(conv.initiatorRoleId, conv.orgId, 'conversation_reply', conv.taskId);
   }
 

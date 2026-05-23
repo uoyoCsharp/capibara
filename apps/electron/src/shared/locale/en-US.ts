@@ -62,6 +62,13 @@ export const enUS: LocaleMessages = {
     canApprove: 'Can Approve',
     canDelegate: 'Can Delegate',
     requiresHumanApproval: 'Requires Human Approval',
+    toolPolicyLabel: 'Tool Policy',
+    toolPolicyPermissive: 'Permissive — allow all tools',
+    toolPolicyRestrictive: 'Restrictive — deny by default',
+    toolPolicyAskUser: 'Ask User — prompt before each tool',
+    fileAccessLabel: 'File Access Paths',
+    fileAccessPlaceholder: 'One glob pattern per line, e.g. src/**',
+    fileAccessHint: 'Leave empty to allow all paths (subject to global deny rules)',
     deleteWithChildren: 'Delete Role with Children?',
     deleteWithChildrenMessage: 'This role has child roles. They will become orphaned (moved to root level) after deletion.',
     deleteAnyway: 'Delete Anyway',
@@ -158,6 +165,52 @@ export const enUS: LocaleMessages = {
       failed: 'Failed',
       running: 'Running',
       cancelled: 'Cancelled',
+      suspended: 'Suspended',
+      interrupted: 'Interrupted',
+    },
+  },
+
+  toolCalls: {
+    title: 'Tool Calls',
+    noToolCalls: 'No tool calls recorded.',
+    status: {
+      running: 'Running',
+      completed: 'Completed',
+      failed: 'Failed',
+    },
+    permission: {
+      allowed: 'Allowed',
+      rejected: 'Rejected',
+      notRequested: 'Not Requested',
+    },
+  },
+
+  collaboration: {
+    title: 'Collaboration',
+    noActiveSuspensions: 'No active suspensions.',
+    suspendedSince: 'Suspended since {time}',
+    waitingFor: 'Waiting for',
+    chainDepth: 'Chain depth: {n}',
+    awaitingStatus: {
+      pending: 'Pending',
+      resolved: 'Resolved',
+    },
+  },
+
+  auditLog: {
+    title: 'Audit Log',
+    noEntries: 'No audit entries.',
+    tabs: {
+      toolCalls: 'Tool Calls',
+      fileAccess: 'File Access',
+    },
+    columns: {
+      time: 'Time',
+      tool: 'Tool',
+      permission: 'Permission',
+      path: 'Path',
+      operation: 'Operation',
+      allowed: 'Allowed',
     },
   },
 
@@ -261,6 +314,21 @@ export const enUS: LocaleMessages = {
       title: 'System',
       checkHealth: 'Check System Health',
       healthOk: 'System OK: {timestamp}',
+    },
+    agentConfig: {
+      title: 'Agent Configuration',
+      description: 'Currently registered AI agent backends and collaboration settings.',
+      agentName: 'Agent Name',
+      agentCommand: 'Command',
+      agentStatus: 'Status',
+      defaultAgent: 'Default',
+      denyPatterns: 'Global Deny Patterns',
+      collaborationTitle: 'Collaboration',
+      collaborationDescription: 'Limits for multi-agent collaboration chains.',
+      maxChainDepth: 'Max Chain Depth',
+      maxBroadcastTargets: 'Max Broadcast Targets',
+      maxResumeCount: 'Max Resume Count',
+      inquiryTimeoutMs: 'Inquiry Timeout (ms)',
     },
     logs: {
       title: 'Execution Logs',

@@ -6,6 +6,7 @@ import type { IOrganizationRepository } from '@core/modules/organization/interfa
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { WakeReason } from '@core/modules/execution/types/execution.types';
+import type { ResumeDecision } from '@core/modules/acp/collaboration/suspension.types';
 
 @injectable()
 export class RunCoordinator {
@@ -94,6 +95,31 @@ export class RunCoordinator {
         intent: 'reply',
       });
     }
+
+    return { runId: result.runId, status: result.status };
+  }
+
+  /**
+   * Resume a previously suspended run with aggregated inquiry replies.
+   */
+  async executeResume(
+    decision: ResumeDecision,
+    locale: string,
+  ): Promise<{ runId: string; status: string }> {
+    const org = this.orgRepo.findById(decision.orgId);
+    const projectDir = org?.workspacePath || undefined;
+
+    const result = await this.runEngine.execute({
+      roleId: decision.roleId,
+      orgId: decision.orgId,
+      prompt: decision.aggregatedReply,
+      contextId: decision.taskId || decision.sessionId,
+      contextLabel: decision.orgId,
+      taskId: decision.taskId ?? undefined,
+      wakeReason: 'conversation_reply',
+      sessionId: decision.acpSessionId,
+      projectDir,
+    });
 
     return { runId: result.runId, status: result.status };
   }

@@ -23,6 +23,7 @@ import type { ProcessEngine } from '@core/modules/workflow/engines/process.engin
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
 import type { NotificationService } from '@core/modules/notification/notification.service';
+import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import { SqlitePendingWakeRepository } from '@core/modules/orchestrator/persistence/sqlite-pending-wake.repository';
 import { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
 import { RetryScheduler } from '@core/modules/orchestrator/retry.scheduler';
@@ -58,6 +59,7 @@ export function registerOrchestratorModule(
   taskStateMachine: TaskStateMachine,
   behaviorEngine: BehaviorEngine,
   notificationService: NotificationService,
+  suspensionManager: ISessionSuspensionManager | null = null,
 ): OrchestratorModule {
   const pendingWakeRepo = new SqlitePendingWakeRepository(connection);
   const wakeGateValidator = new WakeGateValidator(roleRepo, runRepo, config, logger);
@@ -89,6 +91,8 @@ export function registerOrchestratorModule(
     runCoordinator,
     taskOrchestrator,
     notificationService,
+    suspensionManager,
+    conversationService,
   );
 
   const runOrchestrator = new RunOrchestrator(

@@ -17,6 +17,8 @@ function role(id: string): RoleRecord {
     consecutiveWakeCount: 0,
     isSystemRole: false,
     status: 'active',
+    fileAccessPaths: null,
+    toolPolicy: 'permissive',
     createdAt: '',
     updatedAt: '',
   };

@@ -102,6 +102,15 @@ const api = {
   // Cost
   getCostSummary: (orgId: string) => ipcRenderer.invoke('capibara:cost:summary', orgId),
 
+  // Audit
+  getToolCallsByRunId: (runId: string) => ipcRenderer.invoke('capibara:audit:tool-calls', runId),
+  getToolCallsByOrgId: (orgId: string, limit?: number) => ipcRenderer.invoke('capibara:audit:tool-calls-by-org', orgId, limit),
+  getFileAccessByRunId: (runId: string) => ipcRenderer.invoke('capibara:audit:file-access', runId),
+  getFileAccessByOrgId: (orgId: string, limit?: number) => ipcRenderer.invoke('capibara:audit:file-access-by-org', orgId, limit),
+
+  // Suspensions
+  getActiveSuspensions: (orgId: string) => ipcRenderer.invoke('capibara:suspension:active', orgId),
+
   // Plan tree (task-scoped preview/eager decomposition)
   getPlanTree: (rootTaskId: string) => ipcRenderer.invoke('capibara:plan-tree:get', rootTaskId),
   approvePlanTree: (rootTaskId: string, expectedVersion?: number) =>
@@ -118,6 +127,7 @@ const api = {
   // System
   getSystemHealth: () => ipcRenderer.invoke('capibara:system:health'),
   checkSystemDeps: () => ipcRenderer.invoke('capibara:system:check-deps'),
+  getAgentConfig: () => ipcRenderer.invoke('capibara:system:agent-config'),
 
   // Scheduler (execution control)
   getExecutionState: () => ipcRenderer.invoke('capibara:scheduler:get-state'),

@@ -33,6 +33,12 @@ export const configSchema = z.object({
     level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
     logDir: z.string().default(''),
   }).default({}),
+  collaboration: z.object({
+    maxChainDepth: z.number().int().min(1).max(20).default(5),
+    maxBroadcastTargets: z.number().int().min(1).max(20).default(5),
+    maxResumeCount: z.number().int().min(1).max(100).default(10),
+    inquiryTimeoutMs: z.number().int().min(10_000).default(300_000),
+  }).default({}),
 });
 
 export type ValidatedConfig = z.infer<typeof configSchema>;

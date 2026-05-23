@@ -15,6 +15,9 @@ export type DesktopEvent =
   | { type: 'run:assistant-text'; runId: string; text: string }
   | { type: 'run:status'; runId: string; status: string }
   | { type: 'run:completed'; runId: string; orgId: string; status: string; tokenCount: number }
+  | { type: 'run:tool-call'; runId: string; toolCallId: string; title: string; status: string; kind: string | null }
+  | { type: 'run:suspended'; runId: string; orgId: string; roleId: string; sessionId: string | null }
+  | { type: 'run:resumed'; runId: string; orgId: string; roleId: string }
   | { type: 'conversation:changed'; orgId: string }
   | { type: 'conversation:response-needed'; orgId: string; conversationId: string }
   | { type: 'scheduler:paused'; cancelledRunCount: number }
@@ -73,6 +76,18 @@ const EVENT_MAPPINGS = [
   mapping({
     domain: 'run:status',
     map: (p) => ({ type: 'run:status', runId: p.runId, status: p.status }),
+  }),
+  mapping({
+    domain: 'run:tool-call',
+    map: (p) => ({ type: 'run:tool-call', runId: p.runId, toolCallId: p.toolCallId, title: p.title, status: p.status, kind: p.kind }),
+  }),
+  mapping({
+    domain: 'run:suspended',
+    map: (p) => ({ type: 'run:suspended', runId: p.runId, orgId: p.orgId, roleId: p.roleId, sessionId: p.sessionId }),
+  }),
+  mapping({
+    domain: 'run:resumed',
+    map: (p) => ({ type: 'run:resumed', runId: p.runId, orgId: p.orgId, roleId: p.roleId }),
   }),
   mapping({ domain: 'conversation:created', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId }) }),
   mapping({ domain: 'conversation:message-added', map: (p) => ({ type: 'conversation:changed', orgId: p.orgId }) }),

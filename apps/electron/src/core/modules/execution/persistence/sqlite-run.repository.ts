@@ -17,6 +17,8 @@ interface RunRow {
   token_count: number;
   summary: string | null;
   error_message: string | null;
+  acp_session_id: string | null;
+  agent_id: string | null;
   created_at: string;
 }
 
@@ -33,6 +35,8 @@ function toRun(row: RunRow): Run {
     tokenCount: row.token_count,
     summary: row.summary,
     errorMessage: row.error_message,
+    acpSessionId: row.acp_session_id ?? null,
+    agentId: row.agent_id ?? null,
     createdAt: row.created_at,
   };
 

@@ -52,6 +52,7 @@ function extractHandlerChannels(): Set<string> {
     'core/ipc-handlers/execution.handlers.ts',
     'core/ipc-handlers/plan-tree.handlers.ts',
     'core/ipc-handlers/system.handlers.ts',
+    'core/ipc-handlers/acp.handlers.ts',
   ];
   const all = new Set<string>();
   for (const f of files) {

@@ -25,6 +25,7 @@ import { registerConversationHandlers } from '@core/ipc-handlers/conversation.ha
 import { registerExecutionHandlers } from '@core/ipc-handlers/execution.handlers';
 import { registerPlanTreeHandlers } from '@core/ipc-handlers/plan-tree.handlers';
 import { registerSystemHandlers } from '@core/ipc-handlers/system.handlers';
+import { registerAcpHandlers } from '@core/ipc-handlers/acp.handlers';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
 import type { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
@@ -79,7 +80,7 @@ export async function bootstrap(): Promise<void> {
   };
 
   const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));
-  acpModule = registerAcpModule(eventBus, logger, agentConfig, sqliteConn, org.roleRepo as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository);
+  acpModule = registerAcpModule(eventBus, logger, agentConfig, sqliteConn, org.roleRepo as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository, config.collaboration);
 
   const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'), org.roleRepo);
   const conversation = registerConversationModule(sqliteConn, eventPublisher, logger);
@@ -130,6 +131,7 @@ export async function bootstrap(): Promise<void> {
   const mcp = registerMcpModule(
     logger, workflow.taskService, workflow.taskStateMachine, workflow.processEngine,
     conversation.conversationService, org.roleService, eventPublisher,
+    acpModule.suspensionManager, config.collaboration,
   );
 
   const mcpPort = await mcp.mcpIpcServer.start();
@@ -162,6 +164,12 @@ export async function bootstrap(): Promise<void> {
     workflow.taskStateMachine,
     workflow.behaviorEngine,
     notification.notificationService,
+    acpModule.suspensionManager,
+  );
+
+  // Wire executor's conversation repo (acp module created before conversation module)
+  acpModule.executor.setConversationRepository(
+    conversation.conversationRepo as unknown as import('@core/modules/conversation/interfaces/i-conversation.repository').IConversationRepository,
   );
 
   registerOrganizationHandlers(org.organizationService, org.roleService, org.skillService, org.orgTemplateService, logger);
@@ -176,6 +184,7 @@ export async function bootstrap(): Promise<void> {
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);
+  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository);
   registerSystemHandlers({
     connection: sqliteConn,
     runRepo: execution.runRepo,
@@ -184,6 +193,8 @@ export async function bootstrap(): Promise<void> {
     taskOrchestrator: orchestratorModule.taskOrchestrator,
     orgRepo: org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
     logger,
+    agentConfig,
+    collaborationConfig: config.collaboration,
   });
 
   taskOrchestrator = orchestratorModule.taskOrchestrator;

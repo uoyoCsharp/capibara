@@ -33,6 +33,8 @@ interface RunBase {
   tokenCount: number;
   summary: string | null;
   errorMessage: string | null;
+  acpSessionId: string | null;
+  agentId: string | null;
   createdAt: string;
 }
 

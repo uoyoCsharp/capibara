@@ -97,6 +97,8 @@ const RunLifecycleSchema = z.object({
 });
 const RunWithTokensSchema = RunLifecycleSchema.extend({ tokenCount: z.number() });
 const RunFailedSchema = RunWithTokensSchema.extend({ errorMessage: z.string().nullable() });
+const RunSuspendedSchema = RunWithTokensSchema.extend({ sessionId: z.string().nullable() });
+const RunResumedSchema = RunLifecycleSchema.extend({ resumedFromSuspensionId: z.string() });
 const RunLogSchema = z.object({
   runId: z.string(),
   stream: z.enum(['stdout', 'stderr']),
@@ -104,6 +106,13 @@ const RunLogSchema = z.object({
 });
 const RunAssistantTextSchema = z.object({ runId: z.string(), text: z.string() });
 const RunStatusSchema = z.object({ runId: z.string(), status: z.string() });
+const RunToolCallSchema = z.object({
+  runId: z.string(),
+  toolCallId: z.string(),
+  title: z.string(),
+  status: z.string(),
+  kind: z.string().nullable(),
+});
 
 // Plan tree ─────────────────────────────────────────────────────
 // Strict shape for `plan-tree:submitted` (task-scoped preview/eager).
@@ -187,9 +196,12 @@ export const EVENT_SCHEMAS = {
   'run:succeeded': RunWithTokensSchema,
   'run:failed': RunFailedSchema,
   'run:cancelled': RunWithTokensSchema,
+  'run:suspended': RunSuspendedSchema,
+  'run:resumed': RunResumedSchema,
   'run:log': RunLogSchema,
   'run:assistant-text': RunAssistantTextSchema,
   'run:status': RunStatusSchema,
+  'run:tool-call': RunToolCallSchema,
 
   'plan-tree:submitted': PlanTreeSubmittedSchema,
   'plan-tree:ready': PlanTreeReadySchema,

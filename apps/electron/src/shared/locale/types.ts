@@ -77,6 +77,13 @@ export interface LocaleMessages {
     canApprove: string;
     canDelegate: string;
     requiresHumanApproval: string;
+    toolPolicyLabel: string;
+    toolPolicyPermissive: string;
+    toolPolicyRestrictive: string;
+    toolPolicyAskUser: string;
+    fileAccessLabel: string;
+    fileAccessPlaceholder: string;
+    fileAccessHint: string;
     deleteWithChildren: string;
     deleteWithChildrenMessage: string;
     deleteAnyway: string;
@@ -173,6 +180,52 @@ export interface LocaleMessages {
       failed: string;
       running: string;
       cancelled: string;
+      suspended: string;
+      interrupted: string;
+    };
+  };
+
+  toolCalls: {
+    title: string;
+    noToolCalls: string;
+    status: {
+      running: string;
+      completed: string;
+      failed: string;
+    };
+    permission: {
+      allowed: string;
+      rejected: string;
+      notRequested: string;
+    };
+  };
+
+  collaboration: {
+    title: string;
+    noActiveSuspensions: string;
+    suspendedSince: string;
+    waitingFor: string;
+    chainDepth: string;
+    awaitingStatus: {
+      pending: string;
+      resolved: string;
+    };
+  };
+
+  auditLog: {
+    title: string;
+    noEntries: string;
+    tabs: {
+      toolCalls: string;
+      fileAccess: string;
+    };
+    columns: {
+      time: string;
+      tool: string;
+      permission: string;
+      path: string;
+      operation: string;
+      allowed: string;
     };
   };
 
@@ -276,6 +329,21 @@ export interface LocaleMessages {
       title: string;
       checkHealth: string;
       healthOk: string;
+    };
+    agentConfig: {
+      title: string;
+      description: string;
+      agentName: string;
+      agentCommand: string;
+      agentStatus: string;
+      defaultAgent: string;
+      denyPatterns: string;
+      collaborationTitle: string;
+      collaborationDescription: string;
+      maxChainDepth: string;
+      maxBroadcastTargets: string;
+      maxResumeCount: string;
+      inquiryTimeoutMs: string;
     };
     logs: {
       title: string;

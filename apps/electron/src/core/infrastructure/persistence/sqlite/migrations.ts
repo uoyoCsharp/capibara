@@ -334,6 +334,103 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    description: 'ACP Phase 3a: Session suspension tables + runs suspended status',
+    up: (db) => {
+      db.exec(`
+        -- ═══════════════════════════════════════════════
+        -- Recreate runs table to add 'suspended' status
+        -- (SQLite does not support ALTER CHECK)
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE runs_new (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+          conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+          role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'running'
+            CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled', 'interrupted', 'suspended')),
+          wake_reason TEXT NOT NULL,
+          started_at TEXT,
+          finished_at TEXT,
+          cost_usd REAL NOT NULL DEFAULT 0,
+          token_count INTEGER NOT NULL DEFAULT 0,
+          summary TEXT,
+          error_message TEXT,
+          acp_session_id TEXT,
+          agent_id TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          CHECK (task_id IS NOT NULL OR conversation_id IS NOT NULL)
+        );
+
+        INSERT INTO runs_new (id, org_id, task_id, conversation_id, role_id, status, wake_reason,
+          started_at, finished_at, cost_usd, token_count, summary, error_message,
+          acp_session_id, agent_id, created_at)
+        SELECT id, org_id, task_id, conversation_id, role_id, status, wake_reason,
+          started_at, finished_at, cost_usd, token_count, summary, error_message,
+          acp_session_id, agent_id, created_at FROM runs;
+
+        DROP TABLE runs;
+        ALTER TABLE runs_new RENAME TO runs;
+
+        CREATE UNIQUE INDEX idx_runs_active_per_role
+          ON runs(role_id)
+          WHERE status = 'running';
+
+        -- ═══════════════════════════════════════════════
+        -- Session Suspensions
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE session_suspensions (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          acp_session_id TEXT NOT NULL,
+          run_id TEXT NOT NULL,
+          role_id TEXT NOT NULL,
+          org_id TEXT NOT NULL,
+          task_id TEXT,
+          aggregation_mode TEXT NOT NULL DEFAULT 'all'
+            CHECK (aggregation_mode IN ('all', 'any')),
+          status TEXT NOT NULL DEFAULT 'suspended'
+            CHECK (status IN ('suspended', 'resumed', 'timed_out', 'cancelled')),
+          suspended_at TEXT NOT NULL DEFAULT (datetime('now')),
+          resumed_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_session_suspensions_org ON session_suspensions(org_id, status);
+        CREATE INDEX idx_session_suspensions_role ON session_suspensions(role_id, status);
+
+        -- ═══════════════════════════════════════════════
+        -- Suspension Awaiting (inquiries being waited for)
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE suspension_awaiting (
+          id TEXT PRIMARY KEY,
+          suspension_id TEXT NOT NULL REFERENCES session_suspensions(id) ON DELETE CASCADE,
+          conversation_id TEXT NOT NULL,
+          respondent_role_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending', 'in_progress', 'resolved', 'timed_out')),
+          response TEXT,
+          resolved_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_suspension_awaiting_suspension ON suspension_awaiting(suspension_id);
+        CREATE INDEX idx_suspension_awaiting_conversation ON suspension_awaiting(conversation_id);
+      `);
+    },
+  },
+  {
+    version: 4,
+    description: 'ACP Phase 3b: Chain collaboration fields on session_suspensions',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE session_suspensions ADD COLUMN parent_suspension_id TEXT REFERENCES session_suspensions(id);
+        ALTER TABLE session_suspensions ADD COLUMN chain_depth INTEGER NOT NULL DEFAULT 0;
+      `);
+    },
+  },
 ];
 
 export interface RunMigrationsOptions {

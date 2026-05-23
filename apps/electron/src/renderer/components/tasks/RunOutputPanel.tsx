@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { CircleNotch, CheckCircle, XCircle, Clock, Terminal, FolderOpen } from '@phosphor-icons/react';
+import { CircleNotch, CheckCircle, XCircle, Clock, Terminal, FolderOpen, Pause, ArrowsClockwise } from '@phosphor-icons/react';
 import { MarkdownContent } from '../ui/markdown-content';
-import type { RunRecord } from '@core/shared/types';
+import type { RunRecord, ToolCallLogRecord } from '@core/shared/types';
 import { useRunLogs } from '../../hooks/use-run-logs';
 import { Badge } from '../ui/badge';
 import { useT } from '../../hooks/use-locale';
+import { ToolCallTimeline } from './ToolCallTimeline';
+import { AuditLogPanel } from './AuditLogPanel';
 
 function format(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => String(vars[key] ?? ''));
@@ -29,11 +31,13 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
 
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? null;
   const isRunning = selectedRun?.status === 'running';
+  const isSuspended = selectedRun?.status === 'suspended';
 
   const { entries, assistantText } = useRunLogs(isRunning ? selectedRunId : null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const initialScrollDoneRef = useRef(false);
+  const [historicToolCalls, setHistoricToolCalls] = useState<ToolCallLogRecord[]>([]);
 
   useEffect(() => {
     api().getRunsByTaskId(taskId).then((res: { ok: boolean; data?: RunRecord[] }) => {
@@ -53,11 +57,16 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
   useEffect(() => {
     if (!selectedRunId || isRunning) {
       setHistoricLogs([]);
+      setHistoricToolCalls([]);
       return;
     }
     setLoadingLogs(true);
-    api().getRunLogs(selectedRunId).then((res: { ok: boolean; data?: string[] }) => {
-      if (res.ok && res.data) setHistoricLogs(res.data);
+    Promise.all([
+      api().getRunLogs(selectedRunId),
+      api().getToolCallsByRunId(selectedRunId),
+    ]).then(([logRes, tcRes]) => {
+      if (logRes.ok && logRes.data) setHistoricLogs(logRes.data);
+      if (tcRes.ok && tcRes.data) setHistoricToolCalls(tcRes.data);
       setLoadingLogs(false);
     }).catch(() => setLoadingLogs(false));
   }, [selectedRunId, isRunning]);
@@ -109,6 +118,8 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
       case 'failed': return labels.failed;
       case 'running': return labels.running;
       case 'cancelled': return labels.cancelled;
+      case 'suspended': return labels.suspended;
+      case 'interrupted': return labels.interrupted;
       default: return status;
     }
   };
@@ -118,6 +129,8 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
       case 'succeeded': return <CheckCircle size={14} className="text-green-500" weight="fill" />;
       case 'failed': return <XCircle size={14} className="text-red-500" weight="fill" />;
       case 'running': return <CircleNotch size={14} className="text-blue-500 animate-spin" />;
+      case 'suspended': return <Pause size={14} className="text-amber-500" weight="fill" />;
+      case 'interrupted': return <ArrowsClockwise size={14} className="text-orange-500" />;
       default: return <Clock size={14} className="text-muted-foreground" />;
     }
   };
@@ -188,6 +201,18 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
             <MarkdownContent content={assistantText} />
           </div>
         </div>
+      )}
+
+      {/* Tool call timeline */}
+      <ToolCallTimeline
+        runId={selectedRunId}
+        isRunning={isRunning}
+        historicToolCalls={!isRunning ? historicToolCalls : undefined}
+      />
+
+      {/* Audit log (for completed/suspended runs) */}
+      {!isRunning && selectedRunId && (
+        <AuditLogPanel runId={selectedRunId} />
       )}
 
       {/* Log output */}

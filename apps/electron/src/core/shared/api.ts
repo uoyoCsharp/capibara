@@ -10,6 +10,11 @@ import type {
   CostSummaryRecord,
   PendingTreeRecord,
   DesktopEvent,
+  ToolCallLogRecord,
+  FileAccessLogRecord,
+  SuspensionRecord,
+  SuspensionAwaitingRecord,
+  AgentConfigSummary,
 } from './types';
 
 /**
@@ -138,6 +143,15 @@ export interface CapibaraApi {
   // ─── Cost ────────────────────────────────────────────────────────
   getCostSummary: (orgId: string) => Promise<DesktopResult<CostSummaryRecord>>;
 
+  // ─── Audit ───────────────────────────────────────────────────────
+  getToolCallsByRunId: (runId: string) => Promise<DesktopResult<ToolCallLogRecord[]>>;
+  getToolCallsByOrgId: (orgId: string, limit?: number) => Promise<DesktopResult<ToolCallLogRecord[]>>;
+  getFileAccessByRunId: (runId: string) => Promise<DesktopResult<FileAccessLogRecord[]>>;
+  getFileAccessByOrgId: (orgId: string, limit?: number) => Promise<DesktopResult<FileAccessLogRecord[]>>;
+
+  // ─── Suspensions ─────────────────────────────────────────────────
+  getActiveSuspensions: (orgId: string) => Promise<DesktopResult<Array<SuspensionRecord & { awaiting: SuspensionAwaitingRecord[] }>>>;
+
   // ─── Plan tree (task-scoped preview/eager decomposition) ─────────
   getPlanTree: (rootTaskId: string) => Promise<DesktopResult<PendingTreeRecord | null>>;
   approvePlanTree: (
@@ -160,6 +174,7 @@ export interface CapibaraApi {
   // ─── System ──────────────────────────────────────────────────────
   getSystemHealth: () => Promise<DesktopResult<{ status: string; timestamp: string }>>;
   checkSystemDeps: () => Promise<DesktopResult<unknown>>;
+  getAgentConfig: () => Promise<DesktopResult<AgentConfigSummary>>;
 
   // ─── Scheduler (execution control) ───────────────────────────────
   getExecutionState: () => Promise<DesktopResult<{ paused: boolean }>>;

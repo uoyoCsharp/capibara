@@ -33,4 +33,10 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
     level: 'info',
     logDir: '',
   },
+  collaboration: {
+    maxChainDepth: 5,
+    maxBroadcastTargets: 5,
+    maxResumeCount: 10,
+    inquiryTimeoutMs: 300_000,
+  },
 };

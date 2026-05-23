@@ -3,6 +3,7 @@ import { GearSix, FloppyDisk, Trash, Warning } from '@phosphor-icons/react';
 import { useLocaleContext, useT } from '../../hooks/use-locale';
 import type { SupportedLocale } from '@shared/locale/types';
 import { isSupportedLocale } from '@shared/locale/index';
+import { AgentConfigPanel } from './AgentConfigPanel';
 
 function interpolate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
@@ -101,6 +102,8 @@ export function SettingsPage() {
           <option value="zh-CN">{t.settings.language.chinese}</option>
         </select>
       </section>
+
+      <AgentConfigPanel />
 
       <LogsSection
         t={t}

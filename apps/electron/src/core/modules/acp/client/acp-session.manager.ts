@@ -198,6 +198,15 @@ export class AcpSessionManager implements IAcpSessionManager {
     return null;
   }
 
+  findByAcpSessionId(acpSessionId: string): AcpSession | null {
+    for (const session of this.sessions.values()) {
+      if (session.acpSessionId === acpSessionId) {
+        return session;
+      }
+    }
+    return null;
+  }
+
   async shutdown(): Promise<void> {
     for (const session of this.sessions.values()) {
       if (session.status === 'active') {

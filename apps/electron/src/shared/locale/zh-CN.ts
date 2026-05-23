@@ -62,6 +62,13 @@ export const zhCN: LocaleMessages = {
     canApprove: '可以审批',
     canDelegate: '可以委派',
     requiresHumanApproval: '需要人工审批',
+    toolPolicyLabel: '工具策略',
+    toolPolicyPermissive: '宽松 — 允许所有工具',
+    toolPolicyRestrictive: '严格 — 默认拒绝',
+    toolPolicyAskUser: '询问用户 — 每次工具调用前确认',
+    fileAccessLabel: '文件访问路径',
+    fileAccessPlaceholder: '每行一个 glob 模式，例如 src/**',
+    fileAccessHint: '留空则允许所有路径（受全局拒绝规则约束）',
     deleteWithChildren: '删除角色及其子角色？',
     deleteWithChildrenMessage: '该角色有子角色。删除后，子角色将变为孤立角色（移至根级别）。',
     deleteAnyway: '仍然删除',
@@ -158,6 +165,52 @@ export const zhCN: LocaleMessages = {
       failed: '已失败',
       running: '运行中',
       cancelled: '已取消',
+      suspended: '已挂起',
+      interrupted: '已中断',
+    },
+  },
+
+  toolCalls: {
+    title: '工具调用',
+    noToolCalls: '暂无工具调用记录。',
+    status: {
+      running: '运行中',
+      completed: '已完成',
+      failed: '已失败',
+    },
+    permission: {
+      allowed: '已允许',
+      rejected: '已拒绝',
+      notRequested: '未请求',
+    },
+  },
+
+  collaboration: {
+    title: '协作状态',
+    noActiveSuspensions: '当前无挂起的协作。',
+    suspendedSince: '挂起于 {time}',
+    waitingFor: '等待',
+    chainDepth: '链深度：{n}',
+    awaitingStatus: {
+      pending: '等待中',
+      resolved: '已完成',
+    },
+  },
+
+  auditLog: {
+    title: '审计日志',
+    noEntries: '暂无审计记录。',
+    tabs: {
+      toolCalls: '工具调用',
+      fileAccess: '文件访问',
+    },
+    columns: {
+      time: '时间',
+      tool: '工具',
+      permission: '权限',
+      path: '路径',
+      operation: '操作',
+      allowed: '允许',
     },
   },
 
@@ -261,6 +314,21 @@ export const zhCN: LocaleMessages = {
       title: '系统',
       checkHealth: '检查系统健康',
       healthOk: '系统正常：{timestamp}',
+    },
+    agentConfig: {
+      title: 'Agent 配置',
+      description: '当前注册的 AI 代理后端和协作设置。',
+      agentName: '代理名称',
+      agentCommand: '命令',
+      agentStatus: '状态',
+      defaultAgent: '默认',
+      denyPatterns: '全局拒绝规则',
+      collaborationTitle: '协作配置',
+      collaborationDescription: '多代理协作链的限制参数。',
+      maxChainDepth: '最大链深度',
+      maxBroadcastTargets: '最大广播目标',
+      maxResumeCount: '最大恢复次数',
+      inquiryTimeoutMs: '询问超时 (毫秒)',
     },
     logs: {
       title: '执行日志',

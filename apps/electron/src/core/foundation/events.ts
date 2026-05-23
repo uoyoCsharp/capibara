@@ -169,6 +169,26 @@ export interface RunStatusPayload {
   runId: string;
   status: string;
 }
+export interface RunSuspendedPayload {
+  runId: string;
+  orgId: string;
+  roleId: string;
+  tokenCount: number;
+  sessionId: string | null;
+}
+export interface RunResumedPayload {
+  runId: string;
+  orgId: string;
+  roleId: string;
+  resumedFromSuspensionId: string;
+}
+export interface RunToolCallPayload {
+  runId: string;
+  toolCallId: string;
+  title: string;
+  status: string;
+  kind: string | null;
+}
 
 // Plan tree (task-scoped preview/eager decomposition) ────────────
 // Strict tree node — validated server-side by plan-tree-tools.
@@ -262,6 +282,9 @@ export interface DomainEventMap {
   'run:log': RunLogPayload;
   'run:assistant-text': RunAssistantTextPayload;
   'run:status': RunStatusPayload;
+  'run:suspended': RunSuspendedPayload;
+  'run:resumed': RunResumedPayload;
+  'run:tool-call': RunToolCallPayload;
 
   // Plan tree (task-scoped preview/eager decomposition)
   'plan-tree:submitted': PlanTreeSubmittedPayload;

@@ -36,6 +36,7 @@ export class RunOrchestrator {
     });
     this.eventBus.on('run:succeeded', (e) => this.onRunEnded(e.payload.orgId));
     this.eventBus.on('run:cancelled', (e) => this.onRunEnded(e.payload.orgId));
+    this.eventBus.on('run:suspended', (e) => this.onRunEnded(e.payload.orgId));
     this.logger.info('RunOrchestrator started');
   }
 

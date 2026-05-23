@@ -3,6 +3,10 @@ import { AcpExecutor } from '@core/modules/acp/client/acp-executor';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
 import type { AcpMcpConfigBuilder } from '@core/modules/acp/mcp/acp-mcp.config';
+import type { AcpFilesystemHandler } from '@core/modules/acp/handlers/acp-filesystem.handler';
+import type { AcpPermissionHandler } from '@core/modules/acp/handlers/acp-permission.handler';
+import type { AcpAuditRepository } from '@core/modules/acp/persistence/acp-audit.repository';
+import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { AgentRegistryConfig } from '@core/modules/acp/types/acp.types';
 import type { ExecutorInput } from '@core/modules/execution/types/execution.types';
 import { MockLogger } from '../../helpers/mock-logger';
@@ -37,6 +41,7 @@ function createMockUpdateHandler(): AcpUpdateHandler {
     onText: vi.fn(),
     removeCallbacks: vi.fn(),
     handleUpdate: vi.fn(),
+    setRunId: vi.fn(),
   } as any;
 }
 
@@ -197,6 +202,174 @@ describe('AcpExecutor', () => {
       await vi.waitFor(() => {
         expect(sessionManager.cancelPrompt).toHaveBeenCalledWith('internal-1');
       });
+    });
+  });
+
+  describe('setRoleRepository + allowedPaths', () => {
+    it('should pass undefined allowedPaths when no roleRepo is set', async () => {
+      const input = createTestInput();
+      await executor.spawn(input);
+
+      expect(sessionManager.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ allowedPaths: undefined }),
+      );
+    });
+
+    it('should resolve allowedPaths from role when roleRepo is set', async () => {
+      const mockRoleRepo: IRoleRepository = {
+        findById: vi.fn().mockReturnValue({
+          id: 'role-1',
+          fileAccessPaths: ['src/**', 'docs/**'],
+          toolPolicy: 'permissive',
+        }),
+        findByOrgId: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      } as any;
+      executor.setRoleRepository(mockRoleRepo);
+
+      const input = createTestInput();
+      await executor.spawn(input);
+
+      expect(mockRoleRepo.findById).toHaveBeenCalledWith('role-1');
+      expect(sessionManager.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ allowedPaths: ['src/**', 'docs/**'] }),
+      );
+    });
+
+    it('should pass undefined when role has null fileAccessPaths', async () => {
+      const mockRoleRepo: IRoleRepository = {
+        findById: vi.fn().mockReturnValue({
+          id: 'role-1',
+          fileAccessPaths: null,
+          toolPolicy: 'permissive',
+        }),
+        findByOrgId: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      } as any;
+      executor.setRoleRepository(mockRoleRepo);
+
+      const input = createTestInput();
+      await executor.spawn(input);
+
+      expect(sessionManager.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ allowedPaths: undefined }),
+      );
+    });
+
+    it('should pass undefined when role is not found', async () => {
+      const mockRoleRepo: IRoleRepository = {
+        findById: vi.fn().mockReturnValue(null),
+        findByOrgId: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      } as any;
+      executor.setRoleRepository(mockRoleRepo);
+
+      const input = createTestInput();
+      await executor.spawn(input);
+
+      expect(sessionManager.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ allowedPaths: undefined }),
+      );
+    });
+  });
+
+  describe('setAuditComponents + audit flush', () => {
+    let mockFilesystemHandler: AcpFilesystemHandler;
+    let mockPermissionHandler: AcpPermissionHandler;
+    let mockAuditRepo: AcpAuditRepository;
+
+    beforeEach(() => {
+      mockFilesystemHandler = {
+        drainAccessLog: vi.fn().mockReturnValue([
+          { sessionId: 's1', roleId: 'role-1', path: '/a.ts', operation: 'read', allowed: true },
+        ]),
+        handleReadFile: vi.fn(),
+        handleWriteFile: vi.fn(),
+      } as any;
+
+      mockPermissionHandler = {
+        drainToolCallLog: vi.fn().mockReturnValue([
+          { sessionId: 's1', runId: 'run-1', toolCallId: 'tc-1', title: 'bash', kind: 'shell', permission: 'allowed' },
+        ]),
+        handlePermissionRequest: vi.fn(),
+        setToolPolicy: vi.fn(),
+      } as any;
+
+      mockAuditRepo = {
+        insertFileAccessLogs: vi.fn(),
+        insertToolCallLogs: vi.fn(),
+      } as any;
+    });
+
+    it('should flush audit logs after successful prompt', async () => {
+      executor.setAuditComponents(mockFilesystemHandler, mockPermissionHandler, mockAuditRepo);
+
+      const input = createTestInput();
+      const handle = await executor.spawn(input);
+      await handle.complete();
+
+      expect(mockFilesystemHandler.drainAccessLog).toHaveBeenCalled();
+      expect(mockPermissionHandler.drainToolCallLog).toHaveBeenCalled();
+      expect(mockAuditRepo.insertFileAccessLogs).toHaveBeenCalledWith([
+        { sessionId: 's1', roleId: 'role-1', path: '/a.ts', operation: 'read', allowed: true },
+      ]);
+      expect(mockAuditRepo.insertToolCallLogs).toHaveBeenCalledWith([
+        { sessionId: 's1', runId: 'run-1', toolCallId: 'tc-1', title: 'bash', kind: 'shell', permission: 'allowed' },
+      ]);
+    });
+
+    it('should flush audit logs even on prompt failure', async () => {
+      (sessionManager.prompt as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('boom'));
+      executor.setAuditComponents(mockFilesystemHandler, mockPermissionHandler, mockAuditRepo);
+
+      const input = createTestInput();
+      const handle = await executor.spawn(input);
+      await handle.complete();
+
+      expect(mockFilesystemHandler.drainAccessLog).toHaveBeenCalled();
+      expect(mockPermissionHandler.drainToolCallLog).toHaveBeenCalled();
+      expect(mockAuditRepo.insertFileAccessLogs).toHaveBeenCalled();
+      expect(mockAuditRepo.insertToolCallLogs).toHaveBeenCalled();
+    });
+
+    it('should skip audit flush when no audit components are set', async () => {
+      // No setAuditComponents call — should not throw
+      const input = createTestInput();
+      const handle = await executor.spawn(input);
+      await handle.complete();
+
+      // No assertion needed — just verify no crash
+    });
+
+    it('should skip insertion when drain returns empty arrays', async () => {
+      (mockFilesystemHandler.drainAccessLog as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      (mockPermissionHandler.drainToolCallLog as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      executor.setAuditComponents(mockFilesystemHandler, mockPermissionHandler, mockAuditRepo);
+
+      const input = createTestInput();
+      const handle = await executor.spawn(input);
+      await handle.complete();
+
+      expect(mockAuditRepo.insertFileAccessLogs).not.toHaveBeenCalled();
+      expect(mockAuditRepo.insertToolCallLogs).not.toHaveBeenCalled();
+    });
+
+    it('should not crash when audit flush throws', async () => {
+      (mockAuditRepo.insertFileAccessLogs as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('db error'); });
+      executor.setAuditComponents(mockFilesystemHandler, mockPermissionHandler, mockAuditRepo);
+
+      const input = createTestInput();
+      const handle = await executor.spawn(input);
+      const output = await handle.complete();
+
+      // Prompt should still succeed despite audit failure
+      expect(output.status).toBe('succeeded');
     });
   });
 });

@@ -51,6 +51,8 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
   const [parentId, setParentId] = useState(role.parentId);
   const [skillIds, setSkillIds] = useState<string[]>(role.skillIds);
   const [knowledgeBaseRefs, setKnowledgeBaseRefs] = useState(role.knowledgeBaseRefs.join('\n'));
+  const [toolPolicy, setToolPolicy] = useState(role.toolPolicy);
+  const [fileAccessPaths, setFileAccessPaths] = useState(role.fileAccessPaths?.join('\n') ?? '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
@@ -64,6 +66,8 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
     setParentId(role.parentId);
     setSkillIds(role.skillIds);
     setKnowledgeBaseRefs(role.knowledgeBaseRefs.join('\n'));
+    setToolPolicy(role.toolPolicy);
+    setFileAccessPaths(role.fileAccessPaths?.join('\n') ?? '');
     setIsDirty(false);
     setShowDeleteConfirm(false);
   }, [role]);
@@ -73,6 +77,10 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
   const handleSave = () => {
     if (!name.trim()) return;
     const refs = knowledgeBaseRefs
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsedFileAccess = fileAccessPaths
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean);
@@ -87,6 +95,8 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
       parentId,
       skillIds,
       knowledgeBaseRefs: refs,
+      toolPolicy,
+      fileAccessPaths: parsedFileAccess.length > 0 ? parsedFileAccess : null,
     });
     setIsDirty(false);
   };
@@ -251,6 +261,43 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
                   </Label>
                 </div>
               </div>
+            </div>
+
+            {/* Tool Policy */}
+            <div>
+              <Label className="text-xs uppercase tracking-wider mb-1.5">
+                {t.roleDrawer?.toolPolicyLabel ?? 'Tool Policy'}
+              </Label>
+              <Select
+                value={toolPolicy}
+                onValueChange={(val) => { setToolPolicy(val as RoleRecord['toolPolicy']); markDirty(); }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="permissive">{t.roleDrawer?.toolPolicyPermissive ?? 'Permissive'}</SelectItem>
+                  <SelectItem value="restrictive">{t.roleDrawer?.toolPolicyRestrictive ?? 'Restrictive'}</SelectItem>
+                  <SelectItem value="ask_user">{t.roleDrawer?.toolPolicyAskUser ?? 'Ask User'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* File Access Paths */}
+            <div>
+              <Label className="text-xs uppercase tracking-wider mb-1.5">
+                {t.roleDrawer?.fileAccessLabel ?? 'File Access Paths'}
+              </Label>
+              <Textarea
+                className="resize-y font-mono text-xs"
+                rows={3}
+                value={fileAccessPaths}
+                onChange={(e) => { setFileAccessPaths(e.target.value); markDirty(); }}
+                placeholder={t.roleDrawer?.fileAccessPlaceholder ?? 'One glob pattern per line...'}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {t.roleDrawer?.fileAccessHint ?? 'Leave empty to allow all paths'}
+              </p>
             </div>
           </div>
 

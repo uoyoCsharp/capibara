@@ -6,6 +6,7 @@ import type { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.val
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { AgentRegistryConfig, CollaborationConfig } from '@core/modules/acp/types/acp.types';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }
@@ -18,10 +19,12 @@ export interface SystemHandlersDeps {
   taskOrchestrator: TaskOrchestrator;
   orgRepo: IOrganizationRepository;
   logger: ILogger;
+  agentConfig: AgentRegistryConfig;
+  collaborationConfig: CollaborationConfig;
 }
 
 export function registerSystemHandlers(deps: SystemHandlersDeps): void {
-  const { connection, runRepo, runEngine, wakeGateValidator, taskOrchestrator, orgRepo, logger } = deps;
+  const { connection, runRepo, runEngine, wakeGateValidator, taskOrchestrator, orgRepo, logger, agentConfig, collaborationConfig } = deps;
 
   // Restore persisted pause state on registration
   try {
@@ -137,5 +140,18 @@ export function registerSystemHandlers(deps: SystemHandlersDeps): void {
 
   ipcMain.handle('capibara:system:health', async () => {
     return ok({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  ipcMain.handle('capibara:system:agent-config', async () => {
+    return ok({
+      defaultAgent: agentConfig.defaultAgent,
+      registry: agentConfig.registry.map((a) => ({
+        id: a.id,
+        name: a.name,
+        command: a.command,
+      })),
+      globalFilePolicy: agentConfig.globalFilePolicy,
+      collaboration: collaborationConfig,
+    });
   });
 }

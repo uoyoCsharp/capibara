@@ -39,6 +39,8 @@ export interface RoleRecord {
   consecutiveWakeCount: number;
   isSystemRole: boolean;
   status: 'active' | 'paused' | 'idle';
+  fileAccessPaths: string[] | null;
+  toolPolicy: 'permissive' | 'restrictive' | 'ask_user';
   createdAt: string;
   updatedAt: string;
 }
@@ -78,7 +80,7 @@ export interface RunRecord {
   taskId: string | null;
   conversationId: string | null;
   roleId: string;
-  status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted' | 'suspended';
   wakeReason: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -86,6 +88,8 @@ export interface RunRecord {
   tokenCount: number;
   summary: string | null;
   errorMessage: string | null;
+  acpSessionId: string | null;
+  agentId: string | null;
   createdAt: string;
 }
 
@@ -161,6 +165,9 @@ export type DesktopEvent =
   | { type: 'run:assistant-text'; runId: string; text: string }
   | { type: 'run:status'; runId: string; status: string }
   | { type: 'run:completed'; runId: string; orgId: string; status: string; tokenCount: number }
+  | { type: 'run:tool-call'; runId: string; toolCallId: string; title: string; status: string; kind: string | null }
+  | { type: 'run:suspended'; runId: string; orgId: string; roleId: string; sessionId: string | null }
+  | { type: 'run:resumed'; runId: string; orgId: string; roleId: string }
   | { type: 'conversation:changed'; orgId: string }
   | { type: 'conversation:response-needed'; orgId: string; conversationId: string }
   | { type: 'scheduler:paused'; cancelledRunCount: number }
@@ -169,3 +176,65 @@ export type DesktopEvent =
   | { type: 'plan-tree:discarded'; orgId: string; rootTaskId: string | null; sourceConversationId: string | null }
   | { type: 'plan-tree:approved'; orgId: string; rootTaskId: string | null; sourceConversationId: string | null }
   | { type: 'notification'; title: string; body: string };
+
+export interface ToolCallLogRecord {
+  id: string;
+  sessionId: string;
+  runId: string | null;
+  toolCallId: string;
+  title: string;
+  kind: string | null;
+  permission: string;
+  createdAt: string;
+}
+
+export interface FileAccessLogRecord {
+  id: string;
+  sessionId: string;
+  roleId: string;
+  path: string;
+  operation: 'read' | 'write';
+  allowed: boolean;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface SuspensionRecord {
+  id: string;
+  sessionId: string;
+  acpSessionId: string;
+  runId: string;
+  roleId: string;
+  orgId: string;
+  taskId: string | null;
+  aggregationMode: string;
+  parentSuspensionId: string | null;
+  chainDepth: number;
+  status: string;
+  suspendedAt: string;
+  resumedAt: string | null;
+  createdAt: string;
+}
+
+export interface SuspensionAwaitingRecord {
+  id: string;
+  suspensionId: string;
+  conversationId: string;
+  respondentRoleId: string;
+  status: string;
+  response: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface AgentConfigSummary {
+  defaultAgent: string;
+  registry: Array<{ id: string; name: string; command: string }>;
+  globalFilePolicy: { denyPatterns: string[] };
+  collaboration: {
+    maxChainDepth: number;
+    maxBroadcastTargets: number;
+    maxResumeCount: number;
+    inquiryTimeoutMs: number;
+  };
+}

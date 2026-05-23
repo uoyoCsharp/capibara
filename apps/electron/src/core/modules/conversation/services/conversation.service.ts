@@ -54,6 +54,7 @@ export class ConversationService {
     questionContent: string,
     parentConversationId?: string,
     depth?: number,
+    targetRespondentRoleId?: string,
   ): Conversation {
     const conv = this.convRepo.create({
       orgId,
@@ -71,16 +72,26 @@ export class ConversationService {
       intent: 'question',
     });
 
-    // Conversation is left in 'active' state with no respondent. Layer 2
-    // InquiryRouter subscribes to this event, reads Organization data, and
-    // calls assignRespondent() to complete the routing decision.
-    this.emitEvent('conversation:needs-routing', {
-      conversationId: conv.id,
-      orgId,
-      askingRoleId: initiatorRoleId,
-      taskId,
-      conversationDepth: depth ?? 0,
-    });
+    if (targetRespondentRoleId) {
+      // Direct routing: skip InquiryRouter, assign respondent immediately
+      this.assignRespondent(
+        conv.id,
+        targetRespondentRoleId,
+        'ai',
+        'direct-target',
+      );
+    } else {
+      // Conversation is left in 'active' state with no respondent. Layer 2
+      // InquiryRouter subscribes to this event, reads Organization data, and
+      // calls assignRespondent() to complete the routing decision.
+      this.emitEvent('conversation:needs-routing', {
+        conversationId: conv.id,
+        orgId,
+        askingRoleId: initiatorRoleId,
+        taskId,
+        conversationDepth: depth ?? 0,
+      });
+    }
 
     return this.convRepo.findById(conv.id)!;
   }
