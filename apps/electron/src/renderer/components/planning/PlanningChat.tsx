@@ -35,6 +35,8 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
   const [messages, setMessages] = useState<ConversationMessageRecord[]>([]);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
 
@@ -45,22 +47,25 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
 
   useEffect(() => {
     prevMessageCountRef.current = 0;
+    setStreamingText('');
+    setActiveRunId(null);
     void loadMessages();
   }, [conversationId, loadMessages]);
 
-  // Auto-scroll on new messages
+  // Auto-scroll on new messages or streaming text change
   useEffect(() => {
-    if (!messagesContainerRef.current || messages.length === 0) return;
+    if (!messagesContainerRef.current) return;
+    if (messages.length === 0 && !streamingText) return;
     if (prevMessageCountRef.current === 0) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-    } else if (messages.length > prevMessageCountRef.current) {
+    } else if (messages.length > prevMessageCountRef.current || streamingText) {
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
         behavior: 'smooth',
       });
     }
     prevMessageCountRef.current = messages.length;
-  }, [messages]);
+  }, [messages, streamingText]);
 
   // Hold a ref to the current busy state so the event handler can distinguish
   // "run failed while we were waiting for it" from background run noise.
@@ -68,19 +73,34 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
   useEffect(() => { isAIBusyRef.current = isAIBusy; }, [isAIBusy]);
 
   // Events we care about:
-  //   - run:completed → AI finished (maybe with failure) → clear busy, reload
-  //   - conversation:response-needed (this conversation) → AI has work to do → set busy
-  //   - conversation:changed → messages may have been appended (AI's own reply) → reload
-  // Surface failed/cancelled runs only when we were actively waiting.
+  //   - run:completed → AI finished → clear busy, clear streaming, reload messages
+  //   - run:started → track the runId for streaming
+  //   - run:assistant-text → live streaming of AI output
+  //   - conversation:response-needed → AI has work to do → set busy
+  //   - conversation:changed → messages may have been appended → reload
   const runEventTypes = useMemo<DesktopEvent['type'][]>(
-    () => ['run:completed', 'conversation:changed', 'conversation:response-needed'],
+    () => ['run:completed', 'run:changed', 'run:assistant-text', 'conversation:changed', 'conversation:response-needed'],
     [],
   );
   useEventSubscription(runEventTypes, useCallback((event) => {
     if (event.type === 'conversation:response-needed') {
-      // Only flip busy on for THIS conversation (e.g. refine wake from preview pane)
       if (event.conversationId === conversationId) {
         onAIBusyChange(true);
+      }
+      return;
+    }
+    if (event.type === 'run:changed') {
+      // A new run started for our org — track it for streaming.
+      // run:changed fires on run:started and carries orgId but not runId directly,
+      // so we rely on run:assistant-text to auto-detect the active run.
+      return;
+    }
+    if (event.type === 'run:assistant-text') {
+      if (isAIBusyRef.current) {
+        // Accept streaming text from any run while AI is busy for this conversation.
+        // In single-org-single-run architecture, this is unambiguous.
+        if (!activeRunId) setActiveRunId(event.runId);
+        setStreamingText((prev) => prev + event.text);
       }
       return;
     }
@@ -89,13 +109,15 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
         const msg = event.status === 'failed' ? t.planningChat.failedResponse : t.planningChat.cancelled;
         toast.error(msg);
       }
+      setStreamingText('');
+      setActiveRunId(null);
       void loadMessages();
       onAIBusyChange(false);
       return;
     }
     // conversation:changed
     void loadMessages();
-  }, [conversationId, loadMessages, onAIBusyChange, t]));
+  }, [conversationId, loadMessages, onAIBusyChange, activeRunId, t]));
 
   const handleSend = useCallback(async () => {
     const trimmed = replyText.trim();
@@ -120,14 +142,20 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
   return (
     <div className="flex h-full flex-col">
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !streamingText ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             {t.planningChat.startingConversation}
           </div>
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} msg={msg} roles={roles} t={t} />)
+          <>
+            {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} roles={roles} t={t} />)}
+            {isAIBusy && streamingText ? (
+              <StreamingBubble text={streamingText} t={t} />
+            ) : isAIBusy ? (
+              <TypingIndicator t={t} />
+            ) : null}
+          </>
         )}
-        {isAIBusy && <TypingIndicator t={t} />}
       </div>
 
       <div className="border-t border-border p-4 flex gap-2">
@@ -147,6 +175,24 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
         >
           {isSending ? <CircleNotch size={16} className="animate-spin" /> : <ArrowBendUpLeft size={16} />}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Live streaming bubble: shows AI text as it arrives, with a subtle
+ * pulsing indicator so the user knows more text may come.
+ */
+function StreamingBubble({ text, t }: { text: string; t: LocaleMessages }) {
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[80%] bg-accent rounded-lg px-3 py-2">
+        <div className="flex items-center gap-1.5 mb-1">
+          <Sparkle size={12} weight="duotone" className="text-primary animate-pulse" />
+          <span className="text-xs font-medium opacity-70">{t.planningChat.aiBusyLabel}</span>
+        </div>
+        <MarkdownContent content={text} />
       </div>
     </div>
   );

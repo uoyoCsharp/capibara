@@ -36,12 +36,22 @@ function createMockSessionManager(): IAcpSessionManager {
 }
 
 function createMockUpdateHandler(): AcpUpdateHandler {
+  const textCallbacks = new Map<string, Set<(text: string) => void>>();
   return {
     onLog: vi.fn(),
-    onText: vi.fn(),
-    removeCallbacks: vi.fn(),
+    onText: vi.fn().mockImplementation((sessionId: string, cb: (text: string) => void) => {
+      if (!textCallbacks.has(sessionId)) textCallbacks.set(sessionId, new Set());
+      textCallbacks.get(sessionId)!.add(cb);
+    }),
+    removeCallbacks: vi.fn().mockImplementation((sessionId: string) => {
+      textCallbacks.delete(sessionId);
+    }),
     handleUpdate: vi.fn(),
     setRunId: vi.fn(),
+    // Test helper: simulate agent text chunks
+    _emitText: (sessionId: string, text: string) => {
+      textCallbacks.get(sessionId)?.forEach(cb => cb(text));
+    },
   } as any;
 }
 
@@ -85,6 +95,12 @@ describe('AcpExecutor', () => {
     mcpConfigBuilder = createMockMcpConfigBuilder();
     logger = new MockLogger();
     executor = new AcpExecutor(sessionManager, updateHandler, mcpConfigBuilder, agentConfig, logger);
+
+    // Make prompt mock emit text chunks before resolving, simulating ACP streaming.
+    (sessionManager.prompt as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      (updateHandler as any)._emitText('acp-sess-1', 'Task completed successfully');
+      return { stopReason: 'end_turn', textOutput: '', tokensUsed: { input: 500, output: 200, cached: 100 } };
+    });
   });
 
   describe('spawn', () => {

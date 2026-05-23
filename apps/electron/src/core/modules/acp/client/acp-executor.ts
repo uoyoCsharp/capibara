@@ -193,6 +193,13 @@ export class AcpExecutor implements IExecutor {
     content: PromptContent[],
     input: ExecutorInput,
   ): Promise<ExecutorOutput> {
+    // Aggregate agent text chunks so we can populate summary for conversation persistence.
+    // AcpUpdateHandler.onText only receives agent_message_chunk text (no tool-call JSON).
+    let aggregatedText = '';
+    this.updateHandler.onText(acpSessionId, (text) => {
+      aggregatedText += text;
+    });
+
     try {
       const result = await this.sessionManager.prompt(sessionId, content);
 
@@ -246,7 +253,7 @@ export class AcpExecutor implements IExecutor {
       return {
         exitCode: status === 'succeeded' ? 0 : 1,
         status,
-        summary: result.textOutput || null,
+        summary: aggregatedText || null,
         errorMessage: status === 'failed' ? `Agent stopped: ${result.stopReason}` : null,
         model: null,
         sessionId: acpSessionId,
