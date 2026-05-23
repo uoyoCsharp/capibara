@@ -13,7 +13,7 @@ import { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import { FileLogService } from '@core/modules/execution/logging/file-log.service';
 import { MockEventBus } from '../../helpers/mock-event-bus';
 import { MockLogger } from '../../helpers/mock-logger';
-import { createTestConfig, createRunExecutionParams, TEST_ORG_ID, TEST_ROLE_ID } from '../../helpers/fixtures';
+import { createRunExecutionParams, TEST_ORG_ID, TEST_ROLE_ID } from '../../helpers/fixtures';
 import { ExecutionError } from '@core/foundation/errors/capibara.errors';
 
 function createMockRun(overrides?: Partial<Run>): Run {
@@ -149,9 +149,8 @@ describe('RunEngine', () => {
       getAvailableTransitions: vi.fn().mockReturnValue([]),
     } as unknown as import('@core/modules/workflow/engines/process.engine').ProcessEngine;
 
-    const config = createTestConfig();
     engine = new RunEngine(
-      runRepo, executor, eventBus, eventBus, logger, config, costTracker, fileLogService,
+      runRepo, executor, eventBus, eventBus, logger, costTracker, fileLogService,
       taskRepo, taskStateMachine, processEngine,
     );
   });

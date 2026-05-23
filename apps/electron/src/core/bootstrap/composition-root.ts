@@ -42,6 +42,13 @@ let runOrchestrator: RunOrchestrator;
 let eventBroadcaster: EventBroadcaster;
 let mcpIpcServer: McpIpcServer;
 
+function normalizeDefaultAgentId(requested: string | null | undefined): string {
+  // Backward compatibility for legacy executor IDs kept in persisted config.
+  if (!requested) return 'claude-agent';
+  if (requested === 'claude-cli') return 'claude-agent';
+  return requested;
+}
+
 export async function bootstrap(): Promise<void> {
   const config = loadConfig();
   logger = new PinoLogger(config.logging.level);
@@ -57,9 +64,7 @@ export async function bootstrap(): Promise<void> {
     ? process.resourcesPath
     : join(app.getAppPath(), 'resources');
 
-  const agentConfig = {
-    defaultAgent: config.cli?.defaultExecutor ?? 'claude-agent',
-    registry: [
+  const registry = [
       {
         id: 'claude-agent',
         name: 'Claude Agent',
@@ -73,7 +78,22 @@ export async function bootstrap(): Promise<void> {
             ?? 'C:/nvm4w/nodejs/node_modules/@anthropic-ai/claude-code/bin/claude.exe',
         },
       },
-    ],
+    ];
+
+  const requestedDefaultAgent = normalizeDefaultAgentId(config.cli?.defaultExecutor);
+  const hasRequestedDefault = registry.some((entry) => entry.id === requestedDefaultAgent);
+  const resolvedDefaultAgent = hasRequestedDefault ? requestedDefaultAgent : registry[0]!.id;
+
+  if (!hasRequestedDefault) {
+    logger.warn('Configured default agent is not registered; falling back to first registry entry', {
+      requestedDefaultAgent,
+      fallbackAgent: resolvedDefaultAgent,
+    });
+  }
+
+  const agentConfig = {
+    defaultAgent: resolvedDefaultAgent,
+    registry,
     globalFilePolicy: {
       denyPatterns: ['**/.env', '**/.env.*', '**/secrets/**', '**/.git/objects/**'],
     },

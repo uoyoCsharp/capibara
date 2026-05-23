@@ -55,7 +55,10 @@ export class AcpAgentSpawner {
     if (existing && !existing.exited) return existing;
 
     const entry = this.config.registry.find(a => a.id === agentId);
-    if (!entry) throw new Error(`Agent not registered: ${agentId}`);
+    if (!entry) {
+      const available = this.config.registry.map((a) => a.id).join(', ');
+      throw new Error(`Agent not registered: ${agentId}; available: [${available}]`);
+    }
 
     const child = spawn(entry.command, entry.args, {
       stdio: ['pipe', 'pipe', 'pipe'],

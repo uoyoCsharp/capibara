@@ -70,11 +70,35 @@ export class AcpExecutor implements IExecutor {
   async spawn(input: ExecutorInput): Promise<ExecutorHandle> {
     // Resume path: if sessionId is provided, resume an existing ACP session
     if (input.sessionId) {
-      return this.spawnResume(input);
+      try {
+        return await this.spawnResume(input);
+      } catch (err) {
+        this.logger.warn('ACP resume failed; falling back to fresh session', {
+          runId: input.runId,
+          roleId: input.roleId,
+          orgId: input.orgId,
+          requestedSessionId: input.sessionId,
+          error: String(err),
+        });
+      }
     }
 
     // 1. Resolve Agent config
-    const agentId = this.agentConfig.defaultAgent;
+    let agentId = this.agentConfig.defaultAgent;
+    const registered = this.agentConfig.registry.some((entry) => entry.id === agentId);
+    if (!registered) {
+      const fallback = this.agentConfig.registry[0]?.id;
+      if (!fallback) {
+        throw new Error('No ACP agents are registered');
+      }
+      this.logger.warn('Default ACP agent is not registered; using fallback agent', {
+        configuredAgent: agentId,
+        fallbackAgent: fallback,
+        runId: input.runId,
+        roleId: input.roleId,
+      });
+      agentId = fallback;
+    }
 
     // 2. Build MCP server config
     const mcpServers = this.mcpConfigBuilder.buildMcpServers(input);

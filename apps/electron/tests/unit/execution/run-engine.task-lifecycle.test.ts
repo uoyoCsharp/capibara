@@ -11,7 +11,7 @@ import { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import { FileLogService } from '@core/modules/execution/logging/file-log.service';
 import { MockEventBus } from '../../helpers/mock-event-bus';
 import { MockLogger } from '../../helpers/mock-logger';
-import { createTestConfig, createRunExecutionParams, TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID } from '../../helpers/fixtures';
+import { createRunExecutionParams, TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID } from '../../helpers/fixtures';
 
 function createMockRun(overrides?: Partial<Run>): Run {
   return {
@@ -158,9 +158,8 @@ describe('RunEngine — task lifecycle (R2/R3)', () => {
       readRaw: vi.fn().mockResolvedValue([]),
     } as unknown as FileLogService;
 
-    const config = createTestConfig();
     engine = new RunEngine(
-      runRepo, executor, eventBus, eventBus, logger, config, costTracker, fileLogService,
+      runRepo, executor, eventBus, eventBus, logger, costTracker, fileLogService,
       taskRepo, taskStateMachine, processEngine,
     );
   });

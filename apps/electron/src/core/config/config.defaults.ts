@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
     sqlitePath: '',
   },
   cli: {
-    defaultExecutor: 'claude-cli',
+    defaultExecutor: 'claude-agent',
     projectDir: './',
     model: null,
     maxTurnsPerRun: 0,

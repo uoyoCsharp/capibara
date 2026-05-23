@@ -21,7 +21,7 @@ export const configSchema = z.object({
     sqlitePath: z.string().default(''),
   }).default({}),
   cli: z.object({
-    defaultExecutor: z.string().default('claude-cli'),
+    defaultExecutor: z.string().default('claude-agent'),
     projectDir: z.string().default('./'),
     model: z.string().nullable().default(null),
     maxTurnsPerRun: z.number().int().min(0).default(0),

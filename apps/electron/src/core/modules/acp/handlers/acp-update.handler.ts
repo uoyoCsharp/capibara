@@ -78,6 +78,16 @@ export class AcpUpdateHandler {
         break;
       }
 
+      case 'agent_thought_chunk': {
+        // Intentionally ignored for now: internal reasoning chunks are not surfaced in current UI.
+        break;
+      }
+
+      case 'available_commands_update': {
+        // Intentionally ignored: command capability updates are not consumed by current UI.
+        break;
+      }
+
       default: {
         this.logger.debug('Unhandled session update', { sessionId, type: (update as { sessionUpdate: string }).sessionUpdate });
         break;

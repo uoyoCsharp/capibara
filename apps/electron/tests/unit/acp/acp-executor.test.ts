@@ -68,7 +68,8 @@ function createTestInput(overrides?: Partial<ExecutorInput>): ExecutorInput {
 
 const agentConfig: AgentRegistryConfig = {
   defaultAgent: 'claude-agent',
-  agents: [],
+  registry: [{ id: 'claude-agent', name: 'Claude Agent', command: 'claude', args: [] }],
+  globalFilePolicy: { denyPatterns: [] },
 };
 
 describe('AcpExecutor', () => {

@@ -44,7 +44,7 @@ export function registerExecutionModule(
   const costTracker = new CostTracker(costEntryRepo);
   const fileLogService = new FileLogService(config.logging.logDir);
   const runEngine = new RunEngine(
-    runRepo, executor, eventBus, eventPublisher, logger, config, costTracker, fileLogService,
+    runRepo, executor, eventBus, eventPublisher, logger, costTracker, fileLogService,
     taskRepo, taskStateMachine, processEngine,
   );
 

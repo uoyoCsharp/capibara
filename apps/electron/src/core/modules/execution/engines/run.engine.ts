@@ -7,10 +7,8 @@ import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
-import type { CapibaraConfig } from '@core/config/config.types';
 import type { RunExecutionParams, RunResult, WakeReason } from '../types/execution.types';
 import { ExecutionError } from '@core/foundation/errors/capibara.errors';
-import { StreamJsonParser } from '../workers/stream-json-parser';
 import { CostTracker } from '../services/cost-tracker';
 import { FileLogService } from '../logging/file-log.service';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
@@ -20,15 +18,28 @@ import type { ProcessEngine } from '@core/modules/workflow/engines/process.engin
 type LogCallback = (runId: string, stream: 'stdout' | 'stderr', chunk: string) => void;
 type TextCallback = (runId: string, text: string) => void;
 
+/**
+ * RunEngine — orchestrates the lifecycle of a single AI agent execution (Run).
+ *
+ * Responsibilities:
+ *   - Spawn an executor (ACP session), wire callbacks, persist the Run record
+ *   - Publish domain events for each lifecycle transition
+ *   - Track token costs
+ *   - Advance/rollback the associated Task's status
+ *   - Persist execution logs to disk
+ *
+ * NOT responsible for:
+ *   - Protocol-level details (ACP JSON-RPC, stream parsing) — handled by AcpExecutor/AcpUpdateHandler
+ *   - Agent process management — handled by AcpAgentSpawner
+ *   - Permission/file access control — handled by ACP handlers
+ */
 @injectable()
 export class RunEngine implements IRunEngine {
   private logCallbacks: LogCallback[] = [];
   private textCallbacks: TextCallback[] = [];
-  private parsers = new Map<string, StreamJsonParser>();
   private logContexts = new Map<string, { contextLabel: string; contextId: string }>();
   private activeOrgs = new Set<string>();
   private activeHandles = new Map<string, ExecutorHandle>();
-  private mcpConfigPath = '';
 
   constructor(
     private readonly runRepo: IRunRepository,
@@ -36,17 +47,12 @@ export class RunEngine implements IRunEngine {
     private readonly eventBus: IEventBus,
     private readonly eventPublisher: IEventPublisher,
     private readonly logger: ILogger,
-    private readonly config: CapibaraConfig,
     private readonly costTracker: CostTracker,
     private readonly fileLogService: FileLogService,
     private readonly taskRepo: ITaskRepository,
     private readonly taskStateMachine: TaskStateMachine,
     private readonly processEngine: ProcessEngine,
   ) {}
-
-  setMcpConfigPath(path: string): void {
-    this.mcpConfigPath = path;
-  }
 
   async execute(params: RunExecutionParams): Promise<RunResult> {
     if (this.activeOrgs.has(params.orgId)) {
@@ -77,21 +83,12 @@ export class RunEngine implements IRunEngine {
         taskId: params.taskId ?? params.contextId,
         wakeReason,
         prompt: params.sessionId && params.userMessage ? params.userMessage : params.prompt,
-        mcpConfigPath: this.mcpConfigPath,
-        projectDir: params.projectDir || this.config.cli.projectDir,
-        executor: this.config.cli.defaultExecutor,
-        cliConfig: {
-          model: this.config.cli.model,
-          maxTurnsPerRun: this.config.cli.maxTurnsPerRun,
-          effort: this.config.cli.effort,
-          timeoutMs: this.config.cli.timeoutMs,
-          extraArgs: this.config.cli.extraArgs,
-        },
+        projectDir: params.projectDir ?? '',
         sessionId: params.sessionId,
       });
     } catch (err) {
       this.activeOrgs.delete(params.orgId);
-      this.logger.error('CLI spawn failed; no run recorded', {
+      this.logger.error('Agent execution failed to start; no run recorded', {
         orgId: params.orgId, roleId: params.roleId, error: String(err),
       });
       throw err instanceof Error ? err : new Error(String(err));
@@ -119,7 +116,6 @@ export class RunEngine implements IRunEngine {
     this.publishEvent('run:started', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
     this.logger.info('Run started', {
       runId: run.id, pid: handle.pid, orgId: params.orgId, roleId: params.roleId,
-      projectDir: params.projectDir || this.config.cli.projectDir,
     });
 
     this.advanceTaskToActive(params.taskId, params.orgId);
@@ -135,32 +131,11 @@ export class RunEngine implements IRunEngine {
 
       this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount, exitCode: result.exitCode });
 
-      // Don't rollback task when suspended — the task is still active
       if (result.status !== 'suspended') {
         this.rollbackTaskIfActive(params.taskId);
       }
 
-      if (result.status === 'succeeded') {
-        this.publishEvent('run:succeeded', { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
-      } else if (result.status === 'cancelled') {
-        this.publishEvent('run:cancelled', { runId: run.id, orgId: params.orgId, roleId: params.roleId, tokenCount });
-      } else if (result.status === 'suspended') {
-        this.publishEvent('run:suspended', {
-          runId: run.id,
-          orgId: params.orgId,
-          roleId: params.roleId,
-          tokenCount,
-          sessionId: result.sessionId,
-        });
-      } else {
-        this.publishEvent('run:failed', {
-          runId: run.id,
-          orgId: params.orgId,
-          roleId: params.roleId,
-          tokenCount,
-          errorMessage: result.errorMessage ?? null,
-        });
-      }
+      this.publishRunOutcome(run.id, params.orgId, params.roleId, tokenCount, result);
 
       return {
         runId: run.id,
@@ -215,6 +190,13 @@ export class RunEngine implements IRunEngine {
     this.textCallbacks.push(callback);
   }
 
+  // ─── Private ────────────────────────────────────────────────────────────────
+
+  /**
+   * Handle log chunks from the executor.
+   * In ACP mode, the AcpUpdateHandler emits structured text via this callback.
+   * RunEngine simply: forwards to subscribers, persists to file, emits domain events.
+   */
   private handleLog(runId: string, stream: 'stdout' | 'stderr', chunk: string): void {
     for (const cb of this.logCallbacks) {
       cb(runId, stream, chunk);
@@ -227,31 +209,37 @@ export class RunEngine implements IRunEngine {
       this.fileLogService.append(ctx.contextLabel, ctx.contextId, runId, chunk);
     }
 
-    if (stream === 'stdout') {
-      if (!this.parsers.has(runId)) {
-        this.parsers.set(runId, new StreamJsonParser({
-          onText: (text) => {
-            for (const cb of this.textCallbacks) cb(runId, text);
-            this.emitStreamingEvent('run:assistant-text', { runId, text });
-          },
-          onStatus: (status) => {
-            this.emitStreamingEvent('run:status', { runId, status });
-          },
-          onParseError: (line, error) => {
-            this.logger.debug('Stream JSON parse error', { runId, line: line.slice(0, 200), error });
-          },
-        }));
-      }
-      this.parsers.get(runId)!.feed(chunk);
+    // Emit assistant text for stdout (AcpUpdateHandler already sends clean text)
+    if (stream === 'stdout' && chunk) {
+      for (const cb of this.textCallbacks) cb(runId, chunk);
+      this.emitStreamingEvent('run:assistant-text', { runId, text: chunk });
+    }
+  }
+
+  private publishRunOutcome(
+    runId: string,
+    orgId: string,
+    roleId: string,
+    tokenCount: number,
+    result: { status: string; sessionId: string | null; errorMessage: string | null },
+  ): void {
+    switch (result.status) {
+      case 'succeeded':
+        this.publishEvent('run:succeeded', { runId, orgId, roleId, tokenCount });
+        break;
+      case 'cancelled':
+        this.publishEvent('run:cancelled', { runId, orgId, roleId, tokenCount });
+        break;
+      case 'suspended':
+        this.publishEvent('run:suspended', { runId, orgId, roleId, tokenCount, sessionId: result.sessionId });
+        break;
+      default:
+        this.publishEvent('run:failed', { runId, orgId, roleId, tokenCount, errorMessage: result.errorMessage ?? null });
+        break;
     }
   }
 
   private cleanupRun(runId: string): void {
-    const parser = this.parsers.get(runId);
-    if (parser) {
-      parser.flush();
-      this.parsers.delete(runId);
-    }
     this.logContexts.delete(runId);
     this.activeHandles.delete(runId);
     this.fileLogService.flush(runId).catch((err) => {
@@ -270,23 +258,13 @@ export class RunEngine implements IRunEngine {
 
     const currentCategory = this.processEngine.getStatusCategory(orgId, task.status);
     if (currentCategory === 'active') return;
-    if (currentCategory !== 'initial') {
-      this.logger.debug('Skipping advanceTaskToActive for non-initial status', {
-        taskId, status: task.status, category: currentCategory,
-      });
-      return;
-    }
+    if (currentCategory !== 'initial') return;
 
     const transitions = this.processEngine.getAvailableTransitions(orgId, task.status);
     const target = transitions.find(
       (t) => this.processEngine.getStatusCategory(orgId, t.to) === 'active',
     );
-    if (!target) {
-      this.logger.warn('Schema has no initial→active transition; task left in initial state', {
-        taskId, status: task.status,
-      });
-      return;
-    }
+    if (!target) return;
 
     try {
       this.taskStateMachine.transition(taskId, target.to, { triggeredBy: 'system' });
@@ -304,10 +282,7 @@ export class RunEngine implements IRunEngine {
     if (category !== 'active') return;
 
     const initial = this.processEngine.getInitialStatus(task.orgId);
-    if (!initial) {
-      this.logger.warn('Schema has no initial status; cannot rollback active task', { taskId });
-      return;
-    }
+    if (!initial) return;
 
     try {
       this.taskStateMachine.transition(taskId, initial.name, { triggeredBy: 'system' });

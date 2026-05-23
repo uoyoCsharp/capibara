@@ -82,7 +82,7 @@ export function createTestConfig(overrides?: Partial<CapibaraConfig>): CapibaraC
     skills: { provider: 'bmad', bmadRoot: '' },
     database: { driver: 'sqlite', sqlitePath: ':memory:' },
     cli: {
-      defaultExecutor: 'claude-cli',
+      defaultExecutor: 'claude-agent',
       projectDir: '/tmp/project',
       model: 'sonnet',
       maxTurnsPerRun: 5,

@@ -65,14 +65,6 @@ export interface CostEntry {
   createdAt: string;
 }
 
-export interface AdapterCliConfig {
-  model: string | null;
-  maxTurnsPerRun: number;
-  effort: 'low' | 'medium' | 'high';
-  timeoutMs: number;
-  extraArgs: string[];
-}
-
 export interface ExecutorInput {
   runId: string;
   roleId: string;
@@ -80,10 +72,7 @@ export interface ExecutorInput {
   taskId: string;
   wakeReason: string;
   prompt: string;
-  mcpConfigPath: string;
   projectDir: string;
-  executor: string;
-  cliConfig?: AdapterCliConfig;
   sessionId?: string;
 }
 
