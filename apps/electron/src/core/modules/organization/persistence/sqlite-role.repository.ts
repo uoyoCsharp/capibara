@@ -19,6 +19,8 @@ interface RoleRow {
   consecutive_wake_count: number;
   is_system_role: number;
   status: string;
+  file_access_paths: string | null;
+  tool_policy: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -38,6 +40,8 @@ function toRole(row: RoleRow): Role {
     consecutiveWakeCount: row.consecutive_wake_count,
     isSystemRole: row.is_system_role === 1,
     status: row.status as Role['status'],
+    fileAccessPaths: row.file_access_paths ? JSON.parse(row.file_access_paths) as string[] : null,
+    toolPolicy: (row.tool_policy as Role['toolPolicy']) ?? 'permissive',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -109,6 +113,8 @@ export class SqliteRoleRepository implements IRoleRepository {
     if (input.requiresHumanApproval !== undefined) { fields.push('requires_human_approval = ?'); values.push(input.requiresHumanApproval ? 1 : 0); }
     if (input.consecutiveWakeCount !== undefined) { fields.push('consecutive_wake_count = ?'); values.push(input.consecutiveWakeCount); }
     if (input.status !== undefined) { fields.push('status = ?'); values.push(input.status); }
+    if (input.fileAccessPaths !== undefined) { fields.push('file_access_paths = ?'); values.push(input.fileAccessPaths ? JSON.stringify(input.fileAccessPaths) : null); }
+    if (input.toolPolicy !== undefined) { fields.push('tool_policy = ?'); values.push(input.toolPolicy); }
 
     values.push(input.id);
     this.connection.getDb()

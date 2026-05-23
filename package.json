@@ -19,6 +19,7 @@
     "clean": "pnpm -r clean"
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "^0.22.1",
     "prettier": "^3.4.0",
     "typescript": "^5.8.0"
   },

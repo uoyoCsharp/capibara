@@ -17,8 +17,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/core/index.ts'),
-          'capibara-worker': resolve('src/core/modules/execution/workers/worker.ts'),
-          'capibara-mcp-bridge': resolve('src/core/modules/mcp/bridge/capibara-mcp-bridge.ts'),
+          'capibara-mcp-server': resolve('src/core/modules/acp/mcp/capibara-mcp-server.ts'),
         },
       },
     },

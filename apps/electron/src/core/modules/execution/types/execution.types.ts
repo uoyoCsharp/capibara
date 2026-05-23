@@ -3,7 +3,8 @@ export type RunStatus =
   | 'succeeded'
   | 'failed'
   | 'cancelled'
-  | 'interrupted';
+  | 'interrupted'
+  | 'suspended';
 
 export type WakeReason =
   | 'task_assigned'
@@ -86,7 +87,7 @@ export interface ExecutorInput {
 
 export interface ExecutorOutput {
   exitCode: number | null;
-  status: 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+  status: 'succeeded' | 'failed' | 'cancelled' | 'interrupted' | 'suspended';
   summary: string | null;
   errorMessage: string | null;
   model: string | null;

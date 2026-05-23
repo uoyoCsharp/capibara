@@ -9,6 +9,7 @@ import { EmitteryEventBus } from '@core/infrastructure/observability/emittery-ev
 import { SqliteOutboxRepository } from '@core/infrastructure/persistence/sqlite/sqlite-outbox.repository';
 import { OutboxEventPublisher } from '@core/infrastructure/observability/outbox.publisher';
 import { registerExecutionModule } from './execution.module';
+import { registerAcpModule, type AcpModule } from './acp.module';
 import { registerOrganizationModule } from './organization.module';
 import { registerWorkflowModule } from './workflow.module';
 import { registerConversationModule } from './conversation.module';
@@ -25,23 +26,20 @@ import { registerExecutionHandlers } from '@core/ipc-handlers/execution.handlers
 import { registerPlanTreeHandlers } from '@core/ipc-handlers/plan-tree.handlers';
 import { registerSystemHandlers } from '@core/ipc-handlers/system.handlers';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { WorkerService } from '@core/modules/execution/workers/worker-service';
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
 import type { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
 import type { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
 import type { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
 import type { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
-import type { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-generator';
 
 let logger: ILogger;
 let sqliteConn: SqliteConnection;
-let workerService: WorkerService;
+let acpModule: AcpModule;
 let taskOrchestrator: TaskOrchestrator;
 let conversationOrchestrator: ConversationOrchestrator;
 let runOrchestrator: RunOrchestrator;
 let eventBroadcaster: EventBroadcaster;
 let mcpIpcServer: McpIpcServer;
-let mcpConfigGen: McpConfigGenerator;
 
 export async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -57,12 +55,32 @@ export async function bootstrap(): Promise<void> {
   const resourcesDir = app.isPackaged
     ? process.resourcesPath
     : join(app.getAppPath(), 'resources');
-  const workerBasePath = app.isPackaged
-    ? app.getAppPath().replace('app.asar', 'app.asar.unpacked')
-    : app.getAppPath();
-  const workerPath = join(workerBasePath, 'out', 'main', 'capibara-worker.js');
+
+  const agentConfig = {
+    defaultAgent: config.cli?.defaultExecutor ?? 'claude-agent',
+    registry: [
+      {
+        id: 'claude-agent',
+        name: 'Claude Agent',
+        command: 'node',
+        args: [
+          process.env.CLAUDE_AGENT_ACP_ENTRY
+            ?? 'C:/nvm4w/nodejs/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js',
+        ],
+        env: {
+          CLAUDE_CODE_EXECUTABLE: process.env.CLAUDE_CODE_EXECUTABLE
+            ?? 'C:/nvm4w/nodejs/node_modules/@anthropic-ai/claude-code/bin/claude.exe',
+        },
+      },
+    ],
+    globalFilePolicy: {
+      denyPatterns: ['**/.env', '**/.env.*', '**/secrets/**', '**/.git/objects/**'],
+    },
+  };
 
   const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));
+  acpModule = registerAcpModule(eventBus, logger, agentConfig, sqliteConn, org.roleRepo as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository);
+
   const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'), org.roleRepo);
   const conversation = registerConversationModule(sqliteConn, eventPublisher, logger);
   workflow.taskService.setConversationRepository(conversation.conversationRepo);
@@ -77,7 +95,7 @@ export async function bootstrap(): Promise<void> {
   );
 
   const execution = registerExecutionModule(
-    sqliteConn, eventBus, eventPublisher, logger, config, workerPath,
+    sqliteConn, eventBus, eventPublisher, logger, config, acpModule.executor,
     workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
     workflow.taskStateMachine,
     workflow.processEngine,
@@ -115,8 +133,7 @@ export async function bootstrap(): Promise<void> {
   );
 
   const mcpPort = await mcp.mcpIpcServer.start();
-  const mcpConfigPath = mcp.mcpConfigGen.generate(mcpPort);
-  execution.runEngine.setMcpConfigPath(mcpConfigPath);
+  acpModule.mcpConfigBuilder.setIpcPort(mcpPort);
 
   const prompt = registerPromptModule(
     workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
@@ -169,13 +186,11 @@ export async function bootstrap(): Promise<void> {
     logger,
   });
 
-  workerService = execution.workerService;
   taskOrchestrator = orchestratorModule.taskOrchestrator;
   conversationOrchestrator = orchestratorModule.conversationOrchestrator;
   runOrchestrator = orchestratorModule.runOrchestrator;
   eventBroadcaster = notification.eventBroadcaster;
   mcpIpcServer = mcp.mcpIpcServer;
-  mcpConfigGen = mcp.mcpConfigGen;
 
   planning.planningService.setWaker({
     tryWake: (roleId, orgId, reason, taskId) => taskOrchestrator.tryWake(roleId, orgId, reason, taskId),
@@ -210,8 +225,7 @@ export async function bootstrap(): Promise<void> {
 
 export async function shutdown(): Promise<void> {
   logger?.info('Shutting down Capibara core...');
-  workerService?.stop();
-  mcpConfigGen?.cleanup();
+  await acpModule?.sessionManager.shutdown();
   mcpIpcServer?.stop();
   sqliteConn?.close();
 }

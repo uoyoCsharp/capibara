@@ -277,6 +277,63 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    description: 'ACP Phase 2: Role policy columns + audit log tables',
+    up: (db) => {
+      db.exec(`
+        -- ═══════════════════════════════════════════════
+        -- Roles: add file access and tool policy columns
+        -- ═══════════════════════════════════════════════
+        ALTER TABLE roles ADD COLUMN file_access_paths TEXT;
+        ALTER TABLE roles ADD COLUMN tool_policy TEXT DEFAULT 'permissive';
+
+        -- ═══════════════════════════════════════════════
+        -- Runs: add ACP session and agent references
+        -- ═══════════════════════════════════════════════
+        ALTER TABLE runs ADD COLUMN acp_session_id TEXT;
+        ALTER TABLE runs ADD COLUMN agent_id TEXT;
+
+        -- ═══════════════════════════════════════════════
+        -- File access audit log
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE file_access_log (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          role_id TEXT NOT NULL,
+          path TEXT NOT NULL,
+          operation TEXT NOT NULL CHECK (operation IN ('read', 'write')),
+          allowed INTEGER NOT NULL,
+          reason TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_file_access_log_session ON file_access_log(session_id);
+        CREATE INDEX idx_file_access_log_role ON file_access_log(role_id, created_at);
+
+        -- ═══════════════════════════════════════════════
+        -- Tool call audit log
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE tool_call_log (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          run_id TEXT,
+          tool_call_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          kind TEXT,
+          status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed')),
+          permission TEXT CHECK (permission IN ('allowed', 'rejected', 'not_requested')),
+          raw_input TEXT,
+          raw_output TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          completed_at TEXT
+        );
+
+        CREATE INDEX idx_tool_call_log_session ON tool_call_log(session_id);
+        CREATE INDEX idx_tool_call_log_run ON tool_call_log(run_id);
+      `);
+    },
+  },
 ];
 
 export interface RunMigrationsOptions {

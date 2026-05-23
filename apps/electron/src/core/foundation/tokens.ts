@@ -31,9 +31,14 @@ export const CONVERSATION_CONTEXT_BUILDER_TOKEN = Symbol('CONVERSATION_CONTEXT_B
 // Execution (Runtime)
 export const RUN_ENGINE_TOKEN = Symbol('RUN_ENGINE_TOKEN');
 export const EXECUTOR_TOKEN = Symbol('EXECUTOR_TOKEN');
-export const WORKER_SERVICE_TOKEN = Symbol('WORKER_SERVICE_TOKEN');
 export const RUN_REPO_TOKEN = Symbol('RUN_REPO_TOKEN');
 export const COST_ENTRY_REPO_TOKEN = Symbol('COST_ENTRY_REPO_TOKEN');
+
+// ACP Module
+export const ACP_SESSION_MANAGER_TOKEN = Symbol('ACP_SESSION_MANAGER_TOKEN');
+export const ACP_EXECUTOR_TOKEN = Symbol('ACP_EXECUTOR_TOKEN');
+export const ACP_UPDATE_HANDLER_TOKEN = Symbol('ACP_UPDATE_HANDLER_TOKEN');
+export const ACP_MCP_CONFIG_BUILDER_TOKEN = Symbol('ACP_MCP_CONFIG_BUILDER_TOKEN');
 
 // Prompt (Integration)
 export const PROMPT_BUILDER_TOKEN = Symbol('PROMPT_BUILDER_TOKEN');

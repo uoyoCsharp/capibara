@@ -1,6 +1,11 @@
 #!/usr/bin/env node
-// MCP bridge — spawned by Claude CLI as an MCP server.
-// JSON-RPC 2.0 over stdin/stdout ↔ HTTP POST to Electron main process.
+/**
+ * Capibara MCP Server — stdio transport.
+ * Spawned by ACP Agent as an MCP server subprocess.
+ * JSON-RPC 2.0 over stdin/stdout ↔ HTTP POST to Electron main process.
+ *
+ * Replaces the old capibara-mcp-bridge.ts with identical functionality as a standalone build entry.
+ */
 
 import { request as httpRequest } from 'node:http';
 import { createInterface } from 'node:readline';
@@ -80,13 +85,7 @@ const TOOLS = [
     name: 'capibara_plan_submit_tree',
     description:
       'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
-      '(rootTaskId) or a planning conversation (conversationId) — provide EXACTLY ONE, never both. ' +
-      'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
-      '(preview waits for approval, eager persists immediately). ' +
-      'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
-      'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
-      'are created as root-level tasks. ' +
-      'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
+      '(rootTaskId) or a planning conversation (conversationId) — provide EXACTLY ONE, never both.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -96,14 +95,11 @@ const TOOLS = [
         },
         conversationId: {
           type: 'string',
-          description: 'Conversation anchor — the planning conversation ID (for conversational planning sessions). Provide this OR rootTaskId, not both.',
+          description: 'Conversation anchor — the planning conversation ID. Provide this OR rootTaskId, not both.',
         },
         tree: {
           type: 'object',
-          description:
-            'The decomposition tree. For task anchor: root type must match the task type. ' +
-            'For conversation anchor: root must be an allowedAtRoot type. ' +
-            'Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
+          description: 'The decomposition tree. Each node: { type, title, description, assigneeRoleId, children: [...] }.',
         },
       },
       required: ['tree'],
@@ -174,7 +170,7 @@ async function handleMessage(raw: string): Promise<void> {
     case 'initialize':
       sendResponse(id, {
         protocolVersion: '2024-11-05',
-        serverInfo: { name: 'capibara', version: '0.2.0' },
+        serverInfo: { name: 'capibara', version: '0.3.0' },
         capabilities: { tools: {} },
       });
       break;

@@ -1,5 +1,6 @@
 export type OrgStatus = 'active' | 'paused' | 'archived';
 export type RoleStatus = 'active' | 'paused' | 'idle';
+export type ToolPolicyMode = 'permissive' | 'restrictive' | 'ask_user';
 export type SkillCategory = 'analysis' | 'design' | 'implementation' | 'review' | 'test' | 'general';
 export type SkillSource = 'builtin' | 'template' | 'custom';
 
@@ -31,6 +32,8 @@ export interface Role {
   consecutiveWakeCount: number;
   isSystemRole: boolean;
   status: RoleStatus;
+  fileAccessPaths: string[] | null;
+  toolPolicy: ToolPolicyMode;
   createdAt: string;
   updatedAt: string;
 }
@@ -90,6 +93,8 @@ export interface UpdateRoleInput {
   requiresHumanApproval?: boolean;
   consecutiveWakeCount?: number;
   status?: RoleStatus;
+  fileAccessPaths?: string[] | null;
+  toolPolicy?: ToolPolicyMode;
 }
 
 export interface CreateSkillInput {

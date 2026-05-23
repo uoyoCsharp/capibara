@@ -9,7 +9,6 @@ import type { RoleService } from '@core/modules/organization/services/role.servi
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import { McpToolRegistry } from '@core/modules/mcp/registry/mcp-tool.registry';
 import { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
-import { McpConfigGenerator } from '@core/modules/mcp/config/mcp-config-generator';
 import { createTaskTools } from '@core/modules/mcp/handlers/task-tools';
 import { createConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
 import { createContextTools } from '@core/modules/mcp/handlers/context-tools';
@@ -23,10 +22,9 @@ export function registerMcpModule(
   conversationService: ConversationService,
   roleService: RoleService,
   eventPublisher: IEventPublisher,
-): { mcpIpcServer: McpIpcServer; mcpToolRegistry: McpToolRegistry; mcpConfigGen: McpConfigGenerator } {
+): { mcpIpcServer: McpIpcServer; mcpToolRegistry: McpToolRegistry } {
   const toolRegistry = new McpToolRegistry(logger);
   const mcpIpcServer = new McpIpcServer(toolRegistry, logger);
-  const mcpConfigGen = new McpConfigGenerator(logger);
 
   for (const tool of createTaskTools(taskService, taskStateMachine, processEngine)) {
     toolRegistry.register(tool);
@@ -44,5 +42,5 @@ export function registerMcpModule(
   container.register(MCP_TOOL_REGISTRY_TOKEN, { useValue: toolRegistry });
   container.register(MCP_IPC_SERVER_TOKEN, { useValue: mcpIpcServer });
 
-  return { mcpIpcServer, mcpToolRegistry: toolRegistry, mcpConfigGen };
+  return { mcpIpcServer, mcpToolRegistry: toolRegistry };
 }
