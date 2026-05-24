@@ -103,7 +103,12 @@ function buildToolGuidance(scenario: PromptScenario): string {
   };
 
   const lines = tools[scenario].map((t) => `- \`mcp__capibara__${t}\` — ${toolDescriptions[t]}`).join('\n');
-  return `# Tool Guidance\n\nUse the following MCP tools (provided by the \`capibara\` server):\n\n${lines}`;
+  return (
+    `# Tool Guidance\n\n` +
+    `Use the following MCP tools (provided by the \`capibara\` server):\n\n${lines}\n\n` +
+    `IMPORTANT: Call tools using the exact full names above (for example, \`mcp__capibara__capibara_task_transition\`). ` +
+    `Do not use bare names like \`capibara_task_transition\` in tool calls.`
+  );
 }
 
 function buildWorkflowSchema(ctx: PromptContext): string | null {
@@ -141,16 +146,16 @@ function buildWorkflowSchema(ctx: PromptContext): string | null {
     `${statusTable}\n\n` +
     `${transitionTable}\n\n` +
     `${terminalLine}\n\n` +
-    `> When calling \`capibara_task_transition\`, use an exact status name from the table above. ` +
+    `> When calling \`mcp__capibara__capibara_task_transition\`, use an exact status name from the table above. ` +
     `If the transition fails, the tool will return your current status and available transitions.`
   );
 }
 
 function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string {
   const collaborationGuide =
-    '\n\n## Collaboration via `capibara_ask_question`\n\n' +
+    '\n\n## Collaboration via `mcp__capibara__capibara_ask_question`\n\n' +
     'You are part of a multi-role organization, not a solo agent. When another role is better positioned to answer or decide, ' +
-    'PREFER asking over guessing. Calling `capibara_ask_question` opens an inquiry conversation, the system routes it to ' +
+    'PREFER asking over guessing. Calling `mcp__capibara__capibara_ask_question` opens an inquiry conversation, the system routes it to ' +
     'your supervisor or a peer, that role wakes up and replies, and you are resumed with the answer.\n\n' +
     '**Ask proactively when ANY of the following hold:**\n' +
     '- A decision crosses role boundaries (e.g. an implementer needs an architecture call, a designer needs a product call).\n' +
@@ -163,10 +168,10 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
   const instructions: Record<PromptScenario, string> = {
     terminal_noop:
       'This task is already in a terminal status. ' +
-      'Do NOT call `capibara_plan_submit_tree` or `capibara_task_transition`. ' +
+      'Do NOT call `mcp__capibara__capibara_plan_submit_tree` or `mcp__capibara__capibara_task_transition`. ' +
       'Treat this run as a no-op and provide a brief completion note only.',
     preview_decomposition:
-      'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
+      'Produce the complete decomposition tree for this task in a single call, then submit via `mcp__capibara__capibara_plan_submit_tree`. ' +
       'Structural rules:\n' +
       '- The tree root MUST match the current task (same type).\n' +
       '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema). A type whose name does NOT appear in the parent\'s Allowed Children list is INVALID, even if it is non-leaf.\n' +
@@ -176,10 +181,10 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
       'Granularity guidance: Each leaf is consumed by an AI agent, NOT a human. Prefer COARSE granularity — a leaf should represent a meaningful unit of work an AI agent can complete in one execution turn. Do NOT split into human-checklist-sized micro-steps (e.g. "open file", "write line", "save"). Produce the smallest tree that still respects the type hierarchy and assignment rules; only split further when a single agent genuinely cannot handle the scope or when different leaves require different roles.\n' +
       'The user will review the tree and approve it before any task is persisted.\n' +
-      'If the parent goal, scope, or assignee selection is genuinely ambiguous (not just under-specified detail you can decide), call `capibara_ask_question` to clarify with your supervisor before submitting the tree.' +
+      'If the parent goal, scope, or assignee selection is genuinely ambiguous (not just under-specified detail you can decide), call `mcp__capibara__capibara_ask_question` to clarify with your supervisor before submitting the tree.' +
       collaborationGuide,
     eager_decomposition:
-      'Produce the complete decomposition tree for this task in a single call, then submit via `capibara_plan_submit_tree`. ' +
+      'Produce the complete decomposition tree for this task in a single call, then submit via `mcp__capibara__capibara_plan_submit_tree`. ' +
       'Structural rules:\n' +
       '- The tree root MUST match the current task (same type).\n' +
       '- Every node\'s `type` MUST appear in its parent\'s `allowedChildren` (see Type Schema). A type whose name does NOT appear in the parent\'s Allowed Children list is INVALID, even if it is non-leaf.\n' +
@@ -189,41 +194,41 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       '- IMPORTANT: Do NOT nest a type under itself. Check the Allowed Children column for each parent before adding a child.\n' +
       'Granularity guidance: Each leaf is consumed by an AI agent, NOT a human. Prefer COARSE granularity — a leaf should represent a meaningful unit of work an AI agent can complete in one execution turn. Do NOT split into human-checklist-sized micro-steps (e.g. "open file", "write line", "save"). Produce the smallest tree that still respects the type hierarchy and assignment rules; only split further when a single agent genuinely cannot handle the scope or when different leaves require different roles.\n' +
       'The tree will be persisted immediately with NO human review. Every node must be directly actionable and every assignee must be correct.\n' +
-      'Because there is no human review, the cost of guessing is high — if scope, ownership, or acceptance is genuinely ambiguous, call `capibara_ask_question` to confirm with your supervisor before submitting.' +
+      'Because there is no human review, the cost of guessing is high — if scope, ownership, or acceptance is genuinely ambiguous, call `mcp__capibara__capibara_ask_question` to confirm with your supervisor before submitting.' +
       collaborationGuide,
     execute_leaf:
       'Execute this task directly. ' +
-      'When finished, use `capibara_task_transition` to advance to the next status (refer to the Workflow Status section).' +
+      'When finished, use `mcp__capibara__capibara_task_transition` to advance to the next status (refer to the Workflow Status section).' +
       collaborationGuide,
     revision:
       'Your previous work needs revision. ' +
-      'Review the latest feedback, address each point, then use `capibara_task_transition` to advance to the next status. ' +
-      'If any feedback point is ambiguous or appears to conflict with a peer\'s output, use `capibara_ask_question` to clarify before reworking.' +
+      'Review the latest feedback, address each point, then use `mcp__capibara__capibara_task_transition` to advance to the next status. ' +
+      'If any feedback point is ambiguous or appears to conflict with a peer\'s output, use `mcp__capibara__capibara_ask_question` to clarify before reworking.' +
       collaborationGuide,
     review_approve:
       'Your previous work has been approved. ' +
-      'Continue with any remaining steps or use `capibara_task_transition` to advance to the next status.',
+      'Continue with any remaining steps or use `mcp__capibara__capibara_task_transition` to advance to the next status.',
     task_completed:
       'A child task has completed. ' +
       'Check if there are other child tasks still pending. ' +
-      'If all children are done, use `capibara_task_transition` to advance the parent task.',
+      'If all children are done, use `mcp__capibara__capibara_task_transition` to advance the parent task.',
     conversation_reply:
       'You previously started a conversation and have received a reply. ' +
       'Read the reply, then continue your work. ' +
-      'If the reply leaves a follow-up unanswered, ask again via `capibara_ask_question`; otherwise use `capibara_task_transition` to advance.' +
+      'If the reply leaves a follow-up unanswered, ask again via `mcp__capibara__capibara_ask_question`; otherwise use `mcp__capibara__capibara_task_transition` to advance.' +
       collaborationGuide,
     retry_failed:
       'Your previous execution failed. ' +
       'Review the error, simplify your approach or try a different strategy, and retry. ' +
-      'If the failure points to a cross-role decision (unclear contract, missing artifact from a peer, supervisor-level trade-off), use `capibara_ask_question` instead of looping on the same approach. ' +
-      'Use `capibara_task_transition` to advance when ready.' +
+      'If the failure points to a cross-role decision (unclear contract, missing artifact from a peer, supervisor-level trade-off), use `mcp__capibara__capibara_ask_question` instead of looping on the same approach. ' +
+      'Use `mcp__capibara__capibara_task_transition` to advance when ready.' +
       collaborationGuide,
   };
 
   const feedback = ctx.task.pendingFeedback;
   const feedbackSection =
     feedback && (scenario === 'preview_decomposition' || scenario === 'eager_decomposition')
-      ? `\n\n## User Feedback on Previous Tree\n\nThe user reviewed your previous submission and left this feedback. Incorporate it when you re-submit:\n\n> ${feedback.replace(/\n/g, '\n> ')}\n\nSubmit a revised tree via \`capibara_plan_submit_tree\`.`
+      ? `\n\n## User Feedback on Previous Tree\n\nThe user reviewed your previous submission and left this feedback. Incorporate it when you re-submit:\n\n> ${feedback.replace(/\n/g, '\n> ')}\n\nSubmit a revised tree via \`mcp__capibara__capibara_plan_submit_tree\`.`
       : '';
 
   return `# Instructions\n\n${instructions[scenario]}${feedbackSection}`;

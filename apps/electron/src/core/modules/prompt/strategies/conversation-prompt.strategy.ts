@@ -92,10 +92,11 @@ function buildPlanningDiscussionSections(ctx: ConversationPromptContext): string
   parts.push(
     `# Instructions\n\n` +
     `You are guiding the user through a conversational planning session. The user has an idea or project to plan.\n\n` +
+    `Use MCP tools only by their full names from Tool Guidance (for example: \`mcp__capibara__capibara_plan_submit_tree\`).\n\n` +
     `**Your approach:**\n` +
     `1. First, understand the user's goal. Ask clarifying questions about scope, constraints, target users, success criteria, and any existing context. Keep each question focused — don't ask too many at once.\n` +
     `2. Converge within 2-6 rounds of back-and-forth. Don't drag the conversation out.\n` +
-    `3. When you have enough information to propose a concrete decomposition, submit a task tree via the \`capibara_plan_submit_tree\` MCP tool.\n\n` +
+    `3. When you have enough information to propose a concrete decomposition, submit a task tree via the \`mcp__capibara__capibara_plan_submit_tree\` MCP tool.\n\n` +
     `**When submitting the tree, use these parameters:**\n` +
     `- \`conversationId\`: \`${ctx.conversation.id}\`  (do NOT pass \`rootTaskId\`)\n` +
     `- \`tree\`: the full decomposition tree (root + all descendants)\n\n` +
