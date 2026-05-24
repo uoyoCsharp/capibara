@@ -80,6 +80,7 @@ export class AcpSessionManager implements IAcpSessionManager {
       capabilities,
       resumeStrategy,
       resumeCount: 0,
+      mcpServers,
       createdAt: new Date().toISOString(),
       closedAt: null,
     };
@@ -138,7 +139,7 @@ export class AcpSessionManager implements IAcpSessionManager {
       await connection.loadSession({
         sessionId: session.acpSessionId,
         cwd: session.cwd,
-        mcpServers: [],
+        mcpServers: session.mcpServers,
       });
     } else {
       // rebuild — not yet supported, requires new session + context reconstruction

@@ -67,6 +67,7 @@ export interface AcpSession {
   capabilities: AgentCapabilities;
   resumeStrategy: 'resume' | 'load' | 'rebuild';
   resumeCount: number;
+  mcpServers: schema.McpServer[];
   createdAt: string;
   closedAt: string | null;
 }
