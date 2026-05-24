@@ -27,6 +27,7 @@ export function registerWorkflowModule(
   workflowsDir: string,
   roleRepo: IRoleRepository,
 ): {
+  taskRepo: SqliteTaskRepository;
   taskService: TaskService;
   processEngine: ProcessEngine;
   taskStateMachine: TaskStateMachine;
@@ -50,5 +51,5 @@ export function registerWorkflowModule(
   container.register(PROCESS_SCHEMA_REPO_TOKEN, { useValue: schemaRepo });
   container.register(PROCESS_TEMPLATE_SERVICE_TOKEN, { useValue: processTemplateService });
 
-  return { taskService, processEngine, taskStateMachine, behaviorEngine, processTemplateService };
+  return { taskRepo, taskService, processEngine, taskStateMachine, behaviorEngine, processTemplateService };
 }

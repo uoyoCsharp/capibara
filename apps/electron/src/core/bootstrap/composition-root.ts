@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { app } from 'electron';
 import { loadConfig } from '@core/config/config.loader';
@@ -33,6 +33,9 @@ import type { ConversationOrchestrator } from '@core/modules/orchestrator/orches
 import type { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
 import type { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
 import type { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
+import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
+import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 
 let logger: ILogger;
 let sqliteConn: SqliteConnection;
@@ -109,7 +112,7 @@ export async function bootstrap(): Promise<void> {
   };
 
   const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));
-  acpModule = registerAcpModule(eventBus, logger, agentConfig, sqliteConn, org.roleRepo as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository, config.collaboration);
+  acpModule = registerAcpModule(eventBus, logger, agentConfig, sqliteConn, org.roleRepo, config.collaboration);
 
   const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'), org.roleRepo);
   const conversation = registerConversationModule(sqliteConn, eventPublisher, logger);
@@ -119,14 +122,14 @@ export async function bootstrap(): Promise<void> {
     eventBus,
     eventPublisher,
     logger,
-    org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository,
+    org.roleRepo,
     conversation.conversationRepo,
     conversation.conversationService,
   );
 
   const execution = registerExecutionModule(
     sqliteConn, eventBus, eventPublisher, logger, config, acpModule.executor,
-    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
+    workflow.taskRepo,
     workflow.taskStateMachine,
     workflow.processEngine,
   );
@@ -143,7 +146,7 @@ export async function bootstrap(): Promise<void> {
   // again on demand. This is the cross-restart counterpart of rollbackTaskIfActive.
   reconcileOrphanedActiveTasks(
     org.organizationService.findAll().map((o) => o.id),
-    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
+    workflow.taskRepo,
     workflow.processEngine,
     workflow.taskStateMachine,
     logger,
@@ -167,25 +170,25 @@ export async function bootstrap(): Promise<void> {
   acpModule.mcpConfigBuilder.setHttpPort(mcpPort);
 
   const prompt = registerPromptModule(
-    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
-    org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository,
-    org.skillService as unknown as import('@core/modules/organization/interfaces/i-skill.repository').ISkillRepository,
-    conversation.conversationService as unknown as import('@core/modules/conversation/interfaces/i-conversation.repository').IConversationRepository,
+    workflow.taskRepo,
+    org.roleRepo,
+    org.skillRepo,
+    conversation.conversationRepo,
     conversation.conversationContextBuilder,
     workflow.processEngine,
-    org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
+    org.orgRepo,
   );
 
   const notification = registerNotificationModule(eventBus, logger);
 
   const orchestratorModule = registerOrchestratorModule(
     sqliteConn, eventBus, logger, config,
-    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
-    org.roleService as unknown as import('@core/modules/organization/interfaces/i-role.repository').IRoleRepository,
-    org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
+    workflow.taskRepo,
+    org.roleRepo,
+    org.orgRepo,
     execution.runRepo,
     execution.runEngine,
-    conversation.conversationService as unknown as import('@core/modules/conversation/interfaces/i-conversation.repository').IConversationRepository,
+    conversation.conversationRepo,
     conversation.conversationService,
     prompt.promptBuilder,
     execution.costTracker,
@@ -198,7 +201,7 @@ export async function bootstrap(): Promise<void> {
 
   // Wire executor's conversation repo (acp module created before conversation module)
   acpModule.executor.setConversationRepository(
-    conversation.conversationRepo as unknown as import('@core/modules/conversation/interfaces/i-conversation.repository').IConversationRepository,
+    conversation.conversationRepo,
   );
 
   registerOrganizationHandlers(org.organizationService, org.roleService, org.skillService, org.orgTemplateService, logger);
@@ -209,7 +212,7 @@ export async function bootstrap(): Promise<void> {
     execution.runEngine,
     execution.costTracker,
     orchestratorModule.taskOrchestrator,
-    workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
+    workflow.taskRepo,
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);
@@ -220,7 +223,7 @@ export async function bootstrap(): Promise<void> {
     runEngine: execution.runEngine,
     wakeGateValidator: orchestratorModule.wakeGateValidator,
     taskOrchestrator: orchestratorModule.taskOrchestrator,
-    orgRepo: org.orgRepo as unknown as import('@core/modules/organization/interfaces/i-organization.repository').IOrganizationRepository,
+    orgRepo: org.orgRepo,
     logger,
     agentConfig,
     collaborationConfig: config.collaboration,
@@ -280,9 +283,9 @@ export function getSqliteConnection(): SqliteConnection {
 
 function reconcileOrphanedActiveTasks(
   orgIds: string[],
-  taskRepo: import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
-  processEngine: import('@core/modules/workflow/engines/process.engine').ProcessEngine,
-  taskStateMachine: import('@core/modules/workflow/engines/task.state-machine').TaskStateMachine,
+  taskRepo: ITaskRepository,
+  processEngine: ProcessEngine,
+  taskStateMachine: TaskStateMachine,
   log: ILogger,
 ): void {
   let total = 0;
