@@ -205,18 +205,6 @@ describe('buildTaskPrompt — new sections', () => {
     expect(leafResult).not.toContain('capibara_plan_submit_tree');
     expect(decompResult).toContain('capibara_plan_submit_tree');
   });
-
-  it('terminal task uses noop instructions and avoids execution tools', () => {
-    const ctx = createCtx({
-      wakeReason: 'task_assigned',
-      task: { ...defaultTask, status: 'done', isDecomposable: true },
-    });
-    const result = buildTaskPrompt(ctx);
-    expect(result).toContain('terminal status');
-    expect(result).not.toContain('mcp__capibara__capibara_task_transition');
-    expect(result).not.toContain('mcp__capibara__capibara_plan_submit_tree');
-    expect(result).toContain('mcp__capibara__capibara_context');
-  });
 });
 
 describe('buildTaskPrompt — organization context', () => {

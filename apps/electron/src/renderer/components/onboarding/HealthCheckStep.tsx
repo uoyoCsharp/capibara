@@ -4,8 +4,6 @@ import {
   WarningCircle,
   ArrowRight,
   ArrowClockwise,
-  Copy,
-  Check,
   CircleNotch,
 } from '@phosphor-icons/react';
 import { useT } from '../../hooks/use-locale';
@@ -13,7 +11,7 @@ import { useT } from '../../hooks/use-locale';
 const api = () => window.capibara;
 
 interface DepCheckItem { ok: boolean; version: string | null }
-interface SystemCheckResult { nodejs: DepCheckItem; claudeCli: DepCheckItem; network: DepCheckItem }
+interface SystemCheckResult { nodejs: DepCheckItem; acpAgent: DepCheckItem; network: DepCheckItem }
 
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
@@ -29,13 +27,12 @@ export function HealthCheckStep({ onContinue }: HealthCheckStepProps) {
   const t = useT();
   const [state, setState] = useState<CheckState>('idle');
   const [result, setResult] = useState<SystemCheckResult | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const runCheck = useCallback(async () => {
     setState('checking');
     const fallback: SystemCheckResult = {
       nodejs: { ok: false, version: null },
-      claudeCli: { ok: false, version: null },
+      acpAgent: { ok: false, version: null },
       network: { ok: false, version: null },
     };
     try {
@@ -53,13 +50,7 @@ export function HealthCheckStep({ onContinue }: HealthCheckStepProps) {
 
   useEffect(() => { void runCheck(); }, [runCheck]);
 
-  const allPassed = result?.nodejs.ok && result?.claudeCli.ok && result?.network.ok;
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(t.onboarding.installCommand);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const allPassed = result?.nodejs.ok && result?.acpAgent.ok && result?.network.ok;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
@@ -81,8 +72,8 @@ export function HealthCheckStep({ onContinue }: HealthCheckStepProps) {
             failLabel={t.onboarding.notInstalled}
           />
           <CheckRow
-            label={t.onboarding.claudeCli}
-            item={result?.claudeCli ?? null}
+            label={t.onboarding.acpAgent}
+            item={result?.acpAgent ?? null}
             checking={state === 'checking'}
             okLabel={t.onboarding.installed}
             failLabel={t.onboarding.notInstalled}
@@ -95,24 +86,6 @@ export function HealthCheckStep({ onContinue }: HealthCheckStepProps) {
             failLabel={t.onboarding.disconnected}
           />
         </div>
-
-        {/* Claude CLI install hint */}
-        {state === 'done' && result && !result.claudeCli.ok && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
-            <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">
-              Claude Code CLI is required for AI agent execution.
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono text-foreground select-all">
-                {t.onboarding.installCommand}
-              </code>
-              <Button variant="outline" size="sm" onClick={handleCopy} className="shrink-0">
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                <span className="ml-1">{copied ? t.onboarding.copied : ''}</span>
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Status message */}
         {state === 'done' && allPassed && (

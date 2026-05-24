@@ -47,9 +47,7 @@ let eventBroadcaster: EventBroadcaster;
 let mcpTransport: McpHttpTransportManager;
 
 function normalizeDefaultAgentId(requested: string | null | undefined): string {
-  // Backward compatibility for legacy executor IDs kept in persisted config.
   if (!requested) return 'claude-agent';
-  if (requested === 'claude-cli') return 'claude-agent';
   return requested;
 }
 
@@ -76,7 +74,7 @@ export async function bootstrap(): Promise<void> {
   // claude-agent-acp auto-discovers Claude Code via its bundled
   // @anthropic-ai/claude-agent-sdk platform binary.  Only forward
   // CLAUDE_CODE_EXECUTABLE when the user explicitly sets it in the
-  // system environment (e.g. to pin a specific CLI version).
+  // system environment (e.g. to pin a specific agent binary version).
   const agentEnv: Record<string, string> = {};
   if (process.env.CLAUDE_CODE_EXECUTABLE) {
     agentEnv.CLAUDE_CODE_EXECUTABLE = process.env.CLAUDE_CODE_EXECUTABLE;
@@ -92,7 +90,7 @@ export async function bootstrap(): Promise<void> {
       },
     ];
 
-  const requestedDefaultAgent = normalizeDefaultAgentId(config.cli?.defaultExecutor);
+  const requestedDefaultAgent = normalizeDefaultAgentId(config.agents?.defaultAgent);
   const hasRequestedDefault = registry.some((entry) => entry.id === requestedDefaultAgent);
   const resolvedDefaultAgent = hasRequestedDefault ? requestedDefaultAgent : registry[0]!.id;
 

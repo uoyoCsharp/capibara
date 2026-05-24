@@ -109,7 +109,6 @@ describe('AcpExecutor', () => {
       const handle = await executor.spawn(input);
 
       expect(handle.runId).toBe('run-1');
-      expect(handle.pid).toBe(process.pid);
       expect(typeof handle.complete).toBe('function');
       expect(typeof handle.cancel).toBe('function');
       expect(typeof handle.onLog).toBe('function');
@@ -145,7 +144,6 @@ describe('AcpExecutor', () => {
       const handle = await executor.spawn(input);
       const output = await handle.complete();
 
-      expect(output.exitCode).toBe(0);
       expect(output.status).toBe('succeeded');
       expect(output.summary).toBe('Task completed successfully');
       expect(output.inputTokens).toBe(500);
@@ -174,7 +172,6 @@ describe('AcpExecutor', () => {
       const handle = await executor.spawn(input);
       const output = await handle.complete();
 
-      expect(output.exitCode).toBe(1);
       expect(output.status).toBe('cancelled');
     });
 
@@ -189,7 +186,6 @@ describe('AcpExecutor', () => {
       const handle = await executor.spawn(input);
       const output = await handle.complete();
 
-      expect(output.exitCode).toBe(1);
       expect(output.status).toBe('failed');
       expect(output.errorMessage).toBe('Agent stopped: max_tokens');
     });
@@ -201,7 +197,6 @@ describe('AcpExecutor', () => {
       const handle = await executor.spawn(input);
       const output = await handle.complete();
 
-      expect(output.exitCode).toBe(1);
       expect(output.status).toBe('failed');
       expect(output.errorMessage).toBe('Connection lost');
       expect(updateHandler.removeCallbacks).toHaveBeenCalledWith('acp-sess-1');

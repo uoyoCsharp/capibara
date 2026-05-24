@@ -9,6 +9,7 @@ export interface CapibaraConfig {
     maxConsecutiveWakes: number;
     maxDecompositionDepth: number;
     retryBackoffMs: number;
+    maxTurnsPerRun: number;
   };
   skills: {
     provider: string;
@@ -18,14 +19,8 @@ export interface CapibaraConfig {
     driver: 'sqlite';
     sqlitePath: string;
   };
-  cli: {
-    defaultExecutor: string;
-    projectDir: string;
-    model: string | null;
-    maxTurnsPerRun: number;
-    effort: 'low' | 'medium' | 'high';
-    timeoutMs: number;
-    extraArgs: string[];
+  agents: {
+    defaultAgent: string;
   };
   logging: {
     level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';

@@ -115,7 +115,7 @@ export class RunEngine implements IRunEngine {
 
     this.publishEvent('run:started', { runId: run.id, orgId: params.orgId, roleId: params.roleId });
     this.logger.info('Run started', {
-      runId: run.id, pid: handle.pid, orgId: params.orgId, roleId: params.roleId,
+      runId: run.id, orgId: params.orgId, roleId: params.roleId,
     });
 
     this.advanceTaskToActive(params.taskId, params.orgId);
@@ -129,7 +129,7 @@ export class RunEngine implements IRunEngine {
         this.costTracker.recordCost(run.id, params.roleId, params.orgId, tokenCount, 0);
       }
 
-      this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount, exitCode: result.exitCode });
+      this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount });
 
       if (result.status !== 'suspended') {
         this.rollbackTaskIfActive(params.taskId);
@@ -144,8 +144,6 @@ export class RunEngine implements IRunEngine {
         summary: result.summary,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
-        model: result.model,
-        exitCode: result.exitCode,
         errorMessage: result.errorMessage,
       };
     } catch (err) {

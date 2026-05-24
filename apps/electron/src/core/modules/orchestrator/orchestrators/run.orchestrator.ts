@@ -49,6 +49,18 @@ export class RunOrchestrator {
     this.taskOrchestrator.scheduleNext(orgId);
   }
 
+  /**
+   * Drain one queued wake for this org.
+   *
+   * PendingWakes are the scheduling-layer queue: they hold deferred wake
+   * requests that were blocked by WakeGateValidator (typically because the
+   * org already had an active run). This is orthogonal to the ACP session
+   * suspension mechanism — suspensions preserve agent session state while
+   * pending_wakes handle role-level scheduling order.
+   *
+   * Only one wake is consumed per call. The resulting run will eventually
+   * end, re-triggering onRunEnded → drainPendingWakes, forming a chain.
+   */
   private drainPendingWakes(orgId: string): void {
     const next = this.pendingWakeRepo.findNext(orgId);
     if (!next) return;

@@ -11,6 +11,7 @@ export const configSchema = z.object({
     maxConsecutiveWakes: z.number().int().min(1).default(5),
     maxDecompositionDepth: z.number().int().min(1).max(10).default(4),
     retryBackoffMs: z.number().int().min(100).default(2000),
+    maxTurnsPerRun: z.number().int().min(0).default(0),
   }).default({}),
   skills: z.object({
     provider: z.string().default('bmad'),
@@ -20,14 +21,8 @@ export const configSchema = z.object({
     driver: z.literal('sqlite').default('sqlite'),
     sqlitePath: z.string().default(''),
   }).default({}),
-  cli: z.object({
-    defaultExecutor: z.string().default('claude-agent'),
-    projectDir: z.string().default('./'),
-    model: z.string().nullable().default(null),
-    maxTurnsPerRun: z.number().int().min(0).default(0),
-    effort: z.enum(['low', 'medium', 'high']).default('medium'),
-    timeoutMs: z.number().int().min(0).default(0),
-    extraArgs: z.array(z.string()).default([]),
+  agents: z.object({
+    defaultAgent: z.string().default('claude-agent'),
   }).default({}),
   logging: z.object({
     level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),

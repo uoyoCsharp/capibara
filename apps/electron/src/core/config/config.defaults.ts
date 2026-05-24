@@ -11,6 +11,7 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
     maxConsecutiveWakes: 5,
     maxDecompositionDepth: 4,
     retryBackoffMs: 2000,
+    maxTurnsPerRun: 0,
   },
   skills: {
     provider: 'bmad',
@@ -20,14 +21,8 @@ export const DEFAULT_CONFIG: CapibaraConfig = {
     driver: 'sqlite',
     sqlitePath: '',
   },
-  cli: {
-    defaultExecutor: 'claude-agent',
-    projectDir: './',
-    model: null,
-    maxTurnsPerRun: 0,
-    effort: 'medium',
-    timeoutMs: 0,
-    extraArgs: [],
+  agents: {
+    defaultAgent: 'claude-agent',
   },
   logging: {
     level: 'info',

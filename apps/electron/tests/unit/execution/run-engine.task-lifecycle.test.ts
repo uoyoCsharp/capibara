@@ -54,11 +54,9 @@ function createMockTask(overrides?: Partial<Task>): Task {
 
 function createMockOutput(overrides?: Partial<ExecutorOutput>): ExecutorOutput {
   return {
-    exitCode: 0,
     status: 'succeeded',
     summary: 'Done',
     errorMessage: null,
-    model: 'claude-sonnet-4-6-20250514',
     sessionId: 'sess-1',
     inputTokens: 100,
     outputTokens: 50,
@@ -75,7 +73,6 @@ function createMockHandle(output: Promise<ExecutorOutput>): MockHandle {
   const logCallbacks: HandleLogCallback[] = [];
   return {
     runId: 'run-1',
-    pid: 1234,
     complete: () => output,
     cancel: vi.fn(),
     onLog: (cb) => { logCallbacks.push(cb); },

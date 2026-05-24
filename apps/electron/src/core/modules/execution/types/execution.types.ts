@@ -77,11 +77,9 @@ export interface ExecutorInput {
 }
 
 export interface ExecutorOutput {
-  exitCode: number | null;
   status: 'succeeded' | 'failed' | 'cancelled' | 'interrupted' | 'suspended';
   summary: string | null;
   errorMessage: string | null;
-  model: string | null;
   sessionId: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -109,8 +107,6 @@ export interface RunResult {
   summary: string | null;
   inputTokens: number;
   outputTokens: number;
-  model: string | null;
-  exitCode: number | null;
   errorMessage: string | null;
 }
 

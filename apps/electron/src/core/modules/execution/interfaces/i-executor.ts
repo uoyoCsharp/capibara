@@ -4,7 +4,6 @@ export type HandleLogCallback = (stream: 'stdout' | 'stderr', chunk: string) => 
 
 export interface ExecutorHandle {
   runId: string;
-  pid: number;
   complete(): Promise<ExecutorOutput>;
   cancel(): void;
   onLog(callback: HandleLogCallback): void;

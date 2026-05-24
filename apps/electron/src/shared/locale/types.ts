@@ -253,13 +253,12 @@ export interface LocaleMessages {
     healthCheck: string;
     healthCheckDesc: string;
     nodejs: string;
-    claudeCli: string;
+    acpAgent: string;
     network: string;
     installed: string;
     notInstalled: string;
     connected: string;
     disconnected: string;
-    installCommand: string;
     copied: string;
     retryCheck: string;
     continueAnyway: string;

@@ -78,19 +78,20 @@ export function createTestConfig(overrides?: Partial<CapibaraConfig>): CapibaraC
       maxConsecutiveWakes: 10,
       maxDecompositionDepth: 4,
       retryBackoffMs: 5000,
+      maxTurnsPerRun: 5,
     },
     skills: { provider: 'bmad', bmadRoot: '' },
     database: { driver: 'sqlite', sqlitePath: ':memory:' },
-    cli: {
-      defaultExecutor: 'claude-agent',
-      projectDir: '/tmp/project',
-      model: 'sonnet',
-      maxTurnsPerRun: 5,
-      effort: 'medium',
-      timeoutMs: 60000,
-      extraArgs: [],
+    agents: {
+      defaultAgent: 'claude-agent',
     },
     logging: { level: 'info', logDir: '/tmp/logs' },
+    collaboration: {
+      maxChainDepth: 5,
+      maxBroadcastTargets: 5,
+      maxResumeCount: 10,
+      inquiryTimeoutMs: 300_000,
+    },
     ...overrides,
   };
 }

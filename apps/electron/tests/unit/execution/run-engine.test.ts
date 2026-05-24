@@ -38,11 +38,9 @@ function createMockRun(overrides?: Partial<Run>): Run {
 
 function createMockExecutorOutput(overrides?: Partial<ExecutorOutput>): ExecutorOutput {
   return {
-    exitCode: 0,
     status: 'succeeded',
     summary: 'Task completed',
     errorMessage: null,
-    model: 'claude-sonnet-4-6-20250514',
     sessionId: 'sess-1',
     inputTokens: 1000,
     outputTokens: 500,
@@ -59,7 +57,6 @@ function createMockHandle(output: Promise<ExecutorOutput>): MockHandle {
   const logCallbacks: HandleLogCallback[] = [];
   return {
     runId: 'run-1',
-    pid: 1234,
     complete: () => output,
     cancel: vi.fn(),
     onLog: (cb) => { logCallbacks.push(cb); },
@@ -235,7 +232,7 @@ describe('RunEngine', () => {
 
   describe('execute — failed', () => {
     it('emits run:failed when executor returns failed status', async () => {
-      setExecutorOutput({ status: 'failed', errorMessage: 'CLI error' });
+      setExecutorOutput({ status: 'failed', errorMessage: 'Agent error' });
 
       const result = await engine.execute(createRunExecutionParams());
 

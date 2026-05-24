@@ -137,7 +137,6 @@ export class AcpExecutor implements IExecutor {
 
     return {
       runId: input.runId,
-      pid: process.pid,
       complete: () => completePromise,
       cancel: () => {
         this.sessionManager.cancelPrompt(session.id).catch(err => {
@@ -174,7 +173,6 @@ export class AcpExecutor implements IExecutor {
 
     return {
       runId: input.runId,
-      pid: process.pid,
       complete: () => completePromise,
       cancel: () => {
         this.sessionManager.cancelPrompt(session.id).catch(err => {
@@ -230,11 +228,9 @@ export class AcpExecutor implements IExecutor {
         });
 
         return {
-          exitCode: 0,
           status: 'suspended',
           summary: null,
           errorMessage: null,
-          model: null,
           sessionId: acpSessionId,
           inputTokens: result.tokensUsed.input,
           outputTokens: result.tokensUsed.output,
@@ -251,11 +247,9 @@ export class AcpExecutor implements IExecutor {
         : 'failed';
 
       return {
-        exitCode: status === 'succeeded' ? 0 : 1,
         status,
         summary: aggregatedText || null,
         errorMessage: status === 'failed' ? `Agent stopped: ${result.stopReason}` : null,
-        model: null,
         sessionId: acpSessionId,
         inputTokens: result.tokensUsed.input,
         outputTokens: result.tokensUsed.output,
@@ -269,11 +263,9 @@ export class AcpExecutor implements IExecutor {
       this.logger.error('ACP prompt execution failed', { sessionId, error: message });
 
       return {
-        exitCode: 1,
         status: 'failed',
         summary: null,
         errorMessage: message,
-        model: null,
         sessionId: acpSessionId,
         inputTokens: 0,
         outputTokens: 0,

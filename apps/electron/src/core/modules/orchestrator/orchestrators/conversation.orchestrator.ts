@@ -12,10 +12,18 @@ import type { RunCoordinator } from '../run.coordinator';
 import type { TaskOrchestrator } from './task.orchestrator';
 
 /**
- * Conversation lifecycle coordinator. Responsible only for deciding when to
- * wake a Role in response to conversation activity and delegating execution
- * to RunCoordinator. Delegates task-level side effects (continuing a Task
- * after an inquiry resolves) back to TaskOrchestrator.
+ * Conversation lifecycle coordinator.
+ *
+ * Handles two complementary flows when conversations need attention:
+ *
+ * 1. **onResponseNeeded** — A role needs to respond to a conversation.
+ *    Delegates to RunCoordinator if the org's WakeGate allows it; otherwise
+ *    queues a PendingWake for later dispatch by RunOrchestrator.
+ *
+ * 2. **onResolved** — A conversation has been resolved. Two mutually-exclusive
+ *    resume paths: (a) if a SuspensionManager record matches, resume the
+ *    suspended ACP session; (b) otherwise, wake the initiator role through
+ *    TaskOrchestrator (which may queue a PendingWake if the gate blocks).
  */
 @injectable()
 export class ConversationOrchestrator {
@@ -71,23 +79,38 @@ export class ConversationOrchestrator {
       });
   }
 
+  /**
+   * When a conversation is resolved, two mutually-exclusive resume paths exist:
+   *
+   * Path 1 — ACP Session Resume (SuspensionManager):
+   *   If the resolved conversation is an inquiry that caused an ACP session
+   *   to suspend, we restore that session with the aggregated reply. This
+   *   preserves the agent's in-flight context (tool state, reasoning chain).
+   *
+   * Path 2 — Role Wake (pending_wakes / TaskOrchestrator):
+   *   For all other conversations (e.g. human replies, non-inquiry dialogues),
+   *   we wake the initiator role through TaskOrchestrator.tryWake(). If the
+   *   org already has an active run, the wake is queued in pending_wakes and
+   *   drained by RunOrchestrator after the current run ends.
+   */
   private onResolved(event: DomainEvent<'conversation:resolved'>): void {
     const { conversationId } = event.payload;
     const conv = this.convRepo.findById(conversationId);
     if (!conv) return;
 
-    // Check if a session suspension is waiting for this inquiry to be resolved
+    // ── Path 1: ACP Session Resume ──────────────────────────────────
+    // If an ACP session was suspended waiting for this inquiry, resume it
+    // with the respondent's reply. This path is authoritative for any
+    // conversation that maps to an active suspension record.
     if (this.suspensionManager && this.conversationService) {
       const suspension = this.suspensionManager.findSuspensionByInquiry(conversationId);
       if (suspension) {
-        // Extract the response text from the conversation
         const messages = this.conversationService.getLatestMessages(conversationId, 10);
         const lastReply = [...messages].reverse().find(m => m.intent === 'reply');
         const response = lastReply?.content ?? '';
 
         const decision = this.suspensionManager.onInquiryResolved(conversationId, response);
         if (decision) {
-          // Publish run:resumed event before triggering the resume run
           this.eventBus.emit({
             type: 'run:resumed',
             timestamp: new Date().toISOString(),
@@ -99,7 +122,6 @@ export class ConversationOrchestrator {
             },
           });
 
-          // All inquiries resolved — resume the suspended session
           this.runCoordinator
             .executeResume(decision, this.locale)
             .catch((err) => {
@@ -113,7 +135,12 @@ export class ConversationOrchestrator {
       }
     }
 
-    // Original behavior: wake the initiator to continue the task
+    // ── Path 2: Role Wake (scheduling layer) ─────────────────────────
+    // No suspension matched — this conversation was resolved outside of an
+    // ACP inquiry flow (e.g. a human replied, or a non-inquiry dialogue).
+    // Wake the initiator role so it can process the reply. If the org has
+    // an active run, tryWake enqueues a PendingWake that RunOrchestrator
+    // will drain after the current run ends.
     if (!conv.taskId || !conv.initiatorRoleId) return;
     this.taskOrchestrator.tryWake(conv.initiatorRoleId, conv.orgId, 'conversation_reply', conv.taskId);
   }

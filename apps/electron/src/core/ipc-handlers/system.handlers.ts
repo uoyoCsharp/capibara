@@ -116,9 +116,13 @@ export function registerSystemHandlers(deps: SystemHandlersDeps): void {
     } catch { return ok('en-US'); }
   });
 
-  // System checks — stub
+  // System checks
   ipcMain.handle('capibara:system:check-deps', async () => {
-    return ok({ nodejs: { ok: true, version: process.version }, claudeCli: { ok: true, version: null }, network: { ok: true, version: null } });
+    let agentOk = false;
+    try {
+      agentOk = agentConfig.registry.length > 0;
+    } catch { /* resolve failed */ }
+    return ok({ nodejs: { ok: true, version: process.version }, acpAgent: { ok: agentOk, version: null }, network: { ok: true, version: null } });
   });
   ipcMain.handle('capibara:settings:get', async (_ev, key: string) => {
     try {
