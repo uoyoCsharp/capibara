@@ -25,6 +25,7 @@ export class AcpAgentSpawner {
   private processes = new Map<string, AgentProcess>();
   private filesystemHandler: AcpFilesystemHandler | null = null;
   private sessionContextResolver: ((key: string) => SessionContext | null) | null = null;
+  private shuttingDown = false;
 
   constructor(
     private readonly config: AgentRegistryConfig,
@@ -77,18 +78,24 @@ export class AcpAgentSpawner {
     child.on('exit', (code) => {
       agentProcess.exited = true;
       this.processes.delete(agentId);
-      this.logger.info('Agent process exited', { agentId, code });
+      if (!this.shuttingDown) {
+        this.logger.info('Agent process exited', { agentId, code });
+      }
     });
 
     child.on('error', (err) => {
       agentProcess.exited = true;
       this.processes.delete(agentId);
-      this.logger.error('Agent process error', { agentId, error: String(err) });
+      if (!this.shuttingDown) {
+        this.logger.error('Agent process error', { agentId, error: String(err) });
+      }
     });
 
     // stderr → log
     child.stderr?.on('data', (chunk: Buffer) => {
-      this.logger.debug('Agent stderr', { agentId, data: chunk.toString('utf-8').slice(0, 500) });
+      if (!this.shuttingDown) {
+        this.logger.debug('Agent stderr', { agentId, data: chunk.toString('utf-8').slice(0, 500) });
+      }
     });
 
     // Create ACP connection
@@ -223,10 +230,10 @@ export class AcpAgentSpawner {
    * Terminate all Agent processes.
    */
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
     for (const [agentId, proc] of this.processes) {
       if (!proc.exited) {
         proc.child.kill('SIGTERM');
-        this.logger.info('Agent process terminated', { agentId });
       }
     }
     this.processes.clear();

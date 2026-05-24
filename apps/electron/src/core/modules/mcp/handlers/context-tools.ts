@@ -1,53 +1,66 @@
-import type { McpToolDefinition } from '../registry/mcp-tool.registry';
-import type { TaskService } from '@core/modules/workflow/services/task.service';
-import type { RoleService } from '@core/modules/organization/services/role.service';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServerDeps } from '../mcp-server.builder';
 
-export function createContextTools(
-  taskService: TaskService,
-  roleService: RoleService,
-): McpToolDefinition[] {
-  return [
+export function registerContextTools(server: McpServer, deps: McpServerDeps): void {
+  const { taskService, roleService } = deps;
+
+  server.tool(
+    'capibara_context',
+    'Query project context: tasks, roles, and organizational information',
     {
-      name: 'capibara_context',
-      description: 'Query project context: tasks, roles, and organizational information',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          orgId: { type: 'string', description: 'Organization ID' },
-          query: { type: 'string', enum: ['tasks', 'roles', 'task_detail', 'role_detail'], description: 'What to query' },
-          entityId: { type: 'string', description: 'Entity ID for detail queries' },
-        },
-        required: ['orgId', 'query'],
-      },
-      handler: async (params) => {
-        const orgId = params.orgId as string;
-        const query = params.query as string;
-
-        switch (query) {
-          case 'tasks':
-            return taskService.findByOrgId(orgId).map((t) => ({
-              id: t.id, type: t.type, title: t.title, status: t.status, assigneeRoleId: t.assigneeRoleId,
-            }));
-          case 'roles':
-            return roleService.findByOrgId(orgId).map((r) => ({
-              id: r.id, name: r.name, parentId: r.parentId, status: r.status,
-            }));
-          case 'task_detail': {
-            const task = taskService.findById(params.entityId as string);
-            if (!task) return { error: 'Task not found' };
-            const children = taskService.findChildren(task.id);
-            return { ...task, children: children.map((c) => ({ id: c.id, type: c.type, title: c.title, status: c.status })) };
-          }
-          case 'role_detail': {
-            const role = roleService.findById(params.entityId as string);
-            if (!role) return { error: 'Role not found' };
-            const children = roleService.findChildren(role.id);
-            return { ...role, children: children.map((c) => ({ id: c.id, name: c.name, status: c.status })) };
-          }
-          default:
-            return { error: `Unknown query: ${query}` };
-        }
-      },
+      orgId: z.string().describe('Organization ID'),
+      query: z.enum(['tasks', 'roles', 'task_detail', 'role_detail']).describe('What to query'),
+      entityId: z.string().optional().describe('Entity ID for detail queries'),
     },
-  ];
+    async ({ orgId, query, entityId }) => {
+      let result: unknown;
+
+      switch (query) {
+        case 'tasks':
+          result = taskService.findByOrgId(orgId).map((t) => ({
+            id: t.id, type: t.type, title: t.title, status: t.status, assigneeRoleId: t.assigneeRoleId,
+          }));
+          break;
+        case 'roles':
+          result = roleService.findByOrgId(orgId).map((r) => ({
+            id: r.id, name: r.name, parentId: r.parentId, status: r.status,
+          }));
+          break;
+        case 'task_detail': {
+          const task = taskService.findById(entityId as string);
+          if (!task) {
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Task not found' }) }],
+              isError: true,
+            };
+          }
+          const children = taskService.findChildren(task.id);
+          result = { ...task, children: children.map((c) => ({ id: c.id, type: c.type, title: c.title, status: c.status })) };
+          break;
+        }
+        case 'role_detail': {
+          const role = roleService.findById(entityId as string);
+          if (!role) {
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Role not found' }) }],
+              isError: true,
+            };
+          }
+          const children = roleService.findChildren(role.id);
+          result = { ...role, children: children.map((c) => ({ id: c.id, name: c.name, status: c.status })) };
+          break;
+        }
+        default:
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: `Unknown query: ${query}` }) }],
+            isError: true,
+          };
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    },
+  );
 }

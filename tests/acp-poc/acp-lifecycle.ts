@@ -17,6 +17,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { Writable, Readable } from 'node:stream';
+import { createRequire } from 'node:module';
 import * as acp from '@agentclientprotocol/sdk';
 
 // ── Result tracking ───────────────────────────────────────────
@@ -120,14 +121,21 @@ async function main() {
   console.log('  ACP Phase 0 PoC — Claude Agent (claude-agent-acp)');
   console.log('═══════════════════════════════════════════════════\n');
 
-  // Spawn claude-agent-acp as subprocess
-  // Point CLAUDE_CODE_EXECUTABLE to the npm-installed claude.exe (v2.1.150+).
-  // Older versions (e.g. 2.1.71) lack CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS
-  // support, causing prompt() to hang (session_state_changed:idle never emitted).
-  const AGENT_ENTRY = 'C:/nvm4w/nodejs/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js';
-  const CLAUDE_CLI = 'C:/nvm4w/nodejs/node_modules/@anthropic-ai/claude-code/bin/claude.exe';
+  // Spawn claude-agent-acp as subprocess.
+  // claude-agent-acp auto-discovers Claude Code via its bundled
+  // @anthropic-ai/claude-agent-sdk platform binary, so we do NOT need
+  // to set CLAUDE_CODE_EXECUTABLE unless the user explicitly provides it
+  // (e.g. to pin a specific CLI version).
+  const _require = createRequire(import.meta.url);
+  const AGENT_ENTRY = process.env.CLAUDE_AGENT_ACP_ENTRY
+    ?? _require.resolve('@agentclientprotocol/claude-agent-acp/dist/index.js');
   console.log('🚀 Spawning claude-agent-acp via node...');
-  console.log(`  CLAUDE_CODE_EXECUTABLE → ${CLAUDE_CLI}\n`);
+  if (process.env.CLAUDE_CODE_EXECUTABLE) {
+    console.log(`  CLAUDE_CODE_EXECUTABLE (user override) → ${process.env.CLAUDE_CODE_EXECUTABLE}`);
+  } else {
+    console.log('  CLAUDE_CODE_EXECUTABLE not set — agent will auto-discover via SDK platform binary');
+  }
+  console.log();
 
   let agentProcess: ChildProcess;
   try {
@@ -135,7 +143,6 @@ async function main() {
       stdio: ['pipe', 'pipe', 'inherit'],
       env: {
         ...process.env,
-        CLAUDE_CODE_EXECUTABLE: CLAUDE_CLI,
         DEBUG_CLAUDE_AGENT_SDK: '1',
       },
       windowsHide: true,

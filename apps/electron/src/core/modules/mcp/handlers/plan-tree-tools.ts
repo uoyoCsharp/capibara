@@ -1,9 +1,7 @@
-import type { McpToolDefinition } from '../registry/mcp-tool.registry';
-import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
-import type { TaskService } from '@core/modules/workflow/services/task.service';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServerDeps } from '../mcp-server.builder';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { RoleService } from '@core/modules/organization/services/role.service';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { PlanTreeNode, PlanTreeMode } from '@core/foundation/events';
 
 export const MAX_TREE_NODES = 500;
@@ -170,137 +168,151 @@ export function validatePlanTree(args: ValidateArgs): PlanTreeValidationError | 
   return walk(tree, null, '$');
 }
 
-export function createPlanTreeTools(
-  taskService: TaskService,
-  processEngine: ProcessEngine,
-  roleService: RoleService,
-  conversationService: ConversationService,
-  eventPublisher: IEventPublisher,
-): McpToolDefinition[] {
-  return [
-    {
-      name: 'capibara_plan_submit_tree',
-      description:
-        'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
-        '(rootTaskId) or a conversation (conversationId) — provide exactly one. ' +
-        'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
-        '(preview waits for approval, eager persists immediately). ' +
-        'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
-        'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
-        'are created as root-level tasks. ' +
-        'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          rootTaskId: {
-            type: 'string',
-            description: 'Task anchor — the current task ID (tree root type must match the task). Provide this OR conversationId.',
-          },
-          conversationId: {
-            type: 'string',
-            description: 'Conversation anchor — the planning conversation ID. Provide this OR rootTaskId.',
-          },
-          tree: {
-            type: 'object',
-            description:
-              'The decomposition tree. For task anchor: root must match current task type. ' +
-              'For conversation anchor: root must be an allowedAtRoot type. ' +
-              'Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
-          },
-        },
-        required: ['tree'],
-      },
-      handler: async (params) => {
-        const rootTaskId = (params.rootTaskId ?? null) as string | null;
-        const conversationId = (params.conversationId ?? null) as string | null;
-        const rawTree = params.tree;
+export function registerPlanTreeTools(server: McpServer, deps: McpServerDeps): void {
+  const { taskService, processEngine, roleService, conversationService, eventPublisher } = deps;
 
-        if ((rootTaskId === null) === (conversationId === null)) {
-          return {
+  // The tree input is a recursive structure that Zod cannot fully validate
+  // (recursive lazy schemas are not supported by Standard Schema).
+  // We use z.record() as a passthrough and rely on isDraftNode() for structural validation.
+  server.tool(
+    'capibara_plan_submit_tree',
+    'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
+      '(rootTaskId) or a conversation (conversationId) — provide exactly one. ' +
+      'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
+      '(preview waits for approval, eager persists immediately). ' +
+      'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
+      'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
+      'are created as root-level tasks. ' +
+      'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
+    {
+      rootTaskId: z.string().optional().describe(
+        'Task anchor — the current task ID (tree root type must match the task). Provide this OR conversationId.',
+      ),
+      conversationId: z.string().optional().describe(
+        'Conversation anchor — the planning conversation ID. Provide this OR rootTaskId.',
+      ),
+      tree: z.record(z.unknown()).describe(
+        'The decomposition tree. Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
+      ),
+    },
+    async ({ rootTaskId: rawRootTaskId, conversationId: rawConversationId, tree: rawTree }) => {
+      const rootTaskId = rawRootTaskId ?? null;
+      const conversationId = rawConversationId ?? null;
+
+      if ((rootTaskId === null) === (conversationId === null)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
             error: 'INVALID_ANCHOR',
             message: 'Provide exactly one of rootTaskId or conversationId.',
-          };
-        }
+          }) }],
+          isError: true,
+        };
+      }
 
-        if (!isDraftNode(rawTree)) {
-          return {
+      if (!isDraftNode(rawTree)) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
             error: 'INVALID_TREE_SHAPE',
             message: 'Tree does not match required shape. Each node must include type, title, description, assigneeRoleId, children[].',
+          }) }],
+          isError: true,
+        };
+      }
+      const tree = normalizeDraftNode(rawTree);
+
+      let orgId: string;
+      let agentRoleId: string;
+      let rootType: string | null;
+      let mode: PlanTreeMode;
+
+      if (rootTaskId) {
+        const rootTask = taskService.findById(rootTaskId);
+        if (!rootTask) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              error: 'ROOT_TASK_NOT_FOUND', message: `Root task "${rootTaskId}" not found.`,
+            }) }],
+            isError: true,
           };
         }
-        const tree = normalizeDraftNode(rawTree);
-
-        let orgId: string;
-        let agentRoleId: string;
-        let rootType: string | null;
-        let mode: PlanTreeMode;
-
-        if (rootTaskId) {
-          const rootTask = taskService.findById(rootTaskId);
-          if (!rootTask) {
-            return { error: 'ROOT_TASK_NOT_FOUND', message: `Root task "${rootTaskId}" not found.` };
-          }
-          const rootStatusCategory = processEngine.getStatusCategory(rootTask.orgId, rootTask.status);
-          if (rootStatusCategory === 'terminal') {
-            return {
+        const rootStatusCategory = processEngine.getStatusCategory(rootTask.orgId, rootTask.status);
+        if (rootStatusCategory === 'terminal') {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
               error: 'ROOT_TASK_TERMINAL',
               message: `Task "${rootTaskId}" is in terminal status "${rootTask.status}" and cannot be decomposed.`,
-            };
-          }
-          orgId = rootTask.orgId;
-          agentRoleId = rootTask.assigneeRoleId ?? tree.assigneeRoleId;
-          rootType = rootTask.type;
-          mode = rootTask.planningMode;
-        } else {
-          const conversation = conversationService.findById(conversationId!);
-          if (!conversation) {
-            return { error: 'CONVERSATION_NOT_FOUND', message: `Conversation "${conversationId}" not found.` };
-          }
-          if (conversation.type !== 'planning') {
-            return {
+            }) }],
+            isError: true,
+          };
+        }
+        orgId = rootTask.orgId;
+        agentRoleId = rootTask.assigneeRoleId ?? tree.assigneeRoleId;
+        rootType = rootTask.type;
+        mode = rootTask.planningMode;
+      } else {
+        const conversation = conversationService.findById(conversationId!);
+        if (!conversation) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              error: 'CONVERSATION_NOT_FOUND', message: `Conversation "${conversationId}" not found.`,
+            }) }],
+            isError: true,
+          };
+        }
+        if (conversation.type !== 'planning') {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
               error: 'INVALID_CONVERSATION_TYPE',
               message: `Conversation "${conversationId}" has type "${conversation.type}"; expected "planning".`,
-            };
-          }
-          orgId = conversation.orgId;
-          agentRoleId = conversation.respondentRoleId ?? tree.assigneeRoleId;
-          rootType = null; // root must be allowedAtRoot, verified by validator
-          mode = 'preview';
+            }) }],
+            isError: true,
+          };
         }
+        orgId = conversation.orgId;
+        agentRoleId = conversation.respondentRoleId ?? tree.assigneeRoleId;
+        rootType = null;
+        mode = 'preview';
+      }
 
-        const roles = roleService.findByOrgId(orgId);
-        const validRoleIds = new Set(roles.map((r) => r.id));
+      const roles = roleService.findByOrgId(orgId);
+      const validRoleIds = new Set(roles.map((r) => r.id));
 
-        const err = validatePlanTree({
-          orgId,
-          rootType,
-          tree,
-          processEngine,
-          validRoleIds,
-        });
-        if (err) {
-          return { error: err.code, message: err.message, nodePath: err.nodePath };
-        }
-
-        eventPublisher.publish('plan-tree:submitted', {
-          rootTaskId,
-          sourceConversationId: conversationId,
-          orgId,
-          roleId: agentRoleId,
-          mode,
-          tree,
-          submittedAt: new Date().toISOString(),
-        });
-
+      const err = validatePlanTree({
+        orgId,
+        rootType,
+        tree,
+        processEngine,
+        validRoleIds,
+      });
+      if (err) {
         return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: err.code, message: err.message, nodePath: err.nodePath,
+          }) }],
+          isError: true,
+        };
+      }
+
+      eventPublisher.publish('plan-tree:submitted', {
+        rootTaskId,
+        sourceConversationId: conversationId,
+        orgId,
+        roleId: agentRoleId,
+        mode,
+        tree,
+        submittedAt: new Date().toISOString(),
+      });
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
           ok: true,
           mode,
           nodeCount: countNodes(tree),
           maxDepth: measureDepth(tree),
-        };
-      },
+        }) }],
+      };
     },
-  ];
+  );
 }
 
 export const __testing__ = { countNodes, measureDepth, isDraftNode, normalizeDraftNode };

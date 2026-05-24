@@ -18,22 +18,36 @@ export class PinoLogger implements ILogger {
   }
 
   info(msg: string, data?: Record<string, unknown>): void {
-    this.logger.info(data ?? {}, msg);
+    this.safeLog(() => this.logger.info(data ?? {}, msg));
   }
 
   warn(msg: string, data?: Record<string, unknown>): void {
-    this.logger.warn(data ?? {}, msg);
+    this.safeLog(() => this.logger.warn(data ?? {}, msg));
   }
 
   error(msg: string, data?: Record<string, unknown>): void {
-    this.logger.error(data ?? {}, msg);
+    this.safeLog(() => this.logger.error(data ?? {}, msg));
   }
 
   debug(msg: string, data?: Record<string, unknown>): void {
-    this.logger.debug(data ?? {}, msg);
+    this.safeLog(() => this.logger.debug(data ?? {}, msg));
   }
 
   child(bindings: Record<string, unknown>): PinoLogger {
     return new PinoLogger(this.logger.level, this.logger.child(bindings));
+  }
+
+  private safeLog(fn: () => void): void {
+    try {
+      fn();
+    } catch (error) {
+      // During Electron shutdown, pino's transport worker can already be
+      // tearing down. Avoid crashing the main process on late log writes.
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes('worker is ending')) {
+        return;
+      }
+      throw error;
+    }
   }
 }

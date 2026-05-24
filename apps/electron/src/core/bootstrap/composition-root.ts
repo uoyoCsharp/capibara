@@ -1,5 +1,6 @@
 import 'reflect-metadata';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { app } from 'electron';
 import { loadConfig } from '@core/config/config.loader';
 import { PinoLogger } from '@core/infrastructure/observability/pino-logger';
@@ -31,7 +32,7 @@ import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/
 import type { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
 import type { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
 import type { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
-import type { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
+import type { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
 
 let logger: ILogger;
 let sqliteConn: SqliteConnection;
@@ -40,7 +41,7 @@ let taskOrchestrator: TaskOrchestrator;
 let conversationOrchestrator: ConversationOrchestrator;
 let runOrchestrator: RunOrchestrator;
 let eventBroadcaster: EventBroadcaster;
-let mcpIpcServer: McpIpcServer;
+let mcpTransport: McpHttpTransportManager;
 
 function normalizeDefaultAgentId(requested: string | null | undefined): string {
   // Backward compatibility for legacy executor IDs kept in persisted config.
@@ -64,19 +65,27 @@ export async function bootstrap(): Promise<void> {
     ? process.resourcesPath
     : join(app.getAppPath(), 'resources');
 
+  const _require = createRequire(import.meta.url);
+
+  const resolvedAgentEntry = process.env.CLAUDE_AGENT_ACP_ENTRY
+    ?? _require.resolve('@agentclientprotocol/claude-agent-acp/dist/index.js');
+
+  // claude-agent-acp auto-discovers Claude Code via its bundled
+  // @anthropic-ai/claude-agent-sdk platform binary.  Only forward
+  // CLAUDE_CODE_EXECUTABLE when the user explicitly sets it in the
+  // system environment (e.g. to pin a specific CLI version).
+  const agentEnv: Record<string, string> = {};
+  if (process.env.CLAUDE_CODE_EXECUTABLE) {
+    agentEnv.CLAUDE_CODE_EXECUTABLE = process.env.CLAUDE_CODE_EXECUTABLE;
+  }
+
   const registry = [
       {
         id: 'claude-agent',
         name: 'Claude Agent',
         command: 'node',
-        args: [
-          process.env.CLAUDE_AGENT_ACP_ENTRY
-            ?? 'C:/nvm4w/nodejs/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js',
-        ],
-        env: {
-          CLAUDE_CODE_EXECUTABLE: process.env.CLAUDE_CODE_EXECUTABLE
-            ?? 'C:/nvm4w/nodejs/node_modules/@anthropic-ai/claude-code/bin/claude.exe',
-        },
+        args: [resolvedAgentEntry],
+        env: agentEnv,
       },
     ];
 
@@ -154,8 +163,8 @@ export async function bootstrap(): Promise<void> {
     acpModule.suspensionManager, config.collaboration,
   );
 
-  const mcpPort = await mcp.mcpIpcServer.start();
-  acpModule.mcpConfigBuilder.setIpcPort(mcpPort);
+  const mcpPort = await mcp.mcpTransport.start(mcp.mcpServer);
+  acpModule.mcpConfigBuilder.setHttpPort(mcpPort);
 
   const prompt = registerPromptModule(
     workflow.taskService as unknown as import('@core/modules/workflow/interfaces/i-task.repository').ITaskRepository,
@@ -221,7 +230,7 @@ export async function bootstrap(): Promise<void> {
   conversationOrchestrator = orchestratorModule.conversationOrchestrator;
   runOrchestrator = orchestratorModule.runOrchestrator;
   eventBroadcaster = notification.eventBroadcaster;
-  mcpIpcServer = mcp.mcpIpcServer;
+  mcpTransport = mcp.mcpTransport;
 
   planning.planningService.setWaker({
     tryWake: (roleId, orgId, reason, taskId) => taskOrchestrator.tryWake(roleId, orgId, reason, taskId),
@@ -257,7 +266,7 @@ export async function bootstrap(): Promise<void> {
 export async function shutdown(): Promise<void> {
   logger?.info('Shutting down Capibara core...');
   await acpModule?.sessionManager.shutdown();
-  mcpIpcServer?.stop();
+  mcpTransport?.stop();
   sqliteConn?.close();
 }
 

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  createPlanTreeTools,
+  registerPlanTreeTools,
   validatePlanTree,
   MAX_TREE_NODES,
   MAX_TREE_DEPTH,
 } from '@core/modules/mcp/handlers/plan-tree-tools';
-import type { McpToolDefinition } from '@core/modules/mcp/registry/mcp-tool.registry';
+import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { RoleService } from '@core/modules/organization/services/role.service';
@@ -107,7 +107,7 @@ function validTree(): PlanTreeNode {
 // ─── Test Suite ────────────────────────────────────────────────
 
 describe('capibara_plan_submit_tree (MCP tool)', () => {
-  let tools: McpToolDefinition[];
+  let mockServer: MockMcpServer;
   let taskService: TaskService;
   let processEngine: ProcessEngine;
   let roleService: RoleService;
@@ -144,57 +144,55 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
       }),
     } as unknown as IEventPublisher;
 
-    tools = createPlanTreeTools(
+    mockServer = new MockMcpServer();
+    registerPlanTreeTools(mockServer as any, {
       taskService,
       processEngine,
       roleService,
       conversationService,
       eventPublisher,
-    );
+    } as any);
   });
 
-  function tool(): McpToolDefinition {
-    return tools.find((t) => t.name === 'capibara_plan_submit_tree')!;
-  }
-
   async function invoke(params: Record<string, unknown>) {
-    return tool().handler(params, 'run-1');
+    const handler = mockServer.getHandler('capibara_plan_submit_tree');
+    const raw = await handler(params);
+    return parseToolResult(raw);
   }
 
   // ─── Anchor validation (critical: AI MUST send exactly one) ──
 
   describe('anchor XOR enforcement', () => {
     it('PT-01: rejects when neither rootTaskId nor conversationId provided', async () => {
-      const result = await invoke({ tree: validTree() });
-      expect(result).toMatchObject({ error: 'INVALID_ANCHOR' });
+      const { data, isError } = await invoke({ tree: validTree() });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'INVALID_ANCHOR' });
     });
 
     it('PT-02: rejects when BOTH rootTaskId and conversationId provided', async () => {
-      const result = await invoke({
+      const { data, isError } = await invoke({
         rootTaskId: 'task-epic',
         conversationId: 'conv-plan',
         tree: validTree(),
       });
-      expect(result).toMatchObject({ error: 'INVALID_ANCHOR' });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'INVALID_ANCHOR' });
     });
 
     it('PT-03: accepts when only rootTaskId provided', async () => {
-      const result = await invoke({ rootTaskId: 'task-epic', tree: validTree() });
-      expect((result as { ok: boolean }).ok).toBe(true);
+      const { data } = await invoke({ rootTaskId: 'task-epic', tree: validTree() });
+      expect((data as any).ok).toBe(true);
     });
 
     it('PT-04: accepts when only conversationId provided', async () => {
-      const result = await invoke({ conversationId: 'conv-plan', tree: validTree() });
-      expect((result as { ok: boolean }).ok).toBe(true);
+      const { data } = await invoke({ conversationId: 'conv-plan', tree: validTree() });
+      expect((data as any).ok).toBe(true);
     });
 
     it('PT-05: treats empty string rootTaskId as absent (null anchor) — accepts conversationId', async () => {
-      // Empty strings should NOT be treated as provided. This test documents
-      // the (params.rootTaskId ?? null) semantics: only null/undefined absent.
-      // An explicit empty string IS considered "provided" and will fail XOR.
-      const result = await invoke({ rootTaskId: '', conversationId: 'conv-plan', tree: validTree() });
-      // Both are non-null → XOR violation
-      expect(result).toMatchObject({ error: 'INVALID_ANCHOR' });
+      const { data, isError } = await invoke({ rootTaskId: '', conversationId: 'conv-plan', tree: validTree() });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'INVALID_ANCHOR' });
     });
   });
 
@@ -202,20 +200,23 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
 
   describe('tree shape', () => {
     it('PT-10: rejects non-object tree', async () => {
-      const result = await invoke({ rootTaskId: 'task-epic', tree: 'not an object' });
-      expect(result).toMatchObject({ error: 'INVALID_TREE_SHAPE' });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree: 'not an object' });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'INVALID_TREE_SHAPE' });
     });
 
     it('PT-11: rejects tree missing required fields', async () => {
-      const bad = { type: 'epic', title: 'Root' }; // missing description, assigneeRoleId
-      const result = await invoke({ rootTaskId: 'task-epic', tree: bad });
-      expect(result).toMatchObject({ error: 'INVALID_TREE_SHAPE' });
+      const bad = { type: 'epic', title: 'Root' };
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree: bad });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'INVALID_TREE_SHAPE' });
     });
 
     it('PT-12: rejects tree with empty string type', async () => {
       const bad = { type: '', title: 'x', description: '', assigneeRoleId: 'r', children: [] };
-      const result = await invoke({ rootTaskId: 'task-epic', tree: bad });
-      expect(result).toMatchObject({ error: 'INVALID_TREE_SHAPE' });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree: bad });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'INVALID_TREE_SHAPE' });
     });
 
     it('PT-13: accepts tree where a child omits the children field (normalized to [])', async () => {
@@ -231,14 +232,13 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
             description: 's',
             assigneeRoleId: 'role-dev',
             children: [
-              // Leaf task with children omitted entirely — allowed by isDraftNode
               { type: 'task', title: 'T', description: '', assigneeRoleId: 'role-dev' },
             ],
           },
         ],
       };
-      const result = await invoke({ rootTaskId: 'task-epic', tree });
-      expect((result as { ok: boolean }).ok).toBe(true);
+      const { data } = await invoke({ rootTaskId: 'task-epic', tree });
+      expect((data as any).ok).toBe(true);
     });
   });
 
@@ -247,9 +247,9 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
   describe('task anchor', () => {
     it('PT-20: happy path — publishes plan-tree:submitted with task anchor + task planningMode', async () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ planningMode: 'eager' }));
-      const result = await invoke({ rootTaskId: 'task-epic', tree: validTree() });
-      expect((result as { ok: boolean; mode: string }).ok).toBe(true);
-      expect((result as { mode: string }).mode).toBe('eager');
+      const { data } = await invoke({ rootTaskId: 'task-epic', tree: validTree() });
+      expect((data as any).ok).toBe(true);
+      expect((data as any).mode).toBe('eager');
 
       expect(published).toHaveLength(1);
       expect(published[0].type).toBe('plan-tree:submitted');
@@ -263,24 +263,27 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
 
     it('PT-21: rejects when task not found', async () => {
       vi.mocked(taskService.findById).mockReturnValue(null);
-      const result = await invoke({ rootTaskId: 'missing', tree: validTree() });
-      expect(result).toMatchObject({ error: 'ROOT_TASK_NOT_FOUND' });
+      const { data, isError } = await invoke({ rootTaskId: 'missing', tree: validTree() });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'ROOT_TASK_NOT_FOUND' });
       expect(published).toHaveLength(0);
     });
 
     it('PT-22: rejects when task is in terminal status', async () => {
       vi.mocked(processEngine.getStatusCategory).mockReturnValue('terminal');
       vi.mocked(taskService.findById).mockReturnValue(createTask({ status: 'done' }));
-      const result = await invoke({ rootTaskId: 'task-epic', tree: validTree() });
-      expect(result).toMatchObject({ error: 'ROOT_TASK_TERMINAL' });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree: validTree() });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'ROOT_TASK_TERMINAL' });
       expect(published).toHaveLength(0);
     });
 
     it('PT-23: rejects when tree root type does not match task type', async () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ type: 'story' }));
-      const tree = validTree(); // root is 'epic'
-      const result = await invoke({ rootTaskId: 'task-epic', tree });
-      expect(result).toMatchObject({ error: 'ROOT_TYPE_MISMATCH' });
+      const tree = validTree();
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'ROOT_TYPE_MISMATCH' });
       expect(published).toHaveLength(0);
     });
 
@@ -295,9 +298,9 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
 
   describe('conversation anchor', () => {
     it('PT-30: happy path — publishes plan-tree:submitted with conversation anchor + mode=preview', async () => {
-      const result = await invoke({ conversationId: 'conv-plan', tree: validTree() });
-      expect((result as { ok: boolean; mode: string }).ok).toBe(true);
-      expect((result as { mode: string }).mode).toBe('preview');
+      const { data } = await invoke({ conversationId: 'conv-plan', tree: validTree() });
+      expect((data as any).ok).toBe(true);
+      expect((data as any).mode).toBe('preview');
 
       expect(published).toHaveLength(1);
       expect(published[0].type).toBe('plan-tree:submitted');
@@ -311,8 +314,9 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
 
     it('PT-31: rejects when conversation not found', async () => {
       vi.mocked(conversationService.findById).mockReturnValue(null);
-      const result = await invoke({ conversationId: 'missing', tree: validTree() });
-      expect(result).toMatchObject({ error: 'CONVERSATION_NOT_FOUND' });
+      const { data, isError } = await invoke({ conversationId: 'missing', tree: validTree() });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'CONVERSATION_NOT_FOUND' });
       expect(published).toHaveLength(0);
     });
 
@@ -321,22 +325,21 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
       for (const type of types) {
         published.length = 0;
         vi.mocked(conversationService.findById).mockReturnValue(createConversation({ type }));
-        const result = await invoke({ conversationId: 'c', tree: validTree() });
-        expect(result).toMatchObject({ error: 'INVALID_CONVERSATION_TYPE' });
+        const { data, isError } = await invoke({ conversationId: 'c', tree: validTree() });
+        expect(isError).toBe(true);
+        expect(data).toMatchObject({ error: 'INVALID_CONVERSATION_TYPE' });
         expect(published).toHaveLength(0);
       }
     });
 
     it('PT-33: forces mode=preview even if someone passes eager intent via other means', async () => {
-      // Conversation mode is always forced to preview — no way to escape human approval
       await invoke({ conversationId: 'conv-plan', tree: validTree() });
       expect(published[0].payload).toMatchObject({ mode: 'preview' });
     });
 
     it('PT-34: skips ROOT_TYPE_MISMATCH check — root type just needs allowedAtRoot', async () => {
-      // Task anchor would fail ROOT_TYPE_MISMATCH; conversation anchor accepts any allowedAtRoot type
       const tree: PlanTreeNode = {
-        type: 'story', // different from any "current task" — but story IS allowedAtRoot
+        type: 'story',
         title: 'S Root',
         description: 'd',
         assigneeRoleId: 'role-dev',
@@ -344,20 +347,21 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
           { type: 'task', title: 'T', description: '', assigneeRoleId: 'role-dev', children: [] },
         ],
       };
-      const result = await invoke({ conversationId: 'conv-plan', tree });
-      expect((result as { ok: boolean }).ok).toBe(true);
+      const { data } = await invoke({ conversationId: 'conv-plan', tree });
+      expect((data as any).ok).toBe(true);
     });
 
     it('PT-35: rejects root type that is NOT allowedAtRoot', async () => {
       const tree: PlanTreeNode = {
-        type: 'task', // task.allowedAtRoot = false
+        type: 'task',
         title: 'T Root',
         description: '',
         assigneeRoleId: 'role-dev',
         children: [],
       };
-      const result = await invoke({ conversationId: 'conv-plan', tree });
-      expect(result).toMatchObject({ error: 'ROOT_TYPE_MISMATCH' });
+      const { data, isError } = await invoke({ conversationId: 'conv-plan', tree });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'ROOT_TYPE_MISMATCH' });
       expect(published).toHaveLength(0);
     });
 
@@ -365,7 +369,6 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
       vi.mocked(conversationService.findById).mockReturnValue(
         createConversation({ respondentRoleId: 'role-custom-agent' }),
       );
-      // Make sure validator accepts role
       vi.mocked(roleService.findByOrgId).mockReturnValue([
         createRole('role-custom-agent'),
         createRole('role-pm'),
@@ -396,12 +399,12 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
         description: '',
         assigneeRoleId: 'role-pm',
         children: [
-          // epic only allows 'story' as a child, not 'task' directly
           { type: 'task', title: 'T', description: '', assigneeRoleId: 'role-dev', children: [] },
         ],
       };
-      const result = await invoke({ rootTaskId: 'task-epic', tree });
-      expect(result).toMatchObject({ error: 'TYPE_NOT_IN_ALLOWED_CHILDREN' });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'TYPE_NOT_IN_ALLOWED_CHILDREN' });
     });
 
     it('PT-41: unknown type → UNKNOWN_WORK_ITEM_TYPE (walked before parent-child check)', async () => {
@@ -414,18 +417,17 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
           { type: 'zombiestory', title: 'Z', description: '', assigneeRoleId: 'role-dev', children: [] },
         ],
       };
-      const result = await invoke({ rootTaskId: 'task-epic', tree });
-      // validator checks typeDef existence BEFORE checking allowedChildren — so
-      // an unknown type surfaces as UNKNOWN_WORK_ITEM_TYPE even though parent
-      // wouldn't have allowed it either.
-      expect(result).toMatchObject({ error: 'UNKNOWN_WORK_ITEM_TYPE' });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'UNKNOWN_WORK_ITEM_TYPE' });
     });
 
     it('PT-42: unknown assigneeRoleId → UNKNOWN_ROLE_ID', async () => {
       const tree = validTree();
       tree.children[0].assigneeRoleId = 'role-ghost';
-      const result = await invoke({ rootTaskId: 'task-epic', tree });
-      expect(result).toMatchObject({ error: 'UNKNOWN_ROLE_ID' });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'UNKNOWN_ROLE_ID' });
     });
 
     it('PT-43: leaf with children → LEAF_CANNOT_HAVE_CHILDREN', async () => {
@@ -455,9 +457,9 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
           },
         ],
       };
-      const result = await invoke({ rootTaskId: 'task-epic', tree });
-      // Validation actually catches parent-child compatibility first (task -> task not in allowedChildren)
-      expect(result).toMatchObject({ error: expect.stringMatching(/LEAF_CANNOT_HAVE_CHILDREN|TYPE_NOT_IN_ALLOWED_CHILDREN/) });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree });
+      expect(isError).toBe(true);
+      expect((data as any).error).toMatch(/LEAF_CANNOT_HAVE_CHILDREN|TYPE_NOT_IN_ALLOWED_CHILDREN/);
     });
 
     it('PT-44: non-leaf with zero children → NON_LEAF_MUST_HAVE_CHILDREN', async () => {
@@ -466,10 +468,11 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
         title: 'R',
         description: '',
         assigneeRoleId: 'role-pm',
-        children: [], // epic is non-leaf — empty children is invalid
+        children: [],
       };
-      const result = await invoke({ rootTaskId: 'task-epic', tree });
-      expect(result).toMatchObject({ error: 'NON_LEAF_MUST_HAVE_CHILDREN' });
+      const { data, isError } = await invoke({ rootTaskId: 'task-epic', tree });
+      expect(isError).toBe(true);
+      expect(data).toMatchObject({ error: 'NON_LEAF_MUST_HAVE_CHILDREN' });
     });
   });
 
@@ -477,13 +480,10 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
 
   describe('success response', () => {
     it('PT-50: returns nodeCount and maxDepth', async () => {
-      const result = (await invoke({ rootTaskId: 'task-epic', tree: validTree() })) as {
-        ok: boolean;
-        nodeCount: number;
-        maxDepth: number;
-      };
+      const { data } = await invoke({ rootTaskId: 'task-epic', tree: validTree() });
+      const result = data as { ok: boolean; nodeCount: number; maxDepth: number };
       expect(result.ok).toBe(true);
-      expect(result.nodeCount).toBe(3); // epic + story + task
+      expect(result.nodeCount).toBe(3);
       expect(result.maxDepth).toBe(3);
     });
   });

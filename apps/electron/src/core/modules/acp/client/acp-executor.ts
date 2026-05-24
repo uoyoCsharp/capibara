@@ -101,7 +101,7 @@ export class AcpExecutor implements IExecutor {
     }
 
     // 2. Build MCP server config
-    const mcpServers = this.mcpConfigBuilder.buildMcpServers(input);
+    const mcpServers = this.mcpConfigBuilder.buildMcpServers();
 
     // 3. Resolve allowed paths from role's file access policy
     let allowedPaths: string[] | undefined;

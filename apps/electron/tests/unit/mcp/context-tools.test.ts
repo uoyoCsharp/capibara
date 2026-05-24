@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createContextTools } from '@core/modules/mcp/handlers/context-tools';
-import type { McpToolDefinition } from '@core/modules/mcp/registry/mcp-tool.registry';
+import { registerContextTools } from '@core/modules/mcp/handlers/context-tools';
+import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { RoleService } from '@core/modules/organization/services/role.service';
 
@@ -44,7 +44,7 @@ function createRole(overrides?: Record<string, unknown>) {
 }
 
 describe('Context Tools (MCP Handlers)', () => {
-  let tools: McpToolDefinition[];
+  let mockServer: MockMcpServer;
   let taskService: TaskService;
   let roleService: RoleService;
 
@@ -71,17 +71,16 @@ describe('Context Tools (MCP Handlers)', () => {
       ]),
     } as unknown as RoleService;
 
-    tools = createContextTools(taskService, roleService);
+    mockServer = new MockMcpServer();
+    registerContextTools(mockServer as any, { taskService, roleService } as any);
   });
-
-  function findTool(name: string): McpToolDefinition {
-    return tools.find((t) => t.name === name)!;
-  }
 
   describe('capibara_context - tasks query', () => {
     it('returns list of tasks for org', async () => {
-      const tool = findTool('capibara_context');
-      const result = await tool.handler({ orgId: 'org-1', query: 'tasks' }, 'run-1') as unknown[];
+      const handler = mockServer.getHandler('capibara_context');
+      const raw = await handler({ orgId: 'org-1', query: 'tasks' });
+      const { data } = parseToolResult(raw);
+      const result = data as unknown[];
       expect(taskService.findByOrgId).toHaveBeenCalledWith('org-1');
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual(expect.objectContaining({ id: 'task-1', title: 'Task A', status: 'in_progress' }));
@@ -90,8 +89,10 @@ describe('Context Tools (MCP Handlers)', () => {
 
   describe('capibara_context - roles query', () => {
     it('returns list of roles for org', async () => {
-      const tool = findTool('capibara_context');
-      const result = await tool.handler({ orgId: 'org-1', query: 'roles' }, 'run-1') as unknown[];
+      const handler = mockServer.getHandler('capibara_context');
+      const raw = await handler({ orgId: 'org-1', query: 'roles' });
+      const { data } = parseToolResult(raw);
+      const result = data as unknown[];
       expect(roleService.findByOrgId).toHaveBeenCalledWith('org-1');
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual(expect.objectContaining({ id: 'role-1', name: 'Dev' }));
@@ -100,8 +101,10 @@ describe('Context Tools (MCP Handlers)', () => {
 
   describe('capibara_context - task_detail query', () => {
     it('returns task with children', async () => {
-      const tool = findTool('capibara_context');
-      const result = await tool.handler({ orgId: 'org-1', query: 'task_detail', entityId: 'task-1' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_context');
+      const raw = await handler({ orgId: 'org-1', query: 'task_detail', entityId: 'task-1' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
       expect(taskService.findById).toHaveBeenCalledWith('task-1');
       expect(taskService.findChildren).toHaveBeenCalledWith('task-1');
       expect(result.id).toBe('task-1');
@@ -110,16 +113,20 @@ describe('Context Tools (MCP Handlers)', () => {
 
     it('returns error when task not found', async () => {
       vi.mocked(taskService.findById).mockReturnValue(null);
-      const tool = findTool('capibara_context');
-      const result = await tool.handler({ orgId: 'org-1', query: 'task_detail', entityId: 'missing' }, 'run-1');
-      expect(result).toEqual({ error: 'Task not found' });
+      const handler = mockServer.getHandler('capibara_context');
+      const raw = await handler({ orgId: 'org-1', query: 'task_detail', entityId: 'missing' });
+      const { data, isError } = parseToolResult(raw);
+      expect(isError).toBe(true);
+      expect(data).toEqual({ error: 'Task not found' });
     });
   });
 
   describe('capibara_context - role_detail query', () => {
     it('returns role with children', async () => {
-      const tool = findTool('capibara_context');
-      const result = await tool.handler({ orgId: 'org-1', query: 'role_detail', entityId: 'role-1' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_context');
+      const raw = await handler({ orgId: 'org-1', query: 'role_detail', entityId: 'role-1' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
       expect(roleService.findById).toHaveBeenCalledWith('role-1');
       expect(roleService.findChildren).toHaveBeenCalledWith('role-1');
       expect(result.id).toBe('role-1');
@@ -128,17 +135,21 @@ describe('Context Tools (MCP Handlers)', () => {
 
     it('returns error when role not found', async () => {
       vi.mocked(roleService.findById).mockReturnValue(null);
-      const tool = findTool('capibara_context');
-      const result = await tool.handler({ orgId: 'org-1', query: 'role_detail', entityId: 'missing' }, 'run-1');
-      expect(result).toEqual({ error: 'Role not found' });
+      const handler = mockServer.getHandler('capibara_context');
+      const raw = await handler({ orgId: 'org-1', query: 'role_detail', entityId: 'missing' });
+      const { data, isError } = parseToolResult(raw);
+      expect(isError).toBe(true);
+      expect(data).toEqual({ error: 'Role not found' });
     });
   });
 
   describe('capibara_context - unknown query', () => {
     it('returns error for unknown query type', async () => {
-      const tool = findTool('capibara_context');
-      const result = await tool.handler({ orgId: 'org-1', query: 'invalid' }, 'run-1');
-      expect(result).toEqual({ error: 'Unknown query: invalid' });
+      const handler = mockServer.getHandler('capibara_context');
+      const raw = await handler({ orgId: 'org-1', query: 'invalid' });
+      const { data, isError } = parseToolResult(raw);
+      expect(isError).toBe(true);
+      expect(data).toEqual({ error: 'Unknown query: invalid' });
     });
   });
 });

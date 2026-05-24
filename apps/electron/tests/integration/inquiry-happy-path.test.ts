@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import { InquiryRouter } from '@core/modules/coordination/routing/inquiry.router';
 import { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
-import { createConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
+import { registerConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
 import { MockEventBus } from '../helpers/mock-event-bus';
 import { MockLogger } from '../helpers/mock-logger';
+import { MockMcpServer, parseToolResult } from '../helpers/mock-mcp-server';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IConversationMessageRepository } from '@core/modules/conversation/interfaces/i-conversation-message.repository';
 import type { ConversationEventLogger } from '@core/modules/conversation/persistence/conversation-event.logger';
@@ -304,20 +305,21 @@ describe('Inquiry happy-path end-to-end', () => {
   });
 
   it('MCP capibara_ask_question entry produces the same routed inquiry', async () => {
-    const tools = createConversationTools(h.conversationService);
-    const ask = tools.find((t) => t.name === 'capibara_ask_question');
-    expect(ask).toBeDefined();
+    const mockServer = new MockMcpServer();
+    registerConversationTools(mockServer as any, { conversationService: h.conversationService } as any);
+    const handler = mockServer.getHandler('capibara_ask_question');
 
-    const result = await ask!.handler({
+    const raw = await handler({
       orgId: ORG,
       askingRoleId: ROLE_FE,
       taskId: TASK,
       question: 'Which state library should we standardise on?',
     });
+    const { data } = parseToolResult(raw);
 
     // The tool returns the freshly-created conversation; by the time it
     // resolves, InquiryRouter has already written the respondent back.
-    expect(result).toMatchObject({
+    expect(data).toMatchObject({
       conversationId: 'conv-1',
       respondentRoleId: ROLE_LEAD,
       state: 'waiting',

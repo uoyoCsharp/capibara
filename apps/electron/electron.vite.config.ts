@@ -17,7 +17,6 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/core/index.ts'),
-          'capibara-mcp-server': resolve('src/core/modules/acp/mcp/capibara-mcp-server.ts'),
         },
       },
     },

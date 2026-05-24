@@ -79,7 +79,7 @@ export interface CreateSessionParams {
   taskId?: string;
   conversationId?: string;
   cwd: string;
-  mcpServers: schema.McpServerStdio[];
+  mcpServers: schema.McpServer[];
   allowedPaths?: string[];
 }
 

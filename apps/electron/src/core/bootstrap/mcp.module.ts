@@ -1,5 +1,4 @@
-import { container } from 'tsyringe';
-import { MCP_IPC_SERVER_TOKEN, MCP_TOOL_REGISTRY_TOKEN } from '@core/foundation/tokens';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
@@ -9,12 +8,8 @@ import type { RoleService } from '@core/modules/organization/services/role.servi
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { CollaborationConfig } from '@core/modules/acp/types/acp.types';
-import { McpToolRegistry } from '@core/modules/mcp/registry/mcp-tool.registry';
-import { McpIpcServer } from '@core/modules/mcp/server/mcp-ipc.server';
-import { createTaskTools } from '@core/modules/mcp/handlers/task-tools';
-import { createConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
-import { createContextTools } from '@core/modules/mcp/handlers/context-tools';
-import { createPlanTreeTools } from '@core/modules/mcp/handlers/plan-tree-tools';
+import { buildCapibaraMcpServer } from '@core/modules/mcp/mcp-server.builder';
+import { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
 
 export function registerMcpModule(
   logger: ILogger,
@@ -26,25 +21,19 @@ export function registerMcpModule(
   eventPublisher: IEventPublisher,
   suspensionManager?: ISessionSuspensionManager | null,
   collaborationConfig?: CollaborationConfig | null,
-): { mcpIpcServer: McpIpcServer; mcpToolRegistry: McpToolRegistry } {
-  const toolRegistry = new McpToolRegistry(logger);
-  const mcpIpcServer = new McpIpcServer(toolRegistry, logger);
+): { mcpServer: McpServer; mcpTransport: McpHttpTransportManager } {
+  const mcpServer = buildCapibaraMcpServer({
+    taskService,
+    taskStateMachine,
+    processEngine,
+    conversationService,
+    roleService,
+    eventPublisher,
+    suspensionManager,
+    collaborationConfig,
+  });
 
-  for (const tool of createTaskTools(taskService, taskStateMachine, processEngine)) {
-    toolRegistry.register(tool);
-  }
-  for (const tool of createConversationTools(conversationService, suspensionManager, collaborationConfig)) {
-    toolRegistry.register(tool);
-  }
-  for (const tool of createPlanTreeTools(taskService, processEngine, roleService, conversationService, eventPublisher)) {
-    toolRegistry.register(tool);
-  }
-  for (const tool of createContextTools(taskService, roleService)) {
-    toolRegistry.register(tool);
-  }
+  const mcpTransport = new McpHttpTransportManager(logger);
 
-  container.register(MCP_TOOL_REGISTRY_TOKEN, { useValue: toolRegistry });
-  container.register(MCP_IPC_SERVER_TOKEN, { useValue: mcpIpcServer });
-
-  return { mcpIpcServer, mcpToolRegistry: toolRegistry };
+  return { mcpServer, mcpTransport };
 }

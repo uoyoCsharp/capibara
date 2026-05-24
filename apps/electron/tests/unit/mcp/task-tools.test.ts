@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createTaskTools } from '@core/modules/mcp/handlers/task-tools';
-import type { McpToolDefinition } from '@core/modules/mcp/registry/mcp-tool.registry';
+import { registerTaskTools } from '@core/modules/mcp/handlers/task-tools';
+import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
@@ -24,7 +24,7 @@ function createTask(overrides?: Record<string, unknown>) {
 }
 
 describe('Task Tools (MCP Handlers)', () => {
-  let tools: McpToolDefinition[];
+  let mockServer: MockMcpServer;
   let taskService: TaskService;
   let taskStateMachine: TaskStateMachine;
   let processEngine: ProcessEngine;
@@ -54,21 +54,19 @@ describe('Task Tools (MCP Handlers)', () => {
       ]),
     } as unknown as ProcessEngine;
 
-    tools = createTaskTools(taskService, taskStateMachine, processEngine);
+    mockServer = new MockMcpServer();
+    registerTaskTools(mockServer as any, { taskService, taskStateMachine, processEngine } as any);
   });
-
-  function findTool(name: string): McpToolDefinition {
-    return tools.find((t) => t.name === name)!;
-  }
 
   // ─── capibara_task_transition ──────────────────────────────────
 
   describe('capibara_task_transition', () => {
     it('transitions task to a valid target status', async () => {
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'awaiting_review' }, 'run-1');
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'awaiting_review' });
+      const { data } = parseToolResult(raw);
       expect(taskStateMachine.transition).toHaveBeenCalledWith('task-1', 'awaiting_review');
-      expect(result).toEqual({
+      expect(data).toEqual({
         taskId: 'task-1',
         previousStatus: 'in_progress',
         currentStatus: 'awaiting_review',
@@ -77,17 +75,21 @@ describe('Task Tools (MCP Handlers)', () => {
 
     it('returns error when task not found', async () => {
       vi.mocked(taskService.findById).mockReturnValue(null);
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'missing', targetStatus: 'done' }, 'run-1');
-      expect(result).toEqual({ error: 'Task not found: missing' });
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'missing', targetStatus: 'done' });
+      const { data, isError } = parseToolResult(raw);
+      expect(isError).toBe(true);
+      expect(data).toEqual({ error: 'Task not found: missing' });
     });
 
     it('returns no-op when task is already in terminal status', async () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ status: 'done' }));
       vi.mocked(processEngine.getStatusCategory).mockReturnValue('terminal');
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'cancelled' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'cancelled' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
       expect(taskStateMachine.transition).not.toHaveBeenCalled();
       expect(result.currentStatus).toBe('done');
@@ -97,9 +99,12 @@ describe('Task Tools (MCP Handlers)', () => {
     it('returns structured error with available transitions when transition is invalid', async () => {
       vi.mocked(processEngine.validateTransition).mockReturnValue(false);
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'approved' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'approved' });
+      const { data, isError } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
+      expect(isError).toBe(true);
       expect(taskStateMachine.transition).not.toHaveBeenCalled();
       expect(result.error).toContain('in_progress');
       expect(result.error).toContain('approved');
@@ -119,10 +124,12 @@ describe('Task Tools (MCP Handlers)', () => {
         { from: 'in_progress', to: 'cancelled' },
       ]);
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'approved' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'approved' });
+      const { data, isError } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
-      expect(result.error).toBeDefined();
+      expect(isError).toBe(true);
       expect(result.currentStatus).toBe('in_progress');
       const transitions = result.availableTransitions as string[];
       expect(transitions).toContain('awaiting_review');
@@ -135,8 +142,10 @@ describe('Task Tools (MCP Handlers)', () => {
       );
       vi.mocked(processEngine.validateTransition).mockReturnValue(true);
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'epic-1', targetStatus: 'awaiting_review' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'epic-1', targetStatus: 'awaiting_review' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
       expect(taskStateMachine.transition).toHaveBeenCalledWith('epic-1', 'awaiting_review');
       expect(result.currentStatus).toBe('awaiting_review');
@@ -145,8 +154,8 @@ describe('Task Tools (MCP Handlers)', () => {
     it('uses orgId from task for all process engine calls', async () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ orgId: 'org-special' }));
 
-      const tool = findTool('capibara_task_transition');
-      await tool.handler({ taskId: 'task-1', targetStatus: 'awaiting_review' }, 'run-1');
+      const handler = mockServer.getHandler('capibara_task_transition');
+      await handler({ taskId: 'task-1', targetStatus: 'awaiting_review' });
 
       expect(processEngine.getStatusCategory).toHaveBeenCalledWith('org-special', 'in_progress');
       expect(processEngine.validateTransition).toHaveBeenCalledWith('org-special', 'in_progress', 'awaiting_review');
@@ -156,10 +165,12 @@ describe('Task Tools (MCP Handlers)', () => {
       vi.mocked(processEngine.validateTransition).mockReturnValue(false);
       vi.mocked(processEngine.getAvailableTransitions).mockReturnValue([]);
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'done' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'done' });
+      const { data, isError } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
-      expect(result.error).toBeDefined();
+      expect(isError).toBe(true);
       expect(result.availableTransitions).toEqual([]);
     });
 
@@ -167,8 +178,10 @@ describe('Task Tools (MCP Handlers)', () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ status: 'pending' }));
       vi.mocked(processEngine.getStatusCategory).mockReturnValue('initial');
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'in_progress' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'in_progress' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
       expect(taskStateMachine.transition).toHaveBeenCalledWith('task-1', 'in_progress');
       expect(result.previousStatus).toBe('pending');
@@ -179,8 +192,10 @@ describe('Task Tools (MCP Handlers)', () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ status: 'awaiting_review' }));
       vi.mocked(processEngine.getStatusCategory).mockReturnValue('approval');
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'approved' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'approved' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
       expect(taskStateMachine.transition).toHaveBeenCalledWith('task-1', 'approved');
       expect(result.previousStatus).toBe('awaiting_review');
@@ -188,8 +203,10 @@ describe('Task Tools (MCP Handlers)', () => {
     });
 
     it('handles transition to cancelled', async () => {
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'cancelled' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'cancelled' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
       expect(taskStateMachine.transition).toHaveBeenCalledWith('task-1', 'cancelled');
       expect(result.currentStatus).toBe('cancelled');
@@ -199,8 +216,10 @@ describe('Task Tools (MCP Handlers)', () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ status: 'done' }));
       vi.mocked(processEngine.getStatusCategory).mockReturnValue('terminal');
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'done' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'done' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
       expect(taskStateMachine.transition).not.toHaveBeenCalled();
       expect(result.currentStatus).toBe('done');
@@ -210,11 +229,13 @@ describe('Task Tools (MCP Handlers)', () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ status: 'cancelled' }));
       vi.mocked(processEngine.getStatusCategory).mockReturnValue('terminal');
 
-      const tool = findTool('capibara_task_transition');
-      const result = await tool.handler({ taskId: 'task-1', targetStatus: 'in_progress' }, 'run-1') as Record<string, unknown>;
+      const handler = mockServer.getHandler('capibara_task_transition');
+      const raw = await handler({ taskId: 'task-1', targetStatus: 'in_progress' });
+      const { data } = parseToolResult(raw);
+      const result = data as Record<string, unknown>;
 
       expect(taskStateMachine.transition).not.toHaveBeenCalled();
-      expect(result.message).toContain('terminal');
+      expect((result.message as string)).toContain('terminal');
     });
   });
 
@@ -222,11 +243,11 @@ describe('Task Tools (MCP Handlers)', () => {
 
   describe('capibara_task_create_child', () => {
     it('creates child task under parent', async () => {
-      const tool = findTool('capibara_task_create_child');
-      const result = await tool.handler(
+      const handler = mockServer.getHandler('capibara_task_create_child');
+      const raw = await handler(
         { parentId: 'task-1', type: 'subtask', title: 'Sub', description: 'Details', assigneeRoleId: 'role-2' },
-        'run-1',
       );
+      const { data } = parseToolResult(raw);
       expect(taskService.create).toHaveBeenCalledWith(expect.objectContaining({
         orgId: 'org-1',
         parentId: 'task-1',
@@ -235,19 +256,21 @@ describe('Task Tools (MCP Handlers)', () => {
         description: 'Details',
         assigneeRoleId: 'role-2',
       }));
-      expect(result).toEqual({ taskId: 'child-1', status: 'pending' });
+      expect(data).toEqual({ taskId: 'child-1', status: 'pending' });
     });
 
     it('returns error when parent not found', async () => {
       vi.mocked(taskService.findById).mockReturnValue(null);
-      const tool = findTool('capibara_task_create_child');
-      const result = await tool.handler({ parentId: 'missing', type: 'task', title: 'X' }, 'run-1');
-      expect(result).toEqual({ error: 'Parent task not found: missing' });
+      const handler = mockServer.getHandler('capibara_task_create_child');
+      const raw = await handler({ parentId: 'missing', type: 'task', title: 'X' });
+      const { data, isError } = parseToolResult(raw);
+      expect(isError).toBe(true);
+      expect(data).toEqual({ error: 'Parent task not found: missing' });
     });
 
     it('handles missing optional fields', async () => {
-      const tool = findTool('capibara_task_create_child');
-      await tool.handler({ parentId: 'task-1', type: 'task', title: 'Minimal' }, 'run-1');
+      const handler = mockServer.getHandler('capibara_task_create_child');
+      await handler({ parentId: 'task-1', type: 'task', title: 'Minimal' });
       expect(taskService.create).toHaveBeenCalledWith(expect.objectContaining({
         description: '',
         assigneeRoleId: null,
@@ -256,8 +279,8 @@ describe('Task Tools (MCP Handlers)', () => {
 
     it('inherits orgId from parent task', async () => {
       vi.mocked(taskService.findById).mockReturnValue(createTask({ orgId: 'org-special' }));
-      const tool = findTool('capibara_task_create_child');
-      await tool.handler({ parentId: 'task-1', type: 'subtask', title: 'Child' }, 'run-1');
+      const handler = mockServer.getHandler('capibara_task_create_child');
+      await handler({ parentId: 'task-1', type: 'subtask', title: 'Child' });
       expect(taskService.create).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-special' }));
     });
 
@@ -266,9 +289,9 @@ describe('Task Tools (MCP Handlers)', () => {
         throw new Error("Type 'epic' not allowed as child of 'subtask'");
       });
 
-      const tool = findTool('capibara_task_create_child');
+      const handler = mockServer.getHandler('capibara_task_create_child');
       await expect(
-        tool.handler({ parentId: 'task-1', type: 'epic', title: 'Bad' }, 'run-1'),
+        handler({ parentId: 'task-1', type: 'epic', title: 'Bad' }),
       ).rejects.toThrow("Type 'epic' not allowed as child of 'subtask'");
     });
   });
@@ -277,33 +300,19 @@ describe('Task Tools (MCP Handlers)', () => {
 
   describe('tool registration', () => {
     it('registers exactly 2 tools', () => {
-      expect(tools).toHaveLength(2);
+      expect(mockServer.getToolNames()).toHaveLength(2);
     });
 
     it('registers all expected tool names', () => {
-      const names = tools.map((t) => t.name);
+      const names = mockServer.getToolNames();
       expect(names).toContain('capibara_task_transition');
       expect(names).toContain('capibara_task_create_child');
     });
 
     it('does not register removed tools', () => {
-      const names = tools.map((t) => t.name);
+      const names = mockServer.getToolNames();
       expect(names).not.toContain('capibara_task_complete');
       expect(names).not.toContain('capibara_task_review');
-    });
-
-    it('all tools have required inputSchema fields', () => {
-      for (const tool of tools) {
-        expect(tool.inputSchema).toBeDefined();
-        expect(tool.inputSchema.type).toBe('object');
-        expect(tool.inputSchema.required).toBeDefined();
-        expect(Array.isArray(tool.inputSchema.required)).toBe(true);
-      }
-    });
-
-    it('capibara_task_transition requires taskId and targetStatus', () => {
-      const tool = findTool('capibara_task_transition');
-      expect(tool.inputSchema.required).toEqual(['taskId', 'targetStatus']);
     });
   });
 });

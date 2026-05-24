@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
-import type { McpToolDefinition } from '@core/modules/mcp/registry/mcp-tool.registry';
+import { registerConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
+import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { CollaborationConfig } from '@core/modules/acp/types/acp.types';
@@ -24,7 +24,7 @@ const testConfig: CollaborationConfig = {
 };
 
 describe('Conversation Tools (MCP Handlers)', () => {
-  let tools: McpToolDefinition[];
+  let mockServer: MockMcpServer;
   let conversationService: ConversationService;
 
   beforeEach(() => {
@@ -36,26 +36,23 @@ describe('Conversation Tools (MCP Handlers)', () => {
       }),
     } as unknown as ConversationService;
 
-    tools = createConversationTools(conversationService);
+    mockServer = new MockMcpServer();
+    registerConversationTools(mockServer as any, { conversationService } as any);
   });
-
-  function findTool(name: string): McpToolDefinition {
-    return tools.find((t) => t.name === name)!;
-  }
 
   describe('capibara_ask_question', () => {
     it('creates inquiry via ConversationService', async () => {
-      const tool = findTool('capibara_ask_question');
-      const result = await tool.handler(
+      const handler = mockServer.getHandler('capibara_ask_question');
+      const raw = await handler(
         { orgId: 'org-1', askingRoleId: 'role-asker', taskId: 'task-1', question: 'How to deploy?' },
-        'run-1',
       );
+      const { data } = parseToolResult(raw);
 
       expect(conversationService.createInquiry).toHaveBeenCalledWith(
         'org-1', 'role-asker', 'task-1', 'How to deploy?',
         undefined, undefined, undefined,
       );
-      expect(result).toEqual({
+      expect(data).toEqual({
         conversationId: 'conv-new',
         respondentRoleId: 'role-resp',
         state: 'waiting',
@@ -69,12 +66,12 @@ describe('Conversation Tools (MCP Handlers)', () => {
         state: 'active',
       } as ReturnType<typeof conversationService.createInquiry>);
 
-      const tool = findTool('capibara_ask_question');
-      const result = await tool.handler(
+      const handler = mockServer.getHandler('capibara_ask_question');
+      const raw = await handler(
         { orgId: 'org-1', askingRoleId: 'role-x', taskId: 'task-2', question: 'Why?' },
-        'run-2',
       );
-      expect(result).toEqual({
+      const { data } = parseToolResult(raw);
+      expect(data).toEqual({
         conversationId: 'conv-2',
         respondentRoleId: null,
         state: 'active',
@@ -87,29 +84,35 @@ describe('Conversation Tools (MCP Handlers)', () => {
 
     beforeEach(() => {
       suspensionManager = createMockSuspensionManager();
-      tools = createConversationTools(conversationService, suspensionManager, testConfig);
+      mockServer = new MockMcpServer();
+      registerConversationTools(mockServer as any, {
+        conversationService,
+        suspensionManager,
+        collaborationConfig: testConfig,
+      } as any);
     });
 
     it('returns error when chain depth limit reached', async () => {
       vi.mocked(suspensionManager.getChainDepth).mockReturnValue(3);
-      const tool = findTool('capibara_ask_question');
-      const result = await tool.handler(
+      const handler = mockServer.getHandler('capibara_ask_question');
+      const raw = await handler(
         { orgId: 'org-1', askingRoleId: 'role-a', taskId: 'task-1', question: 'Q?' },
-        'run-1',
-      ) as any;
+      );
+      const { data, isError } = parseToolResult(raw);
 
-      expect(result.error).toContain('Chain depth limit reached');
+      expect(isError).toBe(true);
+      expect((data as any).error).toContain('Chain depth limit reached');
     });
 
     it('allows when chain depth is below limit', async () => {
       vi.mocked(suspensionManager.getChainDepth).mockReturnValue(2);
-      const tool = findTool('capibara_ask_question');
-      const result = await tool.handler(
+      const handler = mockServer.getHandler('capibara_ask_question');
+      const raw = await handler(
         { orgId: 'org-1', askingRoleId: 'role-a', taskId: 'task-1', question: 'Q?' },
-        'run-1',
-      ) as any;
+      );
+      const { data } = parseToolResult(raw);
 
-      expect(result.conversationId).toBe('conv-new');
+      expect((data as any).conversationId).toBe('conv-new');
     });
 
     it('returns error on circular inquiry (targetRoleId is waiting for asker)', async () => {
@@ -118,22 +121,22 @@ describe('Conversation Tools (MCP Handlers)', () => {
         id: 'susp-1', roleId: 'role-b',
       } as any);
 
-      const tool = findTool('capibara_ask_question');
-      const result = await tool.handler(
+      const handler = mockServer.getHandler('capibara_ask_question');
+      const raw = await handler(
         { orgId: 'org-1', askingRoleId: 'role-a', taskId: 'task-1', question: 'Q?', targetRoleId: 'role-b' },
-        'run-1',
-      ) as any;
+      );
+      const { data, isError } = parseToolResult(raw);
 
-      expect(result.error).toContain('Circular inquiry detected');
+      expect(isError).toBe(true);
+      expect((data as any).error).toContain('Circular inquiry detected');
     });
 
     it('passes targetRoleId to createInquiry', async () => {
       vi.mocked(suspensionManager.getChainDepth).mockReturnValue(0);
 
-      const tool = findTool('capibara_ask_question');
-      await tool.handler(
+      const handler = mockServer.getHandler('capibara_ask_question');
+      await handler(
         { orgId: 'org-1', askingRoleId: 'role-a', taskId: 'task-1', question: 'Q?', targetRoleId: 'role-target' },
-        'run-1',
       );
 
       expect(conversationService.createInquiry).toHaveBeenCalledWith(
@@ -148,21 +151,25 @@ describe('Conversation Tools (MCP Handlers)', () => {
 
     beforeEach(() => {
       suspensionManager = createMockSuspensionManager();
-      tools = createConversationTools(conversationService, suspensionManager, testConfig);
+      mockServer = new MockMcpServer();
+      registerConversationTools(mockServer as any, {
+        conversationService,
+        suspensionManager,
+        collaborationConfig: testConfig,
+      } as any);
     });
 
     it('creates inquiry for each target role', async () => {
-      const tool = findTool('capibara_broadcast_question');
-      const result = await tool.handler(
-        {
-          orgId: 'org-1',
-          askingRoleId: 'role-a',
-          taskId: 'task-1',
-          targetRoleIds: ['role-b', 'role-c'],
-          question: 'What do you think?',
-        },
-        'run-1',
-      ) as any;
+      const handler = mockServer.getHandler('capibara_broadcast_question');
+      const raw = await handler({
+        orgId: 'org-1',
+        askingRoleId: 'role-a',
+        taskId: 'task-1',
+        targetRoleIds: ['role-b', 'role-c'],
+        question: 'What do you think?',
+      });
+      const { data } = parseToolResult(raw);
+      const result = data as any;
 
       expect(conversationService.createInquiry).toHaveBeenCalledTimes(2);
       expect(result.inquiries).toHaveLength(2);
@@ -170,52 +177,49 @@ describe('Conversation Tools (MCP Handlers)', () => {
     });
 
     it('returns error when targets exceed max', async () => {
-      const tool = findTool('capibara_broadcast_question');
-      const result = await tool.handler(
-        {
-          orgId: 'org-1',
-          askingRoleId: 'role-a',
-          taskId: 'task-1',
-          targetRoleIds: ['r1', 'r2', 'r3', 'r4'],
-          question: 'Q?',
-        },
-        'run-1',
-      ) as any;
+      const handler = mockServer.getHandler('capibara_broadcast_question');
+      const raw = await handler({
+        orgId: 'org-1',
+        askingRoleId: 'role-a',
+        taskId: 'task-1',
+        targetRoleIds: ['r1', 'r2', 'r3', 'r4'],
+        question: 'Q?',
+      });
+      const { data, isError } = parseToolResult(raw);
 
-      expect(result.error).toContain('Too many targets');
+      expect(isError).toBe(true);
+      expect((data as any).error).toContain('Too many targets');
     });
 
     it('returns error when no targets provided', async () => {
-      const tool = findTool('capibara_broadcast_question');
-      const result = await tool.handler(
-        {
-          orgId: 'org-1',
-          askingRoleId: 'role-a',
-          taskId: 'task-1',
-          targetRoleIds: [],
-          question: 'Q?',
-        },
-        'run-1',
-      ) as any;
+      const handler = mockServer.getHandler('capibara_broadcast_question');
+      const raw = await handler({
+        orgId: 'org-1',
+        askingRoleId: 'role-a',
+        taskId: 'task-1',
+        targetRoleIds: [],
+        question: 'Q?',
+      });
+      const { data, isError } = parseToolResult(raw);
 
-      expect(result.error).toContain('At least one target');
+      expect(isError).toBe(true);
+      expect((data as any).error).toContain('At least one target');
     });
 
     it('returns error when chain depth limit reached', async () => {
       vi.mocked(suspensionManager.getChainDepth).mockReturnValue(3);
-      const tool = findTool('capibara_broadcast_question');
-      const result = await tool.handler(
-        {
-          orgId: 'org-1',
-          askingRoleId: 'role-a',
-          taskId: 'task-1',
-          targetRoleIds: ['role-b'],
-          question: 'Q?',
-        },
-        'run-1',
-      ) as any;
+      const handler = mockServer.getHandler('capibara_broadcast_question');
+      const raw = await handler({
+        orgId: 'org-1',
+        askingRoleId: 'role-a',
+        taskId: 'task-1',
+        targetRoleIds: ['role-b'],
+        question: 'Q?',
+      });
+      const { data, isError } = parseToolResult(raw);
 
-      expect(result.error).toContain('Chain depth limit reached');
+      expect(isError).toBe(true);
+      expect((data as any).error).toContain('Chain depth limit reached');
     });
 
     it('detects circular inquiry in broadcast targets', async () => {
@@ -224,37 +228,34 @@ describe('Conversation Tools (MCP Handlers)', () => {
         id: 'susp-1', roleId: 'role-c',
       } as any);
 
-      const tool = findTool('capibara_broadcast_question');
-      const result = await tool.handler(
-        {
-          orgId: 'org-1',
-          askingRoleId: 'role-a',
-          taskId: 'task-1',
-          targetRoleIds: ['role-b', 'role-c'],
-          question: 'Q?',
-        },
-        'run-1',
-      ) as any;
+      const handler = mockServer.getHandler('capibara_broadcast_question');
+      const raw = await handler({
+        orgId: 'org-1',
+        askingRoleId: 'role-a',
+        taskId: 'task-1',
+        targetRoleIds: ['role-b', 'role-c'],
+        question: 'Q?',
+      });
+      const { data, isError } = parseToolResult(raw);
 
-      expect(result.error).toContain('Circular inquiry detected');
-      expect(result.error).toContain('role-c');
+      expect(isError).toBe(true);
+      expect((data as any).error).toContain('Circular inquiry detected');
+      expect((data as any).error).toContain('role-c');
     });
 
     it('uses custom waitMode', async () => {
-      const tool = findTool('capibara_broadcast_question');
-      const result = await tool.handler(
-        {
-          orgId: 'org-1',
-          askingRoleId: 'role-a',
-          taskId: 'task-1',
-          targetRoleIds: ['role-b'],
-          question: 'Q?',
-          waitMode: 'any',
-        },
-        'run-1',
-      ) as any;
+      const handler = mockServer.getHandler('capibara_broadcast_question');
+      const raw = await handler({
+        orgId: 'org-1',
+        askingRoleId: 'role-a',
+        taskId: 'task-1',
+        targetRoleIds: ['role-b'],
+        question: 'Q?',
+        waitMode: 'any',
+      });
+      const { data } = parseToolResult(raw);
 
-      expect(result.waitMode).toBe('any');
+      expect((data as any).waitMode).toBe('any');
     });
   });
 });

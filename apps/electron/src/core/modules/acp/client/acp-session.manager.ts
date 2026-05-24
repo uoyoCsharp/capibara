@@ -56,17 +56,10 @@ export class AcpSessionManager implements IAcpSessionManager {
     const agentProcess = await this.spawner.getOrSpawn(agentId);
     const connection = agentProcess.connection!;
 
-    // Create ACP session
-    const mcpServerConfigs: acp.McpServerStdio[] = mcpServers.map(s => ({
-      name: s.name,
-      command: s.command,
-      args: s.args,
-      env: s.env,
-    }));
-
+    // Pass MCP server configs directly — ACP SDK accepts the McpServer union type
     const response = await connection.newSession({
       cwd,
-      mcpServers: mcpServerConfigs,
+      mcpServers,
     });
 
     const capabilities = agentProcess.capabilities!;

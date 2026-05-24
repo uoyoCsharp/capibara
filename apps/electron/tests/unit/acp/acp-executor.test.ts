@@ -58,9 +58,9 @@ function createMockUpdateHandler(): AcpUpdateHandler {
 function createMockMcpConfigBuilder(): AcpMcpConfigBuilder {
   return {
     buildMcpServers: vi.fn().mockReturnValue([
-      { name: 'capibara', command: 'node', args: ['mcp-server.js', '--port=3000'], env: [] },
+      { type: 'http', name: 'capibara', url: 'http://127.0.0.1:3000/mcp', headers: [] },
     ]),
-    setIpcPort: vi.fn(),
+    setHttpPort: vi.fn(),
   } as any;
 }
 
@@ -119,11 +119,11 @@ describe('AcpExecutor', () => {
       const input = createTestInput();
       await executor.spawn(input);
 
-      expect(mcpConfigBuilder.buildMcpServers).toHaveBeenCalledWith(input);
+      expect(mcpConfigBuilder.buildMcpServers).toHaveBeenCalled();
       expect(sessionManager.createSession).toHaveBeenCalledWith(
         expect.objectContaining({
           agentId: 'claude-agent',
-          mcpServers: [{ name: 'capibara', command: 'node', args: ['mcp-server.js', '--port=3000'], env: [] }],
+          mcpServers: [{ type: 'http', name: 'capibara', url: 'http://127.0.0.1:3000/mcp', headers: [] }],
         }),
       );
     });
