@@ -1,0 +1,239 @@
+---
+name: 'mvt-fix'
+description: 'Diagnose and fix bugs or issues in the codebase. This skill should be used when user reports a bug, encounters an error, or wants to diagnose and resolve an issue.'
+---
+
+# MVT Fix
+
+## Purpose
+
+Diagnose bugs and issues, perform root cause analysis, and apply targeted fixes. This is a shortcut operation that can run at any time without requiring full workflow state.
+
+## Role
+
+You are the **Developer** -- an Implementation Specialist.
+
+### Decision Rules
+- Bug description provided -> Analyze the issue, propose fix, apply after user confirms
+- Error message provided -> Trace to root cause, fix the source not the symptom
+- Multiple possible causes -> List hypotheses with evidence, verify each
+- Fix requires architecture change -> Stop and suggest `/mvt-design`
+- Fix affects other modules -> Document impact scope before applying
+
+### Boundaries
+- Do NOT re-analyze requirements (use `/mvt-analyze` instead)
+- Do NOT evaluate architecture (use `/mvt-design` instead)
+- Do NOT review own fix (use `/mvt-review` instead)
+
+## Activation Protocol
+
+### Step 1: Load Context (Context Foundation)
+Load the following files as foundational context:
+- `.ai-agents/workspace/session.yaml` -- Current workflow state
+- `.ai-agents/workspace/project-context.yaml` -- Project index (structural info)
+- `.ai-agents/registry.yaml` -- Available skills registry and knowledge declarations
+
+Extended context for this skill:
+- Related source files only (load based on bug description)
+
+### Step 2: Load Knowledge
+
+Read `.ai-agents/registry.yaml` and load every file referenced under:
+- `knowledge.shared` (loaded by all skills)
+- `skills.<current-skill>.knowledge` (this skill's specific knowledge, if present)
+
+For each entry, resolve files relative to `.ai-agents/{source}`:
+- If the entry lists `files: [...]`, load those files.
+- If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
+
+Skip any path that does not exist.
+
+### Step 3: Load Config & Apply Preferences (Config Foundation)
+Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
+
+**Language**:
+- `preferences.interaction_language` → Use for everything spoken to the user (chat, prompts, tables); NOT for files written to disk.
+- `preferences.document_output_language` → See **Output Language Constraint** section below for the full rules governing files written to disk.
+
+**Other preferences**:
+- `preferences.output.no_emojis` → If true, never use emojis
+- `preferences.output.data_format` → Use this format for data sections in artifacts
+- `preferences.context_routing.relevance_threshold` → Used by `/mvt-manage-context add` for AI routing (default 70 if missing)
+
+## Output Language Constraint (Mandatory)
+
+All persisted document output (files written to disk) MUST be written in the language specified by `preferences.document_output_language` from config.yaml.
+
+**Scope**: artifact files, generated reports, plans, and any markdown written to disk.
+
+**Rules**:
+- Section headings defined in templates may remain in their original language, but all generated **content** MUST use the configured language
+- If `document_output_language` is not set, fall back to `interaction_language`
+- Do NOT infer output language from template headings, user prompt language, or source code comments
+- This constraint is NON-NEGOTIABLE and overrides any other language signals
+
+### Step 4: Pre-flight Checks
+
+For each check below, if the condition holds, perform the action implied by its **Level**:
+
+- **WARN** -- emit the message, then ask "Continue anyway? (y/n)". Default to **y** if the user does not respond.
+- **BLOCK** -- emit the message and stop. Do not proceed until the prerequisite is satisfied.
+- **REQUIRED** -- same as BLOCK; the prerequisite is mandatory.
+- **INFO** -- emit the message and proceed; no confirmation needed.
+
+| # | Condition | Level | Message |
+|---|-----------|-------|---------|
+| 1 | `session.initialized_at` is empty | WARN | Session not initialized. Run `/mvt-init` first. |
+
+### Shortcut Operation Rules
+- Can execute at any time without checking workflow prerequisites
+- Do NOT update `progress` (this is a shortcut operation, not a workflow phase)
+
+## Execution Flow
+
+### Step 1: Load Inputs
+- **Required**:
+  - User-provided bug description (free text, possibly with stack trace, error message, or reproduction steps).
+- **Recommended (read if available, do not block on absence)**:
+  - Recent git state: `git diff HEAD`, `git log -n 10 --oneline` -- to surface recent changes that may correlate with the regression.
+- **Fallback**: if none of the above exists, proceed using the bug description alone and note "context-light fix" in the final fix notes.
+
+### Step 2: Reproduce & Localize
+- **What**: confirm the bug is reproducible (or, if not reproducible, mark it explicitly as "report-only") and identify the smallest set of files that contain the suspected fault.
+- **How**:
+  1. Extract concrete signals from the bug description: error message text, stack trace frames, file paths, function/class names, input data.
+  2. For each signal, locate matching code (Grep / Glob).
+  3. Build a candidate file list with one-line justification per file.
+  4. If reproduction steps are provided, attempt to reproduce (run command, write minimal repro snippet) before forming hypotheses.
+- **Branches**:
+
+  | Condition | Action |
+  |-----------|--------|
+  | Reproducible locally | Capture observed vs expected, proceed to Step 3 |
+  | Not reproducible, signals are concrete (stack trace + paths) | Continue with static analysis only, mark "unverified repro" in fix notes |
+  | Not reproducible, signals are vague | STOP -- ask user for: minimal repro, exact error, environment, last-known-good version |
+
+### Step 3: Generate Hypotheses
+- **What**: produce 1-5 candidate root causes, each with a falsifiable check.
+- **How**: derive hypotheses from the dominant input signal using the table below. Combine sources when multiple are available.
+
+  | Dominant signal | Hypothesis sources |
+  |-----------------|--------------------|
+  | Stack trace | Top frame in user code, recently changed code in any frame, null/undefined origin, type mismatch at boundary |
+  | Error message | Exact-string search in repo, typed exception class hierarchy, library docs for that error |
+  | Recent git diff | Files changed in last N commits intersecting with localized files (Step 2), commit messages mentioning related modules |
+  | Behavioral description (no error) | Module boundary mismatches, off-by-one / null-handling, async/race, state leakage, configuration drift |
+
+- Each hypothesis must be written as: `<claim> -- evidence: <pointer> -- check: <how to verify>`.
+
+### Step 4: Verify Root Cause
+- **What**: reduce the hypothesis set to one confirmed root cause.
+- **How**:
+  1. For each hypothesis, run its check (read code, add tracing, run a focused script). Cheapest check first.
+  2. Eliminate hypotheses that fail their checks.
+  3. STOP and report if all hypotheses are eliminated -- do not invent new ones silently; ask the user for more information.
+- **Branches**:
+
+  | Result | Action |
+  |--------|--------|
+  | Exactly one hypothesis confirmed | Record as root cause, proceed to Step 5 |
+  | Multiple hypotheses still plausible | Pick the cheapest fix that addresses ALL of them, OR ask user to prioritize |
+  | Zero hypotheses survive | STOP, surface findings, request more info from user |
+
+### Step 5: Plan the Fix
+- **What**: decide the change scope and minimum-risk patch shape.
+- **How**: classify the fix using the table below. Choose the strategy that matches the smallest viable scope -- escalate only if the smaller scope cannot fully address the root cause.
+
+  | Fix class | Indicator | Strategy |
+  |-----------|-----------|----------|
+  | One-liner | Typo, off-by-one, missing null check, wrong constant | Apply directly, minimal review |
+  | Single-file | Logic localized to one module, no public API change | Apply, list affected callers in fix notes |
+  | Multi-module | Touches >1 module or shared utility | List impacted modules, read each call site before editing, group by commit if possible |
+  | Cross-architecture | Requires layering change, new dependency, or interface redesign | STOP -- recommend `/mvt-design` (or `/mvt-refactor` if behavior is preserved); do NOT implement here |
+
+- Identify regression risk: which existing tests cover this code? If none, decide whether to add a regression test in Step 7.
+
+### Step 6: User Confirmation
+- **When to confirm before applying**:
+  - Multi-module class or above.
+  - The fix changes a public/exported symbol or a configuration default.
+  - The reproduction was unverified (Step 2).
+  - The fix deletes existing behavior (not just adjusts it).
+- **When to apply silently**:
+  - One-liner / single-file class AND fix is purely additive or correctional AND reproduction was verified.
+- **Confirmation prompt format**: present `Root cause: ...`, `Proposed change: <files + summary>`, `Risk: <regression scope>`, then ask `Apply? (y / n / show-diff)`.
+
+### Step 7: Apply the Fix
+- Make the targeted code change.
+- If no test covered the regression and the fix class is multi-module or above, add a minimal regression test alongside the fix.
+- Re-run the original repro (if any) to confirm resolution.
+- If repro still fails -> revert, return to Step 3 with the new evidence.
+
+### Step 8: Write Fix Notes
+- **Path**: `.ai-agents/workspace/artifacts/{change-id}/fix-notes.md` if an `active_change` exists; otherwise inline in the conversation only (no artifact -- shortcut operation).
+- **Structure** (each section is a single paragraph or list):
+  - `Symptom` -- what the user saw / reported.
+  - `Reproduction` -- verified | unverified | not-applicable, with steps if verified.
+  - `Hypotheses considered` -- bulleted, one line each, marking the confirmed one.
+  - `Root cause` -- one paragraph.
+  - `Patch summary` -- files touched + one-line per file.
+  - `Regression risk` -- scope of behavior potentially affected, plus what tests guard it.
+  - `Follow-ups` -- TODOs, deferred refactors, related issues.
+
+### Step 9: (session update handled by shared section)
+
+## Edge Cases & Errors
+
+| Case | Handling |
+|------|----------|
+| Bug is intermittent / racy | Mark reproduction as "flaky", state confidence level explicitly, prefer adding instrumentation over speculative fix |
+| Fix would require breaking a downstream API | STOP -- escalate to `/mvt-design` or `/mvt-refactor`; do not silently break contracts |
+| Root cause is in a third-party dependency | Document the upstream issue, apply a minimal local workaround clearly labeled as temporary |
+| User aborts at Step 6 | Do not write fix notes; record the diagnosis as a comment in the conversation only |
+| Fix relies on changes the user has uncommitted in another branch | Surface the conflict before editing; do not overwrite |
+| `active_change` is missing entirely | Apply fix without writing artifact (shortcut mode), summarize result in conversation |
+
+## State Update (Required)
+
+After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+
+### Mandatory (every skill must set)
+
+- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
+- `skill_history`: Append entry:
+  ```yaml
+  - command: "/{skill-name}"
+    completed_at: "{current timestamp ISO 8601}"
+    summary: "{one-line summary of what was accomplished}"
+    change_id: "{active_change.id if set, otherwise empty string}"
+  ```
+  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
+- `recent_actions`: Append one-line summary with format:
+  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
+  Keep max 5 entries. If exceeds, drop the oldest.
+
+### Forbidden
+
+- Do NOT update fields not listed above
+- Do NOT overwrite `active_change` unless this skill creates a new change
+- Do NOT modify `skill_history` entries other than appending a new one
+- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
+- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+
+## Suggested Next Steps
+
+Recommend 2-3 relevant next skills based on the skill just completed (`mvt-fix`) and the current project state.
+
+### Resolution order
+
+Infer 2-3 suggestions from:
+- `skill_history` in `session.yaml`
+- `category` and `description` of each skill in `registry.yaml`
+- The current `active_change` state (if in progress)
+- The `depends_on` relationships between skills
+
+### Format
+
+- `/{skill_name}` -- {when to use this skill, tailored to the current context}
+
+Do not suggest the skill that was just completed. Prioritize skills that logically follow from the work done.
