@@ -1,0 +1,37 @@
+# Workspace Session State
+# Supports flexible workflows -- no longer bound to a fixed pipeline
+
+session:
+  initialized_at: "2026-05-27T18:48:00"
+  last_command: "/mvt-analyze-code"
+
+# Current active change (id/title/created_at set by /mvt-analyze;
+# plan_path/has_plan set by /mvt-plan-dev once a plan is generated)
+active_change:
+  id: ""
+  title: ""
+  created_at: ""
+  plan_path: ""
+  has_plan: false
+
+# Recent changes with active plans (max 5, owned by /mvt-plan-dev and /mvt-update-plan)
+# Each entry: { id, title, plan_path, last_updated }
+# Status is the responsibility of plan.yaml (read on demand by /mvt-resume).
+recent_changes: []
+
+# Skill execution history (append-only, max 10)
+# Records which skills have been executed, replacing the old progress field
+skill_history:
+  - command: "/mvt-init"
+    completed_at: "2026-05-27T18:48:00"
+    summary: "Initialized project: detected monorepo with Electron+React app, wrote project-context.yaml"
+    change_id: ""
+  - command: "/mvt-analyze-code"
+    completed_at: "2026-05-27T19:00:00"
+    summary: "Analyzed codebase: generated project-context.md with 11 core modules, glossary, business rules, API overview"
+    change_id: ""
+
+# Recent actions (append-only, max 5)
+recent_actions:
+  - "[2026-05-27 18:48] /mvt-init: Initialized project - monorepo with Electron+React desktop app"
+  - "[2026-05-27 19:00] /mvt-analyze-code: Generated project-context.md with 11 modules, glossary, business rules, API overview"
