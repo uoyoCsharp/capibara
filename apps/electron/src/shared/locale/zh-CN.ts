@@ -399,6 +399,11 @@ export const zhCN: LocaleMessages = {
     system: '系统',
     failedResponse: 'AI 响应失败。你可以再发一条消息重试。',
     cancelled: 'AI 运行已取消。你可以再发一条消息重试。',
+    progressToolCallStatus: {
+      running: '...',
+      completed: '完成',
+      failed: '失败',
+    },
   },
 
   planPreview: {

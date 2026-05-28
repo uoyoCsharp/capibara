@@ -413,6 +413,11 @@ export interface LocaleMessages {
     system: string;
     failedResponse: string;
     cancelled: string;
+    progressToolCallStatus: {
+      running: string;
+      completed: string;
+      failed: string;
+    };
   };
 
   planPreview: {

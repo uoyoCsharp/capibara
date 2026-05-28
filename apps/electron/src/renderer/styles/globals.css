@@ -199,3 +199,29 @@ body {
     transform: translateY(-4px) scale(0.96);
   }
 }
+
+/* ─── Planning crossfade animations ─────────────────────────────── */
+@keyframes fade-out-progress {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes fade-in-result {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.planning-fade-out {
+  animation: fade-out-progress 300ms ease-out forwards;
+}
+
+.planning-fade-in {
+  animation: fade-in-result 300ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planning-fade-out,
+  .planning-fade-in {
+    animation-duration: 0ms;
+  }
+}

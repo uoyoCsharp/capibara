@@ -74,11 +74,6 @@ skills:
     path: .claude/skills/mvt-analyze-code/SKILL.md
     template: .ai-agents/skills/_templates/project-context.md
     category: workflow
-    knowledge:
-      - id: "coding-standards"
-        type: static
-        source: "knowledge/principle/"
-        files: ["coding-standards.md"]
 
   # --- Architect Skills ---
   mvt-design:
@@ -105,6 +100,12 @@ skills:
     category: project
 
   # --- Developer Skills ---
+  mvt-bug-detect:
+    agent: analyst
+    description: "Analyze and detect bugs by investigating root cause, assessing severity and impact scope. Produces a structured diagnosis in conversation without applying fixes. This skill should be used when user suspects a bug, wants to understand a problem before fixing, or needs impact analysis."
+    path: .claude/skills/mvt-bug-detect/SKILL.md
+    template: null
+    category: shortcut
   mvt-implement:
     agent: developer
     description: "Implement features based on architecture design. This skill should be used when user wants to implement a feature, write production code, or translate design blueprints into working code."
@@ -112,11 +113,6 @@ skills:
     template: .ai-agents/skills/_templates/implement-output.md
     category: workflow
     depends_on: [mvt-design]
-    knowledge:
-      - id: "coding-standards"
-        type: static
-        source: "knowledge/principle/"
-        files: ["coding-standards.md"]
 
   mvt-fix:
     agent: developer
@@ -131,11 +127,6 @@ skills:
     path: .claude/skills/mvt-refactor/SKILL.md
     template: null
     category: shortcut
-    knowledge:
-      - id: "coding-standards"
-        type: static
-        source: "knowledge/principle/"
-        files: ["coding-standards.md"]
 
   mvt-quick-dev:
     agent: developer
@@ -143,11 +134,6 @@ skills:
     path: .claude/skills/mvt-quick-dev/SKILL.md
     template: null
     category: shortcut
-    knowledge:
-      - id: "coding-standards"
-        type: static
-        source: "knowledge/principle/"
-        files: ["coding-standards.md"]
 
   # --- Reviewer Skills ---
   mvt-review:
@@ -157,11 +143,6 @@ skills:
     template: .ai-agents/skills/_templates/review-output.md
     category: workflow
     depends_on: [mvt-implement]
-    knowledge:
-      - id: "coding-standards"
-        type: static
-        source: "knowledge/principle/"
-        files: ["coding-standards.md"]
 
 
   # --- Tester Skills ---

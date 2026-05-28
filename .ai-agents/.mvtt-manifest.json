@@ -1,7 +1,7 @@
 {
-  "mvtt_version": "2.0.0-beta.1",
+  "mvtt_version": "2.0.0-beta.2",
   "installed_at": "2026-05-27T10:48:04.265Z",
-  "last_updated_at": "2026-05-27T10:48:04.265Z",
+  "last_updated_at": "2026-05-28T11:25:51.800Z",
   "files": {
     ".claude/skills/mvt-analyze/SKILL.md": {
       "hash": "sha256:6afc0b94a0c7d35a2bd2b8bffe955923c18416b8495c401ca7a68aeeb8c34741",
@@ -9,6 +9,10 @@
     },
     ".claude/skills/mvt-analyze-code/SKILL.md": {
       "hash": "sha256:b3658d0ade99004d4acadbc4ea511a5ce3b5e38f82f873b5f56e63086fa3cfd5",
+      "category": "generated"
+    },
+    ".claude/skills/mvt-bug-detect/SKILL.md": {
+      "hash": "sha256:f2c842a7d4677ccf677e2481699329b5d50cad4e0e7ea23b48e653cec613be65",
       "category": "generated"
     },
     ".claude/skills/mvt-check-context/SKILL.md": {
@@ -24,7 +28,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-create-skill/SKILL.md": {
-      "hash": "sha256:8cd626b42322116d9816624e1cb99e6eee7370172d3923135b5215190e26096c",
+      "hash": "sha256:6f92a423aeb63c7d8cc5e11e827f797a8bb78f777353301398715ee8de5eea56",
       "category": "generated"
     },
     ".claude/skills/mvt-design/SKILL.md": {
@@ -32,7 +36,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-fix/SKILL.md": {
-      "hash": "sha256:10d6e918e8037f7e4e7aef9e82a786a7a95edf7c25cb71dde0ac2aacfefbb704",
+      "hash": "sha256:b45665458e1edefce20d5056268765afbbd48122c2a170d776cbc002a0405511",
       "category": "generated"
     },
     ".claude/skills/mvt-help/SKILL.md": {
@@ -120,19 +124,19 @@
       "category": "create_once"
     },
     ".ai-agents/registry.yaml": {
-      "hash": "sha256:169c55d8b0be27eb5a2ab3ff73eb19513308ec6ffdb296b62a5e0b32610f9d9f",
+      "hash": "sha256:895828b5a35116a6b6a2b09696300db53483f577ef62a98df8927ec7e5216ee7",
       "category": "generated"
     },
     ".ai-agents/config.yaml": {
-      "hash": "sha256:96be9757156a86769632519c96dd9547664a6206df693e67e58b9aa5d46d24b6",
+      "hash": "sha256:ec7d6768c90ee118437f91751d26bd0c46d8c4af16199ebbfc42431cb71ed598",
       "category": "create_once"
     },
     ".ai-agents/workspace/session.yaml": {
-      "hash": "sha256:03b2e64f89dd6cc4276030fcd125c7f545f15ddd473cdf7d7c14a3f525f470d3",
+      "hash": "sha256:09c805f28dfe98181f171f433acaee52844cff20dcc85e344e62d67882da18ce",
       "category": "create_once"
     },
     ".ai-agents/workspace/project-context.yaml": {
-      "hash": "sha256:d4284e747e519df64c445b2b26d61ed8448c4218e2d66832ca5f8de384443f73",
+      "hash": "sha256:d0d97aaea0cdf0f09a0de506fb2954d43c86841ee9904701646920f01463282e",
       "category": "create_once"
     }
   }

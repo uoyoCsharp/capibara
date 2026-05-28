@@ -401,6 +401,11 @@ export const enUS: LocaleMessages = {
     system: 'System',
     failedResponse: 'AI failed to respond. You can send another message to retry.',
     cancelled: 'AI run was cancelled. You can send another message to retry.',
+    progressToolCallStatus: {
+      running: '...',
+      completed: 'done',
+      failed: 'failed',
+    },
   },
 
   planPreview: {

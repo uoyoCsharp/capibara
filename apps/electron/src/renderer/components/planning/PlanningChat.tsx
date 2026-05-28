@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { ArrowBendUpLeft, CircleNotch, Sparkle } from '@phosphor-icons/react';
+import { ArrowBendUpLeft, CircleNotch } from '@phosphor-icons/react';
 import type {
   ConversationMessageRecord,
   RoleRecord,
@@ -7,6 +7,8 @@ import type {
 } from '@core/shared/types';
 import { MarkdownContent } from '../ui/markdown-content';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
+import { useToolCalls } from '../../hooks/use-tool-calls';
+import { ProgressPhaseIndicator } from './ProgressPhaseIndicator';
 import { useT } from '../../hooks/use-locale';
 import type { LocaleMessages } from '@shared/locale/types';
 import { toast } from '../../store/toast.store';
@@ -16,6 +18,8 @@ function interpolate(template: string, vars: Record<string, string | number>): s
 }
 
 const api = () => window.capibara;
+
+const CROSSFADE_MS = 300;
 
 interface PlanningChatProps {
   conversationId: string;
@@ -37,8 +41,15 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
   const [isSending, setIsSending] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [transitioning, setTransitioning] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+  const [fadingInMsgId, setFadingInMsgId] = useState<string | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { toolCalls } = useToolCalls(isAIBusy ? activeRunId : null);
 
   const loadMessages = useCallback(async () => {
     const res = await api().getConversationMessages(conversationId);
@@ -49,8 +60,35 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
     prevMessageCountRef.current = 0;
     setStreamingText('');
     setActiveRunId(null);
+    setTransitioning(false);
+    setFadingOut(false);
+    setFadingInMsgId(null);
+    setElapsedSeconds(0);
     void loadMessages();
   }, [conversationId, loadMessages]);
+
+  // Elapsed time counter: runs while AI is busy
+  useEffect(() => {
+    if (isAIBusy) {
+      setElapsedSeconds(0);
+      const start = Date.now();
+      elapsedTimerRef.current = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
+      }, 1000);
+    } else if (!transitioning) {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+      setElapsedSeconds(0);
+    }
+    return () => {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+    };
+  }, [isAIBusy, transitioning]);
 
   // Auto-scroll on new messages or streaming text change
   useEffect(() => {
@@ -67,19 +105,14 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
     prevMessageCountRef.current = messages.length;
   }, [messages, streamingText]);
 
-  // Hold a ref to the current busy state so the event handler can distinguish
-  // "run failed while we were waiting for it" from background run noise.
   const isAIBusyRef = useRef(isAIBusy);
   useEffect(() => { isAIBusyRef.current = isAIBusy; }, [isAIBusy]);
 
-  // Events we care about:
-  //   - run:completed → AI finished → clear busy, clear streaming, reload messages
-  //   - run:started → track the runId for streaming
-  //   - run:assistant-text → live streaming of AI output
-  //   - conversation:response-needed → AI has work to do → set busy
-  //   - conversation:changed → messages may have been appended → reload
+  const activeRunIdRef = useRef(activeRunId);
+  useEffect(() => { activeRunIdRef.current = activeRunId; }, [activeRunId]);
+
   const runEventTypes = useMemo<DesktopEvent['type'][]>(
-    () => ['run:completed', 'run:changed', 'run:assistant-text', 'conversation:changed', 'conversation:response-needed'],
+    () => ['run:completed', 'run:changed', 'run:assistant-text', 'run:tool-call', 'conversation:changed', 'conversation:response-needed'],
     [],
   );
   useEventSubscription(runEventTypes, useCallback((event) => {
@@ -90,34 +123,73 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
       return;
     }
     if (event.type === 'run:changed') {
-      // A new run started for our org — track it for streaming.
-      // run:changed fires on run:started and carries orgId but not runId directly,
-      // so we rely on run:assistant-text to auto-detect the active run.
       return;
     }
     if (event.type === 'run:assistant-text') {
       if (isAIBusyRef.current) {
-        // Accept streaming text from any run while AI is busy for this conversation.
-        // In single-org-single-run architecture, this is unambiguous.
-        if (!activeRunId) setActiveRunId(event.runId);
+        if (!activeRunIdRef.current) setActiveRunId(event.runId);
         setStreamingText((prev) => prev + event.text);
       }
+      return;
+    }
+    if (event.type === 'run:tool-call') {
+      // Handled by useToolCalls hook via its own subscription
       return;
     }
     if (event.type === 'run:completed') {
       if (event.status !== 'succeeded' && isAIBusyRef.current) {
         const msg = event.status === 'failed' ? t.planningChat.failedResponse : t.planningChat.cancelled;
         toast.error(msg);
+        setStreamingText('');
+        setActiveRunId(null);
+        setTransitioning(false);
+        setFadingOut(false);
+        setFadingInMsgId(null);
+        onAIBusyChange(false);
+        return;
       }
-      setStreamingText('');
-      setActiveRunId(null);
-      void loadMessages();
-      onAIBusyChange(false);
+      // Load-then-transition: fetch persisted messages first, then crossfade
+      void loadMessages().then(() => {
+        // New messages are now in state; start crossfade
+        setTransitioning(true);
+        setFadingOut(true);
+        onAIBusyChange(false);
+      }).catch(() => {
+        // Fallback: skip crossfade on load failure
+        setStreamingText('');
+        setActiveRunId(null);
+        onAIBusyChange(false);
+      });
       return;
     }
     // conversation:changed
     void loadMessages();
-  }, [conversationId, loadMessages, onAIBusyChange, activeRunId, t]));
+  }, [conversationId, loadMessages, onAIBusyChange, t]));
+
+  // Crossfade cleanup: after animation completes, clear progress state
+  useEffect(() => {
+    if (!transitioning) return;
+    const timer = setTimeout(() => {
+      setStreamingText('');
+      setActiveRunId(null);
+      setTransitioning(false);
+      setFadingOut(false);
+      setFadingInMsgId(null);
+    }, CROSSFADE_MS);
+    return () => clearTimeout(timer);
+  }, [transitioning]);
+
+  // Detect the newest AI message for fade-in (the one added during transition)
+  const prevMsgCountRef = useRef(messages.length);
+  useEffect(() => { prevMsgCountRef.current = messages.length; });
+  useEffect(() => {
+    if (transitioning && messages.length > prevMsgCountRef.current) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.authorType === 'ai') {
+        setFadingInMsgId(lastMsg.id);
+      }
+    }
+  }, [messages, transitioning]);
 
   const handleSend = useCallback(async () => {
     const trimmed = replyText.trim();
@@ -139,6 +211,8 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
     }
   }, [conversationId, replyText, isSending, isAIBusy, loadMessages, onAIBusyChange]);
 
+  const showProgress = isAIBusy || transitioning;
+
   return (
     <div className="flex h-full flex-col">
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -148,12 +222,24 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
           </div>
         ) : (
           <>
-            {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} roles={roles} t={t} />)}
-            {isAIBusy && streamingText ? (
-              <StreamingBubble text={streamingText} t={t} />
-            ) : isAIBusy ? (
-              <TypingIndicator t={t} />
-            ) : null}
+            {messages.map((msg) => (
+              <MessageBubble
+                key={msg.id}
+                msg={msg}
+                roles={roles}
+                t={t}
+                fadeOut={false}
+                fadeIn={fadingInMsgId === msg.id}
+              />
+            ))}
+            {showProgress && (
+              <ProgressPhaseIndicator
+                toolCalls={toolCalls}
+                streamingText={streamingText}
+                elapsedSeconds={elapsedSeconds}
+                fadingOut={fadingOut}
+              />
+            )}
           </>
         )}
       </div>
@@ -180,69 +266,23 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
   );
 }
 
-/**
- * Live streaming bubble: shows AI text as it arrives, with a subtle
- * pulsing indicator so the user knows more text may come.
- */
-function StreamingBubble({ text, t }: { text: string; t: LocaleMessages }) {
-  return (
-    <div className="flex justify-start">
-      <div className="max-w-[80%] bg-accent rounded-lg px-3 py-2">
-        <div className="flex items-center gap-1.5 mb-1">
-          <Sparkle size={12} weight="duotone" className="text-primary animate-pulse" />
-          <span className="text-xs font-medium opacity-70">{t.planningChat.aiBusyLabel}</span>
-        </div>
-        <MarkdownContent content={text} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Richer waiting indicator: animated bouncing dots + elapsed time so user
- * knows the system is alive during long AI runs.
- */
-function TypingIndicator({ t }: { t: LocaleMessages }) {
-  const [elapsed, setElapsed] = useState(0);
-  const startedRef = useRef(Date.now());
-
-  useEffect(() => {
-    startedRef.current = Date.now();
-    setElapsed(0);
-    const interval = window.setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startedRef.current) / 1000));
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="flex justify-start">
-      <div className="bg-accent rounded-lg px-3 py-2 flex items-start gap-2 min-w-0">
-        <Sparkle size={14} weight="duotone" className="text-primary mt-0.5 shrink-0" />
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium opacity-70">{t.planningChat.aiBusyLabel}</span>
-            <span className="flex items-center gap-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:-0.3s]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:-0.15s]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce" />
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {elapsed > 3
-              ? interpolate(t.planningChat.thinkingWithTime, { seconds: elapsed })
-              : t.planningChat.thinking}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble({ msg, roles, t }: { msg: ConversationMessageRecord; roles: RoleRecord[]; t: LocaleMessages }) {
+function MessageBubble({
+  msg,
+  roles,
+  t,
+  fadeOut,
+  fadeIn,
+}: {
+  msg: ConversationMessageRecord;
+  roles: RoleRecord[];
+  t: LocaleMessages;
+  fadeOut: boolean;
+  fadeIn: boolean;
+}) {
   const isHuman = msg.authorType === 'human';
+  const animClass = fadeIn ? 'planning-fade-in' : fadeOut ? 'planning-fade-out' : '';
   return (
-    <div className={`flex ${isHuman ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${isHuman ? 'justify-end' : 'justify-start'} ${animClass}`}>
       <div
         className={`max-w-[80%] rounded-lg px-3 py-2 ${
           isHuman

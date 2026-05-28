@@ -207,8 +207,8 @@ export class RunEngine implements IRunEngine {
       this.fileLogService.append(ctx.contextLabel, ctx.contextId, runId, chunk);
     }
 
-    // Emit assistant text for stdout (AcpUpdateHandler already sends clean text)
-    if (stream === 'stdout' && chunk) {
+    // Emit assistant text for stdout, but skip structured JSON markers
+    if (stream === 'stdout' && chunk && !isStructuredMarker(chunk)) {
       for (const cb of this.textCallbacks) cb(runId, chunk);
       this.emitStreamingEvent('run:assistant-text', { runId, text: chunk });
     }
@@ -294,4 +294,14 @@ export class RunEngine implements IRunEngine {
   private emitStreamingEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
     this.eventBus.emit({ type, timestamp: new Date().toISOString(), payload });
   }
+}
+
+const STRUCTURED_MARKER_PREFIXES = [
+  '{"type":"tool_call_start"',
+  '{"type":"tool_call_update"',
+  '{"type":"plan"',
+];
+
+function isStructuredMarker(chunk: string): boolean {
+  return STRUCTURED_MARKER_PREFIXES.some(p => chunk.startsWith(p));
 }
