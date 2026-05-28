@@ -5,13 +5,15 @@ import type { McpServerDeps } from '../mcp-server.builder';
 export function registerTaskTools(server: McpServer, deps: McpServerDeps): void {
   const { taskService, taskStateMachine, processEngine } = deps;
 
-  server.tool(
+  server.registerTool(
     'capibara_task_transition',
-    'Transition a task to a new status. ' +
-      'On failure, returns the current status and available transitions so you can retry with a valid target.',
     {
-      taskId: z.string().describe('The task ID to transition'),
-      targetStatus: z.string().describe('The target status name to transition to'),
+      description: 'Transition a task to a new status. ' +
+        'On failure, returns the current status and available transitions so you can retry with a valid target.',
+      inputSchema: {
+        taskId: z.string().describe('The task ID to transition'),
+        targetStatus: z.string().describe('The target status name to transition to'),
+      },
     },
     async ({ taskId, targetStatus }) => {
       const task = taskService.findById(taskId);
@@ -60,15 +62,17 @@ export function registerTaskTools(server: McpServer, deps: McpServerDeps): void 
     },
   );
 
-  server.tool(
+  server.registerTool(
     'capibara_task_create_child',
-    'Create a child task under an existing parent task',
     {
-      parentId: z.string().describe('Parent task ID'),
-      type: z.string().describe('Task type (e.g., task, subtask)'),
-      title: z.string().describe('Task title'),
-      description: z.string().optional().describe('Task description'),
-      assigneeRoleId: z.string().nullable().optional().describe('Role ID to assign'),
+      description: 'Create a child task under an existing parent task',
+      inputSchema: {
+        parentId: z.string().describe('Parent task ID'),
+        type: z.string().describe('Task type (e.g., task, subtask)'),
+        title: z.string().describe('Task title'),
+        description: z.string().optional().describe('Task description'),
+        assigneeRoleId: z.string().nullable().optional().describe('Role ID to assign'),
+      },
     },
     async ({ parentId, type, title, description, assigneeRoleId }) => {
       const parent = taskService.findById(parentId);

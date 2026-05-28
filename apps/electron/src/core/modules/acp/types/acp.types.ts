@@ -7,6 +7,8 @@ import type * as schema from '@agentclientprotocol/sdk';
 
 // ── Agent Configuration ──────────────────────────────────
 
+export type McpTransportType = 'sse' | 'http';
+
 export interface AgentRegistryEntry {
   id: string;
   name: string;
@@ -17,6 +19,8 @@ export interface AgentRegistryEntry {
     supportsResume?: boolean;
     supportsLoad?: boolean;
   };
+  /** Preferred MCP transport protocol. 'sse' for broad compatibility (Claude Code), 'http' for Streamable HTTP (newer clients). Defaults to 'sse'. */
+  mcpTransport?: McpTransportType;
 }
 
 export interface AgentRegistryConfig {

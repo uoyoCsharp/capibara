@@ -174,26 +174,28 @@ export function registerPlanTreeTools(server: McpServer, deps: McpServerDeps): v
   // The tree input is a recursive structure that Zod cannot fully validate
   // (recursive lazy schemas are not supported by Standard Schema).
   // We use z.record() as a passthrough and rely on isDraftNode() for structural validation.
-  server.tool(
+  server.registerTool(
     'capibara_plan_submit_tree',
-    'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
-      '(rootTaskId) or a conversation (conversationId) — provide exactly one. ' +
-      'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
-      '(preview waits for approval, eager persists immediately). ' +
-      'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
-      'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
-      'are created as root-level tasks. ' +
-      'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
     {
-      rootTaskId: z.string().optional().describe(
-        'Task anchor — the current task ID (tree root type must match the task). Provide this OR conversationId.',
-      ),
-      conversationId: z.string().optional().describe(
-        'Conversation anchor — the planning conversation ID. Provide this OR rootTaskId.',
-      ),
-      tree: z.record(z.unknown()).describe(
-        'The decomposition tree. Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
-      ),
+      description: 'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
+        '(rootTaskId) or a conversation (conversationId) — provide exactly one. ' +
+        'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
+        '(preview waits for approval, eager persists immediately). ' +
+        'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
+        'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
+        'are created as root-level tasks. ' +
+        'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
+      inputSchema: {
+        rootTaskId: z.string().optional().describe(
+          'Task anchor — the current task ID (tree root type must match the task). Provide this OR conversationId.',
+        ),
+        conversationId: z.string().optional().describe(
+          'Conversation anchor — the planning conversation ID. Provide this OR rootTaskId.',
+        ),
+        tree: z.record(z.unknown()).describe(
+          'The decomposition tree. Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
+        ),
+      },
     },
     async ({ rootTaskId: rawRootTaskId, conversationId: rawConversationId, tree: rawTree }) => {
       const rootTaskId = rawRootTaskId ?? null;

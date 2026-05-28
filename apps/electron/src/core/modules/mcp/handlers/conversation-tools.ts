@@ -8,15 +8,17 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
   const maxChainDepth = deps.collaborationConfig?.maxChainDepth ?? 5;
   const maxBroadcastTargets = deps.collaborationConfig?.maxBroadcastTargets ?? 5;
 
-  server.tool(
+  server.registerTool(
     'capibara_ask_question',
-    'Ask a question to another role, creating an inquiry conversation',
     {
-      orgId: z.string().describe('Organization ID'),
-      askingRoleId: z.string().describe('Role ID of the questioner'),
-      taskId: z.string().describe('Associated task ID'),
-      question: z.string().describe('The question content'),
-      targetRoleId: z.string().optional().describe('Optional: specific role to ask. If omitted, auto-routed.'),
+      description: 'Ask a question to another role, creating an inquiry conversation',
+      inputSchema: {
+        orgId: z.string().describe('Organization ID'),
+        askingRoleId: z.string().describe('Role ID of the questioner'),
+        taskId: z.string().describe('Associated task ID'),
+        question: z.string().describe('The question content'),
+        targetRoleId: z.string().optional().describe('Optional: specific role to ask. If omitted, auto-routed.'),
+      },
     },
     async ({ orgId, askingRoleId, taskId, question, targetRoleId }) => {
       // Chain depth check
@@ -66,16 +68,18 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
     },
   );
 
-  server.tool(
+  server.registerTool(
     'capibara_broadcast_question',
-    'Ask the same question to multiple roles simultaneously, creating inquiry conversations for each target',
     {
-      orgId: z.string().describe('Organization ID'),
-      askingRoleId: z.string().describe('Role ID of the questioner'),
-      taskId: z.string().describe('Associated task ID'),
-      targetRoleIds: z.array(z.string()).describe('Role IDs to broadcast the question to'),
-      question: z.string().describe('The question content'),
-      waitMode: z.enum(['all', 'any']).optional().describe('Wait for all replies or any single reply. Defaults to all.'),
+      description: 'Ask the same question to multiple roles simultaneously, creating inquiry conversations for each target',
+      inputSchema: {
+        orgId: z.string().describe('Organization ID'),
+        askingRoleId: z.string().describe('Role ID of the questioner'),
+        taskId: z.string().describe('Associated task ID'),
+        targetRoleIds: z.array(z.string()).describe('Role IDs to broadcast the question to'),
+        question: z.string().describe('The question content'),
+        waitMode: z.enum(['all', 'any']).optional().describe('Wait for all replies or any single reply. Defaults to all.'),
+      },
     },
     async ({ orgId, askingRoleId, taskId, targetRoleIds, question, waitMode: rawWaitMode }) => {
       const waitMode = rawWaitMode ?? 'all';

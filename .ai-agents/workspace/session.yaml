@@ -3,7 +3,7 @@
 
 session:
   initialized_at: "2026-05-27T18:48:00"
-  last_command: "/mvt-analyze-code"
+  last_command: "/mvt-fix"
 
 # Current active change (id/title/created_at set by /mvt-analyze;
 # plan_path/has_plan set by /mvt-plan-dev once a plan is generated)
@@ -30,8 +30,18 @@ skill_history:
     completed_at: "2026-05-27T19:00:00"
     summary: "Analyzed codebase: generated project-context.md with 11 core modules, glossary, business rules, API overview"
     change_id: ""
+  - command: "/mvt-bug-detect"
+    completed_at: "2026-05-28T12:00:00"
+    summary: "Diagnosed MCP tool unavailability: AcpMcpConfigBuilder likely returns empty array due to mcpHttpPort=0; also found missing http capability check in AcpAgentSpawner"
+    change_id: ""
+  - command: "/mvt-fix"
+    completed_at: "2026-05-28T14:30:00"
+    summary: "Fixed MCP tool unavailability: switched from Streamable HTTP to SSE transport for Claude Code compatibility, added request logging, fixed AcpAgentSpawner http capability detection"
+    change_id: ""
 
 # Recent actions (append-only, max 5)
 recent_actions:
   - "[2026-05-27 18:48] /mvt-init: Initialized project - monorepo with Electron+React desktop app"
   - "[2026-05-27 19:00] /mvt-analyze-code: Generated project-context.md with 11 modules, glossary, business rules, API overview"
+  - "[2026-05-28 12:00] /mvt-bug-detect: Diagnosed MCP tool unavailability - AcpMcpConfigBuilder returns empty array when port=0"
+  - "[2026-05-28 14:30] /mvt-fix: Switched MCP transport from Streamable HTTP to SSE, fixed AcpAgentSpawner http capability, added request logging"

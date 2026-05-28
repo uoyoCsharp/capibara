@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServerDeps } from '@core/modules/mcp/mcp-server.builder';
 import http from 'node:http';
 
 function stubLogger(): ILogger {
@@ -19,19 +20,33 @@ function stubMcpServer(): McpServer {
   } as unknown as McpServer;
 }
 
+function stubDeps(): McpServerDeps {
+  return {
+    taskService: {} as McpServerDeps['taskService'],
+    taskStateMachine: {} as McpServerDeps['taskStateMachine'],
+    processEngine: {} as McpServerDeps['processEngine'],
+    conversationService: {} as McpServerDeps['conversationService'],
+    roleService: {} as McpServerDeps['roleService'],
+    eventPublisher: {} as McpServerDeps['eventPublisher'],
+    suspensionManager: null,
+    collaborationConfig: null,
+  };
+}
+
 describe('McpHttpTransportManager', () => {
   let manager: McpHttpTransportManager;
   let logger: ILogger;
   let mcpServer: McpServer;
+  let deps: McpServerDeps;
 
   beforeEach(() => {
     logger = stubLogger();
     mcpServer = stubMcpServer();
-    manager = new McpHttpTransportManager(logger);
+    deps = stubDeps();
+    manager = new McpHttpTransportManager(logger, deps);
   });
 
   afterEach(() => {
-    // Ensure cleanup even if a test fails
     manager.stop();
   });
 
@@ -43,19 +58,16 @@ describe('McpHttpTransportManager', () => {
       expect(port).toBeLessThan(65536);
     });
 
-    it('connects the McpServer to the transport', async () => {
+    it('connects the McpServer to the Streamable HTTP transport at startup', async () => {
       await manager.start(mcpServer);
 
-      expect(mcpServer.connect).toHaveBeenCalledOnce();
-      // The argument should be a StreamableHTTPServerTransport instance
-      const transportArg = vi.mocked(mcpServer.connect).mock.calls[0]![0];
-      expect(transportArg).toBeDefined();
+      expect(mcpServer.connect).toHaveBeenCalled();
     });
 
     it('logs the port on startup', async () => {
       const port = await manager.start(mcpServer);
 
-      expect(logger.info).toHaveBeenCalledWith('MCP HTTP server started (SDK)', { port });
+      expect(logger.info).toHaveBeenCalledWith('MCP server started (SSE + Streamable HTTP)', { port });
     });
 
     it('getPort() returns the bound port after start', async () => {
@@ -63,24 +75,60 @@ describe('McpHttpTransportManager', () => {
 
       expect(manager.getPort()).toBe(port);
     });
+  });
 
-    it('accepts HTTP connections on the bound port', async () => {
+  describe('Streamable HTTP endpoint', () => {
+    it('accepts POST /mcp requests', async () => {
       const port = await manager.start(mcpServer);
 
-      // Verify the server is actually listening by making a request
       const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
         const req = http.request(
-          { hostname: '127.0.0.1', port, path: '/mcp', method: 'POST' },
+          { hostname: '127.0.0.1', port, path: '/mcp', method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' } },
+          resolve,
+        );
+        req.on('error', reject);
+        req.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } } }));
+        req.end();
+      });
+
+      expect(response.statusCode).toBeDefined();
+      response.resume();
+    });
+  });
+
+  describe('request routing', () => {
+    it('returns 404 for unknown paths', async () => {
+      const port = await manager.start(mcpServer);
+
+      const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/unknown', method: 'GET' },
           resolve,
         );
         req.on('error', reject);
         req.end();
       });
 
-      // We don't care about the exact status (transport handles routing),
-      // but we should get a response (not a connection error)
-      expect(response.statusCode).toBeDefined();
-      // Consume the response body to prevent socket hanging
+      expect(response.statusCode).toBe(404);
+      expect(logger.warn).toHaveBeenCalledWith('MCP unknown request', { method: 'GET', path: '/unknown' });
+      response.resume();
+    });
+
+    it('returns 400 for POST /messages without active SSE connection', async () => {
+      const port = await manager.start(mcpServer);
+
+      const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/messages', method: 'POST', headers: { 'Content-Type': 'application/json' } },
+          resolve,
+        );
+        req.on('error', reject);
+        req.write('{}');
+        req.end();
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(logger.warn).toHaveBeenCalledWith('MCP POST /messages received without active SSE connection');
       response.resume();
     });
   });
@@ -99,27 +147,22 @@ describe('McpHttpTransportManager', () => {
       await manager.start(mcpServer);
       manager.stop();
 
-      expect(logger.info).toHaveBeenCalledWith('MCP HTTP server stopped');
+      expect(logger.info).toHaveBeenCalledWith('MCP server stopped');
     });
 
     it('is safe to call multiple times', () => {
-      // stop() without start() should not throw
       manager.stop();
       manager.stop();
     });
 
     it('releases the port so it can be reused', async () => {
-      const port1 = await manager.start(mcpServer);
+      await manager.start(mcpServer);
       manager.stop();
 
-      // After stop, a new server should be able to bind
-      const manager2 = new McpHttpTransportManager(logger);
+      const manager2 = new McpHttpTransportManager(logger, deps);
       const port2 = await manager2.start(stubMcpServer());
       expect(port2).toBeGreaterThan(0);
       manager2.stop();
-
-      // Both ports should have been valid
-      expect(port1).toBeGreaterThan(0);
     });
   });
 

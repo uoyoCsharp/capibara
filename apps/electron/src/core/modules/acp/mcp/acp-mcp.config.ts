@@ -1,9 +1,12 @@
 import type * as acp from '@agentclientprotocol/sdk';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { McpTransportType } from '../types/acp.types';
 
 /**
  * Builds MCP server configuration for ACP sessions.
- * Phase 1: HTTP transport — Agent connects directly to MCP Server in main process.
+ * Supports both SSE and Streamable HTTP transports.
+ * SSE is the default for broad Claude Code compatibility;
+ * Streamable HTTP is available for newer clients.
  */
 export class AcpMcpConfigBuilder {
   private mcpHttpPort = 0;
@@ -22,19 +25,30 @@ export class AcpMcpConfigBuilder {
 
   /**
    * Build MCP server config list for an ACP session.
-   * Returns McpServerHttp — Agent connects via HTTP, no subprocess needed.
+   * @param transport - Preferred transport type: 'sse' (default) or 'http'
    */
-  buildMcpServers(): acp.McpServer[] {
+  buildMcpServers(transport: McpTransportType = 'sse'): acp.McpServer[] {
     if (this.mcpHttpPort === 0) {
       this.logger.warn('MCP HTTP port not set, returning empty MCP servers');
       return [];
     }
 
+    if (transport === 'http') {
+      return [
+        {
+          type: 'http' as const,
+          name: 'capibara',
+          url: `http://127.0.0.1:${this.mcpHttpPort}/mcp`,
+          headers: [],
+        },
+      ];
+    }
+
     return [
       {
-        type: 'http' as const,
+        type: 'sse' as const,
         name: 'capibara',
-        url: `http://127.0.0.1:${this.mcpHttpPort}/mcp`,
+        url: `http://127.0.0.1:${this.mcpHttpPort}/sse`,
         headers: [],
       },
     ];

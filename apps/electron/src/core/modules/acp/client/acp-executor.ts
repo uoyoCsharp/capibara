@@ -100,8 +100,9 @@ export class AcpExecutor implements IExecutor {
       agentId = fallback;
     }
 
-    // 2. Build MCP server config
-    const mcpServers = this.mcpConfigBuilder.buildMcpServers();
+    // 2. Build MCP server config (use agent's preferred transport)
+    const agentEntry = this.agentConfig.registry.find((e) => e.id === agentId);
+    const mcpServers = this.mcpConfigBuilder.buildMcpServers(agentEntry?.mcpTransport);
 
     // 3. Resolve allowed paths from role's file access policy
     let allowedPaths: string[] | undefined;

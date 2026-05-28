@@ -29,10 +29,30 @@ export function buildCapibaraMcpServer(deps: McpServerDeps): McpServer {
     version: '0.3.0',
   });
 
+  registerTools(server, deps);
+
+  return server;
+}
+
+function registerTools(server: McpServer, deps: McpServerDeps): void {
   registerTaskTools(server, deps);
   registerConversationTools(server, deps);
   registerContextTools(server, deps);
   registerPlanTreeTools(server, deps);
+}
+
+/**
+ * Creates a dedicated McpServer instance for an SSE client connection.
+ * Each SSE transport needs its own McpServer because the SDK only allows
+ * one transport per Protocol instance.
+ */
+export function createSseMcpServer(deps: McpServerDeps): McpServer {
+  const server = new McpServer({
+    name: 'capibara',
+    version: '0.3.0',
+  });
+
+  registerTools(server, deps);
 
   return server;
 }

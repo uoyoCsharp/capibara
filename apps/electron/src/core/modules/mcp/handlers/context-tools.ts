@@ -5,13 +5,15 @@ import type { McpServerDeps } from '../mcp-server.builder';
 export function registerContextTools(server: McpServer, deps: McpServerDeps): void {
   const { taskService, roleService } = deps;
 
-  server.tool(
+  server.registerTool(
     'capibara_context',
-    'Query project context: tasks, roles, and organizational information',
     {
-      orgId: z.string().describe('Organization ID'),
-      query: z.enum(['tasks', 'roles', 'task_detail', 'role_detail']).describe('What to query'),
-      entityId: z.string().optional().describe('Entity ID for detail queries'),
+      description: 'Query project context: tasks, roles, and organizational information',
+      inputSchema: {
+        orgId: z.string().describe('Organization ID'),
+        query: z.enum(['tasks', 'roles', 'task_detail', 'role_detail']).describe('What to query'),
+        entityId: z.string().optional().describe('Entity ID for detail queries'),
+      },
     },
     async ({ orgId, query, entityId }) => {
       let result: unknown;

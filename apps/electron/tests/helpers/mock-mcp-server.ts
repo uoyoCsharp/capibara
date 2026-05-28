@@ -1,5 +1,5 @@
 /**
- * Test helper for MCP tool handlers registered via McpServer.tool().
+ * Test helper for MCP tool handlers registered via McpServer.registerTool().
  * Captures the handlers so tests can call them directly without a real transport.
  */
 
@@ -14,12 +14,18 @@ export class MockMcpServer {
   private handlers = new Map<string, ToolHandler>();
 
   /**
-   * Matches the McpServer.tool() overloaded signatures.
-   * Captures the last function argument as the handler.
+   * Matches McpServer.registerTool(name, config, handler) signature.
+   * Captures the handler callback for direct invocation in tests.
+   */
+  registerTool(name: string, _config: unknown, handler: ToolHandler): void {
+    this.handlers.set(name, handler);
+  }
+
+  /**
+   * @deprecated Use registerTool() instead. Kept for backward compatibility.
    */
   tool(...toolArgs: unknown[]): void {
     const name = toolArgs[0] as string;
-    // McpServer.tool() has multiple overloads: (name, desc, schema, handler) or (name, desc, handler)
     const handler = toolArgs[toolArgs.length - 1] as ToolHandler;
     this.handlers.set(name, handler);
   }

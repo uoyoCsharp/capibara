@@ -8,7 +8,7 @@ import type { RoleService } from '@core/modules/organization/services/role.servi
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { CollaborationConfig } from '@core/modules/acp/types/acp.types';
-import { buildCapibaraMcpServer } from '@core/modules/mcp/mcp-server.builder';
+import { buildCapibaraMcpServer, type McpServerDeps } from '@core/modules/mcp/mcp-server.builder';
 import { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
 
 export function registerMcpModule(
@@ -22,7 +22,7 @@ export function registerMcpModule(
   suspensionManager?: ISessionSuspensionManager | null,
   collaborationConfig?: CollaborationConfig | null,
 ): { mcpServer: McpServer; mcpTransport: McpHttpTransportManager } {
-  const mcpServer = buildCapibaraMcpServer({
+  const deps: McpServerDeps = {
     taskService,
     taskStateMachine,
     processEngine,
@@ -31,9 +31,11 @@ export function registerMcpModule(
     eventPublisher,
     suspensionManager,
     collaborationConfig,
-  });
+  };
 
-  const mcpTransport = new McpHttpTransportManager(logger);
+  const mcpServer = buildCapibaraMcpServer(deps);
+
+  const mcpTransport = new McpHttpTransportManager(logger, deps);
 
   return { mcpServer, mcpTransport };
 }
