@@ -3,6 +3,7 @@ import { Cube } from '@phosphor-icons/react';
 import type { ModelStateSummary } from '@core/shared/types';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select';
 import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 import { useT } from '../../hooks/use-locale';
 
 const api = () => window.capibara;
@@ -12,6 +13,7 @@ export function ModelSelector() {
   const ms = t.settings.modelSelector;
   const [state, setState] = useState<ModelStateSummary | null>(null);
   const [saving, setSaving] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,6 +34,18 @@ export function ModelSelector() {
     setSaving(false);
   }, [ms.saveError]);
 
+  const handleDetect = useCallback(async () => {
+    setDetecting(true);
+    setError(null);
+    const result = await api().probeModels();
+    if (result.ok) {
+      setState(result.data);
+    } else {
+      setError(ms.detectError);
+    }
+    setDetecting(false);
+  }, [ms.detectError]);
+
   if (!state) return null;
 
   if (!state.supported) {
@@ -41,12 +55,18 @@ export function ModelSelector() {
           <Cube size={14} />
           {ms.title}
         </h3>
-        <Select disabled>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder={ms.unsupported} />
-          </SelectTrigger>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select disabled>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder={ms.unsupported} />
+            </SelectTrigger>
+          </Select>
+          <Button size="sm" variant="outline" onClick={handleDetect} disabled={detecting}>
+            {detecting ? ms.detecting : ms.detect}
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground">{ms.unsupportedHint}</p>
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
     );
   }

@@ -76,4 +76,10 @@ export function registerAcpHandlers(
       return err('INTERNAL', String(e));
     }
   });
+
+  ipcMain.handle('capibara:acp:probe-models', async () => {
+    try {
+      return ok(await sessionManager.probeModels(defaultAgentId));
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
 }

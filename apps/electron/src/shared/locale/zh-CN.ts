@@ -322,6 +322,9 @@ export const zhCN: LocaleMessages = {
       active: '当前',
       hint: '更改将在下次会话时生效。',
       saveError: '保存模型偏好失败。',
+      detect: '检测模型',
+      detecting: '检测中...',
+      detectError: '检测模型失败。',
     },
     agentConfig: {
       title: 'Agent 配置',

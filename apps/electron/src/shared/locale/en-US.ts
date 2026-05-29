@@ -322,6 +322,9 @@ export const enUS: LocaleMessages = {
       active: 'Active',
       hint: 'Change takes effect on the next session.',
       saveError: 'Failed to save model preference.',
+      detect: 'Detect Models',
+      detecting: 'Detecting...',
+      detectError: 'Failed to detect models.',
     },
     agentConfig: {
       title: 'Agent Configuration',

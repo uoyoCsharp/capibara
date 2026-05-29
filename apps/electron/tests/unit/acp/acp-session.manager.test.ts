@@ -235,6 +235,39 @@ describe('AcpSessionManager', () => {
         expect(e.name).toBe('ValidationError');
       }
     });
+
+    it('probeModels discovers models via an ephemeral session and closes it', async () => {
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+
+      const summary = await manager.probeModels('claude-agent');
+
+      expect(summary.supported).toBe(true);
+      expect(summary.models.map(m => m.id)).toEqual(['opus', 'sonnet']);
+      // The probe session should be closed.
+      expect(connection.closeSession).toHaveBeenCalledWith({ sessionId: 'acp-sess-1' });
+      // No persisted session record created.
+      expect(manager.getActiveSession('role-1', 'org-1')).toBeNull();
+    });
+
+    it('probeModels caches the discovered model state', async () => {
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+
+      await manager.probeModels('claude-agent');
+
+      const cached = modelStore.getCachedModelState('claude-agent');
+      expect(cached?.mechanism).toBe('config_option');
+      expect(cached?.models.map(m => m.id)).toEqual(['opus', 'sonnet']);
+    });
+
+    it('probeModels still returns summary when closeSession fails', async () => {
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      connection.closeSession.mockRejectedValue(new Error('agent gone'));
+
+      const summary = await manager.probeModels('claude-agent');
+
+      expect(summary.supported).toBe(true);
+      expect(logger.logs.some(l => l.level === 'warn' && /probe session/i.test(l.msg))).toBe(true);
+    });
   });
 
   describe('prompt', () => {

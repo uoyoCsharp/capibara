@@ -134,6 +134,7 @@ const api = {
   // ACP Model Selection
   getModelState: () => ipcRenderer.invoke('capibara:acp:model-state'),
   setSelectedModel: (modelId: string) => ipcRenderer.invoke('capibara:acp:set-model', modelId),
+  probeModels: () => ipcRenderer.invoke('capibara:acp:probe-models'),
 
   // Scheduler (execution control)
   getExecutionState: () => ipcRenderer.invoke('capibara:scheduler:get-state'),

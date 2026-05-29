@@ -182,6 +182,7 @@ export interface CapibaraApi {
   // ─── ACP Model Selection ─────────────────────────────────────────
   getModelState: () => Promise<DesktopResult<ModelStateSummary>>;
   setSelectedModel: (modelId: string) => Promise<DesktopResult<ModelStateSummary>>;
+  probeModels: () => Promise<DesktopResult<ModelStateSummary>>;
 
   // ─── Scheduler (execution control) ───────────────────────────────
   getExecutionState: () => Promise<DesktopResult<{ paused: boolean }>>;

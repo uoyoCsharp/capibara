@@ -344,6 +344,18 @@ export class AcpSessionManager implements IAcpSessionManager {
     return this.getModelState(agentId);
   }
 
+  async probeModels(agentId: string): Promise<ModelStateSummary> {
+    const agentProcess = await this.spawner.getOrSpawn(agentId);
+    const connection = agentProcess.connection!;
+    const response = await connection.newSession({ cwd: '', mcpServers: [] });
+    const state = normalizeModelState(response);
+    this.modelPreferences.setCachedModelState(agentId, state);
+    // Close the ephemeral probe session -- we only needed it for discovery.
+    try { await connection.closeSession({ sessionId: response.sessionId }); }
+    catch (e) { this.logger.warn('Failed to close probe session', { agentId, error: String(e) }); }
+    return this.getModelState(agentId);
+  }
+
   getActiveSession(roleId: string, orgId: string): AcpSessionRecord | null {
     const record = this.repo.findResumable(roleId, orgId);
     return record && record.status === 'active' ? record : null;

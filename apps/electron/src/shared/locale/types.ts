@@ -337,6 +337,9 @@ export interface LocaleMessages {
       active: string;
       hint: string;
       saveError: string;
+      detect: string;
+      detecting: string;
+      detectError: string;
     };
     agentConfig: {
       title: string;

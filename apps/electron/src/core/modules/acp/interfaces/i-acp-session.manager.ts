@@ -76,6 +76,13 @@ export interface IAcpSessionManager {
    */
   setSelectedModel(agentId: string, modelId: string): ModelStateSummary;
 
+  /**
+   * Probe an agent for its available models by creating an ephemeral ACP session.
+   * The probe session is closed immediately after discovery — no persisted record or
+   * live runtime context is retained. Useful on cold start when no models are cached.
+   */
+  probeModels(agentId: string): Promise<ModelStateSummary>;
+
   /** Get an active session for a role/org pair. */
   getActiveSession(roleId: string, orgId: string): AcpSessionRecord | null;
 

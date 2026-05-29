@@ -118,6 +118,7 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
     // ACP Model Selection
     getModelState: vi.fn().mockResolvedValue(ok({ supported: false, models: [], currentModelId: null, selectedModelId: null })),
     setSelectedModel: vi.fn().mockResolvedValue(ok({ supported: false, models: [], currentModelId: null, selectedModelId: null })),
+    probeModels: vi.fn().mockResolvedValue(ok({ supported: false, models: [], currentModelId: null, selectedModelId: null })),
 
     // System
     getSystemHealth: vi.fn().mockResolvedValue(ok({ status: 'ok', timestamp: '' })),
