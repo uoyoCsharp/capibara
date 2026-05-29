@@ -3,97 +3,87 @@ id: 'implement-output'
 version: '1.0'
 skill: 'mvt-implement'
 change-id: '20260529-acp-model-selection'
-task: 't1-backend-model-support'
+task: 't2-ipc-and-api'
 ---
 
-# Implementation: ACP Model Selection — Backend (t1)
+# Implementation: ACP Model Selection -- IPC & API (t2)
 
 ## Implementation Plan
 
-Implemented the entire main-process model-selection backend in one cohesive pass per plan task
-`t1-backend-model-support`, dependency-ordered: types → pure normalizer → store
-(interface + impl) → session manager (apply/cache/get/set) → bootstrap DI wiring → tests.
-
-Scope was restricted to `t1`'s files. IPC/preload/shared-API (t2) and the renderer selector (t3)
-were intentionally NOT touched.
+Implemented the IPC layer for model selection in one pass: shared type re-exports
+-> CapibaraApi additions -> IPC handlers (with server-side validation) -> preload
+passthroughs -> composition-root wiring. Scope restricted to t2's files plus the
+necessary composition-root.ts wiring call (deviation noted).
 
 ## Changes
 
 | Path | Action | Intent |
 |------|--------|--------|
-| `acp/types/acp.types.ts` | modify | Add `AgentModelMechanism`, `AvailableModel`, `ModelState`, `ModelStateSummary` |
-| `acp/client/model-state.ts` | create | Pure `normalizeModelState(response)` — configOptions(model) > models > empty; flatten groups |
-| `acp/interfaces/i-model-preference.store.ts` | create | `IModelPreferenceStore` contract |
-| `acp/persistence/sqlite-model-preference.store.ts` | create | `settings`-table-backed store (ADR-2) |
-| `acp/client/acp-session.manager.ts` | modify | Inject store; `modelState` on runtime ctx; apply+cache on create/rebuild; `getModelState`/`setSelectedModel` |
-| `acp/interfaces/i-acp-session.manager.ts` | modify | Add `getModelState`/`setSelectedModel` signatures |
-| `bootstrap/acp.module.ts` | modify | Construct `SqliteModelPreferenceStore`, inject into manager |
-| `tests/unit/acp/model-state.test.ts` | create | 7 cases: precedence, group-flatten, models-fallback, ignore non-model, empty, empty-list |
-| `tests/unit/acp/sqlite-model-preference.store.test.ts` | create | 9 cases: selected get/set/overwrite/clear, cache round-trip/isolation/corrupt |
-| `tests/unit/acp/acp-session.manager.test.ts` | modify | +10 model cases; threaded fake store + mock connection methods |
+| `core/shared/types.ts` | modify | Re-export `AvailableModel`, `ModelStateSummary` from ACP types |
+| `core/shared/api.ts` | modify | Add `getModelState` / `setSelectedModel` to `CapibaraApi` |
+| `core/ipc-handlers/acp.handlers.ts` | modify | Extend signature with `sessionManager` + `defaultAgentId`; add `capibara:acp:model-state` / `:set-model` handlers (ADR-5) |
+| `core/preload/index.ts` | modify | Add passthrough for `capibara:acp:model-state` / `:set-model` |
+| `core/bootstrap/composition-root.ts` | modify | Pass `sessionManager` + `defaultAgentId` to `registerAcpHandlers` |
 
 ## Implementation Details
 
-- **Mechanism normalization (ADR-1)**: `normalizeModelState` is a pure function. Precedence is a
-  `configOptions` entry with `category==='model' && type==='select'` (stable mechanism) over the
-  experimental `models` field; grouped select options (`SessionConfigSelectGroup`) are flattened
-  via `'options' in entry` discrimination. Returns an empty `{mechanism: null}` state when neither
-  is present or `availableModels` is empty.
-- **Apply is best-effort (ADR-3, BR-3)**: `AcpSessionManager.applyModelPreference` runs after every
-  `connection.newSession` (in both `createSession` and `rebuild`): normalize → write-through cache
-  → if the stored preference is in the advertised list and a mechanism exists, call
-  `setSessionConfigOption` (config_option) or `unstable_setSessionModel` (set_model). An agent that
-  rejects the call is caught, logged at WARN, and the session continues on the agent default — never
-  fails the run.
-- **No live mutation (REQ-6)**: `setSelectedModel` only validates membership and persists via the
-  store; it issues no protocol call on any live session. Verified by test.
-- **Persistence (ADR-2)**: the `settings` table already exists (no migration). Keys
-  `acp:default-model` and `acp:models-cache:<agentId>` (JSON). A corrupt cache row is treated as
-  absent rather than throwing into the manager.
-- **`getModelState`** reads live runtime model state (any live session on the agent) falling back to
-  the persisted cache, merged with the stored `selectedModelId` into a `ModelStateSummary`.
+- **Shared types (re-export)**: `AvailableModel` and `ModelStateSummary` are re-exported from
+  `acp.types.ts` via `core/shared/types.ts` so the renderer can import them from the shared
+  surface without depending on ACP internals. The canonical definitions remain in `acp.types.ts`
+  (placed there by t1).
+- **CapibaraApi**: two additive methods -- `getModelState(): Promise<DesktopResult<ModelStateSummary>>`
+  and `setSelectedModel(modelId: string): Promise<DesktopResult<ModelStateSummary>>`. Both match
+  the design's Key Interfaces exactly.
+- **IPC handlers (ADR-5)**: `registerAcpHandlers` signature extended with `sessionManager:
+  IAcpSessionManager` and `defaultAgentId: string`. Two new channels:
+  - `capibara:acp:model-state` -- calls `sessionManager.getModelState(defaultAgentId)`, wraps
+    in `DesktopResult`.
+  - `capibara:acp:set-model` -- validates `modelId` is in the advertised model list
+    (server-side BR-3 check at the IPC boundary), returns `err('VALIDATION')` if not, else
+    delegates to `sessionManager.setSelectedModel(defaultAgentId, modelId)`.
+- **Validation placement**: The handler performs the BR-3 membership check explicitly before
+  calling `setSelectedModel`, rather than relying on the manager's thrown error. This keeps
+  validation at the IPC boundary (consistent with the design's "validate input -> call service
+  -> ok/err" handler pattern) and produces a clean `err('VALIDATION')` code.
+- **Preload**: pure passthroughs for both channels. `getModelState` takes no args;
+  `setSelectedModel` passes `modelId` through.
+- **Composition root**: updated `registerAcpHandlers` call to pass `acpModule.sessionManager`
+  and `agentConfig.defaultAgent`.
 
 ## Design Compliance
 
 | Check | Result |
 |-------|--------|
-| Files touched ⊆ Change Tracking (t1 subset) | PASS — all within t1 scope |
-| Each file in its design-assigned module/layer | PASS — all under `modules/acp/*` + `bootstrap/` |
-| Public interfaces match Key Interfaces | PASS — `normalizeModelState`, `IModelPreferenceStore`, `ModelState(Summary)`, manager methods match design signatures |
-| Forbidden cross-layer imports absent | PASS — new files import only `@core/foundation/*`, own module, and the ACP SDK |
-| Error handling only at boundaries | PASS — try/catch only around the protocol set call (external) and JSON.parse of a persisted row (IO boundary) |
-| No new external deps | PASS — SDK already present; no manifest change |
+| Files touched subset of Change Tracking (t2 + 1 deviation) | PASS -- all within t2 scope except composition-root.ts wiring |
+| Each file in its design-assigned module/layer | PASS -- shared types/api in shared, handlers in ipc-handlers, preload in preload |
+| Public interfaces match Key Interfaces | PASS -- `ModelStateSummary`, `CapibaraApi` additions, channel names match design |
+| Forbidden cross-layer imports absent | PASS -- handler imports only IAcpSessionManager (interface, not impl) |
+| Error handling only at boundaries | PASS -- try/catch in IPC handlers (external boundary) only |
+| No new external deps | PASS |
 
 ## Deviations from Design
 
-- **`composition-root.ts` not modified**: the design's Change Tracking listed it, but
-  `registerAcpModule` already receives `sqliteConn`, so the store is constructed inside
-  `acp.module.ts` with no composition-root change needed. Net-narrower than designed.
-- **No migration file**: the `settings` table already exists (created in the base migration), so
-  ADR-2's store needed no schema change. (Design implied reuse; confirmed.)
-- **`ModelStateSummary` defined in `acp.types.ts`** (re-exported by t2's shared types) rather than
-  authored in `core/shared/types.ts`. Keeps t1 self-contained; matches the prior change's pattern of
-  locating canonical types in the owning module. t2 will re-export it on the renderer-facing surface.
+- **`composition-root.ts` modified** (not listed in t2's file list): the `registerAcpHandlers`
+  call needed updating to pass `sessionManager` + `defaultAgentId`. Without this change the
+  new handlers cannot be wired. The change is one line -- extending the existing call args.
+- **Validation in handler rather than relying on manager throw**: the handler explicitly checks
+  model membership before calling `setSelectedModel`, producing `err('VALIDATION')`. The
+  manager still validates as a safety net (throws if called with a bad modelId), but the IPC
+  boundary owns the user-facing error code. This is consistent with the existing handler
+  pattern (validate input -> call service -> ok/err) and avoids fragile error-message parsing.
 
 ## Self-Check Results
 
-- **Type-check**: `npx tsc --noEmit` — clean (whole project).
-- **Tests**:
-  - New/changed files: `npx vitest run tests/unit/acp/model-state.test.ts
-    tests/unit/acp/sqlite-model-preference.store.test.ts
-    tests/unit/acp/acp-session.manager.test.ts` → 31 passed, 8 skipped.
-  - Full ACP suite: `npx vitest run tests/unit/acp/` → 178 passed, 21 skipped, 0 failed.
-  - The 8/21 skips are the better-sqlite3 ABI guard (`skipIf(!canUseSqlite)`) under system Node —
-    the same guard the existing `sqlite-acp-session.repository.test.ts` uses; they pass under the
-    electron ABI runner.
+- **Type-check**: `npx tsc --noEmit` -- clean (whole project).
+- **Parity test**: `npx vitest run tests/unit/preload-api-parity.test.ts` -- 5/5 passed.
+  All three invariants hold: channels match, preload methods match CapibaraApi, counts equal.
+- **ACP suite**: `npx vitest run tests/unit/acp/` -- 178 passed / 21 skipped (baseline unchanged).
+  The 21 skips are the better-sqlite3 ABI guard under system Node.
 
 ## Open TODOs
 
-- **t2-ipc-and-api**: add `capibara:acp:model-state` / `:set-model` channels (extend
-  `registerAcpHandlers` to receive the session manager + default agentId), re-export
-  `ModelStateSummary`/`AvailableModel` on `core/shared/types.ts`, add `getModelState`/
-  `setSelectedModel` to `CapibaraApi` + preload, update preload-api-parity test.
-- **t3-settings-ui**: `ModelSelector.tsx` + mount in `AgentConfigPanel.tsx`; locale strings.
-- For `/mvt-review`: confirm the `liveModelState(agentId)` loop is acceptable (all live sessions on
-  one agent share a model state — first match wins); confirm `unstable_setSessionModel` use is
-  intentional given its `@experimental` SDK marker (it is the fallback by design, ADR-1).
+- **t3-settings-ui**: `ModelSelector.tsx` + mount in `AgentConfigPanel.tsx`; locale strings
+  in en-US/zh-CN/types.ts.
+- For `/mvt-review`: confirm the handler-level validation approach is acceptable (duplicates
+  the manager's membership check, but produces a cleaner VALIDATION error code at the IPC
+  boundary).

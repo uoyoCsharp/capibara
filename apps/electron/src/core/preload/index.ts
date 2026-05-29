@@ -131,6 +131,10 @@ const api = {
   checkSystemDeps: () => ipcRenderer.invoke('capibara:system:check-deps'),
   getAgentConfig: () => ipcRenderer.invoke('capibara:system:agent-config'),
 
+  // ACP Model Selection
+  getModelState: () => ipcRenderer.invoke('capibara:acp:model-state'),
+  setSelectedModel: (modelId: string) => ipcRenderer.invoke('capibara:acp:set-model', modelId),
+
   // Scheduler (execution control)
   getExecutionState: () => ipcRenderer.invoke('capibara:scheduler:get-state'),
   pauseExecution: () => ipcRenderer.invoke('capibara:scheduler:pause'),

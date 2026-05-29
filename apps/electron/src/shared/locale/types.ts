@@ -329,6 +329,15 @@ export interface LocaleMessages {
       checkHealth: string;
       healthOk: string;
     };
+    modelSelector: {
+      title: string;
+      unsupported: string;
+      unsupportedHint: string;
+      placeholder: string;
+      active: string;
+      hint: string;
+      saveError: string;
+    };
     agentConfig: {
       title: string;
       description: string;

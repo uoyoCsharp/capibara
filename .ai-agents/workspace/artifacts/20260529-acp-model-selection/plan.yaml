@@ -2,9 +2,9 @@ version: 1
 change_id: "20260529-acp-model-selection"
 title: "ACP Model Selection in Settings"
 created_at: "2026-05-29T17:20:00"
-updated_at: "2026-05-29T17:45:00"
-status: in_progress
-current_task: "t1-backend-model-support"
+updated_at: "2026-05-30T00:15:00"
+status: done
+current_task: null
 
 tasks:
   - id: "t1-backend-model-support"
@@ -55,7 +55,8 @@ tasks:
 
   - id: "t2-ipc-and-api"
     title: "IPC channels + shared API + preload passthrough"
-    status: pending
+    status: done
+    completed_at: "2026-05-29T22:35:00"
     depends_on: ["t1-backend-model-support"]
     skill_hint: mvt-implement
     artifacts:
@@ -64,15 +65,17 @@ tasks:
         - "apps/electron/src/core/shared/types.ts"
         - "apps/electron/src/core/shared/api.ts"
         - "apps/electron/src/core/preload/index.ts"
+        - "apps/electron/src/core/bootstrap/composition-root.ts"
         - "apps/electron/tests/unit/preload-api-parity.test.ts"
     notes: >
-      ADR-5, REQ-N1. Extend registerAcpHandlers with the session manager + default
-      agentId. Add additive channels capibara:acp:model-state (get →
-      ModelStateSummary) and capibara:acp:set-model (set(modelId) →
-      ModelStateSummary; validates BR-3 server-side, err('VALIDATION') on reject).
-      Add ModelStateSummary ({supported, models, currentModelId, selectedModelId})
-      to core/shared/types.ts; getModelState/setSelectedModel on CapibaraApi;
-      pure passthroughs in preload/index.ts. Update the preload-api-parity test.
+      ADR-5, REQ-N1. capibara:acp:model-state / :set-model channels with server-side
+      BR-3 validation at IPC boundary. setSelectedModel throws ValidationError (named
+      error) for invalid modelId; handler maps to err('VALIDATION'). ModelStateSummary
+      and AvailableModel re-exported from shared/types.ts. getModelState/setSelectedModel
+      added to CapibaraApi. Pure passthroughs in preload. composition-root.ts wiring
+      (sessionManager + defaultAgentId). Deviation: composition-root.ts not in t2 file
+      list but needed for wiring. Review W1 (liveModelState reverse iteration) and
+      W2 (ValidationError naming) fixed in /mvt-fix.
     acceptance:
       - "Both channels return DesktopResult<ModelStateSummary>; preload is a pure passthrough"
       - "set-model returns err('VALIDATION') for a modelId not in the advertised list"
@@ -80,7 +83,8 @@ tasks:
 
   - id: "t3-settings-ui"
     title: "Settings ModelSelector UI + locale strings"
-    status: pending
+    status: done
+    completed_at: "2026-05-30T00:15:00"
     depends_on: ["t2-ipc-and-api"]
     skill_hint: mvt-implement
     artifacts:

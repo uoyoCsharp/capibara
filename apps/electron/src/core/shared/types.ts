@@ -236,6 +236,10 @@ export interface SuspensionAwaitingRecord {
   createdAt: string;
 }
 
+// Re-exported from ACP module so the renderer can import model types from the shared surface
+// without depending on ACP internals. Defined in acp.types.ts per ADR-1.
+export type { AvailableModel, ModelStateSummary } from '@core/modules/acp/types/acp.types';
+
 export interface AgentConfigSummary {
   defaultAgent: string;
   registry: Array<{ id: string; name: string; command: string }>;

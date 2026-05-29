@@ -219,7 +219,7 @@ export async function bootstrap(): Promise<void> {
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);
-  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository);
+  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository, acpModule.sessionManager, agentConfig.defaultAgent);
   registerSystemHandlers({
     connection: sqliteConn,
     runRepo: execution.runRepo,

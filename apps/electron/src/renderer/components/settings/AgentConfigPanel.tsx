@@ -3,6 +3,7 @@ import { Robot, GitBranch, ShieldCheck } from '@phosphor-icons/react';
 import type { AgentConfigSummary } from '@core/shared/types';
 import { Badge } from '../ui/badge';
 import { useT } from '../../hooks/use-locale';
+import { ModelSelector } from './ModelSelector';
 
 const api = () => window.capibara;
 
@@ -58,6 +59,11 @@ export function AgentConfigPanel() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Model Selection */}
+      <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
+        <ModelSelector />
       </section>
 
       {/* Collaboration Config */}

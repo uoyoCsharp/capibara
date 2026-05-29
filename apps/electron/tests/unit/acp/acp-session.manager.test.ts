@@ -231,6 +231,9 @@ describe('AcpSessionManager', () => {
       await manager.createSession(CREATE_PARAMS);
 
       expect(() => manager.setSelectedModel('claude-agent', 'gpt-5')).toThrow(/not available/i);
+      try { manager.setSelectedModel('claude-agent', 'gpt-5'); } catch (e: any) {
+        expect(e.name).toBe('ValidationError');
+      }
     });
   });
 

@@ -19,7 +19,7 @@ export function normalizeModelState(response: acp.NewSessionResponse): ModelStat
   );
   if (configModel) {
     return {
-      models: flattenSelectOptions(configModel.options).map(toAvailableModel),
+      models: flattenSelectOptions(configModel.options ?? []).map(toAvailableModel),
       currentModelId: configModel.currentValue,
       mechanism: 'config_option',
       configId: configModel.id,

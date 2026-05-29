@@ -336,7 +336,9 @@ export class AcpSessionManager implements IAcpSessionManager {
   setSelectedModel(agentId: string, modelId: string): ModelStateSummary {
     const state = this.liveModelState(agentId) ?? this.modelPreferences.getCachedModelState(agentId);
     if (!state || !state.models.some(m => m.id === modelId)) {
-      throw new Error(`Model not available for agent ${agentId}: ${modelId}`);
+      const e = new Error(`Model not available for agent ${agentId}: ${modelId}`);
+      e.name = 'ValidationError';
+      throw e;
     }
     this.modelPreferences.setSelectedModelId(modelId);
     return this.getModelState(agentId);
@@ -400,9 +402,12 @@ export class AcpSessionManager implements IAcpSessionManager {
     }
   }
 
-  /** The model state of any live session for this agent (all live sessions on one agent share it). */
+  /** The model state of any live session for this agent. Iterates in reverse insertion order so the
+   *  most recently created session (likely the active one) is preferred over an older suspended one. */
   private liveModelState(agentId: string): ModelState | null {
-    for (const runtime of this.live.values()) {
+    const entries = [...this.live.values()];
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const runtime = entries[i];
       if (runtime.agentId === agentId && runtime.modelState) return runtime.modelState;
     }
     return null;

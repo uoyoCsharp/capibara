@@ -314,6 +314,15 @@ export const zhCN: LocaleMessages = {
       checkHealth: '检查系统健康',
       healthOk: '系统正常：{timestamp}',
     },
+    modelSelector: {
+      title: '默认模型',
+      unsupported: '无可用模型',
+      unsupportedHint: '该代理不支持模型选择，或尚未创建会话。',
+      placeholder: '选择模型...',
+      active: '当前',
+      hint: '更改将在下次会话时生效。',
+      saveError: '保存模型偏好失败。',
+    },
     agentConfig: {
       title: 'Agent 配置',
       description: '当前注册的 AI 代理后端和协作设置。',

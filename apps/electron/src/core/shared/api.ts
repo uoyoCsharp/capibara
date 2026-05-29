@@ -16,6 +16,7 @@ import type {
   SuspensionRecord,
   SuspensionAwaitingRecord,
   AgentConfigSummary,
+  ModelStateSummary,
 } from './types';
 
 /**
@@ -177,6 +178,10 @@ export interface CapibaraApi {
   getSystemHealth: () => Promise<DesktopResult<{ status: string; timestamp: string }>>;
   checkSystemDeps: () => Promise<DesktopResult<unknown>>;
   getAgentConfig: () => Promise<DesktopResult<AgentConfigSummary>>;
+
+  // ─── ACP Model Selection ─────────────────────────────────────────
+  getModelState: () => Promise<DesktopResult<ModelStateSummary>>;
+  setSelectedModel: (modelId: string) => Promise<DesktopResult<ModelStateSummary>>;
 
   // ─── Scheduler (execution control) ───────────────────────────────
   getExecutionState: () => Promise<DesktopResult<{ paused: boolean }>>;

@@ -314,6 +314,15 @@ export const enUS: LocaleMessages = {
       checkHealth: 'Check System Health',
       healthOk: 'System OK: {timestamp}',
     },
+    modelSelector: {
+      title: 'Default Model',
+      unsupported: 'No models available',
+      unsupportedHint: 'The agent does not support model selection, or no session has been created yet.',
+      placeholder: 'Select a model...',
+      active: 'Active',
+      hint: 'Change takes effect on the next session.',
+      saveError: 'Failed to save model preference.',
+    },
     agentConfig: {
       title: 'Agent Configuration',
       description: 'Currently registered AI agent backends and collaboration settings.',
