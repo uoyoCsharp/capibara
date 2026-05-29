@@ -16,6 +16,7 @@ import { ToolPermissionPolicy } from '@core/modules/acp/policies/tool-permission
 import { AcpAuditRepository } from '@core/modules/acp/persistence/acp-audit.repository';
 import { SqliteSuspensionRepository } from '@core/modules/acp/persistence/sqlite-suspension.repository';
 import { SqliteAcpSessionRepository } from '@core/modules/acp/persistence/sqlite-acp-session.repository';
+import { SqliteModelPreferenceStore } from '@core/modules/acp/persistence/sqlite-model-preference.store';
 import { SessionSuspensionManager } from '@core/modules/acp/collaboration/session-suspension.manager';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 
@@ -58,6 +59,7 @@ export function registerAcpModule(
   const auditRepository = new AcpAuditRepository(sqliteConn);
   const suspensionRepo = new SqliteSuspensionRepository(sqliteConn);
   const sessionRepo = new SqliteAcpSessionRepository(sqliteConn);
+  const modelPreferenceStore = new SqliteModelPreferenceStore(sqliteConn);
 
   // Collaboration
   const suspensionManager = new SessionSuspensionManager(suspensionRepo, logger, collaborationConfig);
@@ -66,7 +68,7 @@ export function registerAcpModule(
   const mcpConfigBuilder = new AcpMcpConfigBuilder(logger);
   const spawner = new AcpAgentSpawner(agentConfig, updateHandler, permissionHandler, logger);
   spawner.setFilesystemHandler(filesystemHandler);
-  const sessionManager = new AcpSessionManager(sessionRepo, spawner, updateHandler, logger, collaborationConfig);
+  const sessionManager = new AcpSessionManager(sessionRepo, spawner, updateHandler, logger, modelPreferenceStore, collaborationConfig);
   const sessionSweeper = new AcpSessionSweeper(sessionManager, logger);
   const executor = new AcpExecutor(sessionManager, updateHandler, mcpConfigBuilder, agentConfig, logger);
   executor.setRoleRepository(roleRepo);

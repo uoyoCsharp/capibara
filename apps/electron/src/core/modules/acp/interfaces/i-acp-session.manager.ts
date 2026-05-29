@@ -3,6 +3,7 @@ import type {
   AgentCapabilities,
   CloseReason,
   CreateSessionParams,
+  ModelStateSummary,
   PromptContent,
   PromptResult,
   SuspendReason,
@@ -62,6 +63,18 @@ export interface IAcpSessionManager {
 
   /** Query Agent capabilities. */
   getAgentCapabilities(agentId: string): AgentCapabilities | null;
+
+  /**
+   * Renderer-facing model state for an agent: the agent-advertised model list (live or last-cached)
+   * merged with the user's stored default-model preference.
+   */
+  getModelState(agentId: string): ModelStateSummary;
+
+  /**
+   * Persist the user's default-model preference. Applied to the next session created, never to a
+   * live session (REQ-6). Throws if the model is not advertised by the agent (BR-3).
+   */
+  setSelectedModel(agentId: string, modelId: string): ModelStateSummary;
 
   /** Get an active session for a role/org pair. */
   getActiveSession(roleId: string, orgId: string): AcpSessionRecord | null;

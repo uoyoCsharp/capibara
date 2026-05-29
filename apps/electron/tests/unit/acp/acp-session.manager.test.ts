@@ -4,7 +4,8 @@ import { AcpSessionManager } from '@core/modules/acp/client/acp-session.manager'
 import type { AcpAgentSpawner } from '@core/modules/acp/client/acp-agent.spawner';
 import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
 import type { IAcpSessionRepository, CreateAcpSessionInput } from '@core/modules/acp/interfaces/i-acp-session.repository';
-import type { AcpSessionRecord, AcpSessionStatus } from '@core/modules/acp/types/acp.types';
+import type { AcpSessionRecord, AcpSessionStatus, ModelState } from '@core/modules/acp/types/acp.types';
+import type { IModelPreferenceStore } from '@core/modules/acp/interfaces/i-model-preference.store';
 import { MockLogger } from '../../helpers/mock-logger';
 
 /** In-memory IAcpSessionRepository for exercising the manager's state machine without SQLite. */
@@ -62,8 +63,31 @@ function createMockConnection() {
     cancel: vi.fn().mockResolvedValue({}),
     resumeSession: vi.fn().mockResolvedValue({}),
     loadSession: vi.fn().mockResolvedValue({}),
+    setSessionConfigOption: vi.fn().mockResolvedValue({}),
+    unstable_setSessionModel: vi.fn().mockResolvedValue({}),
   };
 }
+
+/** In-memory IModelPreferenceStore. */
+class FakeModelPreferenceStore implements IModelPreferenceStore {
+  selected: string | null = null;
+  private cache = new Map<string, ModelState>();
+  getSelectedModelId(): string | null { return this.selected; }
+  setSelectedModelId(modelId: string | null): void { this.selected = modelId; }
+  getCachedModelState(agentId: string): ModelState | null { return this.cache.get(agentId) ?? null; }
+  setCachedModelState(agentId: string, state: ModelState): void { this.cache.set(agentId, state); }
+}
+
+/** A `session/new` response advertising a model selector via the config-option mechanism. */
+const MODEL_CONFIG_RESPONSE = {
+  sessionId: 'acp-sess-1',
+  configOptions: [
+    {
+      id: 'model', name: 'Model', type: 'select', category: 'model', currentValue: 'opus',
+      options: [{ value: 'opus', name: 'Opus' }, { value: 'sonnet', name: 'Sonnet' }],
+    },
+  ],
+};
 
 function createMockSpawner(connection: ReturnType<typeof createMockConnection>, capabilities: any): AcpAgentSpawner {
   return {
@@ -97,6 +121,7 @@ describe('AcpSessionManager', () => {
   let updateHandler: AcpUpdateHandler;
   let logger: MockLogger;
   let connection: ReturnType<typeof createMockConnection>;
+  let modelStore: FakeModelPreferenceStore;
 
   function setup(capabilities: any) {
     repo = new FakeAcpSessionRepository();
@@ -104,7 +129,8 @@ describe('AcpSessionManager', () => {
     spawner = createMockSpawner(connection, capabilities);
     updateHandler = createMockUpdateHandler();
     logger = new MockLogger();
-    manager = new AcpSessionManager(repo, spawner, updateHandler, logger);
+    modelStore = new FakeModelPreferenceStore();
+    manager = new AcpSessionManager(repo, spawner, updateHandler, logger, modelStore);
   }
 
   beforeEach(() => {
@@ -124,6 +150,87 @@ describe('AcpSessionManager', () => {
       setup({ supportsResume: false, supportsLoad: false, supportedMcpTransports: ['stdio'] });
       const session = await manager.createSession(CREATE_PARAMS);
       expect(session.resumeStrategy).toBe('rebuild');
+    });
+  });
+
+  describe('model selection', () => {
+    it('caches the advertised model state write-through on createSession', async () => {
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      await manager.createSession(CREATE_PARAMS);
+
+      const cached = modelStore.getCachedModelState('claude-agent');
+      expect(cached?.mechanism).toBe('config_option');
+      expect(cached?.models.map(m => m.id)).toEqual(['opus', 'sonnet']);
+    });
+
+    it('applies a valid stored preference via setSessionConfigOption', async () => {
+      modelStore.selected = 'sonnet';
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      await manager.createSession(CREATE_PARAMS);
+
+      expect(connection.setSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: 'acp-sess-1', configId: 'model', value: 'sonnet',
+      });
+    });
+
+    it('does not apply a preference the agent does not advertise (BR-3)', async () => {
+      modelStore.selected = 'gpt-5';
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      await manager.createSession(CREATE_PARAMS);
+
+      expect(connection.setSessionConfigOption).not.toHaveBeenCalled();
+    });
+
+    it('does not apply anything when the agent advertises no models', async () => {
+      modelStore.selected = 'opus';
+      await manager.createSession(CREATE_PARAMS); // default mock response: no configOptions/models
+      expect(connection.setSessionConfigOption).not.toHaveBeenCalled();
+      expect(connection.unstable_setSessionModel).not.toHaveBeenCalled();
+    });
+
+    it('treats an agent rejecting the apply call as non-fatal (WARN, run continues)', async () => {
+      modelStore.selected = 'sonnet';
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      connection.setSessionConfigOption.mockRejectedValue(new Error('unsupported'));
+
+      const session = await manager.createSession(CREATE_PARAMS);
+      expect(session.status).toBe('active');
+      expect(logger.logs.some(l => l.level === 'warn' && /model preference/i.test(l.msg))).toBe(true);
+    });
+
+    it('getModelState merges advertised models with the stored preference', async () => {
+      modelStore.selected = 'sonnet';
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      await manager.createSession(CREATE_PARAMS);
+
+      const summary = manager.getModelState('claude-agent');
+      expect(summary.supported).toBe(true);
+      expect(summary.models.map(m => m.id)).toEqual(['opus', 'sonnet']);
+      expect(summary.selectedModelId).toBe('sonnet');
+    });
+
+    it('getModelState reports unsupported when no models are cached or live', () => {
+      const summary = manager.getModelState('claude-agent');
+      expect(summary.supported).toBe(false);
+      expect(summary.models).toEqual([]);
+    });
+
+    it('setSelectedModel persists the preference without mutating a live session (REQ-6)', async () => {
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      await manager.createSession(CREATE_PARAMS);
+      connection.setSessionConfigOption.mockClear();
+
+      const summary = manager.setSelectedModel('claude-agent', 'sonnet');
+      expect(summary.selectedModelId).toBe('sonnet');
+      expect(modelStore.selected).toBe('sonnet');
+      expect(connection.setSessionConfigOption).not.toHaveBeenCalled();
+    });
+
+    it('setSelectedModel rejects a model the agent does not advertise', async () => {
+      connection.newSession.mockResolvedValue(MODEL_CONFIG_RESPONSE);
+      await manager.createSession(CREATE_PARAMS);
+
+      expect(() => manager.setSelectedModel('claude-agent', 'gpt-5')).toThrow(/not available/i);
     });
   });
 

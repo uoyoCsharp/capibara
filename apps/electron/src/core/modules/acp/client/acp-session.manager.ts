@@ -8,13 +8,17 @@ import type {
   CloseReason,
   CollaborationConfig,
   CreateSessionParams,
+  ModelState,
+  ModelStateSummary,
   PromptContent,
   PromptResult,
   SuspendReason,
 } from '../types/acp.types';
 import type { AcpAgentSpawner, SessionContext } from './acp-agent.spawner';
 import type { AcpUpdateHandler } from '../handlers/acp-update.handler';
+import type { IModelPreferenceStore } from '../interfaces/i-model-preference.store';
 import { assertTransition } from './session-lifecycle';
+import { normalizeModelState } from './model-state';
 
 /** Default idle-TTL applied when CollaborationConfig.sessionTtlMs is not configured. */
 const DEFAULT_IDLE_TTL_MS = 30 * 60 * 1000;
@@ -32,10 +36,12 @@ export interface SessionRuntimeContext {
   mcpServers: acp.McpServer[];
   allowedPaths: string[] | null;
   capabilities: AgentCapabilities;
+  /** Model state advertised by the agent in this session's `session/new` response (ADR-3). */
+  modelState: ModelState | null;
 }
 
 /** Re-derives runtime context for a persisted record whose live connection was lost (post-restart). */
-export type SessionRebuilder = (record: AcpSessionRecord) => Promise<Omit<SessionRuntimeContext, 'capabilities'>>;
+export type SessionRebuilder = (record: AcpSessionRecord) => Promise<Omit<SessionRuntimeContext, 'capabilities' | 'modelState'>>;
 
 /**
  * ACP Session Manager — core lifecycle component.
@@ -55,6 +61,7 @@ export class AcpSessionManager implements IAcpSessionManager {
     private readonly spawner: AcpAgentSpawner,
     private readonly updateHandler: AcpUpdateHandler,
     private readonly logger: ILogger,
+    private readonly modelPreferences: IModelPreferenceStore,
     private readonly collaborationConfig?: CollaborationConfig,
   ) {
     // Spawner fs/permission callbacks resolve context by the in-flight prompt's session id (ADR-4),
@@ -91,6 +98,7 @@ export class AcpSessionManager implements IAcpSessionManager {
     const capabilities = agentProcess.capabilities!;
 
     const response = await connection.newSession({ cwd, mcpServers });
+    const modelState = await this.applyModelPreference(agentId, connection, response);
 
     const resumeStrategy = capabilities.supportsResume ? 'resume'
       : capabilities.supportsLoad ? 'load'
@@ -114,7 +122,7 @@ export class AcpSessionManager implements IAcpSessionManager {
       closeReason: null,
     });
 
-    this.live.set(record.id, { agentId, cwd, mcpServers, allowedPaths: allowedPaths ?? null, capabilities });
+    this.live.set(record.id, { agentId, cwd, mcpServers, allowedPaths: allowedPaths ?? null, capabilities, modelState });
     this.logger.info('ACP session created', {
       sessionId: record.id,
       acpSessionId: record.acpSessionId,
@@ -213,14 +221,16 @@ export class AcpSessionManager implements IAcpSessionManager {
       }
       const derived = await this.rebuilder(record);
       const agentProcess = await this.spawner.getOrSpawn(derived.agentId);
-      runtime = { ...derived, capabilities: agentProcess.capabilities! };
+      // modelState is re-derived from the fresh session/new response below; null is a placeholder.
+      runtime = { ...derived, capabilities: agentProcess.capabilities!, modelState: null };
     }
 
     const agentProcess = await this.spawner.getOrSpawn(runtime.agentId);
     const connection = agentProcess.connection!;
     const response = await connection.newSession({ cwd: runtime.cwd, mcpServers: runtime.mcpServers });
+    const modelState = await this.applyModelPreference(runtime.agentId, connection, response);
 
-    this.live.set(record.id, runtime);
+    this.live.set(record.id, { ...runtime, modelState });
     this.repo.updateStatus(record.id, record.status === 'expired' ? 'active' : record.status, {
       acpSessionId: response.sessionId,
     });
@@ -304,6 +314,34 @@ export class AcpSessionManager implements IAcpSessionManager {
     return this.spawner.getCapabilities(agentId);
   }
 
+  /**
+   * Renderer-facing model state for an agent: the advertised list (live runtime state if a session
+   * is alive, else the last-cached state) merged with the user's stored preference (ADR-3/ADR-4).
+   */
+  getModelState(agentId: string): ModelStateSummary {
+    const state = this.liveModelState(agentId) ?? this.modelPreferences.getCachedModelState(agentId);
+    return {
+      supported: (state?.models.length ?? 0) > 0,
+      models: state?.models ?? [],
+      currentModelId: state?.currentModelId ?? null,
+      selectedModelId: this.modelPreferences.getSelectedModelId(),
+    };
+  }
+
+  /**
+   * Persist the user's default-model preference (ADR-3). This NEVER mutates a live session — the
+   * preference is applied only when the next session is created (REQ-6). Rejects a model that the
+   * agent does not advertise (BR-3).
+   */
+  setSelectedModel(agentId: string, modelId: string): ModelStateSummary {
+    const state = this.liveModelState(agentId) ?? this.modelPreferences.getCachedModelState(agentId);
+    if (!state || !state.models.some(m => m.id === modelId)) {
+      throw new Error(`Model not available for agent ${agentId}: ${modelId}`);
+    }
+    this.modelPreferences.setSelectedModelId(modelId);
+    return this.getModelState(agentId);
+  }
+
   getActiveSession(roleId: string, orgId: string): AcpSessionRecord | null {
     const record = this.repo.findResumable(roleId, orgId);
     return record && record.status === 'active' ? record : null;
@@ -320,6 +358,55 @@ export class AcpSessionManager implements IAcpSessionManager {
   }
 
   // ── Internals ──
+
+  /**
+   * Normalize the agent's model state from a `session/new` response, cache it write-through (ADR-4),
+   * and apply the stored preference if it is one of the advertised models (BR-3). Applying the model
+   * is best-effort: an agent that rejects the set call is logged and the session keeps the agent's
+   * default (the protocol guarantees a default), never failing the run.
+   */
+  private async applyModelPreference(
+    agentId: string,
+    connection: acp.ClientSideConnection,
+    response: acp.NewSessionResponse,
+  ): Promise<ModelState> {
+    const state = normalizeModelState(response);
+    this.modelPreferences.setCachedModelState(agentId, state);
+
+    const selected = this.modelPreferences.getSelectedModelId();
+    if (!selected || !state.mechanism || !state.models.some(m => m.id === selected)) {
+      return state;
+    }
+
+    try {
+      if (state.mechanism === 'config_option') {
+        await connection.setSessionConfigOption({
+          sessionId: response.sessionId,
+          configId: state.configId!,
+          value: selected,
+        });
+      } else {
+        await connection.unstable_setSessionModel({ sessionId: response.sessionId, modelId: selected });
+      }
+      return { ...state, currentModelId: selected };
+    } catch (err) {
+      this.logger.warn('Failed to apply model preference; using agent default', {
+        agentId,
+        modelId: selected,
+        mechanism: state.mechanism,
+        error: String(err),
+      });
+      return state;
+    }
+  }
+
+  /** The model state of any live session for this agent (all live sessions on one agent share it). */
+  private liveModelState(agentId: string): ModelState | null {
+    for (const runtime of this.live.values()) {
+      if (runtime.agentId === agentId && runtime.modelState) return runtime.modelState;
+    }
+    return null;
+  }
 
   private async protocolClose(record: AcpSessionRecord): Promise<void> {
     const runtime = this.live.get(record.id);

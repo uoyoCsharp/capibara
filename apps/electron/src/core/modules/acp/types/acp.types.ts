@@ -50,6 +50,47 @@ export interface CollaborationConfig {
   collaborationCapMs?: number;
 }
 
+// ── Model Selection ──────────────────────────────────────
+
+/**
+ * How the active agent exposes model selection over ACP (ADR-1). Detected per session from the
+ * `session/new` response: a `configOptions` entry with `category: 'model'` (preferred, stable) or
+ * the dedicated `models` field (`SessionModelState`, experimental). `null` ⇒ unsupported.
+ */
+export type AgentModelMechanism = 'config_option' | 'set_model';
+
+/** A model the active agent advertises as selectable. */
+export interface AvailableModel {
+  /** modelId (set_model mechanism) or config option value id (config_option mechanism). */
+  id: string;
+  name: string;
+  description?: string;
+}
+
+/**
+ * Normalized, mechanism-agnostic view of an agent's model selection state, derived from the
+ * `session/new` response by {@link normalizeModelState}. `models` empty ⇒ selection unsupported.
+ */
+export interface ModelState {
+  models: AvailableModel[];
+  /** The model the agent reports as currently active for the session. */
+  currentModelId: string | null;
+  mechanism: AgentModelMechanism | null;
+  /** The `configOptions` id to set; present only when `mechanism === 'config_option'`. */
+  configId?: string;
+}
+
+/** Renderer-facing model state: the agent-advertised list merged with the user's stored preference. */
+export interface ModelStateSummary {
+  /** Whether the active agent advertises any selectable model (`models.length > 0`). */
+  supported: boolean;
+  models: AvailableModel[];
+  /** The model the agent reports as currently active. */
+  currentModelId: string | null;
+  /** The user's persisted default-model preference. */
+  selectedModelId: string | null;
+}
+
 // ── Agent Process ────────────────────────────────────────
 
 export interface AgentCapabilities {
