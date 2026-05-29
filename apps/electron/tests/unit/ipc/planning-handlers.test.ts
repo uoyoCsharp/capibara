@@ -35,6 +35,7 @@ function createMockConversationService() {
     createInquiry: vi.fn(),
     createPlanningOrAdhoc: vi.fn(),
     createPlanning: vi.fn(),
+    findPlanningHistory: vi.fn().mockReturnValue([]),
   };
 }
 
@@ -150,6 +151,28 @@ describe('planning IPC handlers (in conversation.handlers.ts)', () => {
       expect(result).toMatchObject({
         ok: false,
         error: { code: 'INTERNAL', message: expect.stringContaining('repo failure') },
+      });
+    });
+  });
+
+  describe('capibara:planning:history', () => {
+    it('PH-20: returns the planning history list from the service', async () => {
+      const entries = [
+        { id: 'plan-2', title: 'Newer', state: 'resolved', createdAt: '2026-01-02T00:00:00Z', updatedAt: '2026-01-03T00:00:00Z' },
+        { id: 'plan-1', title: 'Older', state: 'cancelled', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+      ];
+      svc.findPlanningHistory.mockReturnValue(entries);
+      const result = await invoke('capibara:planning:history', 'org-1');
+      expect(result).toEqual({ ok: true, data: entries });
+      expect(svc.findPlanningHistory).toHaveBeenCalledWith('org-1');
+    });
+
+    it('PH-21: catches service exceptions as INTERNAL', async () => {
+      svc.findPlanningHistory.mockImplementation(() => { throw new Error('repo down'); });
+      const result = await invoke('capibara:planning:history', 'org-1');
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'INTERNAL', message: expect.stringContaining('repo down') },
       });
     });
   });

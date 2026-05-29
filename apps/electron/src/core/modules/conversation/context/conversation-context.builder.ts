@@ -31,7 +31,11 @@ export class ConversationContextBuilder {
     const conv = this.convRepo.findById(conversationId);
     if (!conv) return null;
 
-    const messages = this.msgRepo.findLatest(conversationId, maxMessages);
+    // A non-positive limit means "no cap" — used by rebuild (ADR-6) to reconstruct the full
+    // conversational context from persisted messages rather than the recent window.
+    const messages = maxMessages > 0
+      ? this.msgRepo.findLatest(conversationId, maxMessages)
+      : this.msgRepo.findByConversationId(conversationId);
 
     return {
       conversationId: conv.id,

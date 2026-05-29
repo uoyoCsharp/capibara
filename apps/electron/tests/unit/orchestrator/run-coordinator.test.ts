@@ -9,6 +9,7 @@ import type { IOrganizationRepository } from '@core/modules/organization/interfa
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { RunResult } from '@core/modules/execution/types/execution.types';
 import type { Conversation } from '@core/modules/conversation/types/conversation.types';
+import type { ResumeDecision } from '@core/modules/acp/collaboration/suspension.types';
 
 function createRunResult(overrides?: Partial<RunResult>): RunResult {
   return {
@@ -114,6 +115,7 @@ describe('RunCoordinator', () => {
         taskId: TEST_TASK_ID,
         wakeReason: 'task_assigned',
         projectDir: '/workspace',
+        lifecycleIntent: 'close_on_complete',
       }));
       expect(result).toEqual({ runId: 'run-1', status: 'succeeded' });
     });
@@ -145,6 +147,7 @@ describe('RunCoordinator', () => {
         conversationId: 'conv-1',
         wakeReason: 'conversation_reply',
         sessionId: undefined,
+        lifecycleIntent: 'keep_alive',
       }));
       expect(conversationService.updateExternalSessionId).toHaveBeenCalledWith('conv-1', 'sess-1');
       expect(conversationService.addMessage).toHaveBeenCalledWith('conv-1', {
@@ -196,6 +199,38 @@ describe('RunCoordinator', () => {
       vi.mocked(runEngine.execute).mockResolvedValue(createRunResult({ status: 'succeeded', summary: null }));
       await coordinator.executeForConversation('conv-1', TEST_ROLE_ID, TEST_ORG_ID, 'en-US');
       expect(conversationService.addMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('executeResume', () => {
+    function createDecision(overrides?: Partial<ResumeDecision>): ResumeDecision {
+      return {
+        suspensionId: 'susp-1',
+        sessionId: 'internal-1',
+        acpSessionId: 'acp-sess-1',
+        runId: 'run-1',
+        roleId: TEST_ROLE_ID,
+        orgId: TEST_ORG_ID,
+        taskId: TEST_TASK_ID,
+        aggregatedReply: 'aggregated reply',
+        ...overrides,
+      };
+    }
+
+    it('inherits close_on_complete intent when resuming a task', async () => {
+      await coordinator.executeResume(createDecision({ taskId: TEST_TASK_ID }), 'en-US');
+      expect(runEngine.execute).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: 'acp-sess-1',
+        taskId: TEST_TASK_ID,
+        lifecycleIntent: 'close_on_complete',
+      }));
+    });
+
+    it('inherits keep_alive intent when resuming a non-task (planning) session', async () => {
+      await coordinator.executeResume(createDecision({ taskId: null }), 'en-US');
+      expect(runEngine.execute).toHaveBeenCalledWith(expect.objectContaining({
+        lifecycleIntent: 'keep_alive',
+      }));
     });
   });
 });

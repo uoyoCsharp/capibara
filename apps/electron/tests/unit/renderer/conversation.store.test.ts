@@ -68,6 +68,32 @@ describe('useConversationStore', () => {
     expect(ctrl.api.getActiveConversations).toHaveBeenCalled();
   });
 
+  it('loadPlanningHistory populates planningHistory', async () => {
+    vi.mocked(ctrl.api.getPlanningHistory).mockResolvedValue({
+      ok: true,
+      data: [{ id: 'p1', title: 'Idea', state: 'resolved', createdAt: '', updatedAt: '' }],
+    });
+    await useConversationStore.getState().loadPlanningHistory('org-1');
+    expect(useConversationStore.getState().planningHistory).toHaveLength(1);
+    expect(ctrl.api.getPlanningHistory).toHaveBeenCalledWith('org-1');
+  });
+
+  it('loadMessages caches messages for flicker-free rehydration', async () => {
+    const msgs = [{ id: 'm1', conversationId: 'c1', authorRoleId: null, authorType: 'human' as const, content: 'hi', intent: 'general' as const, inReplyToMessageId: null, createdAt: '' }];
+    vi.mocked(ctrl.api.getConversationMessages).mockResolvedValue({ ok: true, data: msgs });
+
+    await useConversationStore.getState().loadMessages('c1');
+
+    expect(useConversationStore.getState().getCachedMessages('c1')).toEqual(msgs);
+    expect(useConversationStore.getState().getCachedMessages('other')).toEqual([]);
+  });
+
+  it('setCachedMessages stores messages without an IPC round-trip', () => {
+    const msgs = [{ id: 'm9', conversationId: 'c2', authorRoleId: null, authorType: 'ai' as const, content: 'cached', intent: 'reply' as const, inReplyToMessageId: null, createdAt: '' }];
+    useConversationStore.getState().setCachedMessages('c2', msgs);
+    expect(useConversationStore.getState().getCachedMessages('c2')).toEqual(msgs);
+  });
+
   it('conversation:response-needed for selected conversation reloads messages', async () => {
     useConversationStore.getState().setCurrentOrgId('org-1');
     useConversationStore.getState().setSelectedConversationId('c1');

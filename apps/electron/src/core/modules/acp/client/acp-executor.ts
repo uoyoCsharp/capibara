@@ -9,9 +9,10 @@ import type { AcpUpdateHandler } from '../handlers/acp-update.handler';
 import type { AcpFilesystemHandler } from '../handlers/acp-filesystem.handler';
 import type { AcpPermissionHandler } from '../handlers/acp-permission.handler';
 import type { AcpAuditRepository } from '../persistence/acp-audit.repository';
-import type { AgentRegistryConfig, PromptContent } from '../types/acp.types';
+import type { AgentRegistryConfig, PromptContent, PromptResult } from '../types/acp.types';
 import type { AcpMcpConfigBuilder } from '../mcp/acp-mcp.config';
 import type { PendingInquiry } from '../collaboration/suspension.types';
+import { decideLifecycle } from './session-lifecycle';
 
 /**
  * IExecutor implementation that bridges RunEngine to ACP Session Manager.
@@ -68,17 +69,19 @@ export class AcpExecutor implements IExecutor {
   }
 
   async spawn(input: ExecutorInput): Promise<ExecutorHandle> {
-    // Resume path: if sessionId is provided, resume an existing ACP session
+    // Resume path: if sessionId is provided, resume an existing ACP session.
     if (input.sessionId) {
       try {
         return await this.spawnResume(input);
       } catch (err) {
-        this.logger.warn('ACP resume failed; falling back to fresh session', {
+        // Resume falling back to a fresh session is an expected outcome (the agent-side
+        // session may be gone after restart/expiry), not an error — log at INFO (REQ-X2).
+        this.logger.info('ACP resume unavailable; starting a fresh session', {
           runId: input.runId,
           roleId: input.roleId,
           orgId: input.orgId,
           requestedSessionId: input.sessionId,
-          error: String(err),
+          reason: String(err),
         });
       }
     }
@@ -159,8 +162,14 @@ export class AcpExecutor implements IExecutor {
       throw new Error(`ACP session not found for resume: ${input.sessionId}`);
     }
 
-    // Resume the ACP session
-    await this.sessionManager.resumeSession(session.id);
+    // A closed session is permanently terminated — there is nothing to resume; fall back to fresh.
+    if (session.status === 'closed') {
+      throw new Error(`ACP session ${session.id} is closed; cannot resume`);
+    }
+
+    // Resume the ACP session (the manager dispatches resume | load | rebuild by strategy;
+    // an 'expired' record rebuilds a fresh agent-side session transparently).
+    await this.sessionManager.resume(session.id);
 
     // Associate session with run for event emission
     this.updateHandler.setRunId(session.acpSessionId, input.runId);
@@ -205,13 +214,34 @@ export class AcpExecutor implements IExecutor {
       // Drain and persist audit logs
       await this.flushAuditLogs(acpSessionId, input);
 
-      // Check for pending inquiries (AI↔AI collaboration)
+      // Decide the session's fate from caller intent + observed outcome (ADR-2/3). The executor
+      // holds no lifecycle policy itself — it asks decideLifecycle, then dispatches the transition.
       const pendingInquiries = this.detectPendingInquiries(input);
-      if (pendingInquiries.length > 0 && this.suspensionManager) {
-        // Close the ACP session (preserving state for resume)
-        await this.sessionManager.closeSession(sessionId);
+      const outcome = decideLifecycle({
+        intent: input.lifecycleIntent ?? 'close_on_complete',
+        stopReason: result.stopReason,
+        hasPendingInquiry: pendingInquiries.length > 0,
+      });
 
-        // Create suspension record
+      // Suspend path (pending inquiry): keep the agent-side session alive (ADR-3) and record
+      // the collaboration suspension so the run resumes once the awaited replies arrive.
+      if (outcome.action === 'suspend' && outcome.reason === 'collaboration') {
+        // A collaboration suspend without a suspension manager would orphan the session: it would
+        // be marked suspended (TTL-exempt) with no awaiting record to ever resume it. Refuse to
+        // suspend in that case and close instead, so the run completes honestly rather than
+        // leaving a session waiting forever.
+        if (!this.suspensionManager) {
+          this.logger.error('Pending inquiries detected but no suspension manager is wired; closing instead of orphaning the session', {
+            runId: input.runId,
+            pendingCount: pendingInquiries.length,
+          });
+          await this.sessionManager.close(sessionId, 'completed');
+          this.updateHandler.removeCallbacks(acpSessionId);
+          return this.completedOutput('succeeded', aggregatedText, result, acpSessionId);
+        }
+
+        await this.sessionManager.suspend(sessionId, 'collaboration');
+
         this.suspensionManager.suspend({
           sessionId,
           acpSessionId,
@@ -228,34 +258,26 @@ export class AcpExecutor implements IExecutor {
           pendingCount: pendingInquiries.length,
         });
 
-        return {
-          status: 'suspended',
-          summary: null,
-          errorMessage: null,
-          sessionId: acpSessionId,
-          inputTokens: result.tokensUsed.input,
-          outputTokens: result.tokensUsed.output,
-          cachedInputTokens: result.tokensUsed.cached,
-        };
+        return this.suspendedOutput(acpSessionId, result);
       }
 
-      // Normal completion — close session
-      await this.sessionManager.closeSession(sessionId);
+      // Idle suspend (planning keep_alive): the agent-side session stays alive for the next
+      // round; from the run's perspective the turn succeeded.
+      if (outcome.action === 'suspend') {
+        await this.sessionManager.suspend(sessionId, outcome.reason);
+        this.updateHandler.removeCallbacks(acpSessionId);
+        return this.completedOutput('succeeded', aggregatedText, result, acpSessionId);
+      }
+
+      // Close path: genuine termination (task complete or abnormal stop).
+      await this.sessionManager.close(sessionId, outcome.reason);
       this.updateHandler.removeCallbacks(acpSessionId);
 
       const status = result.stopReason === 'end_turn' ? 'succeeded'
         : result.stopReason === 'cancelled' ? 'cancelled'
         : 'failed';
 
-      return {
-        status,
-        summary: aggregatedText || null,
-        errorMessage: status === 'failed' ? `Agent stopped: ${result.stopReason}` : null,
-        sessionId: acpSessionId,
-        inputTokens: result.tokensUsed.input,
-        outputTokens: result.tokensUsed.output,
-        cachedInputTokens: result.tokensUsed.cached,
-      };
+      return this.completedOutput(status, aggregatedText, result, acpSessionId);
     } catch (err) {
       // Drain audit logs even on failure
       await this.flushAuditLogs(acpSessionId, input);
@@ -273,6 +295,35 @@ export class AcpExecutor implements IExecutor {
         cachedInputTokens: 0,
       };
     }
+  }
+
+  private suspendedOutput(acpSessionId: string, result: PromptResult): ExecutorOutput {
+    return {
+      status: 'suspended',
+      summary: null,
+      errorMessage: null,
+      sessionId: acpSessionId,
+      inputTokens: result.tokensUsed.input,
+      outputTokens: result.tokensUsed.output,
+      cachedInputTokens: result.tokensUsed.cached,
+    };
+  }
+
+  private completedOutput(
+    status: ExecutorOutput['status'],
+    summary: string,
+    result: PromptResult,
+    acpSessionId: string,
+  ): ExecutorOutput {
+    return {
+      status,
+      summary: summary || null,
+      errorMessage: status === 'failed' ? `Agent stopped: ${result.stopReason}` : null,
+      sessionId: acpSessionId,
+      inputTokens: result.tokensUsed.input,
+      outputTokens: result.tokensUsed.output,
+      cachedInputTokens: result.tokensUsed.cached,
+    };
   }
 
   private async flushAuditLogs(acpSessionId: string, input: ExecutorInput): Promise<void> {

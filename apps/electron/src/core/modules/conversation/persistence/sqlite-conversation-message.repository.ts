@@ -53,6 +53,13 @@ export class SqliteConversationMessageRepository implements IConversationMessage
     return rows.map(toMessage).reverse();
   }
 
+  findFirstHuman(conversationId: string): ConversationMessage | null {
+    const row = this.connection.getDb()
+      .prepare("SELECT * FROM conversation_messages WHERE conversation_id = ? AND author_type = 'human' ORDER BY created_at LIMIT 1")
+      .get(conversationId) as MsgRow | undefined;
+    return row ? toMessage(row) : null;
+  }
+
   create(input: CreateMessageInput): ConversationMessage {
     const id = randomUUID();
     const now = new Date().toISOString();

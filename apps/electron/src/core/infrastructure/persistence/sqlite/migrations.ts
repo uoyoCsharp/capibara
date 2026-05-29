@@ -431,6 +431,53 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    description: 'ACP Session Lifecycle: persisted acp_sessions table (single source of lifecycle truth)',
+    up: (db) => {
+      db.exec(`
+        -- ═══════════════════════════════════════════════
+        -- ACP Sessions — lean, persisted lifecycle record.
+        -- The agent process remains the source of truth for session *history*
+        -- (via session/load); only non-derivable lifecycle facts live here.
+        -- cwd/mcpServers/allowedPaths/capabilities are re-derived on rebuild.
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE acp_sessions (
+          id TEXT PRIMARY KEY,
+          acp_session_id TEXT NOT NULL,
+          agent_id TEXT NOT NULL,
+          role_id TEXT NOT NULL,
+          org_id TEXT NOT NULL,
+          run_id TEXT,
+          conversation_id TEXT,
+          task_id TEXT,
+          status TEXT NOT NULL DEFAULT 'active'
+            CHECK (status IN ('active', 'suspended', 'closed', 'expired')),
+          suspend_reason TEXT
+            CHECK (suspend_reason IN ('idle', 'collaboration')),
+          resume_strategy TEXT NOT NULL DEFAULT 'resume'
+            CHECK (resume_strategy IN ('resume', 'load', 'rebuild')),
+          resume_count INTEGER NOT NULL DEFAULT 0,
+          last_activity_at TEXT NOT NULL DEFAULT (datetime('now')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          closed_at TEXT,
+          close_reason TEXT
+            CHECK (close_reason IN ('completed', 'user_closed', 'expired', 'error', 'cancelled', 'shutdown')),
+          -- A suspended session always carries a reason (ADR-5: lifecycle/collaboration axes).
+          CHECK (status != 'suspended' OR suspend_reason IS NOT NULL)
+        );
+
+        -- Resume/load lookups by agent-side id.
+        CREATE INDEX idx_acp_sessions_acp_session_id ON acp_sessions(acp_session_id);
+        -- Planning binding lookups (supersedes conversation.external_session_id truth).
+        CREATE INDEX idx_acp_sessions_conversation ON acp_sessions(conversation_id);
+        -- findResumable(roleId, orgId).
+        CREATE INDEX idx_acp_sessions_role_org_status ON acp_sessions(role_id, org_id, status);
+        -- Idle-TTL sweeper: status + suspend_reason + last_activity_at.
+        CREATE INDEX idx_acp_sessions_idle_sweep ON acp_sessions(status, suspend_reason, last_activity_at);
+      `);
+    },
+  },
 ];
 
 export interface RunMigrationsOptions {

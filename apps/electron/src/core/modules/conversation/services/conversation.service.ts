@@ -10,6 +10,7 @@ import type {
   ConversationMessage,
   ConversationState,
   CreateMessageInput,
+  PlanningHistoryEntry,
   RespondentType,
 } from '../types/conversation.types';
 import { CONVERSATION_TRANSITIONS as TRANSITIONS } from '../types/conversation.types';
@@ -41,6 +42,33 @@ export class ConversationService {
 
   getMessages(conversationId: string): ConversationMessage[] {
     return this.msgRepo.findByConversationId(conversationId);
+  }
+
+  /**
+   * Planning conversation history for an org (REQ-P2), newest first. The title is derived from
+   * the first human message (the user's opening prompt); falls back to a placeholder when none
+   * exists yet. Sourced entirely from the conversation table — no agent-side session/list call.
+   */
+  findPlanningHistory(orgId: string): PlanningHistoryEntry[] {
+    return this.convRepo
+      .findByOrgId(orgId)
+      .filter((c) => c.type === 'planning')
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((c) => ({
+        id: c.id,
+        title: this.derivePlanningTitle(c.id),
+        state: c.state,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      }));
+  }
+
+  private derivePlanningTitle(conversationId: string): string {
+    const firstHuman = this.msgRepo.findFirstHuman(conversationId);
+    const text = firstHuman?.content.trim();
+    if (!text) return '';
+    const firstLine = text.split('\n')[0]!.trim();
+    return firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine;
   }
 
   getLatestMessages(conversationId: string, limit: number): ConversationMessage[] {

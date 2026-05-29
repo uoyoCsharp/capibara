@@ -1,5 +1,9 @@
 import { create } from 'zustand';
-import type { ConversationRecord, ConversationMessageRecord } from '@core/shared/types';
+import type {
+  ConversationRecord,
+  ConversationMessageRecord,
+  PlanningHistoryRecord,
+} from '@core/shared/types';
 import { subscribeToEvents } from '../lib/subscribe-to-events';
 
 const api = () => window.capibara;
@@ -7,7 +11,14 @@ const api = () => window.capibara;
 interface ConversationState {
   conversations: ConversationRecord[];
   activeConversations: ConversationRecord[];
+  planningHistory: PlanningHistoryRecord[];
   messages: ConversationMessageRecord[];
+  /**
+   * Per-conversation message cache for flicker-free rehydration on re-entry (REQ-P4, BR-13).
+   * Re-entering a conversation can seed its view from here synchronously before the async
+   * reload completes, so the page never shows an empty/reset state first.
+   */
+  messageCache: Record<string, ConversationMessageRecord[]>;
   currentOrgId: string | null;
   selectedConversationId: string | null;
   isLoading: boolean;
@@ -18,7 +29,10 @@ interface ConversationState {
   setSelectedConversationId: (id: string | null) => void;
   loadConversations: (orgId: string) => Promise<void>;
   loadActiveConversations: (orgId: string) => Promise<void>;
+  loadPlanningHistory: (orgId: string) => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
+  getCachedMessages: (conversationId: string) => ConversationMessageRecord[];
+  setCachedMessages: (conversationId: string, messages: ConversationMessageRecord[]) => void;
   resolve: (id: string) => Promise<boolean>;
   cancel: (id: string) => Promise<boolean>;
   markWaitingAI: (conversationId: string) => void;
@@ -31,7 +45,9 @@ let conversationUnsubscribe: (() => void) | null = null;
 export const useConversationStore = create<ConversationState>((set, get) => ({
   conversations: [],
   activeConversations: [],
+  planningHistory: [],
   messages: [],
+  messageCache: {},
   currentOrgId: null,
   selectedConversationId: null,
   isLoading: false,
@@ -67,9 +83,25 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (result.ok) set({ activeConversations: result.data });
   },
 
+  loadPlanningHistory: async (orgId) => {
+    const result = await api().getPlanningHistory(orgId);
+    if (result.ok) set({ planningHistory: result.data });
+  },
+
+  getCachedMessages: (conversationId) => get().messageCache[conversationId] ?? [],
+
+  setCachedMessages: (conversationId, messages) => set((s) => ({
+    messageCache: { ...s.messageCache, [conversationId]: messages },
+  })),
+
   loadMessages: async (conversationId) => {
     const result = await api().getConversationMessages(conversationId);
-    if (result.ok) set({ messages: result.data });
+    if (result.ok) {
+      set((s) => ({
+        messages: result.data,
+        messageCache: { ...s.messageCache, [conversationId]: result.data },
+      }));
+    }
   },
 
   resolve: async (id) => {

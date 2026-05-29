@@ -77,4 +77,13 @@ export function registerConversationHandlers(
       return ok(active ?? null);
     } catch (e) { return err('INTERNAL', String(e)); }
   });
+
+  /**
+   * List past planning conversations for an org (REQ-P2), newest first. Sourced from the
+   * conversation table; the renderer's history view resumes a selected entry by id.
+   */
+  ipcMain.handle('capibara:planning:history', async (_ev, orgId: string) => {
+    try { return ok(conversationService.findPlanningHistory(orgId)); }
+    catch (e) { return err('INTERNAL', String(e)); }
+  });
 }

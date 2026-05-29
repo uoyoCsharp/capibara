@@ -26,11 +26,16 @@ function createMockSessionManager(): IAcpSessionManager {
       textOutput: 'Task completed successfully',
       tokensUsed: { input: 500, output: 200, cached: 100 },
     }),
-    resumeSession: vi.fn().mockResolvedValue(undefined),
-    closeSession: vi.fn().mockResolvedValue(undefined),
+    suspend: vi.fn().mockResolvedValue(undefined),
+    resume: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    expire: vi.fn().mockResolvedValue(undefined),
+    reconcileOnStartup: vi.fn().mockResolvedValue(undefined),
+    sweepIdle: vi.fn().mockResolvedValue(undefined),
     cancelPrompt: vi.fn().mockResolvedValue(undefined),
     getAgentCapabilities: vi.fn().mockReturnValue(null),
     getActiveSession: vi.fn().mockReturnValue(null),
+    findByAcpSessionId: vi.fn().mockReturnValue(null),
     shutdown: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -152,13 +157,48 @@ describe('AcpExecutor', () => {
       expect(output.sessionId).toBe('acp-sess-1');
     });
 
-    it('should close session and remove callbacks after completion', async () => {
+    it('should close session and remove callbacks after a task completes (close_on_complete)', async () => {
+      const input = createTestInput({ lifecycleIntent: 'close_on_complete' });
+      const handle = await executor.spawn(input);
+      await handle.complete();
+
+      expect(sessionManager.close).toHaveBeenCalledWith('internal-1', 'completed');
+      expect(sessionManager.suspend).not.toHaveBeenCalled();
+      expect(updateHandler.removeCallbacks).toHaveBeenCalledWith('acp-sess-1');
+    });
+
+    it('should suspend (idle), not close, when intent is keep_alive (planning continuation)', async () => {
+      const input = createTestInput({ lifecycleIntent: 'keep_alive' });
+      const handle = await executor.spawn(input);
+      const output = await handle.complete();
+
+      expect(sessionManager.suspend).toHaveBeenCalledWith('internal-1', 'idle');
+      expect(sessionManager.close).not.toHaveBeenCalled();
+      expect(output.status).toBe('succeeded');
+      expect(updateHandler.removeCallbacks).toHaveBeenCalledWith('acp-sess-1');
+    });
+
+    it('should default to close_on_complete when no intent is supplied', async () => {
       const input = createTestInput();
       const handle = await executor.spawn(input);
       await handle.complete();
 
-      expect(sessionManager.closeSession).toHaveBeenCalledWith('internal-1');
-      expect(updateHandler.removeCallbacks).toHaveBeenCalledWith('acp-sess-1');
+      expect(sessionManager.close).toHaveBeenCalledWith('internal-1', 'completed');
+    });
+
+    it('should close with reason "error" on an abnormal stop reason', async () => {
+      (sessionManager.prompt as ReturnType<typeof vi.fn>).mockResolvedValue({
+        stopReason: 'max_tokens',
+        textOutput: 'partial',
+        tokensUsed: { input: 1000, output: 4096, cached: 0 },
+      });
+      const input = createTestInput({ lifecycleIntent: 'keep_alive' });
+      const handle = await executor.spawn(input);
+      const output = await handle.complete();
+
+      expect(sessionManager.close).toHaveBeenCalledWith('internal-1', 'error');
+      expect(sessionManager.suspend).not.toHaveBeenCalled();
+      expect(output.status).toBe('failed');
     });
 
     it('should resolve with cancelled status on cancelled stop reason', async () => {
@@ -214,6 +254,96 @@ describe('AcpExecutor', () => {
       await vi.waitFor(() => {
         expect(sessionManager.cancelPrompt).toHaveBeenCalledWith('internal-1');
       });
+    });
+  });
+
+  describe('pending-inquiry suspension (collaboration)', () => {
+    function wireCollaboration(): { suspend: ReturnType<typeof vi.fn> } {
+      const suspend = vi.fn();
+      const mockConvRepo = {
+        findByTaskId: vi.fn().mockReturnValue([
+          { id: 'inq-1', type: 'inquiry', initiatorRoleId: 'role-1', state: 'waiting', respondentRoleId: 'role-2' },
+        ]),
+      } as any;
+      executor.setConversationRepository(mockConvRepo);
+      executor.setSuspensionManager({ suspend } as any);
+      return { suspend };
+    }
+
+    it('suspends the session (collaboration) without closing when an inquiry is pending', async () => {
+      const { suspend } = wireCollaboration();
+
+      const input = createTestInput({ lifecycleIntent: 'close_on_complete' });
+      const handle = await executor.spawn(input);
+      const output = await handle.complete();
+
+      expect(sessionManager.suspend).toHaveBeenCalledWith('internal-1', 'collaboration');
+      expect(sessionManager.close).not.toHaveBeenCalled();
+      expect(suspend).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: 'internal-1',
+        awaitingInquiries: [{ conversationId: 'inq-1', respondentRoleId: 'role-2' }],
+      }));
+      expect(output.status).toBe('suspended');
+    });
+
+    it('closes (does not orphan-suspend) when an inquiry is pending but no suspension manager is wired', async () => {
+      // Only the conversation repo is set — suspensionManager intentionally left unset.
+      const mockConvRepo = {
+        findByTaskId: vi.fn().mockReturnValue([
+          { id: 'inq-1', type: 'inquiry', initiatorRoleId: 'role-1', state: 'waiting', respondentRoleId: 'role-2' },
+        ]),
+      } as any;
+      executor.setConversationRepository(mockConvRepo);
+
+      const input = createTestInput({ lifecycleIntent: 'close_on_complete' });
+      const handle = await executor.spawn(input);
+      const output = await handle.complete();
+
+      // Must close rather than mark the session suspended-with-no-resume-record (orphan).
+      expect(sessionManager.close).toHaveBeenCalledWith('internal-1', 'completed');
+      expect(sessionManager.suspend).not.toHaveBeenCalled();
+      expect(output.status).toBe('succeeded');
+      expect(logger.logs.some(l => l.level === 'error' && /no suspension manager/i.test(l.msg))).toBe(true);
+    });
+  });
+
+  describe('resume', () => {
+    it('resumes an existing session via the manager and does not create a new one', async () => {
+      (sessionManager.findByAcpSessionId as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: 'internal-1', acpSessionId: 'acp-sess-1', status: 'suspended',
+      });
+
+      const input = createTestInput({ sessionId: 'acp-sess-1', prompt: 'aggregated reply' });
+      await executor.spawn(input);
+
+      expect(sessionManager.resume).toHaveBeenCalledWith('internal-1');
+      expect(sessionManager.createSession).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a fresh session at INFO (not WARN) when resume fails', async () => {
+      (sessionManager.findByAcpSessionId as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: 'internal-1', acpSessionId: 'acp-sess-1', status: 'suspended',
+      });
+      (sessionManager.resume as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('agent gone'));
+
+      const input = createTestInput({ sessionId: 'acp-sess-1' });
+      await executor.spawn(input);
+
+      expect(sessionManager.createSession).toHaveBeenCalled();
+      expect(logger.logs.some(l => l.level === 'warn')).toBe(false);
+      expect(logger.logs.some(l => l.level === 'info' && /resume unavailable/i.test(l.msg))).toBe(true);
+    });
+
+    it('does not attempt resume on a closed session; starts fresh', async () => {
+      (sessionManager.findByAcpSessionId as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: 'internal-1', acpSessionId: 'acp-sess-1', status: 'closed',
+      });
+
+      const input = createTestInput({ sessionId: 'acp-sess-1' });
+      await executor.spawn(input);
+
+      expect(sessionManager.resume).not.toHaveBeenCalled();
+      expect(sessionManager.createSession).toHaveBeenCalled();
     });
   });
 

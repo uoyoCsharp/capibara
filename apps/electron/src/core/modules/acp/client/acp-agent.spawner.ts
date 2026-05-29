@@ -24,7 +24,10 @@ export interface SessionContext {
 export class AcpAgentSpawner {
   private processes = new Map<string, AgentProcess>();
   private filesystemHandler: AcpFilesystemHandler | null = null;
-  private sessionContextResolver: ((key: string) => SessionContext | null) | null = null;
+  /** Resolve session context by its ACP session id. Set by AcpSessionManager. */
+  private sessionContextResolver: ((acpSessionId: string) => SessionContext | null) | null = null;
+  /** ACP session id of the prompt currently in flight on each agent connection (ADR-4). */
+  private inFlightByAgent = new Map<string, string>();
   private shuttingDown = false;
 
   constructor(
@@ -42,10 +45,34 @@ export class AcpAgentSpawner {
   }
 
   /**
-   * Set a resolver that maps ACP session IDs to session context (roleId, cwd, allowedPaths).
+   * Set a resolver that maps an ACP session id to its session context (roleId, cwd, allowedPaths).
    */
-  setSessionContextResolver(resolver: (key: string) => SessionContext | null): void {
+  setSessionContextResolver(resolver: (acpSessionId: string) => SessionContext | null): void {
     this.sessionContextResolver = resolver;
+  }
+
+  /**
+   * Record (or clear) the ACP session id whose prompt is currently in flight on the given agent
+   * connection. fs/permission callbacks — which carry no session id — resolve their context
+   * against this per-connection value instead of a global "current session" sentinel (ADR-4).
+   */
+  setInFlightSession(agentId: string, acpSessionId: string | null): void {
+    if (acpSessionId === null) {
+      this.inFlightByAgent.delete(agentId);
+    } else {
+      this.inFlightByAgent.set(agentId, acpSessionId);
+    }
+  }
+
+  /**
+   * Resolve the session context for the prompt in flight on the given agent connection.
+   * Exactly one prompt is in flight per connection at a time, so this is unambiguous.
+   */
+  private resolveInFlightContext(agentId: string): SessionContext | null {
+    if (!this.sessionContextResolver) return null;
+    const acpSessionId = this.inFlightByAgent.get(agentId);
+    if (!acpSessionId) return null;
+    return this.sessionContextResolver(acpSessionId);
   }
 
   /**
@@ -78,6 +105,7 @@ export class AcpAgentSpawner {
     child.on('exit', (code) => {
       agentProcess.exited = true;
       this.processes.delete(agentId);
+      this.inFlightByAgent.delete(agentId);
       if (!this.shuttingDown) {
         this.logger.info('Agent process exited', { agentId, code });
       }
@@ -86,6 +114,7 @@ export class AcpAgentSpawner {
     child.on('error', (err) => {
       agentProcess.exited = true;
       this.processes.delete(agentId);
+      this.inFlightByAgent.delete(agentId);
       if (!this.shuttingDown) {
         this.logger.error('Agent process error', { agentId, error: String(err) });
       }
@@ -109,8 +138,8 @@ export class AcpAgentSpawner {
           this.updateHandler.handleUpdate(params.sessionId, params.update);
         },
         requestPermission: async (params: acp.RequestPermissionRequest) => {
-          // Resolve session context for policy evaluation via active session
-          const ctx = this.sessionContextResolver?.('__current__');
+          // Resolve context for the prompt in flight on THIS agent connection (ADR-4).
+          const ctx = this.resolveInFlightContext(agentId);
           if (ctx) {
             return this.permissionHandler.handlePermissionRequest(
               params,
@@ -125,9 +154,8 @@ export class AcpAgentSpawner {
           if (!this.filesystemHandler || !this.sessionContextResolver) {
             return { content: '' };
           }
-          // Resolve which session this request belongs to using the file path context
-          // ACP readTextFile doesn't carry sessionId; look up by matching active sessions
-          const ctx = this.resolveContextForFsRequest();
+          // ACP readTextFile carries no sessionId; resolve via the in-flight prompt on this connection.
+          const ctx = this.resolveInFlightContext(agentId);
           if (!ctx) {
             this.logger.warn('No session context for readTextFile', { path: params.path });
             return { content: '' };
@@ -146,7 +174,7 @@ export class AcpAgentSpawner {
           if (!this.filesystemHandler || !this.sessionContextResolver) {
             return {};
           }
-          const ctx = this.resolveContextForFsRequest();
+          const ctx = this.resolveInFlightContext(agentId);
           if (!ctx) {
             this.logger.warn('No session context for writeTextFile', { path: params.path });
             return {};
@@ -198,6 +226,7 @@ export class AcpAgentSpawner {
       ?? !!sessionCaps?.resume;
     const supportsLoad = entry.capabilities?.supportsLoad
       ?? !!caps.loadSession;
+    const supportsList = !!sessionCaps?.list;
 
     const mcpCaps = caps.mcpCapabilities;
     const transports: ('stdio' | 'sse')[] = [];
@@ -206,7 +235,7 @@ export class AcpAgentSpawner {
     if (mcpCaps?.sse) transports.push('sse');
     if (transports.length === 0) transports.push('stdio'); // default to stdio
 
-    return { supportsResume, supportsLoad, supportedMcpTransports: transports };
+    return { supportsResume, supportsLoad, supportsList, supportedMcpTransports: transports };
   }
 
   /**
@@ -214,17 +243,6 @@ export class AcpAgentSpawner {
    */
   getCapabilities(agentId: string): AgentCapabilities | null {
     return this.processes.get(agentId)?.capabilities ?? null;
-  }
-
-  /**
-   * Resolve session context for filesystem requests.
-   * Since ACP fs callbacks don't carry session IDs, we resolve via the first active session context.
-   */
-  private resolveContextForFsRequest(): SessionContext | null {
-    // The session context resolver is set by AcpSessionManager which tracks active sessions
-    if (!this.sessionContextResolver) return null;
-    // Use a special sentinel to get the "current" active session
-    return this.sessionContextResolver('__current__');
   }
 
   /**
@@ -238,5 +256,6 @@ export class AcpAgentSpawner {
       }
     }
     this.processes.clear();
+    this.inFlightByAgent.clear();
   }
 }

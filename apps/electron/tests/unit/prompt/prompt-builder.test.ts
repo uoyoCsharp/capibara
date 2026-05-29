@@ -101,7 +101,12 @@ describe('PromptBuilder', () => {
 
     it('passes args to RunContext.buildForConversation', () => {
       builder.buildForConversation('c-1', 'r-1', 'ja');
-      expect(runContext.buildForConversation).toHaveBeenCalledWith('c-1', 'r-1', 'ja');
+      expect(runContext.buildForConversation).toHaveBeenCalledWith('c-1', 'r-1', 'ja', undefined);
+    });
+
+    it('forwards forceFullContext options to RunContext (ADR-6)', () => {
+      builder.buildForConversation('c-1', 'r-1', 'ja', { forceFullContext: true });
+      expect(runContext.buildForConversation).toHaveBeenCalledWith('c-1', 'r-1', 'ja', { forceFullContext: true });
     });
   });
 

@@ -400,6 +400,30 @@ describe('RunContext', () => {
       expect(ctx!.locale).toBe('en');
     });
 
+    it('uses the recent-window builder by default (ADR-6)', () => {
+      vi.mocked(convContextBuilder.build).mockReturnValue({
+        conversationId: 'conv-1', type: 'inquiry', state: 'waiting',
+        initiatorRoleId: 'role-init', respondentRoleId: TEST_ROLE_ID,
+        taskId: null, messageHistory: [], depth: 0, externalSessionId: null,
+      });
+
+      runContext.buildForConversation('conv-1', TEST_ROLE_ID, 'en');
+      // Default window: no explicit maxMessages passed to the builder.
+      expect(convContextBuilder.build).toHaveBeenCalledWith('conv-1', undefined);
+    });
+
+    it('forces full message history on rebuild when forceFullContext is set (ADR-6)', () => {
+      vi.mocked(convContextBuilder.build).mockReturnValue({
+        conversationId: 'conv-1', type: 'inquiry', state: 'waiting',
+        initiatorRoleId: 'role-init', respondentRoleId: TEST_ROLE_ID,
+        taskId: null, messageHistory: [], depth: 0, externalSessionId: null,
+      });
+
+      runContext.buildForConversation('conv-1', TEST_ROLE_ID, 'en', { forceFullContext: true });
+      // maxMessages = 0 signals the builder to load the full history (no recent-window cap).
+      expect(convContextBuilder.build).toHaveBeenCalledWith('conv-1', 0);
+    });
+
     it('includes task data with isDecomposable when conversation has taskId', () => {
       vi.mocked(convContextBuilder.build).mockReturnValue({
         conversationId: 'conv-1',

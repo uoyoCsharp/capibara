@@ -81,6 +81,7 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
     // Conversational Planning
     startPlanning: vi.fn(),
     getActivePlanning: vi.fn().mockResolvedValue(ok(null)),
+    getPlanningHistory: vi.fn().mockResolvedValue(ok([])),
     getPlanTreeByConversation: vi.fn().mockResolvedValue(ok(null)),
     approvePlanTreeByConversation: vi.fn().mockResolvedValue(ok(null)),
     discardPlanTreeByConversation: vi.fn().mockResolvedValue(ok(null)),

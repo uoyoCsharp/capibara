@@ -123,6 +123,15 @@ export interface ConversationMessageRecord {
   createdAt: string;
 }
 
+/** Planning conversation history list entry (REQ-P2). Title derived from the first human message. */
+export interface PlanningHistoryRecord {
+  id: string;
+  title: string;
+  state: 'active' | 'waiting' | 'resolved' | 'escalated' | 'timed_out' | 'cancelled' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CostSummaryRecord {
   totalTokens: number;
   totalCost: number;

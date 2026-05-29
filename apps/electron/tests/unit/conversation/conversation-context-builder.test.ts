@@ -119,6 +119,21 @@ describe('ConversationContextBuilder', () => {
     expect(msgRepo.findLatest).toHaveBeenCalledWith('conv-1', 5);
   });
 
+  it('loads the full message history (not the recent window) when maxMessages <= 0', () => {
+    const full = [
+      createMsg({ id: 'm1', content: 'first' }),
+      createMsg({ id: 'm2', content: 'second' }),
+    ];
+    vi.mocked(msgRepo.findByConversationId).mockReturnValue(full);
+
+    const ctx = builder.build('conv-1', 0);
+
+    expect(msgRepo.findByConversationId).toHaveBeenCalledWith('conv-1');
+    expect(msgRepo.findLatest).not.toHaveBeenCalled();
+    expect(ctx!.messageHistory).toHaveLength(2);
+    expect(ctx!.messageHistory[0].content).toBe('first');
+  });
+
   it('handles conversation with null optional fields', () => {
     vi.mocked(convRepo.findById).mockReturnValue(createConv({
       respondentRoleId: null,

@@ -113,6 +113,10 @@ export async function bootstrap(): Promise<void> {
   const org = registerOrganizationModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'templates'));
   acpModule = registerAcpModule(eventBus, logger, agentConfig, sqliteConn, org.roleRepo, config.collaboration);
 
+  // ADR-7: agent subprocesses died with the previous app process, so every persisted non-terminal
+  // session is stale. Mark them expired (rebuild lazily on next use); no eager reconnect.
+  await acpModule.sessionManager.reconcileOnStartup();
+
   const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'), org.roleRepo);
   const conversation = registerConversationModule(sqliteConn, eventPublisher, logger);
   workflow.taskService.setConversationRepository(conversation.conversationRepo);
@@ -260,6 +264,7 @@ export async function bootstrap(): Promise<void> {
   eventBroadcaster.start();
   coordination.inquiryRouter.start();
   planning.planningService.init();
+  acpModule.sessionSweeper.start();
   eventPublisher.start();
 
   logger.info('Capibara core bootstrapped successfully');
@@ -267,6 +272,7 @@ export async function bootstrap(): Promise<void> {
 
 export async function shutdown(): Promise<void> {
   logger?.info('Shutting down Capibara core...');
+  acpModule?.sessionSweeper.stop();
   await acpModule?.sessionManager.shutdown();
   mcpTransport?.stop();
   sqliteConn?.close();

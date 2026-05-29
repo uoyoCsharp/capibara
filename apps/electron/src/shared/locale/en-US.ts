@@ -388,6 +388,14 @@ export const enUS: LocaleMessages = {
       starting: 'Starting...',
       shortcutHint: 'Press ⌘/Ctrl + Enter to send',
     },
+    history: {
+      title: 'Planning sessions',
+      newSession: 'New session',
+      empty: 'No planning sessions yet. Start one to begin.',
+      untitled: 'Untitled session',
+      backToHistory: 'Back to planning sessions',
+      notFound: 'Could not open that planning session',
+    },
   },
 
   planningChat: {
@@ -401,6 +409,7 @@ export const enUS: LocaleMessages = {
     system: 'System',
     failedResponse: 'AI failed to respond. You can send another message to retry.',
     cancelled: 'AI run was cancelled. You can send another message to retry.',
+    readOnlyNotice: 'This planning session has ended and is read-only.',
     progressToolCallStatus: {
       running: '...',
       completed: 'done',

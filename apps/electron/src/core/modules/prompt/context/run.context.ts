@@ -154,8 +154,18 @@ export class RunContext {
     };
   }
 
-  buildForConversation(conversationId: string, roleId: string, locale: string): ConversationPromptContext | null {
-    const convContext = this.convContextBuilder.build(conversationId);
+  buildForConversation(
+    conversationId: string,
+    roleId: string,
+    locale: string,
+    options?: { forceFullContext?: boolean },
+  ): ConversationPromptContext | null {
+    // On rebuild (ADR-6) the agent-side session is gone, so the recent-window summary is not
+    // enough — reconstruct from the full message history (maxMessages = 0 means "no cap").
+    const convContext = this.convContextBuilder.build(
+      conversationId,
+      options?.forceFullContext ? 0 : undefined,
+    );
     if (!convContext) return null;
     const role = this.roleRepo.findById(roleId);
     if (!role) return null;

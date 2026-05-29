@@ -21,9 +21,16 @@ import {
 import { Button } from '../ui/button';
 import { PlanningAgentPicker } from './PlanningAgentPicker';
 import { PlanningChat } from './PlanningChat';
+import { PlanningHistory } from './PlanningHistory';
 import { PlanPreviewPane } from './PlanPreviewPane';
+import { useConversationStore } from '../../store/conversation.store';
 
 const api = () => window.capibara;
+
+/** Conversation states past which a planning session is over — re-entry from history is read-only. */
+const TERMINAL_CONVERSATION_STATES = new Set<ConversationRecord['state']>([
+  'resolved', 'cancelled', 'completed', 'timed_out',
+]);
 
 interface PlanningPageProps {
   orgId: string | null;
@@ -31,6 +38,7 @@ interface PlanningPageProps {
 
 type Phase =
   | { kind: 'loading' }
+  | { kind: 'history' }
   | { kind: 'pick-agent' }
   | { kind: 'awaiting-first-message'; agentRoleId: string }
   | { kind: 'chatting'; conversation: ConversationRecord }
@@ -43,31 +51,58 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
   const loadRoles = useOrganizationStore((s) => s.loadRoles);
   const { typeLabel } = useWorkflowSchema(orgId);
 
+  const planningHistory = useConversationStore((s) => s.planningHistory);
+  const loadPlanningHistory = useConversationStore((s) => s.loadPlanningHistory);
+
   const [phase, setPhase] = useState<Phase>(orgId ? { kind: 'loading' } : { kind: 'no-org' });
   const [isAIBusy, setIsAIBusy] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [hasTree, setHasTree] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     if (orgId) void loadRoles(orgId);
   }, [orgId, loadRoles]);
 
-  // On mount / org change: look for an active planning conversation to resume.
+  // On mount / org change: if a planning conversation is already active, resume it directly;
+  // otherwise land on the history list (REQ-P2) from which the user resumes or starts fresh.
   useEffect(() => {
     if (!orgId) {
       setPhase({ kind: 'no-org' });
       return;
     }
     setPhase({ kind: 'loading' });
+    setHistoryLoading(true);
     void (async () => {
-      const res = await api().getActivePlanning(orgId);
-      if (res.ok && res.data) {
-        setPhase({ kind: 'chatting', conversation: res.data });
-      } else {
-        setPhase({ kind: 'pick-agent' });
+      const active = await api().getActivePlanning(orgId);
+      if (active.ok && active.data) {
+        setPhase({ kind: 'chatting', conversation: active.data });
+        void loadPlanningHistory(orgId).finally(() => setHistoryLoading(false));
+        return;
       }
+      await loadPlanningHistory(orgId);
+      setHistoryLoading(false);
+      setPhase({ kind: 'history' });
     })();
-  }, [orgId]);
+  }, [orgId, loadPlanningHistory]);
+
+  const handleSelectHistory = useCallback(async (conversationId: string) => {
+    const res = await api().getConversation(conversationId);
+    if (res.ok && res.data) {
+      setPhase({ kind: 'chatting', conversation: res.data });
+    } else {
+      toast.error(res.ok ? t.planning.history.notFound : (res.error?.message ?? t.planning.history.notFound));
+    }
+  }, [t]);
+
+  const handleNewSession = useCallback(() => {
+    setPhase({ kind: 'pick-agent' });
+  }, []);
+
+  const backToHistory = useCallback(() => {
+    if (orgId) void loadPlanningHistory(orgId);
+    setPhase({ kind: 'history' });
+  }, [orgId, loadPlanningHistory]);
 
   const handleAgentChosen = useCallback((agentRoleId: string) => {
     setPhase({ kind: 'awaiting-first-message', agentRoleId });
@@ -90,11 +125,11 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
     const res = await api().cancelConversation(phase.conversation.id);
     if (res.ok) {
       toast.info(t.planning.sessionDiscarded);
-      setActiveSection('dashboard');
+      backToHistory();
     } else {
       toast.error(res.error?.message ?? t.planning.failedToCancel);
     }
-  }, [phase, setActiveSection, t]);
+  }, [phase, backToHistory, t]);
 
   const handleApproved = useCallback(() => {
     toast.success(t.planning.tasksCreated);
@@ -121,13 +156,25 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
     );
   }
 
+  if (phase.kind === 'history') {
+    return (
+      <PlanningHistory
+        entries={planningHistory}
+        isLoading={historyLoading}
+        onSelect={(id) => void handleSelectHistory(id)}
+        onNew={handleNewSession}
+        onBack={() => setActiveSection('dashboard')}
+      />
+    );
+  }
+
   if (phase.kind === 'pick-agent') {
     return (
       <>
-        <EmptyState onBack={() => setActiveSection('dashboard')} label={t.planning.preparingSession} />
+        <EmptyState onBack={backToHistory} label={t.planning.preparingSession} />
         <PlanningAgentPicker
           roles={roles}
-          onCancel={() => setActiveSection('dashboard')}
+          onCancel={backToHistory}
           onConfirm={handleAgentChosen}
         />
       </>
@@ -140,7 +187,7 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
       <FirstMessagePrompt
         agent={agent ?? null}
         onSubmit={handleFirstMessage}
-        onBack={() => setActiveSection('dashboard')}
+        onBack={backToHistory}
       />
     );
   }
@@ -149,15 +196,18 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
   const { conversation } = phase;
   const agent = roles.find((r) => r.id === conversation.respondentRoleId);
   const agentName = agent?.name ?? t.planning.defaultAgent;
+  // A terminal conversation (resumed from history) is shown read-only: history is visible
+  // but the composer is disabled so the user can't revive a discarded/finished session.
+  const isTerminal = TERMINAL_CONVERSATION_STATES.has(conversation.state);
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveSection('dashboard')}
+            onClick={backToHistory}
             className="p-1 rounded hover:bg-accent transition-colors"
-            title={t.planning.backToDashboard}
+            title={t.planning.history.backToHistory}
           >
             <ArrowLeft size={16} />
           </button>
@@ -166,13 +216,15 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
             {interpolate(t.planning.withAgent, { agentName })}
           </h1>
         </div>
-        <button
-          onClick={() => setShowCancelConfirm(true)}
-          className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 px-2 py-1 rounded hover:bg-destructive/10 transition-colors"
-        >
-          <X size={14} />
-          {t.planning.cancelSession}
-        </button>
+        {!isTerminal && (
+          <button
+            onClick={() => setShowCancelConfirm(true)}
+            className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 px-2 py-1 rounded hover:bg-destructive/10 transition-colors"
+          >
+            <X size={14} />
+            {t.planning.cancelSession}
+          </button>
+        )}
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -182,6 +234,7 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
             roles={roles}
             isAIBusy={isAIBusy}
             onAIBusyChange={setIsAIBusy}
+            readOnly={isTerminal}
           />
         </div>
         <div

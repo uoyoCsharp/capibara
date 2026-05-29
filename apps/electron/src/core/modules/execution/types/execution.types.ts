@@ -6,6 +6,15 @@ export type RunStatus =
   | 'interrupted'
   | 'suspended';
 
+/**
+ * Caller-supplied session-lifecycle intent. Threaded from RunCoordinator through
+ * RunEngine to AcpExecutor, where it decides whether a completed session is suspended
+ * (kept alive on the agent side) or closed. Defined here — the execution layer is the
+ * shared lower layer that ACP depends on, so the canonical type lives here to avoid a
+ * dependency cycle; `acp.types` re-exports it.
+ */
+export type LifecycleIntent = 'keep_alive' | 'close_on_complete';
+
 export type WakeReason =
   | 'task_assigned'
   | 'task_scheduled'
@@ -74,6 +83,11 @@ export interface ExecutorInput {
   prompt: string;
   projectDir: string;
   sessionId?: string;
+  /**
+   * Session-lifecycle intent. The executor calls `decideLifecycle` with this and the
+   * observed stop reason to choose suspend-vs-close. Defaults to `close_on_complete` when absent.
+   */
+  lifecycleIntent?: LifecycleIntent;
 }
 
 export interface ExecutorOutput {
@@ -98,6 +112,8 @@ export interface RunExecutionParams {
   wakeReason?: WakeReason;
   userMessage?: string;
   projectDir?: string;
+  /** Session-lifecycle intent, threaded through to the executor. Defaults to `close_on_complete`. */
+  lifecycleIntent?: LifecycleIntent;
 }
 
 export interface RunResult {

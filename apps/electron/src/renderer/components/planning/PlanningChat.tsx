@@ -8,6 +8,7 @@ import type {
 import { MarkdownContent } from '../ui/markdown-content';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
 import { useToolCalls } from '../../hooks/use-tool-calls';
+import { useConversationStore } from '../../store/conversation.store';
 import { ProgressPhaseIndicator } from './ProgressPhaseIndicator';
 import { useT } from '../../hooks/use-locale';
 import type { LocaleMessages } from '@shared/locale/types';
@@ -27,6 +28,8 @@ interface PlanningChatProps {
   /** When true, the respondent (AI) is processing a wake and input is disabled. */
   isAIBusy: boolean;
   onAIBusyChange: (busy: boolean) => void;
+  /** When true, the conversation is in a terminal state — history is shown but the composer is disabled. */
+  readOnly?: boolean;
 }
 
 function roleName(id: string | null, roles: RoleRecord[], fallback: string): string {
@@ -34,9 +37,14 @@ function roleName(id: string | null, roles: RoleRecord[], fallback: string): str
   return roles.find((r) => r.id === id)?.name ?? id.slice(0, 8);
 }
 
-export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }: PlanningChatProps) {
+export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange, readOnly = false }: PlanningChatProps) {
   const t = useT();
-  const [messages, setMessages] = useState<ConversationMessageRecord[]>([]);
+  const getCachedMessages = useConversationStore((s) => s.getCachedMessages);
+  // Seed from the rehydration cache so re-entering a conversation paints its history
+  // immediately, with no empty-then-fill flicker (REQ-P4, BR-13).
+  const [messages, setMessages] = useState<ConversationMessageRecord[]>(
+    () => getCachedMessages(conversationId),
+  );
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [streamingText, setStreamingText] = useState('');
@@ -51,10 +59,15 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
 
   const { toolCalls } = useToolCalls(isAIBusy ? activeRunId : null);
 
+  const setCachedMessages = useConversationStore((s) => s.setCachedMessages);
   const loadMessages = useCallback(async () => {
     const res = await api().getConversationMessages(conversationId);
-    if (res.ok && res.data) setMessages(res.data);
-  }, [conversationId]);
+    if (res.ok && res.data) {
+      setMessages(res.data);
+      // Mirror into the store cache so a later re-entry can rehydrate without a flicker.
+      setCachedMessages(conversationId, res.data);
+    }
+  }, [conversationId, setCachedMessages]);
 
   useEffect(() => {
     prevMessageCountRef.current = 0;
@@ -64,8 +77,10 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
     setFadingOut(false);
     setFadingInMsgId(null);
     setElapsedSeconds(0);
+    // Re-seed from cache synchronously on conversation switch, then refresh from disk.
+    setMessages(getCachedMessages(conversationId));
     void loadMessages();
-  }, [conversationId, loadMessages]);
+  }, [conversationId, loadMessages, getCachedMessages]);
 
   // Elapsed time counter: runs while AI is busy
   useEffect(() => {
@@ -193,7 +208,7 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
 
   const handleSend = useCallback(async () => {
     const trimmed = replyText.trim();
-    if (!trimmed || isSending || isAIBusy) return;
+    if (!trimmed || isSending || isAIBusy || readOnly) return;
     setIsSending(true);
     try {
       await api().addConversationMessage({
@@ -209,7 +224,7 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
     } finally {
       setIsSending(false);
     }
-  }, [conversationId, replyText, isSending, isAIBusy, loadMessages, onAIBusyChange]);
+  }, [conversationId, replyText, isSending, isAIBusy, readOnly, loadMessages, onAIBusyChange]);
 
   const showProgress = isAIBusy || transitioning;
 
@@ -244,24 +259,30 @@ export function PlanningChat({ conversationId, roles, isAIBusy, onAIBusyChange }
         )}
       </div>
 
-      <div className="border-t border-border p-4 flex gap-2">
-        <input
-          type="text"
-          value={replyText}
-          onChange={(e) => setReplyText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !isSending && !isAIBusy && void handleSend()}
-          placeholder={isAIBusy ? t.planningChat.thinkingPlaceholder : t.planningChat.inputPlaceholder}
-          disabled={isSending || isAIBusy}
-          className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        <button
-          onClick={() => void handleSend()}
-          disabled={!replyText.trim() || isSending || isAIBusy}
-          className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {isSending ? <CircleNotch size={16} className="animate-spin" /> : <ArrowBendUpLeft size={16} />}
-        </button>
-      </div>
+      {readOnly ? (
+        <div className="border-t border-border p-4 text-center text-xs text-muted-foreground">
+          {t.planningChat.readOnlyNotice}
+        </div>
+      ) : (
+        <div className="border-t border-border p-4 flex gap-2">
+          <input
+            type="text"
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !isSending && !isAIBusy && void handleSend()}
+            placeholder={isAIBusy ? t.planningChat.thinkingPlaceholder : t.planningChat.inputPlaceholder}
+            disabled={isSending || isAIBusy}
+            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <button
+            onClick={() => void handleSend()}
+            disabled={!replyText.trim() || isSending || isAIBusy}
+            className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {isSending ? <CircleNotch size={16} className="animate-spin" /> : <ArrowBendUpLeft size={16} />}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

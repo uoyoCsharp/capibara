@@ -75,6 +75,8 @@ const api = {
     ipcRenderer.invoke('capibara:planning:start', orgId, agentRoleId, firstMessage),
   getActivePlanning: (orgId: string) =>
     ipcRenderer.invoke('capibara:planning:active', orgId),
+  getPlanningHistory: (orgId: string) =>
+    ipcRenderer.invoke('capibara:planning:history', orgId),
   getPlanTreeByConversation: (conversationId: string) =>
     ipcRenderer.invoke('capibara:plan-tree:get-by-conversation', conversationId),
   approvePlanTreeByConversation: (conversationId: string, expectedVersion?: number) =>

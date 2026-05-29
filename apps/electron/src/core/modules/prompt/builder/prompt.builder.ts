@@ -14,8 +14,13 @@ export class PromptBuilder {
     return buildTaskPrompt(ctx);
   }
 
-  buildForConversation(conversationId: string, roleId: string, locale: string): string | null {
-    const ctx = this.runContext.buildForConversation(conversationId, roleId, locale);
+  buildForConversation(
+    conversationId: string,
+    roleId: string,
+    locale: string,
+    options?: { forceFullContext?: boolean },
+  ): string | null {
+    const ctx = this.runContext.buildForConversation(conversationId, roleId, locale, options);
     if (!ctx) return null;
     return buildConversationPrompt(ctx);
   }

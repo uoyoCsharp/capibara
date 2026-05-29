@@ -166,6 +166,20 @@ describe.skipIf(!canUseSqlite)('Conversation SQLite Repositories', () => {
       expect(msgs[0].content).toBe('B');
       expect(msgs[1].content).toBe('C');
     });
+
+    it('findFirstHuman returns the earliest human-authored message, skipping AI messages', () => {
+      repo.create({ conversationId: convId, authorRoleId: 'role-init', authorType: 'ai', content: 'AI opener', intent: 'question' });
+      repo.create({ conversationId: convId, authorRoleId: null, authorType: 'human', content: 'First human', intent: 'general' });
+      repo.create({ conversationId: convId, authorRoleId: null, authorType: 'human', content: 'Second human', intent: 'reply' });
+      const msg = repo.findFirstHuman(convId);
+      expect(msg).not.toBeNull();
+      expect(msg!.content).toBe('First human');
+    });
+
+    it('findFirstHuman returns null when there is no human message', () => {
+      repo.create({ conversationId: convId, authorRoleId: 'role-init', authorType: 'ai', content: 'AI only', intent: 'question' });
+      expect(repo.findFirstHuman(convId)).toBeNull();
+    });
   });
 
   describe('ConversationEventLogger', () => {

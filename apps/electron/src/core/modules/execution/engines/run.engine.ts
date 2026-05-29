@@ -85,6 +85,7 @@ export class RunEngine implements IRunEngine {
         prompt: params.sessionId && params.userMessage ? params.userMessage : params.prompt,
         projectDir: params.projectDir ?? '',
         sessionId: params.sessionId,
+        lifecycleIntent: params.lifecycleIntent,
       });
     } catch (err) {
       this.activeOrgs.delete(params.orgId);

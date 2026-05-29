@@ -5,7 +5,7 @@ import type { IConversationRepository } from '@core/modules/conversation/interfa
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { WakeReason } from '@core/modules/execution/types/execution.types';
+import type { LifecycleIntent, WakeReason } from '@core/modules/execution/types/execution.types';
 import type { ResumeDecision } from '@core/modules/acp/collaboration/suspension.types';
 
 @injectable()
@@ -44,6 +44,7 @@ export class RunCoordinator {
       taskId,
       wakeReason,
       projectDir,
+      lifecycleIntent: 'close_on_complete',
     });
 
     return { runId: result.runId, status: result.status };
@@ -80,6 +81,7 @@ export class RunCoordinator {
       wakeReason: 'conversation_reply',
       sessionId: conv.externalSessionId ?? undefined,
       projectDir,
+      lifecycleIntent: 'keep_alive',
     });
 
     if (result.sessionId && !conv.externalSessionId) {
@@ -109,6 +111,9 @@ export class RunCoordinator {
     const org = this.orgRepo.findById(decision.orgId);
     const projectDir = org?.workspacePath || undefined;
 
+    // a suspended planning conversation resumes keeping the session alive.
+    const lifecycleIntent: LifecycleIntent = decision.taskId ? 'close_on_complete' : 'keep_alive';
+
     const result = await this.runEngine.execute({
       roleId: decision.roleId,
       orgId: decision.orgId,
@@ -119,6 +124,7 @@ export class RunCoordinator {
       wakeReason: 'conversation_reply',
       sessionId: decision.acpSessionId,
       projectDir,
+      lifecycleIntent,
     });
 
     return { runId: result.runId, status: result.status };

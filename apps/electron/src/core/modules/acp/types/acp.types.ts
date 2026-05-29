@@ -5,6 +5,8 @@
 
 import type * as schema from '@agentclientprotocol/sdk';
 
+export type { LifecycleIntent } from '@core/modules/execution/types/execution.types';
+
 // ── Agent Configuration ──────────────────────────────────
 
 export type McpTransportType = 'sse' | 'http';
@@ -36,6 +38,16 @@ export interface CollaborationConfig {
   maxBroadcastTargets: number;
   maxResumeCount: number;
   inquiryTimeoutMs: number;
+  /**
+   * Idle suspension TTL (ms). Idle planning sessions older than this are expired by the sweeper.
+   * Optional until the sweeper (and its config plumbing) lands; defaults applied by consumers.
+   */
+  sessionTtlMs?: number;
+  /**
+   * Absolute liveness cap (ms) for collaboration suspensions, which are otherwise idle-TTL exempt.
+   * Optional until the sweeper lands; defaults applied by consumers.
+   */
+  collaborationCapMs?: number;
 }
 
 // ── Agent Process ────────────────────────────────────────
@@ -43,6 +55,8 @@ export interface CollaborationConfig {
 export interface AgentCapabilities {
   supportsResume: boolean;
   supportsLoad: boolean;
+  /** Whether the agent advertises `sessionCapabilities.list` (session/list discovery). */
+  supportsList: boolean;
   supportedMcpTransports: ('stdio' | 'sse')[];
 }
 
@@ -56,7 +70,45 @@ export interface AgentProcess {
 
 // ── ACP Session ──────────────────────────────────────────
 
-export type AcpSessionStatus = 'active' | 'suspended' | 'closed' | 'error';
+export type AcpSessionStatus = 'active' | 'suspended' | 'closed' | 'expired';
+
+/**
+ * Why a session was suspended. Drives lifecycle policy:
+ * - 'idle'          — planning session waiting for the user; subject to idle TTL.
+ * - 'collaboration' — waiting for another AI's reply; TTL-exempt (liveness bound to
+ *                     the awaiting records), guarded only by an absolute cap.
+ */
+export type SuspendReason = 'idle' | 'collaboration';
+
+/** Why a session was closed (persisted for diagnostics; replaces the old 'error' status). */
+export type CloseReason = 'completed' | 'user_closed' | 'expired' | 'error' | 'cancelled' | 'shutdown';
+
+/**
+ * Lean, persistable view of a session's lifecycle owned by Capibara. The agent process
+ * remains the source of truth for session *history content* (retrieved via session/load),
+ * so derivable fields (cwd, mcpServers, allowedPaths, capabilities) are intentionally NOT
+ * stored here — they are re-derived from role+org config on rebuild.
+ */
+export interface AcpSessionRecord {
+  id: string;
+  acpSessionId: string;
+  agentId: string;
+  roleId: string;
+  orgId: string;
+  runId: string | null;
+  /** Planning binding (supersedes conversation.externalSessionId as the source of truth). */
+  conversationId: string | null;
+  taskId: string | null;
+  status: AcpSessionStatus;
+  suspendReason: SuspendReason | null;
+  resumeStrategy: 'resume' | 'load' | 'rebuild';
+  resumeCount: number;
+  /** Last prompt/resume activity; drives idle-TTL sweeping. */
+  lastActivityAt: string;
+  createdAt: string;
+  closedAt: string | null;
+  closeReason: CloseReason | null;
+}
 
 export interface AcpSession {
   id: string;

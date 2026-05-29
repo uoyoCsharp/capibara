@@ -400,6 +400,14 @@ export interface LocaleMessages {
       starting: string;
       shortcutHint: string;
     };
+    history: {
+      title: string;
+      newSession: string;
+      empty: string;
+      untitled: string;
+      backToHistory: string;
+      notFound: string;
+    };
   };
 
   planningChat: {
@@ -413,6 +421,7 @@ export interface LocaleMessages {
     system: string;
     failedResponse: string;
     cancelled: string;
+    readOnlyNotice: string;
     progressToolCallStatus: {
       running: string;
       completed: string;

@@ -7,6 +7,7 @@ import type {
   RunRecord,
   ConversationRecord,
   ConversationMessageRecord,
+  PlanningHistoryRecord,
   CostSummaryRecord,
   PendingTreeRecord,
   DesktopEvent,
@@ -104,6 +105,7 @@ export interface CapibaraApi {
     firstMessage: string,
   ) => Promise<DesktopResult<ConversationRecord>>;
   getActivePlanning: (orgId: string) => Promise<DesktopResult<ConversationRecord | null>>;
+  getPlanningHistory: (orgId: string) => Promise<DesktopResult<PlanningHistoryRecord[]>>;
   getPlanTreeByConversation: (
     conversationId: string,
   ) => Promise<DesktopResult<PendingTreeRecord | null>>;

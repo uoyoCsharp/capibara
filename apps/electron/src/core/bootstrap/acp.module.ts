@@ -5,6 +5,7 @@ import type { IRoleRepository } from '@core/modules/organization/interfaces/i-ro
 import type { AgentRegistryConfig, CollaborationConfig } from '@core/modules/acp/types/acp.types';
 import { AcpAgentSpawner } from '@core/modules/acp/client/acp-agent.spawner';
 import { AcpSessionManager } from '@core/modules/acp/client/acp-session.manager';
+import { AcpSessionSweeper } from '@core/modules/acp/client/acp-session.sweeper';
 import { AcpExecutor } from '@core/modules/acp/client/acp-executor';
 import { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
 import { AcpPermissionHandler } from '@core/modules/acp/handlers/acp-permission.handler';
@@ -14,6 +15,7 @@ import { DefaultFileAccessPolicy } from '@core/modules/acp/policies/file-access.
 import { ToolPermissionPolicy } from '@core/modules/acp/policies/tool-permission.policy';
 import { AcpAuditRepository } from '@core/modules/acp/persistence/acp-audit.repository';
 import { SqliteSuspensionRepository } from '@core/modules/acp/persistence/sqlite-suspension.repository';
+import { SqliteAcpSessionRepository } from '@core/modules/acp/persistence/sqlite-acp-session.repository';
 import { SessionSuspensionManager } from '@core/modules/acp/collaboration/session-suspension.manager';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 
@@ -29,7 +31,9 @@ export interface AcpModule {
   toolPermissionPolicy: ToolPermissionPolicy;
   auditRepository: AcpAuditRepository;
   suspensionRepository: SqliteSuspensionRepository;
+  sessionRepository: SqliteAcpSessionRepository;
   suspensionManager: ISessionSuspensionManager;
+  sessionSweeper: AcpSessionSweeper;
 }
 
 export function registerAcpModule(
@@ -53,6 +57,7 @@ export function registerAcpModule(
   // Persistence
   const auditRepository = new AcpAuditRepository(sqliteConn);
   const suspensionRepo = new SqliteSuspensionRepository(sqliteConn);
+  const sessionRepo = new SqliteAcpSessionRepository(sqliteConn);
 
   // Collaboration
   const suspensionManager = new SessionSuspensionManager(suspensionRepo, logger, collaborationConfig);
@@ -61,7 +66,8 @@ export function registerAcpModule(
   const mcpConfigBuilder = new AcpMcpConfigBuilder(logger);
   const spawner = new AcpAgentSpawner(agentConfig, updateHandler, permissionHandler, logger);
   spawner.setFilesystemHandler(filesystemHandler);
-  const sessionManager = new AcpSessionManager(spawner, updateHandler, logger);
+  const sessionManager = new AcpSessionManager(sessionRepo, spawner, updateHandler, logger, collaborationConfig);
+  const sessionSweeper = new AcpSessionSweeper(sessionManager, logger);
   const executor = new AcpExecutor(sessionManager, updateHandler, mcpConfigBuilder, agentConfig, logger);
   executor.setRoleRepository(roleRepo);
   executor.setAuditComponents(filesystemHandler, permissionHandler, auditRepository);
@@ -79,6 +85,8 @@ export function registerAcpModule(
     toolPermissionPolicy,
     auditRepository,
     suspensionRepository: suspensionRepo,
+    sessionRepository: sessionRepo,
     suspensionManager,
+    sessionSweeper,
   };
 }

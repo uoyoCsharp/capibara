@@ -34,6 +34,20 @@ export type Conversation =
   | (ConversationBase & { type: 'adhoc'; metadata: AdhocMetadata })
   | (ConversationBase & { type: 'plan_review'; metadata: PlanReviewMetadata });
 
+/**
+ * Lightweight read model for the planning history list (REQ-P2). Sourced from the conversation
+ * table — `session/list` only validates loadability, it is not the listing source (D-2). The
+ * title is derived from the conversation's first human message so the list is human-scannable
+ * without loading full message history.
+ */
+export interface PlanningHistoryEntry {
+  id: string;
+  title: string;
+  state: ConversationState;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ConversationMessage {
   id: string;
   conversationId: string;

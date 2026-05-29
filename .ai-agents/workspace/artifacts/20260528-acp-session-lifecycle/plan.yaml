@@ -1,0 +1,201 @@
+version: 1
+change_id: "20260528-acp-session-lifecycle"
+title: "ACP Session Lifecycle Fix"
+created_at: "2026-05-29T01:30:00"
+updated_at: "2026-05-29T14:30:00"
+status: in_progress
+current_task: "t7-startup-reconcile-and-sweeper"
+
+tasks:
+  - id: "t1-types-and-policy"
+    title: "Types + pure lifecycle policy"
+    status: done
+    depends_on: []
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/acp/types/acp.types.ts"
+        - "apps/electron/src/core/modules/acp/client/session-lifecycle.ts"
+        - "apps/electron/tests/unit/acp/session-lifecycle.test.ts"
+    completed_at: "2026-05-29T02:00:00"
+    result: "tsc clean; 9/9 unit tests pass. Note: sessionTtlMs/collaborationCapMs left optional until t7 wires layered config."
+    notes: >
+      ADR-2/5/6/8. Foundation step, no runtime deps; unblocks everything.
+      Update acp.types.ts: AcpSessionStatus = active|suspended|closed|expired
+      (drop 'error'), add SuspendReason ('idle'|'collaboration'),
+      LifecycleIntent ('keep_alive'|'close_on_complete'), CloseReason,
+      AcpSessionRecord (lean — no cwd/mcpServers/allowedPaths), sessionTtlMs +
+      collaboration cap on CollaborationConfig.
+      Create session-lifecycle.ts with pure decideLifecycle(ctx) implementing
+      the decision table.
+    acceptance:
+      - "acp.types.ts compiles with new statuses/reasons/intent; 'error' status removed"
+      - "decideLifecycle is a pure function with no manager/IO dependency"
+      - "Unit tests cover all 4 decision-table rows (pending-inquiry, non-end_turn, end_turn+keep_alive, end_turn+close_on_complete)"
+
+  - id: "t2-session-repository"
+    title: "acp_sessions table + repository"
+    status: done
+    depends_on: ["t1-types-and-policy"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/infrastructure/persistence/sqlite/migrations.ts"
+        - "apps/electron/src/core/modules/acp/interfaces/i-acp-session.repository.ts"
+        - "apps/electron/src/core/modules/acp/persistence/sqlite-acp-session.repository.ts"
+        - "apps/electron/tests/unit/acp/sqlite-acp-session.repository.test.ts"
+    completed_at: "2026-05-29T02:30:00"
+    result: "tsc clean; 13/13 repo tests pass under the electron ABI runner (skipped under system Node by the documented better-sqlite3 ABI guard). Deviation: create() input is Omit<AcpSessionRecord,'id'|'createdAt'> — id generated in repo per project convention."
+    notes: >
+      ADR-1. Create migration for acp_sessions table, IAcpSessionRepository
+      interface, and SqliteAcpSessionRepository. Lean schema per AcpSessionRecord.
+      Includes query methods: findByAcpSessionId, findByConversationId,
+      findResumable, findIdleExpired, findNonTerminal, updateStatus, touchActivity.
+    acceptance:
+      - "Migration creates acp_sessions table; runs cleanly on a fresh DB"
+      - "Repository implements all IAcpSessionRepository methods"
+      - "Repo unit tests cover CRUD + findIdleExpired + findNonTerminal queries"
+
+  - id: "t3-session-manager"
+    title: "Session manager state machine + rebuild"
+    status: done
+    depends_on: ["t1-types-and-policy", "t2-session-repository"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/acp/client/acp-session.manager.ts"
+        - "apps/electron/src/core/modules/acp/interfaces/i-acp-session.manager.ts"
+        - "apps/electron/src/core/modules/acp/persistence/sqlite-acp-session.repository.ts"
+        - "apps/electron/src/core/bootstrap/acp.module.ts"
+        - "apps/electron/tests/unit/acp/acp-session.manager.test.ts"
+        - "apps/electron/tests/unit/acp/acp-executor.test.ts"
+    completed_at: "2026-05-29T03:10:00"
+    result: "tsc clean (whole project); 41 manager+executor+lifecycle tests pass, 144 ACP-dir tests pass / 13 skipped. Deviations: deprecated resumeSession/closeSession shims kept until t5; reconcileOnStartup bypasses assertTransition (crash-recovery); rebuild context re-derivation deferred to t7/t8 via injected SessionRebuilder seam."
+    notes: >
+      ADR-1/2/3/5/6. Rework AcpSessionManager: suspend(reason) WITHOUT protocol
+      close, resume (resume|load|rebuild), close(reason) with protocol close,
+      expire. Repo-backed state with in-memory write-through cache for live
+      connections. Implement rebuild (fresh session + re-derived context) last.
+      Update i-acp-session.manager.ts signatures.
+    acceptance:
+      - "suspend() never sends protocol closeSession; status becomes 'suspended'"
+      - "close()/expire() send protocol closeSession and persist closeReason"
+      - "resume() dispatches resume|load|rebuild by strategy; rebuild re-derives cwd/mcpServers/allowedPaths"
+      - "Invalid transitions are rejected by the state machine; unit tests cover transitions"
+
+  - id: "t4-spawner-concurrency-and-list"
+    title: "Spawner: per-prompt context + session/list capability"
+    status: done
+    depends_on: ["t1-types-and-policy"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/acp/types/acp.types.ts"
+        - "apps/electron/src/core/modules/acp/client/acp-agent.spawner.ts"
+        - "apps/electron/src/core/modules/acp/client/acp-session.manager.ts"
+        - "apps/electron/tests/unit/acp/acp-agent.spawner.test.ts"
+        - "apps/electron/tests/unit/acp/acp-session.manager.test.ts"
+    completed_at: "2026-05-29T03:50:00"
+    result: "tsc clean; ACP dir 149 passed / 13 skipped (+5 new ADR-4 cases). Removed __current__ sentinel; per-agent in-flight session tracking resolves fs/permission context correctly under concurrency; supportsList detected. No deviations."
+    notes: >
+      ADR-4 + REQ-F4. Remove the global __current__ sentinel; track the in-flight
+      acpSessionId per agent connection and resolve fs/permission context against
+      that session. Detect sessionCapabilities.list in initialize() and expose
+      supportsList on AgentCapabilities.
+    acceptance:
+      - "fs/permission callbacks resolve context by the in-flight prompt session, not a global"
+      - "Concurrency test: two simultaneous live sessions resolve their own role/cwd/allowedPaths correctly"
+      - "supportsList is detected and surfaced on AgentCapabilities"
+
+  - id: "t5-executor"
+    title: "Executor uses decideLifecycle dispatch"
+    status: done
+    depends_on: ["t1-types-and-policy", "t3-session-manager"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/acp/client/acp-executor.ts"
+        - "apps/electron/src/core/modules/acp/interfaces/i-acp-session.manager.ts"
+        - "apps/electron/src/core/modules/acp/client/acp-session.manager.ts"
+        - "apps/electron/tests/unit/acp/acp-executor.test.ts"
+    completed_at: "2026-05-29T14:10:00"
+    result: "tsc clean; 168 ACP tests pass / 1 skipped (+ executor cases for close_on_complete, keep_alive idle-suspend, default intent, abnormal-stop close('error'), collaboration suspend, resume-via-manager, INFO fallback, closed-session skip). decideLifecycle dispatch replaces unconditional closeSession; resume uses manager.resume() with INFO fallback (REQ-X2); deprecated t3 shims removed (interface + impl). Reviewed: Approve with comments — W1 (latent orphaned session when suspensionManager unset; production always wires it) + W2 (cancelled->closeReason 'error') deferred to /mvt-fix."
+    notes: >
+      ADR-2/3, REQ-F1/F2. Replace the unconditional closeSession() calls in
+      executePrompt() with a call to decideLifecycle() and dispatch to
+      suspend/close. Resume-failure path logged at INFO (REQ-X2), skip resume
+      when session is closed/expired.
+    acceptance:
+      - "No unconditional closeSession() remains in acp-executor.ts"
+      - "Suspend path (pending inquiry) keeps agent-side session alive"
+      - "Resume failure falls back at INFO level, not WARN"
+      - "Executor unit/integration tests pass for planning-continue and task-complete paths"
+
+  - id: "t6-intent-threading"
+    title: "Thread LifecycleIntent through execution layer"
+    status: done
+    depends_on: ["t1-types-and-policy", "t5-executor"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/execution/types/execution.types.ts"
+        - "apps/electron/src/core/modules/acp/types/acp.types.ts"
+        - "apps/electron/src/core/modules/execution/engines/run.engine.ts"
+        - "apps/electron/src/core/modules/orchestrator/run.coordinator.ts"
+        - "apps/electron/tests/unit/orchestrator/run-coordinator.test.ts"
+    completed_at: "2026-05-29T14:10:00"
+    result: "tsc clean; run-coordinator + run-engine tests pass with per-method intent assertions + executeResume inheritance (task vs planning). Implemented alongside t5. Deviation: canonical LifecycleIntent relocated to execution.types.ts (re-exported by acp.types.ts) to keep dependency direction — execution layer must reference the type but cannot import ACP. executeResume intent derived from taskId presence since intent is not persisted on the lean record (documented)."
+    notes: >
+      ADR-8. Add lifecycleIntent to ExecutorInput/RunExecutionParams; thread
+      through RunEngine to executor. RunCoordinator: executeForConversation →
+      keep_alive, executeForTask → close_on_complete, executeResume → inherit
+      original intent. Restart-aware resume via manager (load/rebuild).
+    acceptance:
+      - "lifecycleIntent flows RunCoordinator → RunEngine → AcpExecutor with no wakeReason inference"
+      - "executeForConversation/executeForTask set the correct intent"
+      - "run-coordinator unit tests cover the three entry methods' intents"
+
+  - id: "t7-startup-reconcile-and-sweeper"
+    title: "Startup reconciliation + idle-TTL sweeper"
+    status: in_progress
+    depends_on: ["t3-session-manager"]
+    skill_hint: mvt-implement
+    notes: >
+      ADR-7, REQ-X1. reconcileOnStartup() marks dead post-restart sessions
+      'expired' (lazy rebuild on next use; no eager reconnect). sweepIdle()
+      expires idle suspensions past sessionTtlMs; collaboration sessions skipped
+      unless past absolute cap. Wire both into bootstrap.
+    acceptance:
+      - "On startup, non-terminal persisted sessions are reconciled (expired) without crashing"
+      - "Idle sweeper expires only suspendReason='idle' sessions past TTL"
+      - "Collaboration sessions are exempt from idle TTL until the absolute cap"
+
+  - id: "t8-collaboration-liveness-and-prompt-rebuild"
+    title: "Collaboration liveness tag + PromptBuilder forceFullContext"
+    status: pending
+    depends_on: ["t3-session-manager", "t6-intent-threading"]
+    skill_hint: mvt-implement
+    notes: >
+      ADR-5/6, REQ-C6. Tag collaboration suspensions for TTL-exempt liveness in
+      session-suspension.manager.ts + suspension repo (light edits; cycle/depth/
+      aggregation logic unchanged). Add forceFullContext to
+      PromptBuilder.buildForConversation for rebuild reconstruction.
+    acceptance:
+      - "Collaboration suspend marks the session suspendReason='collaboration'"
+      - "Existing chain-depth/cycle/aggregation tests still pass"
+      - "PromptBuilder forceFullContext reconstructs full conversational context for rebuild"
+
+  - id: "t9-renderer-history-and-rehydration"
+    title: "Planning history list + page rehydration"
+    status: pending
+    depends_on: ["t6-intent-threading"]
+    skill_hint: mvt-implement
+    notes: >
+      REQ-P2/P4, BR-13. Add IPC channel for planning conversation history list
+      (conversation table is the source; session/list only validates loadability).
+      New PlanningHistory.tsx + PlanningPage entry point; rehydrate messages and
+      tool-call panels from conversation.store before first paint (no flicker).
+    acceptance:
+      - "History list shows past planning conversations with title/timestamp from conversation table"
+      - "Selecting a history entry resumes via load, falling back to rebuild"
+      - "Re-entering a conversation rehydrates page state without a visible reset/flicker"

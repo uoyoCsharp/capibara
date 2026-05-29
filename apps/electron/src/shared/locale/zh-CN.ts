@@ -386,6 +386,14 @@ export const zhCN: LocaleMessages = {
       starting: '启动中...',
       shortcutHint: '按 ⌘/Ctrl + Enter 发送',
     },
+    history: {
+      title: '规划会话',
+      newSession: '新建会话',
+      empty: '还没有规划会话，新建一个开始吧。',
+      untitled: '未命名会话',
+      backToHistory: '返回规划会话列表',
+      notFound: '无法打开该规划会话',
+    },
   },
 
   planningChat: {
@@ -399,6 +407,7 @@ export const zhCN: LocaleMessages = {
     system: '系统',
     failedResponse: 'AI 响应失败。你可以再发一条消息重试。',
     cancelled: 'AI 运行已取消。你可以再发一条消息重试。',
+    readOnlyNotice: '该规划会话已结束，为只读状态。',
     progressToolCallStatus: {
       running: '...',
       completed: '完成',

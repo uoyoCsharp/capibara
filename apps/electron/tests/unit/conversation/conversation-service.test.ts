@@ -68,6 +68,7 @@ describe('ConversationService', () => {
       findById: vi.fn(),
       findByConversationId: vi.fn().mockReturnValue([]),
       findLatest: vi.fn().mockReturnValue([]),
+      findFirstHuman: vi.fn().mockReturnValue(null),
       create: vi.fn().mockReturnValue(createMsg()),
     };
     eventLogger = {
@@ -527,6 +528,54 @@ describe('ConversationService', () => {
     it('delegates to repository', () => {
       service.updateExternalSessionId('conv-1', 'sess-new');
       expect(convRepo.updateExternalSessionId).toHaveBeenCalledWith('conv-1', 'sess-new');
+    });
+  });
+
+  describe('findPlanningHistory', () => {
+    it('returns only planning conversations, newest first', () => {
+      vi.mocked(convRepo.findByOrgId).mockReturnValue([
+        createConv({ id: 'inq', type: 'inquiry', updatedAt: '2026-01-05T00:00:00.000Z' }),
+        createConv({ id: 'plan-old', type: 'planning', updatedAt: '2026-01-01T00:00:00.000Z' }),
+        createConv({ id: 'plan-new', type: 'planning', updatedAt: '2026-01-03T00:00:00.000Z' }),
+        createConv({ id: 'adhoc', type: 'adhoc', updatedAt: '2026-01-04T00:00:00.000Z' }),
+      ]);
+      vi.mocked(msgRepo.findByConversationId).mockReturnValue([]);
+
+      const history = service.findPlanningHistory(TEST_ORG_ID);
+
+      expect(history.map((h) => h.id)).toEqual(['plan-new', 'plan-old']);
+      expect(convRepo.findByOrgId).toHaveBeenCalledWith(TEST_ORG_ID);
+    });
+
+    it('derives the title from the first human message', () => {
+      vi.mocked(convRepo.findByOrgId).mockReturnValue([
+        createConv({ id: 'plan-1', type: 'planning' }),
+      ]);
+      vi.mocked(msgRepo.findFirstHuman).mockReturnValue(
+        createMsg({ id: 'm1', authorType: 'human', content: 'Build a note-taking app\nwith sync' }),
+      );
+
+      const [entry] = service.findPlanningHistory(TEST_ORG_ID);
+      expect(entry.title).toBe('Build a note-taking app');
+      expect(msgRepo.findFirstHuman).toHaveBeenCalledWith('plan-1');
+    });
+
+    it('truncates long titles to 80 chars with an ellipsis', () => {
+      const long = 'x'.repeat(120);
+      vi.mocked(convRepo.findByOrgId).mockReturnValue([createConv({ id: 'plan-1', type: 'planning' })]);
+      vi.mocked(msgRepo.findFirstHuman).mockReturnValue(createMsg({ authorType: 'human', content: long }));
+
+      const [entry] = service.findPlanningHistory(TEST_ORG_ID);
+      expect(entry.title).toHaveLength(81); // 80 chars + ellipsis
+      expect(entry.title.endsWith('…')).toBe(true);
+    });
+
+    it('falls back to an empty title when there is no human message', () => {
+      vi.mocked(convRepo.findByOrgId).mockReturnValue([createConv({ id: 'plan-1', type: 'planning' })]);
+      vi.mocked(msgRepo.findFirstHuman).mockReturnValue(null);
+
+      const [entry] = service.findPlanningHistory(TEST_ORG_ID);
+      expect(entry.title).toBe('');
     });
   });
 });

@@ -8,40 +8,68 @@ session:
 # Current active change (id/title/created_at set by /mvt-analyze;
 # plan_path/has_plan set by /mvt-plan-dev once a plan is generated)
 active_change:
-  id: ""
-  title: ""
-  created_at: ""
-  plan_path: ""
-  has_plan: false
+  id: "20260528-acp-session-lifecycle"
+  title: "ACP Session Lifecycle Fix"
+  created_at: "2026-05-28T02:00:00"
+  plan_path: ".ai-agents/workspace/artifacts/20260528-acp-session-lifecycle/plan.yaml"
+  has_plan: true
 
 # Recent changes with active plans (max 5, owned by /mvt-plan-dev and /mvt-update-plan)
 # Each entry: { id, title, plan_path, last_updated }
 # Status is the responsibility of plan.yaml (read on demand by /mvt-resume).
-recent_changes: []
+recent_changes:
+  - id: "20260528-acp-session-lifecycle"
+    title: "ACP Session Lifecycle Fix"
+    plan_path: ".ai-agents/workspace/artifacts/20260528-acp-session-lifecycle/plan.yaml"
+    last_updated: "2026-05-29T14:30:00"
 
 # Skill execution history (append-only, max 10)
 # Records which skills have been executed, replacing the old progress field
 skill_history:
-  - command: "/mvt-init"
-    completed_at: "2026-05-27T18:48:00"
-    summary: "Initialized project: detected monorepo with Electron+React app, wrote project-context.yaml"
-    change_id: ""
-  - command: "/mvt-analyze-code"
-    completed_at: "2026-05-27T19:00:00"
-    summary: "Analyzed codebase: generated project-context.md with 11 core modules, glossary, business rules, API overview"
-    change_id: ""
-  - command: "/mvt-bug-detect"
-    completed_at: "2026-05-28T12:00:00"
-    summary: "Diagnosed MCP tool unavailability: AcpMcpConfigBuilder likely returns empty array due to mcpHttpPort=0; also found missing http capability check in AcpAgentSpawner"
-    change_id: ""
+  - command: "/mvt-implement"
+    completed_at: "2026-05-29T03:50:00"
+    summary: "Implemented t4-spawner-concurrency-and-list: removed __current__ sentinel, per-agent in-flight session tracking for fs/permission context (ADR-4), supportsList detection; tsc clean, 149 ACP tests pass (+5)"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-update-plan"
+    completed_at: "2026-05-29T03:55:00"
+    summary: "Marked t4-spawner-concurrency-and-list done (artifacts + result attached); advanced current_task to t5-executor (now in_progress)"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-implement"
+    completed_at: "2026-05-29T14:10:00"
+    summary: "Implemented t5-executor + t6-intent-threading: executePrompt now uses decideLifecycle dispatch (suspend idle/collaboration vs close) replacing unconditional closeSession; resume via manager.resume() with INFO fallback + closed-session skip; removed t3 deprecated shims; LifecycleIntent threaded RunCoordinator->RunEngine->executor (task=close_on_complete, conversation=keep_alive, resume=inherit). tsc clean; 168 ACP tests pass + 56 executor/coordinator/engine cases"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-review"
+    completed_at: "2026-05-29T14:25:00"
+    summary: "Reviewed t5+t6: Approve with comments (0 critical, 2 warnings, 4 suggestions). W1 latent orphaned-session on null suspensionManager fall-through; W2 cancelled->closeReason 'error' conflation. Design/layer compliance (ADR-2/3/8) clean; intent threading direct; shims removed correctly"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-update-plan"
+    completed_at: "2026-05-29T14:30:00"
+    summary: "Marked t5-executor + t6-intent-threading done (artifacts + results attached, review W1/W2 deferred to /mvt-fix); advanced current_task to t7-startup-reconcile-and-sweeper (now in_progress)"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-implement"
+    completed_at: "2026-05-29T15:00:00"
+    summary: "Implemented t7-startup-reconcile-and-sweeper + t8-collaboration-liveness-and-prompt-rebuild: reconcileOnStartup wired into bootstrap; new AcpSessionSweeper drives periodic sweepIdle (started/stopped in composition-root); sweepIdle now reclaims idle (TTL) + collaboration (absolute cap) via new findCollaborationExpired; PromptBuilder/RunContext forceFullContext threads to ConversationContextBuilder full-history (maxMessages<=0). tsc clean; 325 tests pass / 1 skipped. session-suspension.manager.ts left untouched per ADR-5 orthogonality"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-review"
+    completed_at: "2026-05-29T15:15:00"
+    summary: "Reviewed t7+t8: Approve with comments (0 critical, 2 warnings, 4 suggestions). W1 forceFullContext implemented+tested but no caller invokes it on rebuild (ADR-6 half-wired); W2 unbounded per-row reconcile/sweep writes. ADR-5/6/7 compliance otherwise clean; suspension manager correctly untouched. Pre-existing sqlite fixture failures confirmed out-of-scope vs baseline"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-implement"
+    completed_at: "2026-05-29T15:35:00"
+    summary: "Implemented t9-renderer-history-and-rehydration: capibara:planning:history IPC + findPlanningHistory service (lean PlanningHistoryEntry, title from first human message) sourced from conversation table (D-2); new PlanningHistory.tsx list, PlanningPage lands on history view + resume-by-select; conversation.store messageCache for flicker-free rehydration (REQ-P4/BR-13), PlanningChat seeds from cache; locale strings both locales. tsc clean; 145 renderer+ipc tests pass. W1 forceFullContext-on-rebuild wiring deferred to /mvt-fix"
+    change_id: "20260528-acp-session-lifecycle"
+  - command: "/mvt-review"
+    completed_at: "2026-05-29T15:50:00"
+    summary: "Reviewed t9: Approve with comments (0 critical, 2 warnings, 4 suggestions). W1 N+1 message query behind title derivation; W2 history can re-enter terminal-state conversation with live composer. REQ-P2/P4/BR-13/D-2 compliance clean; rehydration cache correct; resume routes through existing dispatch. Suggests /mvt-fix to also wire carried t8 forceFullContext-on-rebuild in same resume flow"
+    change_id: "20260528-acp-session-lifecycle"
   - command: "/mvt-fix"
-    completed_at: "2026-05-28T14:30:00"
-    summary: "Fixed MCP tool unavailability: switched from Streamable HTTP to SSE transport for Claude Code compatibility, added request logging, fixed AcpAgentSpawner http capability detection"
-    change_id: ""
+    completed_at: "2026-05-29T16:10:00"
+    summary: "Fixed 4 accumulated review warnings: t5/6-W2 (CloseReason gains 'cancelled', decideLifecycle maps cancelled->close('cancelled') + migration CHECK), t5/6-W1 (executor closes instead of orphaning when suspensionManager unwired), t9-W1 (findFirstHuman repo query replaces N+1 whole-thread read for title), t9-W2 (terminal-state conversations read-only: PlanningChat readOnly prop + composer notice, cancel hidden). tsc clean; 256 tests pass (1 pre-existing metadata failure out-of-scope). Deferred: t8-W1 forceFullContext-on-rebuild (needs RunCoordinator<->SessionManager seam, /mvt-design) + t9-W1 batch optimization"
+    change_id: "20260528-acp-session-lifecycle"
 
 # Recent actions (append-only, max 5)
 recent_actions:
-  - "[2026-05-27 18:48] /mvt-init: Initialized project - monorepo with Electron+React desktop app"
-  - "[2026-05-27 19:00] /mvt-analyze-code: Generated project-context.md with 11 modules, glossary, business rules, API overview"
-  - "[2026-05-28 12:00] /mvt-bug-detect: Diagnosed MCP tool unavailability - AcpMcpConfigBuilder returns empty array when port=0"
-  - "[2026-05-28 14:30] /mvt-fix: Switched MCP transport from Streamable HTTP to SSE, fixed AcpAgentSpawner http capability, added request logging"
+  - "[2026-05-29 14:10] /mvt-implement: t5-executor + t6-intent done - decideLifecycle dispatch replaces unconditional close; resume via manager + INFO fallback; LifecycleIntent threaded RC->engine->executor; t3 shims removed; tsc clean, 168 ACP tests pass"
+  - "[2026-05-29 15:00] /mvt-implement: t7-reconcile+sweeper + t8-collab-liveness/forceFullContext done - reconcileOnStartup at boot, AcpSessionSweeper periodic sweepIdle (idle TTL + collab cap via findCollaborationExpired), forceFullContext full-history rebuild; tsc clean, 325 tests pass"
+  - "[2026-05-29 15:50] /mvt-review: t9 Approve with comments - 0 critical / 2 warnings (W1 N+1 title query, W2 terminal-state re-entry w/ live composer) / 4 suggestions; REQ-P2/P4/BR-13/D-2 compliance clean"
+  - "[2026-05-29 16:10] /mvt-fix: cleared 4 review warnings (t5/6-W2 cancelled closeReason, t5/6-W1 no-orphan close, t9-W1 findFirstHuman N+1, t9-W2 terminal read-only); tsc clean, 256 tests pass (1 pre-existing metadata fail out-of-scope); t8-W1 + batch opt deferred"
