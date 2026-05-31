@@ -246,6 +246,37 @@ export class AcpAgentSpawner {
   }
 
   /**
+   * Check whether a given agent has a live process entry.
+   */
+  hasProcess(agentId: string): boolean {
+    return this.processes.has(agentId);
+  }
+
+  /**
+   * Get the AgentProcess entry for a registered agent (read-only).
+   * Returns null if the agent has no live process.
+   */
+  getProcess(agentId: string): AgentProcess | null {
+    return this.processes.get(agentId) ?? null;
+  }
+
+  /**
+   * Kill a specific Agent process and remove it from the map.
+   * No-op if the agentId is not in the map. The next getOrSpawn()
+   * call will spawn a fresh process.
+   */
+  killAgent(agentId: string): void {
+    const proc = this.processes.get(agentId);
+    if (!proc) return;
+    if (!proc.exited) {
+      proc.child.kill('SIGTERM');
+    }
+    this.processes.delete(agentId);
+    this.inFlightByAgent.delete(agentId);
+    this.logger.info('Agent process killed', { agentId });
+  }
+
+  /**
    * Terminate all Agent processes.
    */
   async shutdown(): Promise<void> {

@@ -4,6 +4,7 @@ import { useOnboardingGate } from './hooks/use-onboarding-gate';
 import { useCrossCuttingToasts } from './hooks/use-cross-cutting-toasts';
 import { useAutoUpdateToasts } from './hooks/use-auto-update-toasts';
 import { useSectionShortcuts } from './hooks/use-section-shortcuts';
+import { useDevPanel } from './hooks/use-dev-panel';
 import { useAppStore } from './store/app.store';
 import { useTaskStore } from './store/task.store';
 import { useRunStore } from './store/run.store';
@@ -14,6 +15,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { SectionRouter } from './components/layout/SectionRouter';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { ToastContainer } from './components/shared/ToastContainer';
+import { DevPanel } from './components/dev/DevPanel';
 
 export function App() {
   return (
@@ -31,6 +33,8 @@ function AppContent() {
   const setActiveSection = useAppStore((s) => s.setActiveSection);
   const currentOrgId = useAppStore((s) => s.currentOrgId);
   const isLoading = useAppStore((s) => s.isLoading);
+  const devModeEnabled = useAppStore((s) => s.devModeEnabled);
+  const devPanelOpen = useAppStore((s) => s.devPanelOpen);
   const loadOrganizations = useAppStore((s) => s.loadOrganizations);
 
   const { show: showOnboarding, isFirstTime, openForNewWorkspace, markComplete, cancelNewWorkspace } = useOnboardingGate();
@@ -56,6 +60,7 @@ function AppContent() {
   useCrossCuttingToasts(activeSection, setActiveSection);
   useAutoUpdateToasts();
   useSectionShortcuts(setActiveSection);
+  useDevPanel();
 
   if (isLoading || showOnboarding === null) {
     return <LoadingScreen label={t.common?.loading ?? 'Loading...'} />;
@@ -86,7 +91,7 @@ function AppContent() {
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         onCreateWorkspace={openForNewWorkspace}
       />
-      <main className="flex-1 overflow-auto">
+      <main className={`flex-1 overflow-auto transition-[margin] duration-200 ease-in-out ${devModeEnabled && devPanelOpen ? 'mr-[480px]' : ''}`}>
         <SectionRouter
           activeSection={activeSection}
           orgId={currentOrgId}
@@ -94,6 +99,7 @@ function AppContent() {
         />
       </main>
       <ToastContainer />
+      {devModeEnabled && <DevPanel />}
     </div>
   );
 }

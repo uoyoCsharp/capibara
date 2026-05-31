@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { McpTransportDiagnostic } from '@core/shared/types';
 import type { McpServerDeps } from './mcp-server.builder';
 import { createSseMcpServer } from './mcp-server.builder';
 
@@ -86,6 +87,14 @@ export class McpHttpTransportManager {
 
   getPort(): number {
     return this.port;
+  }
+
+  getDiagnostic(): McpTransportDiagnostic {
+    return {
+      listening: this.server !== null,
+      port: this.port,
+      sseClientConnected: this.sseTransport !== null,
+    };
   }
 
   private async handleSseConnect(_req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse): Promise<void> {

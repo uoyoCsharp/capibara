@@ -10,9 +10,13 @@ interface AppState {
   currentOrgId: string | null;
   isLoading: boolean;
   isInitialized: boolean;
+  devModeEnabled: boolean;
+  devPanelOpen: boolean;
 
   setActiveSection: (section: SectionId) => void;
   setCurrentOrgId: (id: string | null) => void;
+  setDevModeEnabled: (enabled: boolean) => void;
+  toggleDevPanel: () => void;
   loadOrganizations: () => Promise<void>;
   init: () => void;
 }
@@ -25,9 +29,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentOrgId: null,
   isLoading: true,
   isInitialized: false,
+  devModeEnabled: false,
+  devPanelOpen: false,
 
   setActiveSection: (section) => set({ activeSection: section }),
   setCurrentOrgId: (id) => set({ currentOrgId: id }),
+
+  setDevModeEnabled: (enabled) => {
+    void api().setSetting('dev_mode_enabled', String(enabled));
+    set({ devModeEnabled: enabled, ...(enabled ? {} : { devPanelOpen: false }) });
+  },
+
+  toggleDevPanel: () => set((state) => {
+    if (!state.devModeEnabled) return state;
+    return { devPanelOpen: !state.devPanelOpen };
+  }),
 
   loadOrganizations: async () => {
     try {
@@ -55,6 +71,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isInitialized: true });
 
     void get().loadOrganizations();
+
+    void api().getSetting('dev_mode_enabled').then((result) => {
+      if (result.ok && result.data === 'true') {
+        set({ devModeEnabled: true });
+      }
+    });
 
     if (appUnsubscribe) appUnsubscribe();
     appUnsubscribe = subscribeToEvents({

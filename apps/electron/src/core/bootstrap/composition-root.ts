@@ -219,7 +219,7 @@ export async function bootstrap(): Promise<void> {
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);
-  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository, acpModule.sessionManager, agentConfig.defaultAgent);
+  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository, acpModule.sessionManager, agentConfig.defaultAgent, acpModule.spawner, acpModule.sessionRepository, logger);
   registerSystemHandlers({
     connection: sqliteConn,
     runRepo: execution.runRepo,
@@ -230,6 +230,21 @@ export async function bootstrap(): Promise<void> {
     logger,
     agentConfig,
     collaborationConfig: config.collaboration,
+    spawner: acpModule.spawner,
+    sessionManager: acpModule.sessionManager,
+    sessionRepo: acpModule.sessionRepository,
+    mcpTransportManager: mcp.mcpTransport,
+    mcpConfigBuilder: acpModule.mcpConfigBuilder,
+    mcpServerDeps: {
+      taskService: workflow.taskService,
+      taskStateMachine: workflow.taskStateMachine,
+      processEngine: workflow.processEngine,
+      conversationService: conversation.conversationService,
+      roleService: org.roleService,
+      eventPublisher,
+      suspensionManager: acpModule.suspensionManager,
+      collaborationConfig: config.collaboration,
+    },
   });
 
   taskOrchestrator = orchestratorModule.taskOrchestrator;

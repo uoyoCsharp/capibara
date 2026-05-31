@@ -239,6 +239,49 @@ export interface SuspensionAwaitingRecord {
 // Re-exported from ACP module so the renderer can import model types from the shared surface
 // without depending on ACP internals. Defined in acp.types.ts per ADR-1.
 export type { AvailableModel, ModelStateSummary } from '@core/modules/acp/types/acp.types';
+import type { AcpSessionStatus, SuspendReason, AgentCapabilities } from '@core/modules/acp/types/acp.types';
+export type { AcpSessionStatus, SuspendReason, AgentCapabilities };
+
+// ── Dev Diagnostics ───────────────────────────────────────
+
+export interface AgentDiagnostic {
+  agentId: string;
+  name: string;
+  processAlive: boolean;
+  pid: number | null;
+  connectionEstablished: boolean;
+  capabilities: AgentCapabilities | null;
+  mcpTransportType: 'sse' | 'http';
+  activeSessionCount: number;
+}
+
+export interface McpTransportDiagnostic {
+  listening: boolean;
+  port: number;
+  sseClientConnected: boolean;
+}
+
+export interface SessionDiagnostic {
+  id: string;
+  acpSessionId: string;
+  agentId: string;
+  roleId: string;
+  orgId: string;
+  runId: string | null;
+  status: AcpSessionStatus;
+  suspendReason: SuspendReason | null;
+  resumeStrategy: 'resume' | 'load' | 'rebuild';
+  resumeCount: number;
+  lastActivityAt: string;
+  hasLiveConnection: boolean;
+}
+
+export interface DiagnosticSnapshot {
+  agents: AgentDiagnostic[] | { error: string };
+  mcpTransport: McpTransportDiagnostic | { error: string };
+  sessions: SessionDiagnostic[] | { error: string };
+  scannedAt: string;
+}
 
 export interface AgentConfigSummary {
   defaultAgent: string;

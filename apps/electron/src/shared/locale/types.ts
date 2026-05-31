@@ -356,6 +356,12 @@ export interface LocaleMessages {
       maxResumeCount: string;
       inquiryTimeoutMs: string;
     };
+    devMode: {
+      title: string;
+      description: string;
+      enabled: string;
+      disabled: string;
+    };
     logs: {
       title: string;
       description: string;
@@ -594,6 +600,54 @@ export interface LocaleMessages {
       activeProgress: string;
       allClear: string;
       readyToStart: string;
+    };
+  };
+
+  devPanel: {
+    title: string;
+    checkConnections: string;
+    scanning: string;
+    noData: string;
+    errorPrefix: string;
+    agents: {
+      title: string;
+      processAlive: string;
+      processDead: string;
+      pid: string;
+      connected: string;
+      disconnected: string;
+      transport: string;
+      sessions: string;
+      restart: string;
+      restartConfirm: string;
+      restartSuccess: string;
+      restartError: string;
+    };
+    mcp: {
+      title: string;
+      listening: string;
+      notListening: string;
+      port: string;
+      sseConnected: string;
+      sseDisconnected: string;
+      reconnect: string;
+      reconnectConfirm: string;
+      reconnectSuccess: string;
+      reconnectError: string;
+    };
+    sessions: {
+      title: string;
+      empty: string;
+      id: string;
+      agent: string;
+      status: string;
+      suspendReason: string;
+      liveConnection: string;
+      lastActivity: string;
+      close: string;
+      closeConfirm: string;
+      closeSuccess: string;
+      closeError: string;
     };
   };
 }

@@ -17,6 +17,7 @@ import type {
   SuspensionAwaitingRecord,
   AgentConfigSummary,
   ModelStateSummary,
+  DiagnosticSnapshot,
 } from './types';
 
 /**
@@ -200,4 +201,10 @@ export interface CapibaraApi {
   onUpdateEvent: (
     callback: (payload: { channel: string; payload?: unknown }) => void,
   ) => () => void;
+
+  // ─── Dev Diagnostics ──────────────────────────────────────────────
+  devDiagnose: () => Promise<DesktopResult<DiagnosticSnapshot>>;
+  devRestartAgent: (agentId: string) => Promise<DesktopResult<{ expiredSessionCount: number }>>;
+  devCloseSession: (sessionId: string) => Promise<DesktopResult<null>>;
+  devRestartMcp: () => Promise<DesktopResult<{ newPort: number }>>;
 }

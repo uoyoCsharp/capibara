@@ -4,6 +4,7 @@ import { useLocaleContext, useT } from '../../hooks/use-locale';
 import type { SupportedLocale } from '@shared/locale/types';
 import { isSupportedLocale } from '@shared/locale/index';
 import { AgentConfigPanel } from './AgentConfigPanel';
+import { useAppStore } from '../../store/app.store';
 
 function interpolate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
@@ -23,6 +24,8 @@ type LogAction = 'idle' | 'confirming-all' | 'confirming-old' | 'clearing';
 export function SettingsPage() {
   const t = useT();
   const { locale: currentLocale, setLocale: commitLocale } = useLocaleContext();
+  const devModeEnabled = useAppStore((s) => s.devModeEnabled);
+  const setDevModeEnabled = useAppStore((s) => s.setDevModeEnabled);
   const [localeDraft, setLocaleDraft] = useState<SupportedLocale>(currentLocale);
   const [saving, setSaving] = useState(false);
   const [logStats, setLogStats] = useState<LogStats | null>(null);
@@ -104,6 +107,24 @@ export function SettingsPage() {
       </section>
 
       <AgentConfigPanel />
+
+      <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
+        <h2 className="font-semibold">{t.settings.devMode.title}</h2>
+        <p className="text-sm text-muted-foreground">
+          {t.settings.devMode.description}
+        </p>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <div
+            className={`relative w-10 h-5 rounded-full transition-colors ${devModeEnabled ? 'bg-primary' : 'bg-muted'}`}
+            onClick={() => setDevModeEnabled(!devModeEnabled)}
+          >
+            <div
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${devModeEnabled ? 'translate-x-5' : ''}`}
+            />
+          </div>
+          <span className="text-sm">{devModeEnabled ? t.settings.devMode.enabled : t.settings.devMode.disabled}</span>
+        </label>
+      </section>
 
       <LogsSection
         t={t}

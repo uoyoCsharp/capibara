@@ -2,6 +2,9 @@ import { ipcMain } from 'electron';
 import type { AcpAuditRepository } from '@core/modules/acp/persistence/acp-audit.repository';
 import type { SqliteSuspensionRepository } from '@core/modules/acp/persistence/sqlite-suspension.repository';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
+import type { IAcpSessionRepository } from '@core/modules/acp/interfaces/i-acp-session.repository';
+import type { AcpAgentSpawner } from '@core/modules/acp/client/acp-agent.spawner';
+import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { SuspensionRecord, SuspensionAwaitingRecord } from '@core/shared/types';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
@@ -12,6 +15,9 @@ export function registerAcpHandlers(
   suspensionRepo: SqliteSuspensionRepository,
   sessionManager: IAcpSessionManager,
   defaultAgentId: string,
+  spawner: AcpAgentSpawner,
+  sessionRepo: IAcpSessionRepository,
+  logger: ILogger,
 ): void {
   // ─── Audit: tool call logs ────────────────────────────────────────
   ipcMain.handle('capibara:audit:tool-calls', async (_ev, runId: string) => {
@@ -81,5 +87,36 @@ export function registerAcpHandlers(
     try {
       return ok(await sessionManager.probeModels(defaultAgentId));
     } catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  // ─── Dev: Restart Agent (ADR-4) ───────────────────────────────────
+  ipcMain.handle('capibara:dev:restart-agent', async (_ev, agentId: string) => {
+    try {
+      // Expire all non-terminal sessions for this agent
+      const sessions = sessionRepo.findNonTerminal().filter(s => s.agentId === agentId);
+      let expiredSessionCount = 0;
+      for (const s of sessions) {
+        try {
+          await sessionManager.expire(s.id);
+          expiredSessionCount++;
+        } catch (e) {
+          logger.warn('Failed to expire session during restart', { sessionId: s.id, error: String(e) });
+        }
+      }
+      spawner.killAgent(agentId);
+      return ok({ expiredSessionCount });
+    } catch (e) {
+      return err('INTERNAL', String(e));
+    }
+  });
+
+  // ─── Dev: Close Session ───────────────────────────────────────────
+  ipcMain.handle('capibara:dev:close-session', async (_ev, sessionId: string) => {
+    try {
+      await sessionManager.close(sessionId, 'user_closed');
+      return ok(null);
+    } catch (e) {
+      return err('INTERNAL', String(e));
+    }
   });
 }

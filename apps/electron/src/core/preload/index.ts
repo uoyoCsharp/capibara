@@ -158,6 +158,12 @@ const api = {
     ipcRenderer.on('capibara:auto-update', handler);
     return () => ipcRenderer.removeListener('capibara:auto-update', handler);
   },
+
+  // Dev Diagnostics
+  devDiagnose: () => ipcRenderer.invoke('capibara:dev:diagnose'),
+  devRestartAgent: (agentId: string) => ipcRenderer.invoke('capibara:dev:restart-agent', agentId),
+  devCloseSession: (sessionId: string) => ipcRenderer.invoke('capibara:dev:close-session', sessionId),
+  devRestartMcp: () => ipcRenderer.invoke('capibara:dev:restart-mcp'),
 };
 
 contextBridge.exposeInMainWorld('capibara', api);

@@ -365,6 +365,10 @@ export class AcpSessionManager implements IAcpSessionManager {
     return this.repo.findByAcpSessionId(acpSessionId);
   }
 
+  hasLiveConnection(sessionId: string): boolean {
+    return this.live.has(sessionId);
+  }
+
   async shutdown(): Promise<void> {
     // Leave persisted records non-terminal so reconcileOnStartup expires them next launch.
     this.live.clear();

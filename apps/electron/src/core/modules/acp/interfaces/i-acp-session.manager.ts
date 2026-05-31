@@ -89,6 +89,9 @@ export interface IAcpSessionManager {
   /** Find a session by its ACP protocol session ID. */
   findByAcpSessionId(acpSessionId: string): AcpSessionRecord | null;
 
+  /** Whether a session has a live runtime context (in-memory connection). */
+  hasLiveConnection(sessionId: string): boolean;
+
   /** Clear live connections and terminate Agent processes. Persisted records are left for reconcile. */
   shutdown(): Promise<void>;
 }
