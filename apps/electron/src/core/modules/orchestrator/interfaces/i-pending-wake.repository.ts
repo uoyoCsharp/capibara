@@ -32,4 +32,6 @@ export interface IPendingWakeRepository {
   create(input: CreatePendingWakeInput): PendingWake;
   delete(id: string): void;
   deleteByRoleId(roleId: string): void;
+  /** Remove all pending wakes targeting a specific conversation. */
+  deleteByConversationId(conversationId: string): void;
 }

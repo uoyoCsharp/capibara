@@ -153,7 +153,16 @@ export class SqliteConversationRepository implements IConversationRepository {
   }
 
   delete(id: string): void {
-    const info = this.connection.getDb()
+    const db = this.connection.getDb();
+
+    // Before deleting the conversation, clean up rows in other tables
+    // that would violate CHECK (task_id IS NOT NULL OR conversation_id IS NOT NULL)
+    // after the FK ON DELETE SET NULL fires on conversation_id.
+    // Planning conversations (task_id=NULL) would leave both columns NULL.
+    db.prepare('DELETE FROM runs WHERE conversation_id = ? AND task_id IS NULL').run(id);
+    db.prepare('DELETE FROM pending_wakes WHERE conversation_id = ? AND task_id IS NULL').run(id);
+
+    const info = db
       .prepare('DELETE FROM conversations WHERE id = ?')
       .run(id);
     if (info.changes === 0) throw new NotFoundError('Conversation', id);

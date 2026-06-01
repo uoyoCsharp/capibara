@@ -5,6 +5,7 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
+import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import type { NotificationService } from '@core/modules/notification/notification.service';
 import type { IPendingWakeRepository } from '../interfaces/i-pending-wake.repository';
 import type { WakeGateValidator } from '../wake-gate.validator';
@@ -40,11 +41,13 @@ export class ConversationOrchestrator {
     private readonly notificationService: NotificationService,
     private readonly suspensionManager: ISessionSuspensionManager | null = null,
     private readonly conversationService: ConversationService | null = null,
+    private readonly acpSessionManager: IAcpSessionManager | null = null,
   ) {}
 
   start(): void {
     this.eventBus.on('conversation:response-needed', (e) => this.onResponseNeeded(e));
     this.eventBus.on('conversation:resolved', (e) => this.onResolved(e));
+    this.eventBus.on('conversation:cancelled', (e) => this.onCancelled(e));
     this.logger.info('ConversationOrchestrator started');
   }
 
@@ -143,6 +146,45 @@ export class ConversationOrchestrator {
     // will drain after the current run ends.
     if (!conv.taskId || !conv.initiatorRoleId) return;
     this.taskOrchestrator.tryWake(conv.initiatorRoleId, conv.orgId, 'conversation_reply', conv.taskId);
+  }
+
+  /**
+   * When a conversation is cancelled, cascade the cancellation to:
+   *   1. The active run (if any) — cancels the in-flight ACP prompt
+   *   2. The ACP session — closes the agent-side session and disconnects MCP SSE
+   *   3. Pending wakes — removes queued wakes targeting this conversation
+   *
+   * Without this cascade, a cancelled planning conversation leaves the ACP session
+   * alive; its MCP SSE client stays connected and fights with the new session's
+   * client over the single SSE slot in McpHttpTransportManager.
+   */
+  private onCancelled(event: DomainEvent<'conversation:cancelled'>): void {
+    const { conversationId } = event.payload;
+
+    // 1. Cancel the active run for this conversation
+    this.runCoordinator
+      .cancelForConversation(conversationId)
+      .catch((err) => {
+        this.logger.error('Failed to cancel run for conversation', {
+          conversationId,
+          error: String(err),
+        });
+      });
+
+    // 2. Close the ACP session bound to this conversation
+    if (this.acpSessionManager) {
+      this.acpSessionManager
+        .closeByConversationId(conversationId)
+        .catch((err) => {
+          this.logger.error('Failed to close ACP session for conversation', {
+            conversationId,
+            error: String(err),
+          });
+        });
+    }
+
+    // 3. Remove pending wakes targeting this conversation
+    this.pendingWakeRepo.deleteByConversationId(conversationId);
   }
 
   private notifyHumanFallback(conversationId: string): void {

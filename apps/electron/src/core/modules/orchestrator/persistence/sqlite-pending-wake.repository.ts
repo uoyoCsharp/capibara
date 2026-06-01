@@ -75,4 +75,8 @@ export class SqlitePendingWakeRepository implements IPendingWakeRepository {
   deleteByRoleId(roleId: string): void {
     this.connection.getDb().prepare('DELETE FROM pending_wakes WHERE role_id = ?').run(roleId);
   }
+
+  deleteByConversationId(conversationId: string): void {
+    this.connection.getDb().prepare('DELETE FROM pending_wakes WHERE conversation_id = ?').run(conversationId);
+  }
 }

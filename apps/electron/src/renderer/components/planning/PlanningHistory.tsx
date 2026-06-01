@@ -1,8 +1,26 @@
-import { ArrowLeft, ChatCircleText, CircleNotch, Plus } from '@phosphor-icons/react';
+import { useState } from 'react';
+import { ArrowLeft, ChatCircleText, CircleNotch, Plus, Trash } from '@phosphor-icons/react';
 import type { PlanningHistoryRecord } from '@core/shared/types';
 import { Button } from '../ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from '../ui/dialog';
 import { useT } from '../../hooks/use-locale';
 import { cn } from '../../lib/utils';
+
+const TERMINAL_STATES = new Set<PlanningHistoryRecord['state']>([
+  'resolved', 'cancelled', 'completed', 'timed_out', 'escalated',
+]);
+
+interface DeleteResult {
+  ok: boolean;
+  message?: string;
+}
 
 interface PlanningHistoryProps {
   entries: PlanningHistoryRecord[];
@@ -10,6 +28,7 @@ interface PlanningHistoryProps {
   onSelect: (conversationId: string) => void;
   onNew: () => void;
   onBack: () => void;
+  onDelete: (conversationId: string) => Promise<DeleteResult>;
 }
 
 function formatTimestamp(iso: string): string {
@@ -20,12 +39,21 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-/**
- * Past planning conversations list (REQ-P2). Selecting an entry resumes that conversation;
- * the resume itself (load → rebuild fallback) is handled downstream by the session manager.
- */
-export function PlanningHistory({ entries, isLoading, onSelect, onNew, onBack }: PlanningHistoryProps) {
+export function PlanningHistory({ entries, isLoading, onSelect, onNew, onBack, onDelete }: PlanningHistoryProps) {
   const t = useT();
+  const [deleteTarget, setDeleteTarget] = useState<PlanningHistoryRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(deleteTarget.id);
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -63,32 +91,70 @@ export function PlanningHistory({ entries, isLoading, onSelect, onNew, onBack }:
           </div>
         ) : (
           <div className="space-y-1.5 max-w-2xl mx-auto">
-            {entries.map((entry) => (
-              <button
-                key={entry.id}
-                onClick={() => onSelect(entry.id)}
-                className={cn(
-                  'w-full flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-left',
-                  'hover:bg-muted/40 transition-colors',
-                )}
-              >
-                <ChatCircleText size={18} weight="duotone" className="text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {entry.title || t.planning.history.untitled}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatTimestamp(entry.updatedAt)}
-                  </p>
+            {entries.map((entry) => {
+              const canDelete = TERMINAL_STATES.has(entry.state);
+              return (
+                <div
+                  key={entry.id}
+                  className={cn(
+                    'group w-full flex items-center gap-3 rounded-md border border-border text-left',
+                    'hover:bg-muted/40 transition-colors',
+                  )}
+                >
+                  <button
+                    onClick={() => onSelect(entry.id)}
+                    className="flex-1 flex items-center gap-3 px-3 py-2.5 min-w-0"
+                  >
+                    <ChatCircleText size={18} weight="duotone" className="text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {entry.title || t.planning.history.untitled}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatTimestamp(entry.updatedAt)}
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      {entry.state}
+                    </span>
+                  </button>
+                  <div className="shrink-0 pr-2">
+                    {canDelete && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(entry); }}
+                        className="p-1 rounded opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                        title={t.common.delete}
+                      >
+                        <Trash size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <span className="text-[11px] text-muted-foreground shrink-0">
-                  {entry.state}
-                </span>
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !isDeleting) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t.planning.history.deleteTitle}</DialogTitle>
+            <DialogDescription>
+              {t.planning.history.deleteMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              {t.common.cancel}
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDelete()} disabled={isDeleting}>
+              {isDeleting && <CircleNotch size={14} className="mr-1.5 animate-spin" />}
+              {t.common.delete}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

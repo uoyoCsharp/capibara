@@ -200,6 +200,7 @@ export async function bootstrap(): Promise<void> {
     workflow.behaviorEngine,
     notification.notificationService,
     acpModule.suspensionManager,
+    acpModule.sessionManager,
   );
 
   // Wire executor's conversation repo (acp module created before conversation module)

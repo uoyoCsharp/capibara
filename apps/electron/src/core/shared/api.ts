@@ -88,6 +88,7 @@ export interface CapibaraApi {
   addConversationMessage: (input: unknown) => Promise<DesktopResult<ConversationMessageRecord>>;
   resolveConversation: (id: string) => Promise<DesktopResult<null>>;
   cancelConversation: (id: string) => Promise<DesktopResult<null>>;
+  deleteConversation: (id: string) => Promise<DesktopResult<null>>;
   createInquiry: (
     orgId: string,
     roleId: string,

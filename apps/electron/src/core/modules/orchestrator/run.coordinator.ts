@@ -1,5 +1,6 @@
 import { injectable } from 'tsyringe';
 import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
+import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
 import type { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
@@ -12,6 +13,7 @@ import type { ResumeDecision } from '@core/modules/acp/collaboration/suspension.
 export class RunCoordinator {
   constructor(
     private readonly runEngine: IRunEngine,
+    private readonly runRepo: IRunRepository,
     private readonly promptBuilder: PromptBuilder,
     private readonly convRepo: IConversationRepository,
     private readonly conversationService: ConversationService,
@@ -99,6 +101,28 @@ export class RunCoordinator {
     }
 
     return { runId: result.runId, status: result.status };
+  }
+
+  /**
+   * Cancel the active run associated with a conversation (if any).
+   * Used when a conversation is cancelled to tear down in-flight agent execution.
+   */
+  async cancelForConversation(conversationId: string): Promise<void> {
+    const run = this.runRepo.findByConversationId(conversationId);
+    if (!run || run.status !== 'running') {
+      this.logger.debug('No active run to cancel for conversation', { conversationId });
+      return;
+    }
+    try {
+      await this.runEngine.cancelRun(run.id);
+      this.logger.info('Cancelled run for conversation', { conversationId, runId: run.id });
+    } catch (err) {
+      this.logger.warn('Failed to cancel run for conversation', {
+        conversationId,
+        runId: run.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**

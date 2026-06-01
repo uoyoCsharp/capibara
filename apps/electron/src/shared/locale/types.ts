@@ -425,6 +425,9 @@ export interface LocaleMessages {
       untitled: string;
       backToHistory: string;
       notFound: string;
+      deleteTitle: string;
+      deleteMessage: string;
+      deleteFailed: string;
     };
   };
 

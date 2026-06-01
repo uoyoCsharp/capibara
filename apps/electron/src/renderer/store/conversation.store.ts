@@ -35,6 +35,7 @@ interface ConversationState {
   setCachedMessages: (conversationId: string, messages: ConversationMessageRecord[]) => void;
   resolve: (id: string) => Promise<boolean>;
   cancel: (id: string) => Promise<boolean>;
+  deletePlanningConversation: (id: string) => Promise<{ ok: boolean; message?: string }>;
   markWaitingAI: (conversationId: string) => void;
   clearWaitingAI: (conversationId: string) => void;
   init: () => void;
@@ -122,6 +123,16 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       return true;
     }
     return false;
+  },
+
+  deletePlanningConversation: async (id) => {
+    const result = await api().deleteConversation(id);
+    if (result.ok) {
+      const { currentOrgId } = get();
+      if (currentOrgId) await get().loadPlanningHistory(currentOrgId);
+      return { ok: true };
+    }
+    return { ok: false, message: result.error?.message };
   },
 
   init: () => {

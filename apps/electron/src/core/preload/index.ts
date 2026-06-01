@@ -65,6 +65,7 @@ const api = {
   addConversationMessage: (input: unknown) => ipcRenderer.invoke('capibara:conversation:add-message', input),
   resolveConversation: (id: string) => ipcRenderer.invoke('capibara:conversation:resolve', id),
   cancelConversation: (id: string) => ipcRenderer.invoke('capibara:conversation:cancel', id),
+  deleteConversation: (id: string) => ipcRenderer.invoke('capibara:conversation:delete', id),
   createInquiry: (orgId: string, roleId: string, taskId: string, question: string) =>
     ipcRenderer.invoke('capibara:conversation:create-inquiry', orgId, roleId, taskId, question),
   createAdhocConversation: (orgId: string, roleId: string, message: string) =>

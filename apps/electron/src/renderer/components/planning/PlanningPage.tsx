@@ -53,6 +53,7 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
 
   const planningHistory = useConversationStore((s) => s.planningHistory);
   const loadPlanningHistory = useConversationStore((s) => s.loadPlanningHistory);
+  const deletePlanningConversation = useConversationStore((s) => s.deletePlanningConversation);
 
   const [phase, setPhase] = useState<Phase>(orgId ? { kind: 'loading' } : { kind: 'no-org' });
   const [isAIBusy, setIsAIBusy] = useState(false);
@@ -164,6 +165,13 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
         onSelect={(id) => void handleSelectHistory(id)}
         onNew={handleNewSession}
         onBack={() => setActiveSection('dashboard')}
+        onDelete={async (id) => {
+          const result = await deletePlanningConversation(id);
+          if (!result.ok) {
+            toast.error(result.message || t.planning.history.deleteFailed);
+          }
+          return result;
+        }}
       />
     );
   }

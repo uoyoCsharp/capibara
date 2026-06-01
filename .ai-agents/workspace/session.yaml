@@ -21,3 +21,35 @@ history:
     summary: 修复 MCP 不可用问题：回退 mcpTransport 从 http 到 sse（根因）；补充
       McpTransportDiagnostic.httpTransportReady 字段和 DevPanel HTTP 传输状态展示
     change_id: 20260529-acp-model-selection
+  - skill: /mvt-analyze
+    completed_at: 2026-06-01T09:23:07.915Z
+    summary: 分析 planning 历史对话删除需求：仅终态对话可删，完整级联删除，确认弹窗交互
+    change_id: 20260601-planning-history-delete
+  - skill: /mvt-quick-dev
+    completed_at: 2026-06-01T09:33:01.601Z
+    summary: 实现 planning 历史对话删除功能：全链路穿透 Service->IPC->Preload->Store->UI，含确认弹窗和级联删除
+    change_id: ""
+  - skill: /mvt-quick-dev
+    completed_at: 2026-06-01T09:45:49.738Z
+    summary: 修复 planning 历史删除：显示实际错误信息，修复 delete 按钮布局，添加 escalated 到终态
+    change_id: ""
+  - skill: /mvt-quick-dev
+    completed_at: 2026-06-01T10:10:01.274Z
+    summary: 修复删除 planning 对话时 SQLite CHECK 约束冲突：提前清理 task_id=NULL 的 runs 和
+      pending_wakes
+    change_id: ""
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-01T10:35:50.608Z
+    summary: 诊断 MCP SSE 重连风暴：cancelConversation 不级联取消 Run/ACP Session/Agent 进程，新旧
+      session 的 MCP SSE 客户端在单槽位上形成重连循环
+    change_id: 20260601-planning-history-delete
+  - skill: /mvt-fix
+    completed_at: 2026-06-01T10:46:29.683Z
+    summary: 修复 MCP SSE 重连风暴：添加 conversation:cancelled 级联取消（Run + ACP Session +
+      Pending Wakes），7 个文件
+    change_id: 20260601-planning-history-delete
+active_change:
+  id: 20260601-planning-history-delete
+  title: Planning history delete
+  created_at: 2026-06-01T09:23:07.915Z
+  plan_path: ""

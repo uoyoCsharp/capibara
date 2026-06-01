@@ -92,6 +92,13 @@ export interface IAcpSessionManager {
   /** Whether a session has a live runtime context (in-memory connection). */
   hasLiveConnection(sessionId: string): boolean;
 
+  /**
+   * Close any non-terminal ACP session bound to a conversation.
+   * Used when a conversation is cancelled to tear down the agent-side session
+   * and disconnect MCP SSE clients. No-op if no such session exists.
+   */
+  closeByConversationId(conversationId: string): Promise<void>;
+
   /** Clear live connections and terminate Agent processes. Persisted records are left for reconcile. */
   shutdown(): Promise<void>;
 }

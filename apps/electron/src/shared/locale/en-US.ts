@@ -413,6 +413,9 @@ export const enUS: LocaleMessages = {
       untitled: 'Untitled session',
       backToHistory: 'Back to planning sessions',
       notFound: 'Could not open that planning session',
+      deleteTitle: 'Delete planning session?',
+      deleteMessage: 'This action cannot be undone. The conversation and all associated data will be permanently removed.',
+      deleteFailed: 'Failed to delete planning session',
     },
   },
 

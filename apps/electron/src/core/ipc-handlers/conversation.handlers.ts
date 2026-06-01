@@ -44,6 +44,11 @@ export function registerConversationHandlers(
     catch (e) { return err('INVALID_TRANSITION', String(e)); }
   });
 
+  ipcMain.handle('capibara:conversation:delete', async (_ev, id: string) => {
+    try { conversationService.delete(id); return ok(null); }
+    catch (e) { return err('INVALID_TRANSITION', String(e)); }
+  });
+
   ipcMain.handle('capibara:conversation:create-inquiry', async (_ev, orgId: string, initiatorRoleId: string, taskId: string, question: string) => {
     try { return ok(conversationService.createInquiry(orgId, initiatorRoleId, taskId, question)); }
     catch (e) { return err('VALIDATION_ERROR', String(e)); }

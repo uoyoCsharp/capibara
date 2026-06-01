@@ -369,6 +369,28 @@ export class AcpSessionManager implements IAcpSessionManager {
     return this.live.has(sessionId);
   }
 
+  async closeByConversationId(conversationId: string): Promise<void> {
+    const record = this.repo.findByConversationId(conversationId);
+    if (!record || record.status === 'closed') {
+      this.logger.debug('No non-terminal ACP session for conversation', { conversationId });
+      return;
+    }
+
+    try {
+      await this.close(record.id, 'user_closed');
+      this.logger.info('Closed ACP session for cancelled conversation', {
+        sessionId: record.id,
+        conversationId,
+      });
+    } catch (err) {
+      this.logger.warn('Failed to close ACP session for conversation', {
+        conversationId,
+        sessionId: record.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   async shutdown(): Promise<void> {
     // Leave persisted records non-terminal so reconcileOnStartup expires them next launch.
     this.live.clear();

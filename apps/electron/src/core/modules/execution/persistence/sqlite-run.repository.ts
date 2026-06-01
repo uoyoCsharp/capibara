@@ -93,6 +93,13 @@ export class SqliteRunRepository implements IRunRepository {
     return row ? toRun(row) : null;
   }
 
+  findByConversationId(conversationId: string): Run | null {
+    const row = this.connection.getDb()
+      .prepare('SELECT * FROM runs WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1')
+      .get(conversationId) as RunRow | undefined;
+    return row ? toRun(row) : null;
+  }
+
   create(input: CreateRunInput): Run {
     const now = new Date().toISOString();
     this.connection.getDb()

@@ -24,6 +24,7 @@ import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state
 import type { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
 import type { NotificationService } from '@core/modules/notification/notification.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
+import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import { SqlitePendingWakeRepository } from '@core/modules/orchestrator/persistence/sqlite-pending-wake.repository';
 import { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
 import { RetryScheduler } from '@core/modules/orchestrator/retry.scheduler';
@@ -60,11 +61,12 @@ export function registerOrchestratorModule(
   behaviorEngine: BehaviorEngine,
   notificationService: NotificationService,
   suspensionManager: ISessionSuspensionManager | null = null,
+  acpSessionManager: IAcpSessionManager | null = null,
 ): OrchestratorModule {
   const pendingWakeRepo = new SqlitePendingWakeRepository(connection);
   const wakeGateValidator = new WakeGateValidator(roleRepo, runRepo, config, logger);
   const retryScheduler = new RetryScheduler(runRepo, pendingWakeRepo, config, logger);
-  const runCoordinator = new RunCoordinator(runEngine, promptBuilder, convRepo, conversationService, orgRepo, logger);
+  const runCoordinator = new RunCoordinator(runEngine, runRepo, promptBuilder, convRepo, conversationService, orgRepo, logger);
   const taskScheduler = new TaskScheduler(taskRepo, processEngine, logger);
 
   const taskOrchestrator = new TaskOrchestrator(
@@ -93,6 +95,7 @@ export function registerOrchestratorModule(
     notificationService,
     suspensionManager,
     conversationService,
+    acpSessionManager,
   );
 
   const runOrchestrator = new RunOrchestrator(

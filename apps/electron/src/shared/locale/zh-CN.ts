@@ -411,6 +411,9 @@ export const zhCN: LocaleMessages = {
       untitled: '未命名会话',
       backToHistory: '返回规划会话列表',
       notFound: '无法打开该规划会话',
+      deleteTitle: '删除规划会话？',
+      deleteMessage: '此操作不可撤销。对话及所有关联数据将被永久删除。',
+      deleteFailed: '删除规划会话失败',
     },
   },
 

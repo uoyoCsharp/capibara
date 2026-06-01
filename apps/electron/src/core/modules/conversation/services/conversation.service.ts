@@ -289,6 +289,18 @@ export class ConversationService {
     this.emitEvent('conversation:escalated', { conversationId, orgId: conv.orgId, newRespondentRoleId });
   }
 
+  delete(conversationId: string): void {
+    const conv = this.convRepo.findById(conversationId);
+    if (!conv) throw new NotFoundError('Conversation', conversationId);
+
+    const terminal: ConversationState[] = ['resolved', 'cancelled', 'completed', 'timed_out', 'escalated'];
+    if (!terminal.includes(conv.state)) {
+      throw new ConversationStateError(conversationId, conv.state, 'delete');
+    }
+
+    this.convRepo.delete(conversationId);
+  }
+
   updateExternalSessionId(conversationId: string, sessionId: string): void {
     this.convRepo.updateExternalSessionId(conversationId, sessionId);
   }
