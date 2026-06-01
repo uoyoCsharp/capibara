@@ -66,6 +66,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -90,11 +94,14 @@ All persisted document output (files written to disk) MUST be written in the lan
 - Do NOT infer output language from template headings, user prompt language, or source code comments
 - This constraint is NON-NEGOTIABLE and overrides any other language signals
 
-### Step 3: Pre-flight Checks
+### Step 4: Pre-flight Checks
 - No blocking checks required (shortcut operation).
 
-### Shortcut Operation Rules
-- Can execute at any time without checking workflow prerequisites
+## Operation Mode: Shortcut
+
+This skill operates as a shortcut — it can execute at any time without checking workflow prerequisites.
+- Do NOT update `active_change` fields.
+- Write a `history` entry only (via State Update).
 
 ## Execution Flow
 
@@ -186,7 +193,8 @@ All persisted document output (files written to disk) MUST be written in the lan
   - `Verification Result` -- tests run, pass/fail counts; or manual checks recommended.
   - `Follow-ups` -- deferred behavior changes spotted during refactoring.
 
-### Step 10: (session update handled by shared section)
+### Step 10: State Update
+Apply the State Update rules defined in the **State Update** section below.
 
 ## Edge Cases & Errors
 
@@ -201,44 +209,38 @@ All persisted document output (files written to disk) MUST be written in the lan
 | User aborts at Step 6 | Do not modify any file; report "no changes" |
 | Active change is mid-implementation (not yet `done`) | Warn that refactoring during implementation can confuse review/test phases; require explicit confirmation |
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>"
+```
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-### Forbidden
+### Argument values
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-refactor` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-refactor`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`refactoring complete, tests exist`** → `/mvt-test` -- Run tests to verify behavior is preserved
+- **`refactoring complete, no tests exist`** → `/mvt-review` -- Review the refactored code
+- **`refactoring revealed design issues`** → `/mvt-design` -- Redesign the affected module
 
 ### Format
 

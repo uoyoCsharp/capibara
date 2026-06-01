@@ -22,11 +22,11 @@ You are the **Conductor** -- a Workflow Coordinator.
 - Usage patterns unclear -> Ask for concrete examples before proceeding
 
 ### Boundaries
-- Do NOT Generated skills must follow MVTT SKILL.md standard structure (use `(constraint)` instead)
-- Do NOT Skill names may use `mvt-` prefix or a project-specific prefix (e.g., `app-`, `proj-`) (use `(constraint)` instead)
-- Do NOT All custom skills MUST be registered in `registry.yaml` with `custom: true` (use `(to prevent overwrite during framework updates)` instead)
-- Do NOT Description field must use third-person with effective trigger keywords (use `(constraint)` instead)
-- Do NOT SKILL.md body target <5k words; move detailed content to references/ (use `(progressive disclosure)` instead)
+- Do NOT generate skills that deviate from MVTT SKILL.md standard structure (use `the standard structure as documented` instead)
+- Do NOT use arbitrary prefixes without validating naming conventions (use ``mvt-` or a project-specific prefix like `app-`, `proj-`` instead)
+- Do NOT create skills without registering in registry.yaml (use ``custom: true` in registry.yaml` instead)
+- Do NOT write vague or first-person descriptions (use `third-person with effective trigger keywords` instead)
+- Do NOT exceed ~5k words in SKILL.md body (use `references/ for detailed content` instead)
 
 ## Activation Protocol
 
@@ -50,6 +50,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 - If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
 
 Skip any path that does not exist.
+
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
 
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
@@ -75,7 +79,7 @@ All persisted document output (files written to disk) MUST be written in the lan
 - Do NOT infer output language from template headings, user prompt language, or source code comments
 - This constraint is NON-NEGOTIABLE and overrides any other language signals
 
-### Step 3: Pre-flight Checks
+### Step 4: Pre-flight Checks
 - No blocking checks required.
 
 ## Design Principles
@@ -107,7 +111,7 @@ The `name` and `description` in YAML frontmatter determine when Claude will use 
 ### Step 1: Load Inputs
 - **Recommended**:
   - One existing skill's SKILL.md under `.claude/skills/<existing>/SKILL.md` as a structural reference (to extract shared section patterns like Activation Protocol, State Update, Next Steps).
-  - `registry.yaml` -- to check for name collisions and understand skill categories.
+  - `.ai-agents/registry.yaml` -- to check for name collisions and understand skill categories.
 
 ### Step 2: Understand Usage with Concrete Examples
 Skip only when usage patterns are already crystal clear.
@@ -216,7 +220,7 @@ Walk this checklist; any failed item must be fixed before declaring success.
 | Standard sections present | SKILL.md contains Role, Activation Protocol, Execution Flow, Edge Cases & Errors, State Update, Suggested Next Steps |
 | Knowledge files exist | Every file referenced in `knowledge:` resolves on disk |
 | Template path correct | If `template:` set, file exists at that path; the template is headings-only |
-| Word budget | SKILL.md body under ~5k words (run a quick `wc` if available) |
+| Word budget | SKILL.md body under ~5k words (use any available word-count method, e.g., editor statistics) |
 | Standard skeleton | Execution Flow contains Load Inputs, main steps with branches, Edge Cases & Errors |
 
 Show the user how to invoke: `/{name}`.
@@ -228,14 +232,15 @@ Tell the user the iteration loop:
 3. Decide whether to update SKILL.md, add a `references/` file, add a knowledge entry, or split into a new skill.
 4. Re-run `/mvt-create-skill` to refine, or edit the source files directly and rebuild.
 
-### Step 10: (session update handled by shared section)
+### Step 10: State Update
+Apply the State Update rules defined in the **State Update** section below.
 
 ## Edge Cases & Errors
 
 | Case | Handling |
 |------|----------|
 | Skill name collides with an existing registry entry | STOP at Step 3; ask user to rename; do not generate any file |
-| User wants the skill to mutate `session.yaml` fields beyond `skill_history` | Surface that ownership rules forbid this (e.g., `recent_changes` is owned by `/mvt-plan-dev`/`/mvt-update-plan`); recommend redesign |
+| User wants the skill to mutate `session.yaml` fields beyond `history` | Surface that ownership rules forbid this (e.g., `changes` is owned by `/mvt-plan-dev`/`/mvt-update-plan`); recommend redesign |
 | Output template is requested but the skill is conversation-only (no persisted file) | Refuse to create a template; explain that templates are for document structure, not conversation replies |
 | User asks to skip the registry registration step | Refuse; an unregistered skill is invisible to `/mvt-help`, `/mvt-status`, and `/mvt-resume`. Registration is non-negotiable |
 | Skill duplicates an existing skill's responsibility | Surface the overlap (cite the existing skill's description); propose merging or sub-classing as a variant rather than creating a duplicate |
@@ -305,7 +310,7 @@ Copy the following sections verbatim from this document (the assembled SKILL.md 
 | Load Config | Load Config step within Activation Protocol | Copy as-is |
 | Output Language Constraint | Output Language Constraint step within Activation Protocol | Copy as-is |
 | Pre-flight Checks | Pre-flight Checks step within Activation Protocol | Replace `checks` table with skill-specific checks; if none required, use a single INFO row |
-| State Update | `## State Update (Required)` | Replace `/{name}` with the new skill's command; include `active_change` conditional block only if the skill creates changes; include `Shortcut Operation Rules` only if category is `shortcut` |
+| State Update | `## State Update` | Replace `/{name}` with the new skill's command; include `active_change` conditional block only if the skill creates changes; include `Shortcut Operation Rules` only if category is `shortcut` |
 | Suggested Next Steps | `## Suggested Next Steps` | Replace `current_skill` with the new skill name; replace conditional suggestions with skill-appropriate ones |
 
 **Important**: Do NOT paraphrase or rewrite the standard sections. Copy them character-for-character from this document and only substitute the skill-specific values. This ensures consistency across all MVTT skills.
@@ -335,17 +340,38 @@ Use `/{name}` to invoke the new skill.
 4. Use `/mvt-create-skill` to refine, or edit skill files directly
 ```
 
+## State Update
+
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
+
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>"
+```
+
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
+
+### Argument values
+
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-create-skill` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
+
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-create-skill`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`skill created successfully`** → `/mvt-help` -- Verify the new skill appears in the catalog
+- **`skill needs knowledge entries`** → `/mvt-manage-context` -- Add knowledge files for the new skill
+- **`skill needs testing with real tasks`** → `/mvt-status` -- Check project state before testing the skill
 
 ### Format
 

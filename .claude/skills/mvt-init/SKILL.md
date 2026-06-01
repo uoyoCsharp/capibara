@@ -59,6 +59,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -224,7 +228,7 @@ For each target file, check if it already exists:
 After writing all files, validate:
 - `project-context.yaml` is valid YAML with `projects[]` containing at least one entry
 - Each project entry has required fields: `name`, `path`, `type`, `tech_stack.primary_language`
-- `session.yaml` is structurally intact and contains: `session`, `active_change` (with `plan_path` / `has_plan`), `recent_changes` (array), `skill_history`, `recent_actions`
+- `session.yaml` is structurally intact and contains: `session` (with `initialized_at`, `last_synced_at`), `active_change` (with `plan_path`), `changes` (array), `history`
 
 If any validation fails → report the specific error and offer to retry or skip.
 
@@ -233,7 +237,7 @@ If any validation fails → report the specific error and offer to retry or skip
 When `--refresh` is specified:
 
 1. **Preserve** the following from existing files:
-   - `session.yaml` > `skill_history` and `recent_actions`
+   - `session.yaml` > `history`
    - `project-context.yaml` > any user-added custom fields (fields not in the standard schema)
    - `config.yaml` > `preferences` section
 
@@ -261,36 +265,34 @@ After Step 5 writes are committed, classify the project state to select the appr
 
 Pass the resolved condition to the output template so the suggested next steps section renders the matching branch from `registry.yaml > skills.mvt-init.next_suggestions.conditional[]`.
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>" --set-initialized
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+```
 
-### Conditional (set only when applicable)
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-- `session.initialized_at`: Set to current timestamp when this skill initializes the project
+### Argument values
 
-### Forbidden
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-init` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+| `--set-initialized` | Flag only, no value. Set when this skill initializes the project for the first time. | — |
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+### Parameter semantics
+
+| Argument | When to use | Effect on `session.yaml` |
+|----------|-------------|--------------------------|
+| `--set-initialized` | Skill initializes the project for the first time | Sets `session.initialized_at` (idempotent — only writes if empty). |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
@@ -306,7 +308,6 @@ Match the current state to one of the conditions below. If none match, use `defa
 - `/mvt-manage-context` -- Manually add team conventions or domain knowledge
 - `/mvt-analyze` -- Start from a requirements document
 - `/mvt-status` -- Inspect current project status
-
 
 ### Format
 

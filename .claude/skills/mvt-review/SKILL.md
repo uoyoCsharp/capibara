@@ -38,6 +38,35 @@ You are the **Reviewer** -- a Code Quality Guardian.
 
 Usage: `/mvt-review` or `/mvt-review --aspect {type}`
 
+## Activation Protocol
+
+### Step 1: Load Context (Context Foundation)
+Load the following files as foundational context:
+- `.ai-agents/workspace/session.yaml` -- Current workflow state
+- `.ai-agents/workspace/project-context.yaml` -- Project index (structural info)
+- `.ai-agents/registry.yaml` -- Available skills registry and knowledge declarations
+
+Extended context for this skill:
+- .ai-agents/workspace/artifacts/{active_change.id}/analysis.md -- Requirements analysis
+- .ai-agents/workspace/artifacts/{active_change.id}/design.md -- Architecture design
+- .ai-agents/workspace/artifacts/{active_change.id}/implementation.md -- Implementation record
+
+### Step 2: Load Knowledge
+
+Read `.ai-agents/registry.yaml` and load every file referenced under:
+- `knowledge.shared` (loaded by all skills)
+- `skills.<current-skill>.knowledge` (this skill's specific knowledge, if present)
+
+For each entry, resolve files relative to `.ai-agents/{source}`:
+- If the entry lists `files: [...]`, load those files.
+- If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
+
+Skip any path that does not exist.
+
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -74,7 +103,7 @@ For each check below, if the condition holds, perform the action implied by its 
 | # | Condition | Level | Message |
 |---|-----------|-------|---------|
 | 1 | `session.initialized_at` is empty | WARN | Session not initialized. Run `/mvt-init` first. |
-| 2 | `no code to review` is empty | WARN | No code to review. Run `/mvt-implement` first or specify files. |
+| 2 | `review target (user args, implementation.md, or git diff)` is empty | WARN | No code to review. Run `/mvt-implement` first or specify files. |
 
 ## Execution Flow
 
@@ -159,8 +188,7 @@ For each check below, if the condition holds, perform the action implied by its 
 - Each finding must include: file, line range, severity, observation, recommendation.
 
 ### Step 6: Write Artifact
-- **Path**: `.ai-agents/workspace/artifacts/{active_change.id}/review.md` if `active_change` exists; else `.ai-agents/workspace/artifacts/_ad-hoc-review-{YYYY-MM-DD-HHMM}/review.md`.
-- **Template**: `.ai-agents/skills/_templates/review-output.md` (custom override at `_templates/custom/...` takes precedence).
+- **Path and template**: as defined in the **Artifact Structure** section below. If no `active_change` exists, use `.ai-agents/workspace/artifacts/_ad-hoc-review-{YYYY-MM-DD-HHMM}/review.md`.
 - **Required content** (mapped to template headings):
   - `Review Scope` -- file list, depth, aspect filter, fallbacks applied (e.g., "design.md missing -> Group A skipped").
   - `Summary` -- counts per severity + one-paragraph overall verdict (Approve / Approve with comments / Request changes / Block).
@@ -176,7 +204,8 @@ For each check below, if the condition holds, perform the action implied by its 
 - Critical = 0, Warnings <= 5, Suggestions only -> verdict is `Approve`.
 - Code-only review (design.md missing) -> verdict cannot be higher than `Approve with comments` (call it out explicitly).
 
-### Step 8: (session update handled by shared section)
+### Step 8: State Update
+Apply the State Update rules defined in the **State Update** section below.
 
 ## Edge Cases & Errors
 
@@ -195,44 +224,38 @@ If a custom version exists at `.ai-agents/skills/_templates/custom/review-output
 The template defines section headings only. Generate content for each section based on review results.
 Write the artifact to: `.ai-agents/workspace/artifacts/{change-id}/review.md`
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>"
+```
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-### Forbidden
+### Argument values
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-review` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-review`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`critical issues found`** → `/mvt-fix` -- Fix the critical issues before merge
+- **`review approved, tests not written`** → `/mvt-test` -- Add test coverage
+- **`review approved, all checks passed`** → `/mvt-update-plan` -- Mark review task done in the plan
 
 ### Format
 

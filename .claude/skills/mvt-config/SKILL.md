@@ -60,6 +60,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -72,19 +76,7 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 - `preferences.output.data_format` → Use this format for data sections in artifacts
 - `preferences.context_routing.relevance_threshold` → Used by `/mvt-manage-context add` for AI routing (default 70 if missing)
 
-## Output Language Constraint (Mandatory)
-
-All persisted document output (files written to disk) MUST be written in the language specified by `preferences.document_output_language` from config.yaml.
-
-**Scope**: artifact files, generated reports, plans, and any markdown written to disk.
-
-**Rules**:
-- Section headings defined in templates may remain in their original language, but all generated **content** MUST use the configured language
-- If `document_output_language` is not set, fall back to `interaction_language`
-- Do NOT infer output language from template headings, user prompt language, or source code comments
-- This constraint is NON-NEGOTIABLE and overrides any other language signals
-
-### Step 3: Pre-flight Checks
+### Step 4: Pre-flight Checks
 - No blocking checks required (config is always accessible)
 
 ## Configuration Keys
@@ -98,6 +90,8 @@ All persisted document output (files written to disk) MUST be written in the lan
 | `preferences.output.no_emojis` | bool | `true` | Disable emojis in output |
 | `preferences.output.data_format` | enum | `yaml` | Data output format (yaml, json) |
 | `preferences.context_routing.relevance_threshold` | int | `70` | AI routing threshold for `/mvt-manage-context add` (0-100) |
+| `preferences.history_limits.history` | int | `20` | Max history entries (1-100) |
+| `preferences.history_limits.changes` | int | `20` | Max changes entries (1-100) |
 
 ### Knowledge Settings
 
@@ -167,6 +161,7 @@ All persisted document output (files written to disk) MUST be written in the lan
   | 3 | `preferences.output.no_emojis` | Default `true` |
   | 4 | `preferences.output.data_format` | Default `yaml`; allowed: `yaml`, `json` |
   | 5 | `preferences.context_routing.relevance_threshold` | Default `70`; allowed: 0-100 |
+  | 6 | `preferences.history_limits.*` | Show each limit with current value; accept new int or Enter to keep |
 
 - After all stages, render a Summary Preview table: `key | from | to`, then a single confirmation prompt to apply ALL changes atomically.
 - If the user aborts at the summary, discard all in-progress values; do not write anything.
@@ -179,8 +174,6 @@ All persisted document output (files written to disk) MUST be written in the lan
 5. Write defaults atomically.
 6. Report the keys that changed.
 - Do NOT reset `knowledge.shared` to defaults if the user has added entries via `/mvt-manage-context` -- preserve user-added knowledge ids; only reset preferences. Surface this exception in the diff.
-
-### Step 8: (session update handled by shared section)
 
 ## Knowledge Inspection (sub-flow used by Interactive Menu and Show All)
 - **View**: list shared knowledge ids from `registry.yaml > knowledge.shared`, then per-skill knowledge ids grouped by skill (`registry.yaml > skills.*.knowledge`). Show token estimates from each entry's manifest if available.
@@ -202,19 +195,18 @@ All persisted document output (files written to disk) MUST be written in the lan
 
 ## State Update
 
-This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`. No state mutation, no `skill_history` append, no `recent_actions` append.
+This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`.
 
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-config`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`configuration updated`** → `/mvt-status` -- Check project status with new settings
+- **`language changed`** → `/mvt-help` -- Verify output in the new language
 
 ### Format
 

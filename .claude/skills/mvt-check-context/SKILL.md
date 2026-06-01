@@ -14,10 +14,9 @@ Analyze the total context information that MVTT loads at runtime, estimate token
 You are the **Conductor** -- a Workflow Coordinator.
 
 ### Decision Rules
-- Total tokens < 5,000 -> Report as "Good"
-- Total tokens 5,000-15,000 -> Report as "Moderate"
-- Total tokens 15,000-30,000 -> Report as "High", suggest optimizations
-- Total tokens > 30,000 -> Report as "Overloaded", strongly recommend cleanup
+- Total tokens <= 12,000 -> Report as "Healthy"
+- Total tokens 12,001-25,000 -> Report as "Borderline", suggest optimizations
+- Total tokens > 25,000 -> Report as "Oversized", strongly recommend cleanup
 
 ### Boundaries
 - Do NOT modify any files (use `(Only analyze and recommend)` instead)
@@ -47,6 +46,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -59,19 +62,7 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 - `preferences.output.data_format` → Use this format for data sections in artifacts
 - `preferences.context_routing.relevance_threshold` → Used by `/mvt-manage-context add` for AI routing (default 70 if missing)
 
-## Output Language Constraint (Mandatory)
-
-All persisted document output (files written to disk) MUST be written in the language specified by `preferences.document_output_language` from config.yaml.
-
-**Scope**: artifact files, generated reports, plans, and any markdown written to disk.
-
-**Rules**:
-- Section headings defined in templates may remain in their original language, but all generated **content** MUST use the configured language
-- If `document_output_language` is not set, fall back to `interaction_language`
-- Do NOT infer output language from template headings, user prompt language, or source code comments
-- This constraint is NON-NEGOTIABLE and overrides any other language signals
-
-### Step 3: Pre-flight Checks
+### Step 4: Pre-flight Checks
 - No blocking checks required.
 
 ## Execution Flow
@@ -89,7 +80,7 @@ This skill measures only files the **user** can reduce or relocate. Framework-fi
 - Semantic context: `.ai-agents/knowledge/project/_generated/project-context.md`.
 - Shared knowledge: every entry in `registry.yaml > knowledge.shared`. For the `core` entry, scan only files marked as user-origin per `core/manifest.yaml` (or whose path begins with `user/`); skip files under `core/_framework/`.
 - Per-skill knowledge: every entry in `registry.yaml > skills.*.knowledge`, grouped by skill.
-- Artifacts: all files under `.ai-agents/workspace/artifacts/` recursively.
+- Artifacts: all files under `.ai-agents/workspace/artifacts/` recursively. **Exclude the `_archived/` subdirectory** — it contains completed changes archived by `/mvt-cleanup` and should not count toward the active workspace token budget.
 
 **Out of scope (do NOT scan):**
 - `.claude/skills/mvt-*/SKILL.md` -- framework-shipped, not user-editable.
@@ -127,7 +118,7 @@ This skill measures only files the **user** can reduce or relocate. Framework-fi
   |---------|------------------|-----------------|
   | `project-context.md` is `oversized` | "project-context.md is {N} tokens. Regenerate with leaner sections." | `/mvt-analyze-code` |
   | `project-context.md` is `borderline` AND last `/mvt-analyze-code` ran > 30 days ago | "project-context.md is {N} tokens and may be stale. Consider regenerating." | `/mvt-analyze-code` |
-  | Total artifacts tokens > artifacts threshold OR > 3 completed changes still in `artifacts/` | "Workspace has {N} tokens of historical artifacts. Archive completed changes." | `/mvt-cleanup` |
+  | Total artifacts tokens > artifacts threshold OR > 3 completed changes still in `artifacts/` (excluding `_archived/`) | "Workspace has {N} tokens of historical artifacts. Archive completed changes." | `/mvt-cleanup` |
   | A specific change-id directory is `oversized` | "artifacts/{id} alone is {N} tokens. Summarize this change." | `/mvt-cleanup` |
   | Shared Knowledge total is `oversized` | "Shared knowledge totals {N} tokens (loaded by every skill). Move skill-specific entries to per-skill." | `/mvt-manage-context move` |
   | A single Shared Knowledge file is `oversized` | "{path} is {N} tokens. Split or move to per-skill." | `/mvt-manage-context move` |
@@ -150,8 +141,6 @@ This skill measures only files the **user** can reduce or relocate. Framework-fi
   6. **Excluded Scope Note** -- one paragraph reminding the user that framework files (`_framework/`, `mvt-*/SKILL.md`, `config.yaml`, `session.yaml`, `registry.yaml`) were not measured here.
 - The report is conversation output; this skill does NOT write any artifact.
 
-### Step 7: (session update handled by shared section)
-
 ## Edge Cases & Errors
 
 | Case | Handling |
@@ -159,26 +148,26 @@ This skill measures only files the **user** can reduce or relocate. Framework-fi
 | `registry.yaml` references a knowledge id whose source path is empty / missing | Include in Step 5 recommendations; do NOT count missing files toward token totals |
 | `core/manifest.yaml` cannot be parsed | Treat the whole `core/` tree as in-scope (over-counts); add a note in the report |
 | Workspace has zero artifacts | Skip the artifacts category in Step 6; do not error |
-| Workspace exceeds the artifacts threshold AND the user just ran `/mvt-cleanup` (within last hour per `skill_history`) | Surface but downgrade to a one-line note ("recently cleaned -- remaining {N} tokens are likely active work") |
+| Workspace exceeds the artifacts threshold AND the user just ran `/mvt-cleanup` (within last hour per `history`) | Surface but downgrade to a one-line note ("recently cleaned -- remaining {N} tokens are likely active work") |
 | User passes a path argument | This skill ignores arguments; print a one-line note and run as normal (do not narrow scope to a single file -- that is `/mvt-status` territory) |
 | Token estimate disagrees with model's actual consumption | This is expected; the `chars/4` heuristic is an approximation. State this caveat in the Summary line |
 | Two skills declare the same knowledge id | Count the file once for storage but report it under both skills in the Per-Skill table; flag the duplication in Step 5 |
 
 ## State Update
 
-This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`. No state mutation, no `skill_history` append, no `recent_actions` append.
+This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`.
 
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-check-context`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`context oversized or borderline`** → `/mvt-cleanup` -- Archive old artifacts to reduce context
+  - Or `/mvt-manage-context` -- Move per-skill knowledge to reduce shared load
+- **`context healthy`** → `/mvt-status` -- Check overall project status
 
 ### Format
 

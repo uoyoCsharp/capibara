@@ -22,8 +22,8 @@ You are the **Conductor** -- a Workflow Coordinator.
 - Custom template must preserve frontmatter format
 
 ### Boundaries
-- Do NOT modify default templates in `_templates/` root (use `(Only create/modify in `custom/`)` instead)
-- Do NOT modify skill logic (use `(Only change output formatting)` instead)
+- Do NOT modify default templates in `_templates/` root (only create/modify in `custom/`) (use `(constraint)` instead)
+- Do NOT modify skill logic (only change output formatting) (use `(constraint)` instead)
 
 ## Activation Protocol
 
@@ -48,6 +48,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -60,19 +64,7 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 - `preferences.output.data_format` → Use this format for data sections in artifacts
 - `preferences.context_routing.relevance_threshold` → Used by `/mvt-manage-context add` for AI routing (default 70 if missing)
 
-## Output Language Constraint (Mandatory)
-
-All persisted document output (files written to disk) MUST be written in the language specified by `preferences.document_output_language` from config.yaml.
-
-**Scope**: artifact files, generated reports, plans, and any markdown written to disk.
-
-**Rules**:
-- Section headings defined in templates may remain in their original language, but all generated **content** MUST use the configured language
-- If `document_output_language` is not set, fall back to `interaction_language`
-- Do NOT infer output language from template headings, user prompt language, or source code comments
-- This constraint is NON-NEGOTIABLE and overrides any other language signals
-
-### Step 3: Pre-flight Checks
+### Step 4: Pre-flight Checks
 - No blocking checks required.
 
 ## Execution Flow
@@ -159,8 +151,6 @@ All persisted document output (files written to disk) MUST be written in the lan
 
   3. Never write outside the project root unless an absolute path was explicitly provided by the user.
 
-### Step 5: (session update handled by shared section)
-
 ## Edge Cases & Errors
 
 | Case | Handling |
@@ -174,19 +164,18 @@ All persisted document output (files written to disk) MUST be written in the lan
 
 ## State Update
 
-This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`. No state mutation, no `skill_history` append, no `recent_actions` append.
+This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`.
 
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-template`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`template customized`** → `/mvt-status` -- Check project status
+- **`template reset to default`** → `/mvt-help` -- Review available skills and templates
 
 ### Format
 

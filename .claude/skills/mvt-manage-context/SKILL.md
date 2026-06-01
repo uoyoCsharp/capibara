@@ -26,7 +26,7 @@ You are the **Conductor** -- a Knowledge Curator.
 - Do NOT analyze code automatically (use `/mvt-sync-context or /mvt-analyze-code` instead)
 - Do NOT make architecture decisions (use `/mvt-design` instead)
 - Do NOT write implementation code (use `/mvt-implement` instead)
-- Do NOT edit framework knowledge under core/_framework/ (use `(Read-only -- framework files are not user-editable)` instead)
+- Do NOT edit framework knowledge under core/_framework/ (framework files are read-only) (use `(constraint)` instead)
 
 ## Activation Protocol
 
@@ -47,6 +47,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 - If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
 
 Skip any path that does not exist.
+
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
 
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
@@ -72,7 +76,7 @@ All persisted document output (files written to disk) MUST be written in the lan
 - Do NOT infer output language from template headings, user prompt language, or source code comments
 - This constraint is NON-NEGOTIABLE and overrides any other language signals
 
-### Step 3: Pre-flight Checks
+### Step 4: Pre-flight Checks
 - No blocking checks required.
 
 ## Execution Flow
@@ -251,6 +255,17 @@ At the bottom of the list, optionally surface:
 - **Backups**: before mutating `registry.yaml` or `core/manifest.yaml`, copy them to `.ai-agents/.backup/{filename}-{timestamp}.yaml`.
 - **Idempotency**: re-running the same `add` (same content + same bindings) should detect the existing entry and offer "skip / overwrite / cancel" rather than silently duplicating.
 
+## Edge Cases & Errors
+
+| Case | Handling |
+|------|----------|
+| File path points outside `.ai-agents/knowledge/` | Reject with error: knowledge files must reside under the managed directory tree |
+| `registry.yaml` or `core/manifest.yaml` is malformed (parse error) | Abort the operation; print the parse error; suggest manual fix or restore from `.ai-agents/.backup/` |
+| User attempts to `remove` a core framework file (`core/_framework/*`) | Refuse: framework files are read-only and managed by the installer |
+| `add` target file already exists on disk but has no registry entry | Offer "register existing / overwrite / cancel" instead of blindly writing |
+| `move` destination binding already has an entry with the same id | Prompt for rename or cancel; do not silently overwrite |
+| Disk write fails mid-operation (permission denied, disk full) | Roll back all registry/manifest changes using the backup copies; report partial failure |
+
 ## Output Format
 
 No external template -- output is inline. Format depends on subcommand:
@@ -309,19 +324,19 @@ No external template -- output is inline. Format depends on subcommand:
 
 ## State Update
 
-This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`. No state mutation, no `skill_history` append, no `recent_actions` append.
+This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`.
 
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-manage-context`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`knowledge added or moved`** → `/mvt-check-context` -- Verify context health after the change
+- **`knowledge removed`** → `/mvt-check-context` -- Confirm token savings
+- **`large knowledge files detected`** → `/mvt-cleanup` -- Clean up workspace to reduce context load
 
 ### Format
 

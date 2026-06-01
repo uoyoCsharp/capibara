@@ -18,7 +18,7 @@ You are the **Architect** -- a Development Planner.
 - Task id missing AND only one task is in_progress -> Default to that task
 - Target status would create an invalid current_task -> Recompute current_task automatically
 - All tasks become done -> Set plan.status = done, current_task = null
-- active_change.has_plan is false -> Stop and suggest /mvt-plan-dev
+- active_change.plan_path is empty -> Stop and suggest /mvt-plan-dev
 
 ### Boundaries
 - Do NOT create new tasks or restructure the plan (use `/mvt-plan-dev` instead)
@@ -47,6 +47,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 - If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
 
 Skip any path that does not exist.
+
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
 
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
@@ -84,12 +88,13 @@ For each check below, if the condition holds, perform the action implied by its 
 | # | Condition | Level | Message |
 |---|-----------|-------|---------|
 | 1 | `session.initialized_at` is empty | WARN | Session not initialized. Run `/mvt-init` first. |
-| 2 | `active_change.has_plan` is empty | BLOCK | No active plan. Run `/mvt-plan-dev` to create one before updating. |
+| 2 | `active_change.plan_path` is empty | BLOCK | No active plan. Run `/mvt-plan-dev` to create one. |
 
-### Shortcut Operation Rules
-- Can execute at any time when an active plan exists
-- Performs surgical edits only -- never overwrites the whole plan structure
-- Re-validates the resulting plan before writing; aborts on validation failure
+## Operation Mode: Shortcut
+
+This skill operates as a shortcut — it can execute at any time when an active plan exists.
+- Performs surgical edits only — never overwrites the whole plan structure.
+- Re-validates the resulting plan before writing; aborts on validation failure.
 
 ## Execution Flow
 
@@ -147,10 +152,10 @@ If the selected next task is currently `pending` -> promote it to `in_progress` 
 
 ### Step 6: Update Session State
 
-Apply the standard State Update rules (see shared section above) AND the update-plan-specific updates:
+Apply the State Update rules defined in the **State Update** section below, AND the update-plan-specific updates:
 
-- Refresh the matching entry in `recent_changes[]`: `last_updated` -> current ISO 8601 timestamp.
-- Do NOT touch `active_change.has_plan` / `active_change.plan_path`.
+- Refresh the matching entry in `changes[]`: `updated_at` -> current ISO 8601 timestamp.
+- Do NOT touch `active_change.plan_path`.
 
 ### Step 7: Output
 
@@ -163,6 +168,17 @@ Emit the Plan Update summary block defined in the Output Format section. Include
   - If a new `current_task` is set -> recommend the skill matching its `skill_hint`.
   - If plan complete -> recommend `/mvt-cleanup` or starting a new change via `/mvt-analyze`.
   - If all remaining tasks are blocked -> recommend resolving the blocker (point at the `notes` of the blocked task).
+
+## Edge Cases & Errors
+
+| Case | Handling |
+|------|----------|
+| `plan.yaml` not found at `active_change.plan_path` | Abort with error: "No plan found. Run `/mvt-plan-dev` to create one." |
+| Task id provided does not exist in `plan.yaml` | Abort with error listing valid task ids |
+| Transition to `done` but `depends_on` tasks are not all `done` | Warn but allow: "Task marked done despite unfinished dependencies — verify correctness" |
+| All tasks are `done` but user marks another as `in_progress` | Reject: plan is already complete; suggest creating a new change |
+| Circular dependency detected in `depends_on` | Report the cycle and refuse to auto-advance `current_task`; suggest manual fix |
+| `plan.yaml` write fails (permission denied, invalid YAML state) | Abort; do not update session; report the write error |
 
 ## Output Format
 
@@ -191,42 +207,33 @@ Current task: {new_current_task_id_or_"(plan complete)"}
 
 Every response MUST end with a Suggested Next Steps section.
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>" --update-change
+```
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-### Forbidden
+### Argument values
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-update-plan` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+| `--update-change` | Flag only, no value. Upserts the current `active_change` into `changes[]`. | — |
 
-### Update-Plan Specific State Updates
+### Parameter semantics
 
-In addition to the mandatory updates above, this skill MUST refresh `recent_changes` for the active change:
+| Argument | When to use | Effect on `session.yaml` |
+|----------|-------------|--------------------------|
+| `--update-change` | Skill modifies a plan (i.e., after `plan.yaml` is updated) | Upserts current `active_change` into `changes[]` (with `status: active`), sets `updated_at`, sorts ascending, truncates to configured limit. |
 
-- Find the entry where `id == active_change.id`. If absent, append one (this should be rare; happens when the plan was created out-of-band).
-- Set `last_updated` to the current ISO 8601 timestamp.
-- Trim to max 5 entries (drop the oldest by `last_updated` ascending).
+### Failure handling
 
-Do NOT modify `active_change.has_plan` or `active_change.plan_path` here -- those are owned by `/mvt-plan-dev`.
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
@@ -240,7 +247,6 @@ Match the current state to one of the conditions below. If none match, use `defa
 - **`default`** → `/mvt-implement` -- Continue with the next current_task
 - `/mvt-resume` -- Refresh context after task transitions
 - `/mvt-status` -- Inspect overall progress across changes
-
 
 ### Format
 

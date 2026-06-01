@@ -46,6 +46,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -160,38 +164,34 @@ If a custom version exists at `.ai-agents/skills/_templates/custom/analyze-outpu
 The template defines section headings only. Generate content for each section based on analysis results.
 Write the artifact to: `.ai-agents/workspace/artifacts/{change-id}/analysis.md`
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>" --new-change "<active_change.title>" --change-id <active_change.id>
+```
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-### Conditional (set only when applicable)
+### Argument values
 
-- `active_change.id`: Set when this skill creates a new change
-- `active_change.title`: Set when this skill creates a new change
-- `active_change.created_at`: Set when this skill creates a new change
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-analyze` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+| `--new-change` | The title of the new change being created (same value written to `active_change.title`) | `"User authentication system"` |
+| `--change-id` | The unique identifier of the new change (same value written to `active_change.id`) | `chg-001` |
 
-### Forbidden
+### Parameter semantics
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+| Argument | When to use | Effect on `session.yaml` |
+|----------|-------------|--------------------------|
+| `--new-change` + `--change-id` | Skill creates or identifies a new change | Sets `active_change.id`, `.title`, `.created_at`. Auto-snapshots old `active_change` into `changes[]` if non-empty. Requires both arguments together. |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
@@ -204,7 +204,6 @@ Match the current state to one of the conditions below. If none match, use `defa
 - **`user chose quick path in Step 2.5`** → `/mvt-quick-dev` -- Implement this simple change quickly
 - **`default`** → `/mvt-design` -- Design architecture based on analysis
   - Or `/mvt-analyze-code` -- Generate code context for better design
-
 
 ### Format
 

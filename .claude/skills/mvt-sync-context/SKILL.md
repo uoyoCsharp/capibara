@@ -61,6 +61,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -104,10 +108,12 @@ For each check below, if the condition holds, perform the action implied by its 
 ### Step 1: Identify Completed Changes
 - **What**: produce a candidate list of change-ids whose artifacts will be aggregated.
 - **How**:
-  1. Read `session.yaml`. Collect `recent_changes[]` entries with `status: completed`.
+  1. Read `session.yaml`. Collect `changes[]` entries with `status: done`.
   2. For each candidate, verify `.ai-agents/workspace/artifacts/{change-id}/` exists AND contains at least one of `analysis.md` or `design.md`. Drop entries with only `plan.yaml`.
-  3. (Fallback) If `recent_changes[]` is empty, scan `.ai-agents/workspace/artifacts/*/` directly; offer those with `analysis.md` or `design.md`, marked `unindexed`.
-  4. Exclude any change-id whose directory contains an `_archive/` subfolder (already archived).
+  3. (Fallback) If `changes[]` is empty, scan `.ai-agents/workspace/artifacts/*/` directly; offer those with `analysis.md` or `design.md`, marked `unindexed`.
+  4. Exclude already-archived or irrelevant changes:
+     - **Indexed changes**: exclude any `changes[]` entry with `status: abandoned`. For `status: done` entries, Step 1.2's directory existence check already filters out those whose artifacts have been moved to `artifacts/_archived/` by `/mvt-cleanup`.
+     - **Fallback scan**: when scanning `artifacts/*/` directly, skip any path under `artifacts/_archived/` (the unified archive directory managed by `/mvt-cleanup`).
   5. Exclude `active_change.id` (work in flight).
 
 - **Present** the list:
@@ -139,10 +145,9 @@ This step establishes the **target structure** that aggregated content must fit 
 
 - **What**: from each selected change-id, extract atomic knowledge items and classify them against the section map from Step 2.
 - **How**:
-  1. For each selected change-id, read available artifacts (`analysis.md`, `design.md`, `implementation.md`).
+  1. For each selected change-id, read available artifacts (`analysis.md`, `implementation.md`).
   2. Extract atomic items. Typical sources:
      - `analysis.md` -> domain terms, actors, business rules, constraints
-     - `design.md` -> modules, layers, dependency rules, key interfaces, ADRs
      - `implementation.md` -> files added/changed (informs `.yaml` source_paths), realized vs deviated design points
   3. For each item, match to a section from the Step 2 map:
      - Match by semantic similarity to **section title + 1-line summary**, not by exact string.
@@ -227,14 +232,18 @@ If user skips verification: proceed directly to Step 7 with Step 5 selections.
 1. **Applied summary** -- counts: items added / modified / skipped / orphaned-into-new-section
 2. **Files changed** -- paths + byte deltas
 3. **Backup paths** -- so user can manually revert
-4. **Out-of-scope reminder** (always print):
+4. **Synced changes** -- list all change-ids whose knowledge was aggregated in this run:
+   > The following changes have been synced and can be safely archived: {change-id-1}, {change-id-2}, ...
+   > Last synced at: {last_synced_at} (updated by this run)
+5. **Out-of-scope reminder** (always print):
    > This skill processes additions and modifications only. Module deletions, renames, and large refactors are NOT detected here. Run `/mvt-analyze-code` periodically to rebuild from ground truth.
-5. **Suggested next**:
+6. **Suggested next**:
    - Aggregated >= 1 change -> "Run `/mvt-cleanup` to archive these completed changes."
    - Verification flagged code-only entities -> "Run `/mvt-analyze-code` to capture missing entities."
 
-### Step 9: (session update handled by shared section)
-- Refresh `session.last_synced_at` to current ISO timestamp.
+### Step 9: State Update
+Apply the State Update rules defined in the **State Update** section below.
+- The `--set-synced` parameter updates `session.last_synced_at`.
 
 ## Edge Cases & Errors
 
@@ -250,32 +259,33 @@ If user skips verification: proceed directly to Step 7 with Step 5 selections.
 | Two artifacts contradict each other (design says layer A, implementation says layer B) | Surface in Table 4b as cross-artifact conflict; user picks |
 | change-id was archived between Step 1 and Step 7 | Skip with note; do not error the run |
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>" --set-synced
+```
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-### Forbidden
+### Argument values
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-sync-context` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+| `--set-synced` | Flag only, no value. Sets `session.last_synced_at` to current time. | — |
+
+### Parameter semantics
+
+| Argument | When to use | Effect on `session.yaml` |
+|----------|-------------|--------------------------|
+| `--set-synced` | Skill synchronizes context files | Sets `session.last_synced_at` to the current time. |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
@@ -288,7 +298,6 @@ Match the current state to one of the conditions below. If none match, use `defa
 - **`merge applied successfully`** → `/mvt-cleanup` -- Archive aggregated change artifacts now that knowledge is sync'd
 - **`code verification flagged code-only entities`** → `/mvt-analyze-code` -- Regenerate project-context.md from full code scan
 - **`default`** → `/mvt-check-context` -- Audit token cost and overall context health
-
 
 ### Format
 

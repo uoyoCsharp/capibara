@@ -50,6 +50,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 
 Skip any path that does not exist.
 
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
@@ -62,23 +66,12 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 - `preferences.output.data_format` → Use this format for data sections in artifacts
 - `preferences.context_routing.relevance_threshold` → Used by `/mvt-manage-context add` for AI routing (default 70 if missing)
 
-## Output Language Constraint (Mandatory)
+## Operation Mode: Shortcut
 
-All persisted document output (files written to disk) MUST be written in the language specified by `preferences.document_output_language` from config.yaml.
-
-**Scope**: artifact files, generated reports, plans, and any markdown written to disk.
-
-**Rules**:
-- Section headings defined in templates may remain in their original language, but all generated **content** MUST use the configured language
-- If `document_output_language` is not set, fall back to `interaction_language`
-- Do NOT infer output language from template headings, user prompt language, or source code comments
-- This constraint is NON-NEGOTIABLE and overrides any other language signals
-
-### Shortcut Operation Rules
-- Can execute at any time without checking workflow prerequisites
-- Do NOT update `progress` (this is a shortcut operation, not a workflow phase)
-- Do NOT write any artifact — diagnosis is presented in conversation only
-- Do NOT modify any source code — this skill is read-only analysis
+This skill operates as a shortcut — it can execute at any time without checking workflow prerequisites.
+- Do NOT update `active_change` fields (this is a shortcut operation, not a workflow phase).
+- Do NOT write any artifact — diagnosis is presented in conversation only.
+- Do NOT modify any source code — this skill is read-only analysis.
 
 ## Execution Flow
 
@@ -169,8 +162,6 @@ All persisted document output (files written to disk) MUST be written in the lan
 - For `NotABug`: explain why the current behavior is expected, and suggest `/mvt-analyze` if the requirement itself needs revision.
 - For `Inconclusive`: summarize what was found and what remains unknown, so the user or `/mvt-fix` can act with full awareness.
 
-### Step 7: (session update handled by shared section)
-
 ## Edge Cases & Errors
 
 | Case | Handling |
@@ -182,32 +173,26 @@ All persisted document output (files written to disk) MUST be written in the lan
 | User provides a URL or external reference | Note it but do NOT fetch external resources; work only with local code and the description text |
 | `active_change` is missing | Run without change context (shortcut mode); omit change-id references in output |
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>"
+```
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-### Forbidden
+### Argument values
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-bug-detect` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
@@ -222,7 +207,6 @@ Match the current state to one of the conditions below. If none match, use `defa
   - Or `/mvt-fix` -- Apply a minimal workaround
 - **`not a bug (expected behavior)`** → `/mvt-analyze` -- Re-analyze the underlying requirement
 - **`inconclusive, needs deeper code understanding`** → `/mvt-analyze-code` -- Deep-dive into the codebase
-
 
 ### Format
 

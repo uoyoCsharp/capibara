@@ -31,7 +31,7 @@ You are the **Architect** -- a System Architecture Expert.
 | Variant | Description |
 |---------|-------------|
 | `/mvt-design` | Full architecture design |
-| `/mvt-design --plan` | High-level implementation plan only |
+| `/mvt-design --plan` | High-level implementation plan only: skip Step 5 (data flow detail) and Step 6 (full ADR fields). ADRs collapse to one-line `decision: <text>`. Step 8 writes `design.md` with abbreviated content and a top-line `Mode: plan` indicator. If the request is actually small (1 file), downgrade to a 5-line summary in chat and do NOT write `design.md`. |
 
 ## Activation Protocol
 
@@ -55,6 +55,10 @@ For each entry, resolve files relative to `.ai-agents/{source}`:
 - If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
 
 Skip any path that does not exist.
+
+### Archived Artifacts Convention
+
+The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
 
 ### Step 3: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
@@ -180,8 +184,7 @@ For each check below, if the condition holds, perform the action implied by its 
 - **Confirmation format**: present a one-screen summary -- style chosen, modules added/changed, ADRs requiring review, a single yes/no prompt. Do not dump the full artifact.
 
 ### Step 8: Write Artifact
-- **Path**: `.ai-agents/workspace/artifacts/{active_change.id}/design.md`.
-- **Template**: `.ai-agents/skills/_templates/design-output.md`; if `_templates/custom/design-output.md` exists, use the custom version.
+- **Path and template**: as defined in the **Artifact Structure** section below.
 - **Required sections** (filled per template headings, but content must include):
   - `Overview` -- the problem statement (Step 2).
   - `Architecture Decision Records` -- every ADR from Step 6.
@@ -197,10 +200,8 @@ For each check below, if the condition holds, perform the action implied by its 
 - If `Change Tracking` lists more than ~5 files OR Module Design adds more than 1 new module OR ADRs include any breaking change, recommend `/mvt-plan-dev` as the next step.
 - Otherwise recommend `/mvt-implement` directly.
 
-### Step 10: (session update handled by shared section)
-
-## Variants
-- `/mvt-design --plan` flag: skip Step 5 (data flow detail) and Step 6 (full ADR fields). In `--plan` mode, ADRs collapse to a one-line `decision: <text>`. Step 8 still writes `design.md` but with the abbreviated content. The output is a high-level plan, not an implementation-ready blueprint -- mark the artifact with a top-line `Mode: plan` indicator.
+### Step 10: State Update
+Apply the State Update rules defined in the **State Update** section below.
 
 ## Edge Cases & Errors
 
@@ -219,44 +220,38 @@ If a custom version exists at `.ai-agents/skills/_templates/custom/design-output
 The template defines section headings only. Generate content for each section based on design results.
 Write the artifact to: `.ai-agents/workspace/artifacts/{change-id}/design.md`
 
-## State Update (Required)
+## State Update
 
-After execution, update `.ai-agents/workspace/session.yaml` with the following fields.
+After completing the skill's main task, run the session update script **exactly once** with the following arguments:
 
-### Mandatory (every skill must set)
+```bash
+node .ai-agents/scripts/session-update.cjs --skill <skill_command_name> --summary "<concise one-line summary>"
+```
 
-- `session.last_command`: Set to the current skill command (e.g., `"/mvt-analyze"`)
-- `skill_history`: Append entry:
-  ```yaml
-  - command: "/{skill-name}"
-    completed_at: "{current timestamp ISO 8601}"
-    summary: "{one-line summary of what was accomplished}"
-    change_id: "{active_change.id if set, otherwise empty string}"
-  ```
-  Keep max 10 entries. If exceeds, drop the oldest. The `change_id` field enables `/mvt-resume` to filter history per change when multiple changes are in flight.
-- `recent_actions`: Append one-line summary with format:
-  `[{YYYY-MM-DD HH:MM}] /{command}: {one-line summary}`
-  Keep max 5 entries. If exceeds, drop the oldest.
+If the script exits with code 0, the state update was applied successfully; there is no need to read or verify the session file.
 
-### Forbidden
+### Argument values
 
-- Do NOT update fields not listed above
-- Do NOT overwrite `active_change` unless this skill creates a new change
-- Do NOT modify `skill_history` entries other than appending a new one
-- Do NOT modify `recent_changes` -- it is owned by `/mvt-plan-dev` and `/mvt-update-plan`
-- Do NOT modify `active_change.plan_path` or `active_change.has_plan` -- these are owned by `/mvt-plan-dev`
+| Argument | Value source | Example |
+|----------|-------------|---------|
+| `--skill` | The exact skill command name without the leading `/` | `mvt-design` |
+| `--summary` | A concise one-line description of what this invocation accomplished, in the configured `interaction_language` | `"Identified auth requirements and created change chg-001"` |
+
+### Failure handling
+
+If the script fails (non-zero exit), do NOT abort the skill's main task. Continue execution and add a brief note at the end of your response that the session could not be updated.
 
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-design`) and the current project state.
 
-### Resolution order
+### Conditional Recommendations
 
-Infer 2-3 suggestions from:
-- `skill_history` in `session.yaml`
-- `category` and `description` of each skill in `registry.yaml`
-- The current `active_change` state (if in progress)
-- The `depends_on` relationships between skills
+Match the current state to one of the conditions below. If none match, use `default`.
+
+- **`design complete, change tracking lists >5 files or >1 new module`** → `/mvt-plan-dev` -- Create a structured implementation plan
+- **`design complete, small scope`** → `/mvt-implement` -- Implement the designed architecture
+- **`design has proposed ADRs needing stakeholder review`** → `/mvt-review` -- Review the design decisions
 
 ### Format
 
