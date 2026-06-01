@@ -259,6 +259,8 @@ export interface McpTransportDiagnostic {
   listening: boolean;
   port: number;
   sseClientConnected: boolean;
+  /** Whether the Streamable HTTP transport is connected (has at least one active session). */
+  httpTransportReady: boolean;
 }
 
 export interface SessionDiagnostic {

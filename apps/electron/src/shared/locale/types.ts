@@ -630,6 +630,8 @@ export interface LocaleMessages {
       port: string;
       sseConnected: string;
       sseDisconnected: string;
+      httpReady: string;
+      httpNotReady: string;
       reconnect: string;
       reconnectConfirm: string;
       reconnectSuccess: string;

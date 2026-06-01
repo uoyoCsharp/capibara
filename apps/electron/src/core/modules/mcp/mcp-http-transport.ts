@@ -94,6 +94,7 @@ export class McpHttpTransportManager {
       listening: this.server !== null,
       port: this.port,
       sseClientConnected: this.sseTransport !== null,
+      httpTransportReady: this.httpTransport !== null,
     };
   }
 

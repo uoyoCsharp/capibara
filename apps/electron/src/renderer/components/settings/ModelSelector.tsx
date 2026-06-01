@@ -79,23 +79,28 @@ export function ModelSelector() {
         <Cube size={14} />
         {ms.title}
       </h3>
-      <Select value={value} onValueChange={handleChange} disabled={saving}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder={ms.placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {state.models.map((model) => (
-            <SelectItem key={model.id} value={model.id}>
-              <span className="flex items-center gap-2">
-                {model.name}
-                {model.id === state.currentModelId && (
-                  <Badge variant="secondary" className="text-xs">{ms.active}</Badge>
-                )}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex items-center gap-2">
+        <Select value={value} onValueChange={handleChange} disabled={saving}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder={ms.placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {state.models.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                <span className="flex items-center gap-2">
+                  {model.name}
+                  {model.id === state.currentModelId && (
+                    <Badge variant="secondary" className="text-xs">{ms.active}</Badge>
+                  )}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={handleDetect} disabled={detecting}>
+          {detecting ? ms.detecting : ms.detect}
+        </Button>
+      </div>
       <p className="text-xs text-muted-foreground">{ms.hint}</p>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>

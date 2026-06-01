@@ -172,6 +172,7 @@ function McpSection({ snapshot, onReconnect }: { snapshot: DiagnosticSnapshot; o
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
           <span>{t.devPanel.mcp.port}: {mcp.port}</span>
           <span>{mcp.sseClientConnected ? t.devPanel.mcp.sseConnected : t.devPanel.mcp.sseDisconnected}</span>
+          <span>{mcp.httpTransportReady ? t.devPanel.mcp.httpReady : t.devPanel.mcp.httpNotReady}</span>
         </div>
         <button
           onClick={onReconnect}
