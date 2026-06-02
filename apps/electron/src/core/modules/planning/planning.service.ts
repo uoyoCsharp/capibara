@@ -1,16 +1,20 @@
 import { injectable } from 'tsyringe';
-import type { TaskService } from '@core/modules/workflow/services/task.service';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { IPlanningService } from './interfaces/i-planning.service';
+import type { ITaskService } from '@core/modules/workflow/interfaces/i-task.service';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEvent, PlanTreeNode, PlanTreeMode } from '@core/foundation/events';
 import type { BatchCreateTaskInput, Task } from '@core/modules/workflow/types/workflow.types';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
+import type { IRoleQueryService } from '@core/modules/organization/interfaces/i-role-query.service';
 import type { IPendingPlanTreeRepository } from './interfaces/i-pending-plan-tree.repository';
 import type { PendingPlanTree } from './types/pending-plan-tree.types';
+import { validatePlanTree, countNodes, measureDepth } from './validation/plan-tree.validator';
+import type { PlanTreeValidationError } from './validation/plan-tree.validator';
 
 export interface IPlanTreeWaker {
   tryWake(roleId: string, orgId: string, reason: string, taskId: string | null): void;
@@ -25,19 +29,20 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000;
  * in the inbox for human review.
  */
 @injectable()
-export class PlanningService {
+export class PlanningService implements IPlanningService {
   private waker: IPlanTreeWaker | null = null;
 
   constructor(
-    private readonly taskService: TaskService,
-    private readonly taskStateMachine: TaskStateMachine,
-    private readonly processEngine: ProcessEngine,
+    private readonly taskService: ITaskService,
+    private readonly taskStateMachine: ITaskStateMachine,
+    private readonly processEngine: IProcessEngine,
     private readonly connection: ISqliteConnection,
     private readonly eventBus: IEventBus,
     private readonly eventPublisher: IEventPublisher,
     private readonly logger: ILogger,
     private readonly pendingPlanTreeRepo: IPendingPlanTreeRepository,
-    private readonly conversationService: ConversationService,
+    private readonly conversationService: IConversationCommandService,
+    private readonly roleService: IRoleQueryService,
   ) {}
 
   /** Wired at bootstrap after TaskOrchestrator is constructed. */
@@ -51,6 +56,43 @@ export class PlanningService {
   }
 
   // ─── Plan tree (both task-anchored and conversation-anchored) ───
+
+  /**
+   * Submit a plan tree for validation and persistence.
+   * Called by the MCP adapter (primary) after Zod/shape pre-parse.
+   * Validates structural limits + type compatibility + role validity in the domain,
+   * then persists and publishes events. Throws PlanTreeValidationError on violation.
+   */
+  submit(input: {
+    rootTaskId: string | null;
+    sourceConversationId: string | null;
+    orgId: string;
+    roleId: string;
+    rootType: string | null;
+    mode: PlanTreeMode;
+    tree: PlanTreeNode;
+  }): { mode: PlanTreeMode; nodeCount: number; maxDepth: number } {
+    const { rootTaskId, sourceConversationId, orgId, roleId, rootType, mode, tree } = input;
+
+    const roles = this.roleService.findByOrgId(orgId);
+    const validRoleIds = new Set(roles.map((r) => r.id));
+
+    const err = validatePlanTree({ orgId, rootType, tree, processEngine: this.processEngine, validRoleIds });
+    if (err) throw err;
+
+    // Publish the domain event — onTreeSubmitted handles persist/eager/preview logic.
+    this.eventPublisher.publish('plan-tree:submitted', {
+      rootTaskId,
+      sourceConversationId,
+      orgId,
+      roleId,
+      mode,
+      tree,
+      submittedAt: new Date().toISOString(),
+    });
+
+    return { mode, nodeCount: countNodes(tree), maxDepth: measureDepth(tree) };
+  }
 
   getPendingTree(rootTaskId: string): PendingPlanTree | undefined {
     const t = this.pendingPlanTreeRepo.findActiveByRootTaskId(rootTaskId);
@@ -91,6 +133,23 @@ export class PlanningService {
         code: 'VERSION_MISMATCH',
         message: `Plan tree was updated (v${pending.version}) while you were reviewing v${expectedVersion}. Re-fetch and retry.`,
       };
+    }
+
+    // Re-validate structural limits at approve (B-5: domain invariants enforced at both entry points)
+    const roles = this.roleService.findByOrgId(pending.orgId);
+    const validRoleIds = new Set(roles.map((r) => r.id));
+    const rootType = pending.rootTaskId
+      ? (this.taskService.findById(pending.rootTaskId)?.type ?? null)
+      : null;
+    const validationErr = validatePlanTree({
+      orgId: pending.orgId,
+      rootType,
+      tree: pending.tree,
+      processEngine: this.processEngine,
+      validRoleIds,
+    });
+    if (validationErr) {
+      return { ok: false, code: validationErr.code, message: validationErr.message };
     }
 
     try {
@@ -136,12 +195,12 @@ export class PlanningService {
         rootTaskId: pending.rootTaskId,
         sourceConversationId: pending.sourceConversationId,
         orgId: pending.orgId,
-        nodeCount: this.countNodes(pending.tree),
+        nodeCount: countNodes(pending.tree),
       });
       this.logger.info('Plan tree approved', {
         rootTaskId: pending.rootTaskId,
         sourceConversationId: pending.sourceConversationId,
-        nodeCount: this.countNodes(pending.tree),
+        nodeCount: countNodes(pending.tree),
       });
       return { ok: true };
     } catch (err) {
@@ -360,8 +419,8 @@ export class PlanningService {
           sourceConversationId, orgId, roleId, mode, tree, submittedAt, expiresAt,
         });
 
-        const nodeCount = this.countNodes(tree);
-        const maxDepth = this.measureDepth(tree);
+        const nodeCount = countNodes(tree);
+        const maxDepth = measureDepth(tree);
         this.eventPublisher.publish('plan-tree:ready', {
           rootTaskId: null, sourceConversationId, orgId, nodeCount, maxDepth,
         });
@@ -416,8 +475,8 @@ export class PlanningService {
       // Create or update plan_review conversation
       this.ensurePlanReviewConversation(pendingTree, rootTaskId, orgId, roleId);
 
-      const nodeCount = this.countNodes(tree);
-      const maxDepth = this.measureDepth(tree);
+      const nodeCount = countNodes(tree);
+      const maxDepth = measureDepth(tree);
       this.eventPublisher.publish('plan-tree:ready', {
         rootTaskId, sourceConversationId: null, orgId, nodeCount, maxDepth,
       });
@@ -513,16 +572,5 @@ export class PlanningService {
         error: err instanceof Error ? err.message : String(err),
       });
     }
-  }
-
-  private countNodes(tree: PlanTreeNode): number {
-    let count = 1;
-    for (const child of tree.children) count += this.countNodes(child);
-    return count;
-  }
-
-  private measureDepth(tree: PlanTreeNode, depth = 1): number {
-    if (tree.children.length === 0) return depth;
-    return Math.max(...tree.children.map((c) => this.measureDepth(c, depth + 1)));
   }
 }

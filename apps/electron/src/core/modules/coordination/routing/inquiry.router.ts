@@ -3,7 +3,7 @@ import type { IRoleRepository } from '@core/modules/organization/interfaces/i-ro
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEvent } from '@core/foundation/events';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import type { RoutingRequest, RoutingDecision } from './routing.types';
 
 /**
@@ -19,7 +19,7 @@ import type { RoutingRequest, RoutingDecision } from './routing.types';
 export class InquiryRouter {
   constructor(
     private readonly roleRepo: IRoleRepository,
-    private readonly conversationService: ConversationService,
+    private readonly conversationService: IConversationCommandService,
     private readonly eventBus: IEventBus,
     private readonly logger: ILogger,
   ) {}

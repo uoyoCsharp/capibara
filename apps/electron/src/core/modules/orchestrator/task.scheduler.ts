@@ -1,7 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 import type { Task } from '@core/modules/workflow/types/workflow.types';
 import type { WakeReason } from '@core/modules/execution/types/execution.types';
 
@@ -14,7 +14,7 @@ export interface ScheduleResult {
 export class TaskScheduler {
   constructor(
     private readonly taskRepo: ITaskRepository,
-    private readonly processEngine: ProcessEngine,
+    private readonly processEngine: IProcessEngine,
     private readonly logger: ILogger,
   ) {}
 

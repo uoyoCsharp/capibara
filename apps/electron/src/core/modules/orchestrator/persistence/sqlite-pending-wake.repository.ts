@@ -62,9 +62,19 @@ export class SqlitePendingWakeRepository implements IPendingWakeRepository {
   create(input: CreatePendingWakeInput): PendingWake {
     const id = randomUUID();
     const now = new Date().toISOString();
-    this.connection.getDb()
-      .prepare('INSERT INTO pending_wakes (id, role_id, org_id, reason, task_id, conversation_id, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    // INSERT OR IGNORE against ux_pending_wakes_dedup (v7): idempotent under event re-delivery (ADR-05).
+    const result = this.connection.getDb()
+      .prepare('INSERT OR IGNORE INTO pending_wakes (id, role_id, org_id, reason, task_id, conversation_id, priority, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, input.roleId, input.orgId, input.reason, input.taskId, input.conversationId, input.priority, now);
+    if (result.changes === 0) {
+      // Duplicate — return the existing row
+      const existing = this.connection.getDb()
+        .prepare(
+          'SELECT * FROM pending_wakes WHERE org_id = ? AND role_id = ? AND COALESCE(task_id, \'\') = COALESCE(?, \'\') AND COALESCE(conversation_id, \'\') = COALESCE(?, \'\') AND reason = ? ORDER BY created_at LIMIT 1',
+        )
+        .get(input.orgId, input.roleId, input.taskId, input.conversationId, input.reason) as WakeRow | undefined;
+      return existing ? toWake(existing) : this.findById(id)!;
+    }
     return this.findById(id)!;
   }
 

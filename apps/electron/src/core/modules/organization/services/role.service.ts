@@ -1,11 +1,12 @@
 import { injectable } from 'tsyringe';
+import type { IRoleQueryService } from '../interfaces/i-role-query.service';
 import type { IRoleRepository } from '../interfaces/i-role.repository';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import type { Role, CreateRoleInput, UpdateRoleInput } from '../types/organization.types';
 
 @injectable()
-export class RoleService {
+export class RoleService implements IRoleQueryService {
   constructor(
     private readonly roleRepo: IRoleRepository,
     private readonly eventPublisher: IEventPublisher,

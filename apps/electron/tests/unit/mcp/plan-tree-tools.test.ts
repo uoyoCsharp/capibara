@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   registerPlanTreeTools,
-  validatePlanTree,
-  MAX_TREE_NODES,
-  MAX_TREE_DEPTH,
+  __testing__,
 } from '@core/modules/mcp/handlers/plan-tree-tools';
+import { validatePlanTree, MAX_TREE_NODES, MAX_TREE_DEPTH } from '@core/modules/planning/validation/plan-tree.validator';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
-import type { TaskService } from '@core/modules/workflow/services/task.service';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { RoleService } from '@core/modules/organization/services/role.service';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { ITaskService } from '@core/modules/workflow/interfaces/i-task.service';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
+import type { IRoleQueryService } from '@core/modules/organization/interfaces/i-role-query.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
+import type { IPlanningService } from '@core/modules/planning/interfaces/i-planning.service';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { PlanTreeNode } from '@core/foundation/events';
 import type { WorkItemTypeDefinition } from '@core/modules/workflow/types/workflow.types';
@@ -108,10 +108,11 @@ function validTree(): PlanTreeNode {
 
 describe('capibara_plan_submit_tree (MCP tool)', () => {
   let mockServer: MockMcpServer;
-  let taskService: TaskService;
-  let processEngine: ProcessEngine;
-  let roleService: RoleService;
-  let conversationService: ConversationService;
+  let taskService: ITaskService;
+  let processEngine: IProcessEngine;
+  let roleService: IRoleQueryService;
+  let conversationService: IConversationCommandService;
+  let planningService: IPlanningService;
   let eventPublisher: IEventPublisher;
   let published: Array<{ type: string; payload: unknown }>;
 
@@ -120,23 +121,23 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
 
     taskService = {
       findById: vi.fn().mockReturnValue(createTask()),
-    } as unknown as TaskService;
+    } as unknown as ITaskService;
 
     processEngine = {
       getWorkItemType: vi.fn().mockImplementation((_orgId: string, name: string) => typeDefs[name] ?? null),
       getStatusCategory: vi.fn().mockReturnValue('active'),
-    } as unknown as ProcessEngine;
+    } as unknown as IProcessEngine;
 
     roleService = {
       findByOrgId: vi.fn().mockReturnValue([
         createRole('role-pm'),
         createRole('role-dev'),
       ]),
-    } as unknown as RoleService;
+    } as unknown as IRoleQueryService;
 
     conversationService = {
       findById: vi.fn().mockReturnValue(createConversation()),
-    } as unknown as ConversationService;
+    } as unknown as IConversationCommandService;
 
     eventPublisher = {
       publish: vi.fn().mockImplementation((type: string, payload: unknown) => {
@@ -144,12 +145,45 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
       }),
     } as unknown as IEventPublisher;
 
+    planningService = {
+      submit: vi.fn().mockImplementation((input: { rootTaskId: string | null; sourceConversationId: string | null; orgId: string; roleId: string; tree: any; rootType: string | null; mode: any }) => {
+        // Delegate full validation to the real validator, then publish + return
+        const roles = (roleService as any).findByOrgId(input.orgId) ?? [];
+        const validRoleIds = new Set(roles.map((r: any) => r.id));
+        const err = validatePlanTree({
+          orgId: input.orgId,
+          rootType: input.rootType,
+          tree: input.tree,
+          processEngine,
+          validRoleIds,
+        });
+        if (err) throw err;
+
+        eventPublisher.publish('plan-tree:submitted', {
+          rootTaskId: input.rootTaskId,
+          sourceConversationId: input.sourceConversationId,
+          orgId: input.orgId,
+          roleId: input.roleId,
+          mode: input.mode,
+          tree: input.tree,
+          submittedAt: new Date().toISOString(),
+        });
+
+        return {
+          mode: input.mode,
+          nodeCount: 2,
+          maxDepth: 2,
+        };
+      }),
+    };
+
     mockServer = new MockMcpServer();
     registerPlanTreeTools(mockServer as any, {
       taskService,
       processEngine,
       roleService,
       conversationService,
+      planningService,
       eventPublisher,
     } as any);
   });

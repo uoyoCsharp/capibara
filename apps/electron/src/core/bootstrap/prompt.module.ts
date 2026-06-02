@@ -5,7 +5,7 @@ import type { IRoleRepository } from '@core/modules/organization/interfaces/i-ro
 import type { ISkillRepository } from '@core/modules/organization/interfaces/i-skill.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { ConversationContextBuilder } from '@core/modules/conversation/context/conversation-context.builder';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import { RunContext } from '@core/modules/prompt/context/run.context';
 import { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
@@ -16,7 +16,7 @@ export function registerPromptModule(
   skillRepo: ISkillRepository,
   convRepo: IConversationRepository,
   convContextBuilder: ConversationContextBuilder,
-  processEngine: ProcessEngine,
+  processEngine: IProcessEngine,
   orgRepo: IOrganizationRepository,
 ): { promptBuilder: PromptBuilder; runContext: RunContext } {
   const runContext = new RunContext(taskRepo, roleRepo, skillRepo, convRepo, convContextBuilder, processEngine, orgRepo);

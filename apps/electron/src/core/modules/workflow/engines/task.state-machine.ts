@@ -1,27 +1,28 @@
 import { injectable } from 'tsyringe';
+import type { ITaskStateMachine } from '../interfaces/i-task.state-machine';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import { TaskStateError, NotFoundError } from '@core/foundation/errors/capibara.errors';
-import type { ProcessEngine } from './process.engine';
-import type { BehaviorEngine } from './behavior.engine';
+import type { IProcessEngine } from '../interfaces/i-process.engine';
+import type { IBehaviorEngine } from '../interfaces/i-behavior.engine';
 import type { Task, TaskStatus } from '../types/workflow.types';
 
 @injectable()
-export class TaskStateMachine {
-  private behaviorEngine: BehaviorEngine | null = null;
+export class TaskStateMachine implements ITaskStateMachine {
+  private behaviorEngine: IBehaviorEngine | null = null;
 
   constructor(
     private readonly taskRepo: ITaskRepository,
     private readonly roleRepo: IRoleRepository,
-    private readonly processEngine: ProcessEngine,
+    private readonly processEngine: IProcessEngine,
     private readonly eventPublisher: IEventPublisher,
     private readonly logger: ILogger,
   ) {}
 
-  setBehaviorEngine(engine: BehaviorEngine): void {
+  setBehaviorEngine(engine: IBehaviorEngine): void {
     this.behaviorEngine = engine;
   }
 

@@ -4,7 +4,7 @@ import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.re
 import type { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { LifecycleIntent, WakeReason } from '@core/modules/execution/types/execution.types';
 import type { ResumeDecision } from '@core/modules/acp/collaboration/suspension.types';
@@ -16,7 +16,7 @@ export class RunCoordinator {
     private readonly runRepo: IRunRepository,
     private readonly promptBuilder: PromptBuilder,
     private readonly convRepo: IConversationRepository,
-    private readonly conversationService: ConversationService,
+    private readonly conversationService: IConversationCommandService,
     private readonly orgRepo: IOrganizationRepository,
     private readonly logger: ILogger,
   ) {}

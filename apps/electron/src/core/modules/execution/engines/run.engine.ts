@@ -12,8 +12,8 @@ import { ExecutionError } from '@core/foundation/errors/capibara.errors';
 import { CostTracker } from '../services/cost-tracker';
 import { FileLogService } from '../logging/file-log.service';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 
 type LogCallback = (runId: string, stream: 'stdout' | 'stderr', chunk: string) => void;
 type TextCallback = (runId: string, text: string) => void;
@@ -50,8 +50,8 @@ export class RunEngine implements IRunEngine {
     private readonly costTracker: CostTracker,
     private readonly fileLogService: FileLogService,
     private readonly taskRepo: ITaskRepository,
-    private readonly taskStateMachine: TaskStateMachine,
-    private readonly processEngine: ProcessEngine,
+    private readonly taskStateMachine: ITaskStateMachine,
+    private readonly processEngine: IProcessEngine,
   ) {}
 
   async execute(params: RunExecutionParams): Promise<RunResult> {

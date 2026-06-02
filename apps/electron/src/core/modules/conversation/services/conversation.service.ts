@@ -1,4 +1,5 @@
 import { injectable } from 'tsyringe';
+import type { IConversationCommandService } from '../interfaces/i-conversation-command.service';
 import type { IConversationRepository } from '../interfaces/i-conversation.repository';
 import type { IConversationMessageRepository } from '../interfaces/i-conversation-message.repository';
 import type { ConversationEventLogger } from '../persistence/conversation-event.logger';
@@ -16,7 +17,7 @@ import type {
 import { CONVERSATION_TRANSITIONS as TRANSITIONS } from '../types/conversation.types';
 
 @injectable()
-export class ConversationService {
+export class ConversationService implements IConversationCommandService {
   constructor(
     private readonly convRepo: IConversationRepository,
     private readonly msgRepo: IConversationMessageRepository,

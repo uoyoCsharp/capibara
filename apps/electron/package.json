@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:electron": "electron ./node_modules/vitest/vitest.mjs run --pool=forks --teardownTimeout=5000",
-    "postinstall": "electron-rebuild -m ../../node_modules/.pnpm/better-sqlite3@12.8.0/node_modules/better-sqlite3"
+    "postinstall": "electron-rebuild -m ../../node_modules/.pnpm/better-sqlite3@12.8.0/node_modules/better-sqlite3",
+    "arch:check": "depcruise src/core --config .dependency-cruiser.cjs"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.37.0",
@@ -67,6 +68,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.0.0",
+    "dependency-cruiser": "^17.4.3",
     "electron": "^41.1.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",

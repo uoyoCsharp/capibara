@@ -60,6 +60,35 @@ history:
     completed_at: 2026-06-02T11:17:39.333Z
     summary: 生成全路线图重构 plan.yaml:13 工作单元合并为 10 任务,Phase 0 安全网为前置门槛
     change_id: 20260602-architecture-refactor
+  - skill: /mvt-implement
+    completed_at: 2026-06-02T14:57:31.176Z
+    summary: "实现 G-1 Layering CI guard: 添加 .dependency-cruiser.cjs (4条禁止规则+§8.2白名单)
+      和 arch:check 脚本, 20条warn级违规已识别"
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-02T14:59:13.837Z
+    summary: t1-layering-ci-guard 标记为 done，current_task 推进到 t2-sink-plan-tree-invariants
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-02T15:24:28.740Z
+    summary: t2-sink-plan-tree-invariants 标记为 done，current_task 推进到
+      t3-fk-cascade-migration
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-implement
+    completed_at: 2026-06-02T15:29:27.560Z
+    summary: 实现 t3(FK CASCADE migration v6) + t4(pending_wakes dedup v7 + INSERT OR
+      IGNORE), tsc/arch:check 通过
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-02T15:31:21.657Z
+    summary: t3 + t4 标记为 done，Phase 0 全部完成，current_task 推进到
+      t5-extract-service-engine-interfaces
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-02T16:15:25.032Z
+    summary: t5-extract-service-engine-interfaces 标记为 done，current_task 推进到
+      t6-eventize-routing-remove-cascade
+    change_id: 20260602-architecture-refactor
 active_change:
   id: 20260602-architecture-refactor
   title: Capibara Architecture Refactor (architecture-final-v2)
@@ -75,4 +104,4 @@ changes:
     title: Capibara Architecture Refactor (architecture-final-v2)
     plan_path: .ai-agents/workspace/artifacts/20260602-architecture-refactor/plan.yaml
     status: active
-    updated_at: 2026-06-02T11:17:39.333Z
+    updated_at: 2026-06-02T16:15:25.032Z

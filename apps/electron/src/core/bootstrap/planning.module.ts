@@ -4,22 +4,24 @@ import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { TaskService } from '@core/modules/workflow/services/task.service';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { ITaskService } from '@core/modules/workflow/interfaces/i-task.service';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
+import type { IRoleQueryService } from '@core/modules/organization/interfaces/i-role-query.service';
 import { PlanningService } from '@core/modules/planning/planning.service';
 import { SqlitePendingPlanTreeRepository } from '@core/modules/planning/persistence/sqlite-pending-plan-tree.repository';
 
 export function registerPlanningModule(
-  taskService: TaskService,
-  taskStateMachine: TaskStateMachine,
-  processEngine: ProcessEngine,
+  taskService: ITaskService,
+  taskStateMachine: ITaskStateMachine,
+  processEngine: IProcessEngine,
   connection: ISqliteConnection,
   eventBus: IEventBus,
   eventPublisher: IEventPublisher,
   logger: ILogger,
-  conversationService: ConversationService,
+  conversationService: IConversationCommandService,
+  roleService: IRoleQueryService,
 ): { planningService: PlanningService } {
   const pendingPlanTreeRepo = new SqlitePendingPlanTreeRepository(connection);
 
@@ -33,6 +35,7 @@ export function registerPlanningModule(
     logger,
     pendingPlanTreeRepo,
     conversationService,
+    roleService,
   );
 
   container.register(PLANNING_SERVICE_TOKEN, { useValue: planningService });

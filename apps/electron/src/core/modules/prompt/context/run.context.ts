@@ -5,7 +5,7 @@ import type { ISkillRepository } from '@core/modules/organization/interfaces/i-s
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import type { ConversationContextBuilder } from '@core/modules/conversation/context/conversation-context.builder';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 import type { PromptContext, ConversationPromptContext, WakeReason } from '../types/prompt.types';
 
 export interface IPlanTreeFeedbackProvider {
@@ -23,7 +23,7 @@ export class RunContext {
     private readonly skillRepo: ISkillRepository,
     private readonly convRepo: IConversationRepository,
     private readonly convContextBuilder: ConversationContextBuilder,
-    private readonly processEngine: ProcessEngine,
+    private readonly processEngine: IProcessEngine,
     private readonly orgRepo: IOrganizationRepository,
   ) {}
 

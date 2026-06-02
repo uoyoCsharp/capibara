@@ -3,7 +3,7 @@ import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { DomainEvent } from '@core/foundation/events';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import type { NotificationService } from '@core/modules/notification/notification.service';
@@ -40,7 +40,7 @@ export class ConversationOrchestrator {
     private readonly taskOrchestrator: TaskOrchestrator,
     private readonly notificationService: NotificationService,
     private readonly suspensionManager: ISessionSuspensionManager | null = null,
-    private readonly conversationService: ConversationService | null = null,
+    private readonly conversationService: IConversationCommandService | null = null,
     private readonly acpSessionManager: IAcpSessionManager | null = null,
   ) {}
 

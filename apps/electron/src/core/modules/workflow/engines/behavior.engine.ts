@@ -1,8 +1,9 @@
 import { injectable } from 'tsyringe';
+import type { IBehaviorEngine } from '../interfaces/i-behavior.engine';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
-import type { ProcessEngine } from './process.engine';
-import type { TaskStateMachine } from './task.state-machine';
+import type { IProcessEngine } from '../interfaces/i-process.engine';
+import type { ITaskStateMachine } from '../interfaces/i-task.state-machine';
 import type {
   Task,
   BehaviorTrigger,
@@ -13,13 +14,13 @@ import type {
 } from '../types/workflow.types';
 
 @injectable()
-export class BehaviorEngine {
+export class BehaviorEngine implements IBehaviorEngine {
   private evaluating = new Set<string>();
 
   constructor(
     private readonly taskRepo: ITaskRepository,
-    private readonly processEngine: ProcessEngine,
-    private readonly taskStateMachine: TaskStateMachine,
+    private readonly processEngine: IProcessEngine,
+    private readonly taskStateMachine: ITaskStateMachine,
     private readonly logger: ILogger,
   ) {}
 

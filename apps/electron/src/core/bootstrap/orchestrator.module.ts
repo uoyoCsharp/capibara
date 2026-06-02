@@ -16,12 +16,12 @@ import type { IOrganizationRepository } from '@core/modules/organization/interfa
 import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
 import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import type { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
 import type { CostTracker } from '@core/modules/execution/services/cost-tracker';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
-import type { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
+import type { IBehaviorEngine } from '@core/modules/workflow/interfaces/i-behavior.engine';
 import type { NotificationService } from '@core/modules/notification/notification.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
@@ -53,12 +53,12 @@ export function registerOrchestratorModule(
   runRepo: IRunRepository,
   runEngine: IRunEngine,
   convRepo: IConversationRepository,
-  conversationService: ConversationService,
+  conversationService: IConversationCommandService,
   promptBuilder: PromptBuilder,
   costTracker: CostTracker,
-  processEngine: ProcessEngine,
-  taskStateMachine: TaskStateMachine,
-  behaviorEngine: BehaviorEngine,
+  processEngine: IProcessEngine,
+  taskStateMachine: ITaskStateMachine,
+  behaviorEngine: IBehaviorEngine,
   notificationService: NotificationService,
   suspensionManager: ISessionSuspensionManager | null = null,
   acpSessionManager: IAcpSessionManager | null = null,

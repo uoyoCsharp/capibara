@@ -14,9 +14,9 @@ import type { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.val
 import type { RetryScheduler } from '@core/modules/orchestrator/retry.scheduler';
 import type { RunCoordinator } from '@core/modules/orchestrator/run.coordinator';
 import type { TaskScheduler } from '@core/modules/orchestrator/task.scheduler';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
+import type { IBehaviorEngine } from '@core/modules/workflow/interfaces/i-behavior.engine';
 import type { Task } from '@core/modules/workflow/types/workflow.types';
 import type { DomainEventType, DomainEventMap } from '@core/foundation/events';
 
@@ -39,9 +39,9 @@ describe('Event topology — every DomainEventType routes deterministically', ()
   let retryScheduler: RetryScheduler;
   let runCoordinator: RunCoordinator;
   let taskScheduler: TaskScheduler;
-  let taskStateMachine: TaskStateMachine;
-  let processEngine: ProcessEngine;
-  let behaviorEngine: BehaviorEngine;
+  let taskStateMachine: ITaskStateMachine;
+  let processEngine: IProcessEngine;
+  let behaviorEngine: IBehaviorEngine;
 
   function taskFixture(): Task {
     return {

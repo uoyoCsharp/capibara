@@ -1,4 +1,5 @@
 import { injectable } from 'tsyringe';
+import type { IProcessEngine } from '../interfaces/i-process.engine';
 import type { IProcessSchemaRepository } from '../interfaces/i-process-schema.repository';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import { ValidationError } from '@core/foundation/errors/capibara.errors';
@@ -11,7 +12,7 @@ import type {
 } from '../types/workflow.types';
 
 @injectable()
-export class ProcessEngine {
+export class ProcessEngine implements IProcessEngine {
   private schemaCache = new Map<string, ProcessSchema>();
 
   constructor(

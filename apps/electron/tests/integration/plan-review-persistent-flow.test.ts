@@ -78,6 +78,12 @@ describe.skipIf(!canUseSqlite)('Planning flow (persistent) integration', () => {
       getAvailableTransitions: vi.fn().mockReturnValue([{ from: 'pending', to: 'in_progress' }]),
     };
 
+    const roleService = {
+      findByOrgId: vi.fn().mockReturnValue([
+        { id: 'role-cto', name: 'CTO', orgId: 'org-1' },
+      ]),
+    };
+
     const service = new PlanningService(
       taskService as any,
       taskStateMachine as any,
@@ -86,6 +92,7 @@ describe.skipIf(!canUseSqlite)('Planning flow (persistent) integration', () => {
       bus, bus, logger,
       repo,
       conversationService as any,
+      roleService as any,
     );
     service.init();
 

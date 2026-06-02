@@ -8,7 +8,7 @@ import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publis
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import { InquiryRouter } from '@core/modules/coordination/routing/inquiry.router';
 import { InquiryEscalationService } from '@core/modules/coordination/routing/inquiry-escalation.service';
 
@@ -23,7 +23,7 @@ export function registerCoordinationModule(
   logger: ILogger,
   roleRepo: IRoleRepository,
   convRepo: IConversationRepository,
-  conversationService: ConversationService,
+  conversationService: IConversationCommandService,
 ): CoordinationModule {
   const inquiryRouter = new InquiryRouter(roleRepo, conversationService, eventBus, logger);
   const inquiryEscalationService = new InquiryEscalationService(convRepo, roleRepo, eventPublisher, logger);

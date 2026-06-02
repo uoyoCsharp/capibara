@@ -34,8 +34,8 @@ import type { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/r
 import type { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
 import type { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
 
 let logger: ILogger;
 let sqliteConn: SqliteConnection;
@@ -161,11 +161,12 @@ export async function bootstrap(): Promise<void> {
     sqliteConn,
     eventBus, eventPublisher, logger,
     conversation.conversationService,
+    org.roleService,
   );
 
   const mcp = registerMcpModule(
     logger, workflow.taskService, workflow.taskStateMachine, workflow.processEngine,
-    conversation.conversationService, org.roleService, eventPublisher,
+    conversation.conversationService, org.roleService, planning.planningService, eventPublisher,
     acpModule.suspensionManager, config.collaboration,
   );
 
@@ -242,6 +243,7 @@ export async function bootstrap(): Promise<void> {
       processEngine: workflow.processEngine,
       conversationService: conversation.conversationService,
       roleService: org.roleService,
+      planningService: planning.planningService,
       eventPublisher,
       suspensionManager: acpModule.suspensionManager,
       collaborationConfig: config.collaboration,
@@ -305,8 +307,8 @@ export function getSqliteConnection(): SqliteConnection {
 function reconcileOrphanedActiveTasks(
   orgIds: string[],
   taskRepo: ITaskRepository,
-  processEngine: ProcessEngine,
-  taskStateMachine: TaskStateMachine,
+  processEngine: IProcessEngine,
+  taskStateMachine: ITaskStateMachine,
   log: ILogger,
 ): void {
   let total = 0;

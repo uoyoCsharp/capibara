@@ -8,6 +8,7 @@ import type { ConversationService } from '@core/modules/conversation/services/co
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { RoleService } from '@core/modules/organization/services/role.service';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import type { PlanTreeNode } from '@core/foundation/events';
 
@@ -48,6 +49,7 @@ describe('PlanningService (persistent)', () => {
   let taskService: Record<string, ReturnType<typeof vi.fn>>;
   let taskStateMachine: Record<string, ReturnType<typeof vi.fn>>;
   let processEngine: Record<string, ReturnType<typeof vi.fn>>;
+  let roleService: Record<string, ReturnType<typeof vi.fn>>;
   let connection: ISqliteConnection;
 
   beforeEach(() => {
@@ -90,6 +92,20 @@ describe('PlanningService (persistent)', () => {
 
     processEngine = {
       getAvailableTransitions: vi.fn().mockReturnValue([{ from: 'pending', to: 'in_progress' }]),
+      getWorkItemType: vi.fn().mockImplementation((_orgId: string, type: string) => {
+        if (type === 'epic') return { isLeaf: false, allowedChildren: ['story', 'feature'], allowedAtRoot: true };
+        if (type === 'story') return { isLeaf: true, allowedChildren: [] };
+        if (type === 'feature') return { isLeaf: false, allowedChildren: ['task'], allowedAtRoot: true };
+        return null;
+      }),
+      getStatusCategory: vi.fn().mockReturnValue('active'),
+    };
+
+    roleService = {
+      findByOrgId: vi.fn().mockReturnValue([
+        { id: 'role-cto', name: 'CTO', orgId: 'org-1' },
+        { id: 'role-dev', name: 'Dev', orgId: 'org-1' },
+      ]),
     };
 
     const txnFn = vi.fn().mockImplementation((fn: () => unknown) => fn);
@@ -108,6 +124,7 @@ describe('PlanningService (persistent)', () => {
       bus, bus, new MockLogger(),
       repo as unknown as IPendingPlanTreeRepository,
       conversationService as unknown as ConversationService,
+      roleService as unknown as RoleService,
     );
     service.init();
   });
@@ -333,6 +350,7 @@ describe('PlanningService (persistent)', () => {
         connection, bus, bus, new MockLogger(),
         repo as unknown as IPendingPlanTreeRepository,
         conversationService as unknown as ConversationService,
+        roleService as unknown as RoleService,
       );
       service.init();
       repo.findActiveByRootTaskId.mockReturnValue(makePendingTree());

@@ -17,8 +17,8 @@ import { CostTracker } from '@core/modules/execution/services/cost-tracker';
 import { FileLogService } from '@core/modules/execution/logging/file-log.service';
 import { RunEngine } from '@core/modules/execution/engines/run.engine';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 import type { IExecutor } from '@core/modules/execution/interfaces/i-executor';
 
 export interface ExecutionModule {
@@ -36,8 +36,8 @@ export function registerExecutionModule(
   config: CapibaraConfig,
   executor: IExecutor,
   taskRepo: ITaskRepository,
-  taskStateMachine: TaskStateMachine,
-  processEngine: ProcessEngine,
+  taskStateMachine: ITaskStateMachine,
+  processEngine: IProcessEngine,
 ): ExecutionModule {
   const runRepo = new SqliteRunRepository(connection);
   const costEntryRepo = new SqliteCostEntryRepository(connection);

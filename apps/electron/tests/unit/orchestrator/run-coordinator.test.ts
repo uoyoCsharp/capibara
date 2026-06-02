@@ -6,7 +6,7 @@ import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine
 import type { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import type { RunResult } from '@core/modules/execution/types/execution.types';
 import type { Conversation } from '@core/modules/conversation/types/conversation.types';
 import type { ResumeDecision } from '@core/modules/acp/collaboration/suspension.types';
@@ -53,7 +53,7 @@ describe('RunCoordinator', () => {
   let runEngine: IRunEngine;
   let promptBuilder: PromptBuilder;
   let convRepo: IConversationRepository;
-  let conversationService: ConversationService;
+  let conversationService: IConversationCommandService;
   let orgRepo: IOrganizationRepository;
   let logger: MockLogger;
 

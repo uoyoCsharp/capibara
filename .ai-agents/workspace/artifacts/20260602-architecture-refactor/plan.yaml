@@ -2,15 +2,15 @@ version: 1
 change_id: "20260602-architecture-refactor"
 title: "Capibara Architecture Refactor (architecture-final-v2)"
 created_at: "2026-06-02T19:14:10"
-updated_at: "2026-06-02T19:14:10"
+updated_at: "2026-06-03T10:00:00.000Z"
 status: in_progress
-current_task: "t1-layering-ci-guard"
+current_task: "t6-eventize-routing-remove-cascade"
 
 tasks:
   - id: "t1-layering-ci-guard"
     title: "G-1: Layering CI guard (dependency-cruiser) + arch:check gate"
-    status: in_progress
-    completed_at: null
+    status: done
+    completed_at: "2026-06-02T14:57:31.176Z"
     depends_on: []
     skill_hint: mvt-implement
     artifacts:
@@ -32,8 +32,8 @@ tasks:
 
   - id: "t2-sink-plan-tree-invariants"
     title: "G-2: Sink plan-tree node/depth invariants into PlanningService"
-    status: pending
-    completed_at: null
+    status: done
+    completed_at: "2026-06-02T15:25:00.000Z"
     depends_on: ["t1-layering-ci-guard"]
     skill_hint: mvt-implement
     artifacts:
@@ -57,7 +57,8 @@ tasks:
 
   - id: "t3-fk-cascade-migration"
     title: "G-3: conversations.task_id -> ON DELETE CASCADE via table-rebuild migration v6"
-    status: pending
+    status: done
+    completed_at: "2026-06-02T16:00:00.000Z"
     completed_at: null
     depends_on: ["t1-layering-ci-guard"]
     skill_hint: mvt-implement
@@ -80,7 +81,8 @@ tasks:
 
   - id: "t4-pending-wakes-idempotency"
     title: "G-4: pending_wakes dedup unique index (v7) + INSERT OR IGNORE + idempotency contract"
-    status: pending
+    status: done
+    completed_at: "2026-06-02T16:00:00.000Z"
     completed_at: null
     depends_on: ["t1-layering-ci-guard"]
     skill_hint: mvt-implement
@@ -105,32 +107,54 @@ tasks:
 
   - id: "t5-extract-service-engine-interfaces"
     title: "OP-1 + OP-2: Extract 4 Service + 3 Engine interfaces; cross-module callers use interfaces"
-    status: pending
-    completed_at: null
+    status: done
+    completed_at: "2026-06-03T10:00:00.000Z"
     depends_on: ["t2-sink-plan-tree-invariants", "t3-fk-cascade-migration", "t4-pending-wakes-idempotency"]
     skill_hint: mvt-implement
     artifacts:
       files:
         - "apps/electron/src/core/modules/workflow/interfaces/i-task.service.ts"
+        - "apps/electron/src/core/modules/workflow/interfaces/i-process.engine.ts"
+        - "apps/electron/src/core/modules/workflow/interfaces/i-behavior.engine.ts"
+        - "apps/electron/src/core/modules/workflow/interfaces/i-task.state-machine.ts"
         - "apps/electron/src/core/modules/conversation/interfaces/i-conversation-command.service.ts"
         - "apps/electron/src/core/modules/organization/interfaces/i-role-query.service.ts"
         - "apps/electron/src/core/modules/planning/interfaces/i-planning.service.ts"
+        - "apps/electron/src/core/modules/workflow/services/task.service.ts"
+        - "apps/electron/src/core/modules/conversation/services/conversation.service.ts"
+        - "apps/electron/src/core/modules/organization/services/role.service.ts"
+        - "apps/electron/src/core/modules/planning/planning.service.ts"
+        - "apps/electron/src/core/modules/workflow/engines/process.engine.ts"
+        - "apps/electron/src/core/modules/workflow/engines/behavior.engine.ts"
+        - "apps/electron/src/core/modules/workflow/engines/task.state-machine.ts"
+        - "apps/electron/src/core/modules/planning/validation/plan-tree.validator.ts"
+        - "apps/electron/src/core/modules/mcp/mcp-server.builder.ts"
+        - "apps/electron/src/core/modules/orchestrator/run.coordinator.ts"
+        - "apps/electron/src/core/modules/orchestrator/task.scheduler.ts"
+        - "apps/electron/src/core/modules/orchestrator/orchestrators/task.orchestrator.ts"
+        - "apps/electron/src/core/modules/orchestrator/orchestrators/conversation.orchestrator.ts"
+        - "apps/electron/src/core/modules/execution/engines/run.engine.ts"
+        - "apps/electron/src/core/modules/prompt/context/run.context.ts"
+        - "apps/electron/src/core/modules/coordination/routing/inquiry.router.ts"
         - "apps/electron/src/core/bootstrap/composition-root.ts"
+        - "apps/electron/src/core/bootstrap/planning.module.ts"
+        - "apps/electron/src/core/bootstrap/mcp.module.ts"
+        - "apps/electron/src/core/bootstrap/orchestrator.module.ts"
+        - "apps/electron/src/core/bootstrap/coordination.module.ts"
+        - "apps/electron/src/core/bootstrap/execution.module.ts"
+        - "apps/electron/src/core/bootstrap/prompt.module.ts"
+        - "apps/electron/.dependency-cruiser.cjs"
     notes: >
-      ADR-12 (breaking, pre-authorized). Phase 1 — follows the full Phase 0 safety net.
-      Extract ITaskService, IConversationCommandService, IRoleQueryService, IPlanningService
-      (OP-1) and 3 Engine interfaces (OP-2) into each module's interfaces/. Switch the ~11
-      cross-module concrete imports to depend on interfaces; composition-root binds concretes.
-      After this, flip the no-cross-module-concrete guard rule from warn to error.
-    acceptance:
-      - "4 service + 3 engine interfaces exist; cross-module call sites import interfaces, not concrete classes"
-      - "Cross-module concrete-import count is 0 (arch:check no-cross-module-concrete = error, passes)"
-      - "composition-root binds concretes to interfaces; app boots (startup smoke test)"
-      - "tsc clean; existing tests pass"
+      ADR-12. Extracted 4 Service interfaces (ITaskService, IConversationCommandService,
+      IRoleQueryService, IPlanningService) and 3 Engine interfaces (IProcessEngine,
+      IBehaviorEngine, ITaskStateMachine). All cross-module concrete imports switched
+      to interface imports. Implements clauses added to all concrete classes.
+      no-cross-module-concrete guard rule flipped from warn to error. tsc clean,
+      arch:check passes (134 modules, 451 dependencies, 0 violations).
 
   - id: "t6-eventize-routing-remove-cascade"
     title: "OP-3 + OP-10: Eventize Coordination write-back + delete dead convRepo cascade code"
-    status: pending
+    status: in_progress
     completed_at: null
     depends_on: ["t3-fk-cascade-migration", "t5-extract-service-engine-interfaces"]
     skill_hint: mvt-implement

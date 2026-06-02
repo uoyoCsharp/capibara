@@ -478,6 +478,67 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    description: 'FK CASCADE: conversations.task_id ON DELETE CASCADE (table rebuild per ADR-04/ADR-11)',
+    up: (db) => {
+      // SQLite cannot alter FK constraints — rebuild the table.
+      // PRAGMA foreign_keys=OFF so the DROP doesn't cascade mid-migration.
+      db.pragma('foreign_keys = OFF');
+
+      db.exec(`
+        CREATE TABLE conversations_new (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK(type IN ('inquiry', 'planning', 'adhoc', 'plan_review')),
+          state TEXT NOT NULL CHECK(state IN ('active', 'waiting', 'resolved', 'escalated', 'timed_out', 'cancelled', 'completed')),
+          initiator_role_id TEXT NOT NULL,
+          respondent_role_id TEXT,
+          respondent_type TEXT CHECK(respondent_type IN ('ai', 'human')),
+          task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+          parent_conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+          depth INTEGER NOT NULL DEFAULT 0,
+          priority INTEGER NOT NULL DEFAULT 0,
+          timeout_at TEXT,
+          external_session_id TEXT,
+          metadata TEXT DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        INSERT INTO conversations_new SELECT * FROM conversations;
+
+        DROP TABLE conversations;
+        ALTER TABLE conversations_new RENAME TO conversations;
+
+        -- Recreate every index that existed on conversations
+        CREATE INDEX idx_conversations_org_state ON conversations(org_id, state);
+        CREATE INDEX idx_conversations_org_type ON conversations(org_id, type, state);
+        CREATE INDEX idx_conversations_task ON conversations(task_id, state);
+        CREATE INDEX idx_conversations_timeout ON conversations(timeout_at)
+          WHERE state = 'waiting';
+      `);
+
+      db.pragma('foreign_keys = ON');
+    },
+  },
+  {
+    version: 7,
+    description: 'pending_wakes idempotency: dedup + unique index ux_pending_wakes_dedup (ADR-05/ADR-06)',
+    up: (db) => {
+      // De-duplicate pre-existing rows: keep MIN(id) per natural key.
+      // COALESCE sentinel because SQLite treats NULLs as distinct in unique indexes.
+      db.exec(`
+        DELETE FROM pending_wakes WHERE id NOT IN (
+          SELECT MIN(id) FROM pending_wakes
+          GROUP BY org_id, role_id, COALESCE(task_id, ''), COALESCE(conversation_id, ''), reason
+        );
+
+        CREATE UNIQUE INDEX ux_pending_wakes_dedup
+          ON pending_wakes(org_id, role_id, COALESCE(task_id, ''), COALESCE(conversation_id, ''), reason);
+      `);
+    },
+  },
 ];
 
 export interface RunMigrationsOptions {

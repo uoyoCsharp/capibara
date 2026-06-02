@@ -1,18 +1,19 @@
 import { injectable } from 'tsyringe';
+import type { ITaskService } from '../interfaces/i-task.service';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import { ValidationError, NotFoundError } from '@core/foundation/errors/capibara.errors';
-import type { ProcessEngine } from '../engines/process.engine';
+import type { IProcessEngine } from '../interfaces/i-process.engine';
 import type { Task, CreateTaskInput, BatchCreateTaskInput } from '../types/workflow.types';
 
 @injectable()
-export class TaskService {
+export class TaskService implements ITaskService {
   private convRepo: IConversationRepository | null = null;
 
   constructor(
     private readonly taskRepo: ITaskRepository,
-    private readonly processEngine: ProcessEngine,
+    private readonly processEngine: IProcessEngine,
     private readonly eventPublisher: IEventPublisher,
   ) {}
 

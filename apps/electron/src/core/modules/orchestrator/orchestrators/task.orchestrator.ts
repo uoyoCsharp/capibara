@@ -9,9 +9,9 @@ import type { IPendingWakeRepository } from '../interfaces/i-pending-wake.reposi
 import type { WakeGateValidator } from '../wake-gate.validator';
 import type { RunCoordinator } from '../run.coordinator';
 import type { TaskScheduler } from '../task.scheduler';
-import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
-import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
-import type { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
+import type { IBehaviorEngine } from '@core/modules/workflow/interfaces/i-behavior.engine';
 import type { WakeReason } from '@core/modules/execution/types/execution.types';
 
 /**
@@ -45,9 +45,9 @@ export class TaskOrchestrator {
     private readonly wakeGateValidator: WakeGateValidator,
     private readonly runCoordinator: RunCoordinator,
     private readonly taskScheduler: TaskScheduler,
-    private readonly taskStateMachine: TaskStateMachine,
-    private readonly processEngine: ProcessEngine,
-    private readonly behaviorEngine: BehaviorEngine,
+    private readonly taskStateMachine: ITaskStateMachine,
+    private readonly processEngine: IProcessEngine,
+    private readonly behaviorEngine: IBehaviorEngine,
   ) {}
 
   start(): void {
