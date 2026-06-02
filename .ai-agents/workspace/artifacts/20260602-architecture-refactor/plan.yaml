@@ -1,0 +1,251 @@
+version: 1
+change_id: "20260602-architecture-refactor"
+title: "Capibara Architecture Refactor (architecture-final-v2)"
+created_at: "2026-06-02T19:14:10"
+updated_at: "2026-06-02T19:14:10"
+status: in_progress
+current_task: "t1-layering-ci-guard"
+
+tasks:
+  - id: "t1-layering-ci-guard"
+    title: "G-1: Layering CI guard (dependency-cruiser) + arch:check gate"
+    status: in_progress
+    completed_at: null
+    depends_on: []
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/.dependency-cruiser.cjs"
+        - "apps/electron/package.json"
+    notes: >
+      ADR-02. Add .dependency-cruiser.cjs with 4 forbidden rules (no-core-to-adapters,
+      d0-must-stay-leaf, no-upward-d1-to-d3, no-cross-module-concrete) + the design §8.2
+      allowed-edge whitelist. Add "arch:check" npm script (depcruise ... exit code gates CI).
+      Per ADR-12/Q4: prefer explicit per-module whitelist edges over capture-group backref.
+      Existing violations exist now — set those rules to "warn" initially, flip to "error"
+      as later OPs fix them (decide warn-baseline vs allow-list at implement time).
+      This must land FIRST so every subsequent PR is gated.
+    acceptance:
+      - "npx depcruise apps/electron/src/core --config apps/electron/.dependency-cruiser.cjs runs and exits 0 (with current violations as warn)"
+      - "package.json has an arch:check script invoking depcruise"
+      - "The 4 forbidden rules + §8.2 whitelist are present in the config"
+
+  - id: "t2-sink-plan-tree-invariants"
+    title: "G-2: Sink plan-tree node/depth invariants into PlanningService"
+    status: pending
+    completed_at: null
+    depends_on: ["t1-layering-ci-guard"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/planning/validation/plan-tree.validator.ts"
+        - "apps/electron/src/core/modules/planning/planning.service.ts"
+        - "apps/electron/src/core/modules/mcp/handlers/plan-tree-tools.ts"
+    notes: >
+      ADR-03 (breaking, pre-authorized). Move validatePlanTree() + MAX_TREE_NODES/DEPTH +
+      countNodes/measureDepth out of mcp/handlers/plan-tree-tools.ts into
+      planning/validation/plan-tree.validator.ts. Enforce in PlanningService at BOTH submit
+      and approvePending entry points; add explicit state guard at approve (B-5). MCP handler
+      keeps only Zod/shape pre-parse and forwards; domain throws typed PlanTreeValidationError,
+      adapter maps to tool error (preserve existing error code set). Non-MCP paths must no
+      longer bypass limits.
+    acceptance:
+      - "MAX_TREE_NODES/MAX_TREE_DEPTH/measureDepth appear under modules/planning/, not in mcp/handlers/plan-tree-tools.ts"
+      - "PlanningService.submit and approvePending both run validatePlanTree and reject on violation"
+      - "MCP plan_submit_tree still returns the same error codes (mapped from domain errors)"
+      - "tsc clean; existing tests pass; new submit+approve validation tests added"
+
+  - id: "t3-fk-cascade-migration"
+    title: "G-3: conversations.task_id -> ON DELETE CASCADE via table-rebuild migration v6"
+    status: pending
+    completed_at: null
+    depends_on: ["t1-layering-ci-guard"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/infrastructure/persistence/sqlite/migrations.ts"
+    notes: >
+      ADR-04 + ADR-11 (breaking, pre-authorized; destructive at DB layer). Append migration
+      version: 6. SQLite table-rebuild in one transaction: PRAGMA foreign_keys=OFF -> create
+      conversations_new with task_id REFERENCES tasks(id) ON DELETE CASCADE (changed from SET
+      NULL) -> INSERT INTO ... SELECT * -> DROP old -> RENAME -> recreate every index that
+      existed on conversations -> PRAGMA foreign_keys=ON. Do NOT edit migrations v1-v5.
+      Code-level removal of the app-layer cascade loop is deferred to t6 (OP-10).
+      No task:deleted event is added. Test against a populated DB to confirm cascade range.
+    acceptance:
+      - "Migration v6 exists; conversations.task_id FK is ON DELETE CASCADE after migration"
+      - "Deleting a task cascade-deletes its conversations (and their messages/suspensions via own FKs)"
+      - "All indexes formerly on conversations are recreated; migrations v1-v5 unchanged"
+      - "tsc clean; migration applies cleanly on a populated test DB"
+
+  - id: "t4-pending-wakes-idempotency"
+    title: "G-4: pending_wakes dedup unique index (v7) + INSERT OR IGNORE + idempotency contract"
+    status: pending
+    completed_at: null
+    depends_on: ["t1-layering-ci-guard"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/infrastructure/persistence/sqlite/migrations.ts"
+        - "apps/electron/src/core/modules/orchestrator/persistence"
+        - "apps/electron/src/core/modules/orchestrator/orchestrators/conversation.orchestrator.ts"
+    notes: >
+      ADR-05 + ADR-06 (breaking, pre-authorized). Append migration version: 7. First
+      de-duplicate existing rows (keep MIN(id) per natural key), then CREATE UNIQUE INDEX
+      ux_pending_wakes_dedup ON pending_wakes(org_id, role_id, COALESCE(task_id,''),
+      COALESCE(conversation_id,''), reason) — COALESCE sentinel because SQLite treats NULLs
+      as distinct. Change pendingWakeRepo.create() to INSERT OR IGNORE against the index so
+      onResponseNeeded() is idempotent under event re-delivery. Codify §12.4 idempotency
+      contract as team standard + add PR-template field "how is this subscriber idempotent?".
+    acceptance:
+      - "Migration v7 creates ux_pending_wakes_dedup with COALESCE expressions; pre-existing dup rows removed"
+      - "pendingWakeRepo.create uses INSERT OR IGNORE; re-delivered conversation:response-needed produces no duplicate wake"
+      - "Idempotency contract documented; PR template gains the idempotency field"
+      - "tsc clean; existing tests pass; re-delivery dedup test added"
+
+  - id: "t5-extract-service-engine-interfaces"
+    title: "OP-1 + OP-2: Extract 4 Service + 3 Engine interfaces; cross-module callers use interfaces"
+    status: pending
+    completed_at: null
+    depends_on: ["t2-sink-plan-tree-invariants", "t3-fk-cascade-migration", "t4-pending-wakes-idempotency"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/workflow/interfaces/i-task.service.ts"
+        - "apps/electron/src/core/modules/conversation/interfaces/i-conversation-command.service.ts"
+        - "apps/electron/src/core/modules/organization/interfaces/i-role-query.service.ts"
+        - "apps/electron/src/core/modules/planning/interfaces/i-planning.service.ts"
+        - "apps/electron/src/core/bootstrap/composition-root.ts"
+    notes: >
+      ADR-12 (breaking, pre-authorized). Phase 1 — follows the full Phase 0 safety net.
+      Extract ITaskService, IConversationCommandService, IRoleQueryService, IPlanningService
+      (OP-1) and 3 Engine interfaces (OP-2) into each module's interfaces/. Switch the ~11
+      cross-module concrete imports to depend on interfaces; composition-root binds concretes.
+      After this, flip the no-cross-module-concrete guard rule from warn to error.
+    acceptance:
+      - "4 service + 3 engine interfaces exist; cross-module call sites import interfaces, not concrete classes"
+      - "Cross-module concrete-import count is 0 (arch:check no-cross-module-concrete = error, passes)"
+      - "composition-root binds concretes to interfaces; app boots (startup smoke test)"
+      - "tsc clean; existing tests pass"
+
+  - id: "t6-eventize-routing-remove-cascade"
+    title: "OP-3 + OP-10: Eventize Coordination write-back + delete dead convRepo cascade code"
+    status: pending
+    completed_at: null
+    depends_on: ["t3-fk-cascade-migration", "t5-extract-service-engine-interfaces"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/foundation/events.ts"
+        - "apps/electron/src/core/foundation/event-schemas.ts"
+        - "apps/electron/src/core/modules/coordination/routing/inquiry.router.ts"
+        - "apps/electron/src/core/modules/conversation/services/conversation.service.ts"
+        - "apps/electron/src/core/modules/workflow/services/task.service.ts"
+    notes: >
+      ADR-07 + ADR-04/11 (breaking, pre-authorized). OP-3: add conversation:route-resolved
+      event (events.ts + Zod schema). InquiryRouter publishes the routing decision instead of
+      calling conversationService.assignRespondent directly; Conversation subscribes and applies
+      it idempotently (skip if already assigned to same respondent — ADR-06). Drop the
+      ConversationService dependency from the router. OP-10: delete TaskService.setConversationRepository,
+      the convRepo field, and the cascade loop in delete() (now dead — FK CASCADE from t3 handles it);
+      remove the IConversationRepository import.
+    acceptance:
+      - "conversation:route-resolved event + schema exist; InquiryRouter no longer imports/uses ConversationService"
+      - "Conversation route-resolved subscriber is idempotent on re-delivery"
+      - "task.service.ts has no convRepo/setConversationRepository/cascade loop; arch:check passes"
+      - "tsc clean; existing tests pass; routing still assigns respondents end-to-end"
+
+  - id: "t7-notification-to-infra"
+    title: "OP-6: Move Notification to a Secondary Adapter under infrastructure/notification/"
+    status: pending
+    completed_at: null
+    depends_on: ["t5-extract-service-engine-interfaces"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/infrastructure/notification/event-broadcaster.ts"
+        - "apps/electron/src/core/infrastructure/notification/notification.service.ts"
+        - "apps/electron/src/core/bootstrap/composition-root.ts"
+    notes: >
+      ADR-09 (breaking, pre-authorized). Move modules/notification/{event-broadcaster,
+      notification.service}.ts to infrastructure/notification/. It is a driven adapter
+      (domain event -> IPC/desktop notification) implementing INotificationService/
+      IEventBroadcaster ports. Fix all @core/... import paths; update composition-root wiring.
+      Delete the old modules/notification/ directory.
+    acceptance:
+      - "Notification files live under infrastructure/notification/; modules/notification/ deleted"
+      - "arch:check passes (Notification no longer in Domain Core)"
+      - "Desktop notifications + renderer broadcasts still fire (startup smoke test)"
+      - "tsc clean; existing tests pass"
+
+  - id: "t8-mcp-split"
+    title: "OP-5: Split MCP — protocol core -> infrastructure/mcp-protocol/, ToolProviders -> mcp/providers/"
+    status: pending
+    completed_at: null
+    depends_on: ["t2-sink-plan-tree-invariants", "t5-extract-service-engine-interfaces"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/infrastructure/mcp-protocol/mcp-server.builder.ts"
+        - "apps/electron/src/core/infrastructure/mcp-protocol/mcp-http-transport.ts"
+        - "apps/electron/src/core/infrastructure/mcp-protocol/interfaces/i-tool-registry.ts"
+        - "apps/electron/src/core/mcp/providers"
+        - "apps/electron/src/core/bootstrap/composition-root.ts"
+    notes: >
+      ADR-08 (breaking, pre-authorized). Requires t2 (validation already sunk) and t5
+      (service interfaces). Move mcp-server.builder.ts + mcp-http-transport.ts + tool-registry
+      interface to infrastructure/mcp-protocol/. Convert handlers/*-tools.ts into thin
+      mcp/providers/*.provider.ts on the PRIMARY side — they depend on domain interfaces and
+      only forward (zero domain validation). Boundary = i-tool-registry.ts. Delete the old
+      modules/mcp/ directory. Keep mcpTransport=sse (per prior MCP fix; do not switch to http).
+    acceptance:
+      - "mcp-protocol core lives under infrastructure/; ToolProviders under mcp/providers/ (primary); modules/mcp/ deleted"
+      - "ToolProviders contain no tree-limit constants/validation (forward only)"
+      - "arch:check passes; MCP tools still callable by an agent (startup smoke / manual)"
+      - "tsc clean; existing tests pass"
+
+  - id: "t9-acp-split"
+    title: "OP-8: ACP internal layering — client mechanics -> infra, domain stays D1; fix B-1/B-2/B-4"
+    status: pending
+    completed_at: null
+    depends_on: ["t5-extract-service-engine-interfaces"]
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - "apps/electron/src/core/infrastructure/acp-protocol"
+        - "apps/electron/src/core/modules/acp"
+        - "apps/electron/src/core/bootstrap/composition-root.ts"
+    notes: >
+      ADR-08 (breaking, pre-authorized). Move acp/client/ (spawn/wire/transport/sweeper) to
+      infrastructure/acp-protocol/ as Secondary adapters implementing IExecutor/ports. Keep
+      acp/collaboration/, acp/policies/, session lifecycle in modules/acp/ (D1 — depends on
+      IRoleRepository). Fix in passing: B-1 (resume() try-catch fallback to rebuild),
+      B-2 (aggregation-level timeout for aggregationMode='all'), B-4 (restrictive tool policy).
+      Fix @core/... import paths; update composition-root.
+    acceptance:
+      - "acp client mechanics under infrastructure/acp-protocol/; collaboration/policies/session stay in modules/acp/"
+      - "B-1 resume() degrades to rebuild on protocol error; B-2 aggregation timeout present; B-4 restrictive policy enforced"
+      - "arch:check passes; ACP sessions spawn/suspend/resume still work (smoke)"
+      - "tsc clean; existing tests pass"
+
+  - id: "t10-reclassify-layers-rename"
+    title: "OP-7 + OP-9: Reclassify modules into D0-D3 + rename InquiryRouter -> InquiryOrchestrator"
+    status: pending
+    completed_at: null
+    depends_on: ["t6-eventize-routing-remove-cascade", "t7-notification-to-infra", "t8-mcp-split", "t9-acp-split"]
+    skill_hint: mvt-refactor
+    artifacts:
+      files:
+        - "apps/electron/src/core/modules/coordination/routing/inquiry.orchestrator.ts"
+        - "apps/electron/src/core/bootstrap/composition-root.ts"
+    notes: >
+      ADR-10 (breaking, pre-authorized). Final phase — after all relocations land. OP-7:
+      apply the D0-D3 layer reclassification per design §4 (folder/doc organization; the guard
+      already enforces the edges). OP-9: rename InquiryRouter class + inquiry.router.ts to
+      InquiryOrchestrator / inquiry.orchestrator.ts (active D3 unit); leave the passive
+      InquiryEscalationService unchanged. Update all references + composition-root.
+    acceptance:
+      - "inquiry.router.ts renamed to inquiry.orchestrator.ts; class is InquiryOrchestrator; InquiryEscalationService unchanged"
+      - "Modules reflect D0-D3 classification; arch:check passes with all rules at error severity"
+      - "App boots; routing still works (startup smoke test)"
+      - "tsc clean; existing tests pass"

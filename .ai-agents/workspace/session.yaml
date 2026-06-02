@@ -48,8 +48,31 @@ history:
     summary: 修复 MCP SSE 重连风暴：添加 conversation:cancelled 级联取消（Run + ACP Session +
       Pending Wakes），7 个文件
     change_id: 20260601-planning-history-delete
+  - skill: /mvt-analyze
+    completed_at: 2026-06-02T11:03:13.914Z
+    summary: 分析 architecture-final-v2 全路线图重构需求,核对 G1-G4/OP 现状,提出 5 项执行级澄清
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-design
+    completed_at: 2026-06-02T11:11:57.114Z
+    summary: 完成全路线图重构架构设计:12 项 ADR(含 5 项破坏性),迁移 v6/v7 表重建+幂等索引,模块/接口/数据流/文件结构落地
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-plan-dev
+    completed_at: 2026-06-02T11:17:39.333Z
+    summary: 生成全路线图重构 plan.yaml:13 工作单元合并为 10 任务,Phase 0 安全网为前置门槛
+    change_id: 20260602-architecture-refactor
 active_change:
-  id: 20260601-planning-history-delete
-  title: Planning history delete
-  created_at: 2026-06-01T09:23:07.915Z
-  plan_path: ""
+  id: 20260602-architecture-refactor
+  title: Capibara Architecture Refactor (architecture-final-v2)
+  created_at: 2026-06-02T11:17:39.333Z
+  plan_path: .ai-agents/workspace/artifacts/20260602-architecture-refactor/plan.yaml
+changes:
+  - id: 20260601-planning-history-delete
+    title: Planning history delete
+    plan_path: ""
+    status: active
+    updated_at: 2026-06-02T11:03:13.914Z
+  - id: 20260602-architecture-refactor
+    title: Capibara Architecture Refactor (architecture-final-v2)
+    plan_path: .ai-agents/workspace/artifacts/20260602-architecture-refactor/plan.yaml
+    status: active
+    updated_at: 2026-06-02T11:17:39.333Z
