@@ -24,8 +24,8 @@ interface DenyPattern {
  *
  * Modes:
  *   - permissive: allow all except denylist
- *   - restrictive: deny all except allowlist (fallback to permissive for now)
- *   - ask_user: deferred to permissive (UI not yet available)
+ *   - restrictive: deny all by default (explicit allowlist is not implemented yet)
+ *   - ask_user: deny until interactive approval flow is implemented
  */
 export class ToolPermissionPolicy {
   private readonly denyPatterns: DenyPattern[] = [
@@ -52,10 +52,9 @@ export class ToolPermissionPolicy {
       case 'permissive':
         return this.checkDenyList(toolCall);
       case 'restrictive':
-        return this.checkAllowList(roleId, toolCall);
+        return this.checkRestrictive(toolCall);
       case 'ask_user':
-        // Not yet implemented — fallback to permissive
-        return this.checkDenyList(toolCall);
+        return { allowed: false, reason: 'ask_user policy is not yet supported in this build' };
     }
   }
 
@@ -68,9 +67,14 @@ export class ToolPermissionPolicy {
     return { allowed: true };
   }
 
-  private checkAllowList(_roleId: string, toolCall: ToolCallInfo): PolicyDecision {
-    // TODO: Read allowlist from Role config once schema supports it
-    // Fallback to permissive (denylist only) for now
-    return this.checkDenyList(toolCall);
+  private checkRestrictive(toolCall: ToolCallInfo): PolicyDecision {
+    const deniedByPattern = this.checkDenyList(toolCall);
+    if (!deniedByPattern.allowed) {
+      return deniedByPattern;
+    }
+    return {
+      allowed: false,
+      reason: 'Restrictive policy blocks tool calls unless an explicit allowlist is configured',
+    };
   }
 }

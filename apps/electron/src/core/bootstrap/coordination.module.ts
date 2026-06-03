@@ -8,12 +8,11 @@ import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publis
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
-import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
-import { InquiryRouter } from '@core/modules/coordination/routing/inquiry.router';
+import { InquiryOrchestrator } from '@core/modules/coordination/routing/inquiry.orchestrator';
 import { InquiryEscalationService } from '@core/modules/coordination/routing/inquiry-escalation.service';
 
 export interface CoordinationModule {
-  inquiryRouter: InquiryRouter;
+  inquiryOrchestrator: InquiryOrchestrator;
   inquiryEscalationService: InquiryEscalationService;
 }
 
@@ -23,13 +22,12 @@ export function registerCoordinationModule(
   logger: ILogger,
   roleRepo: IRoleRepository,
   convRepo: IConversationRepository,
-  conversationService: IConversationCommandService,
 ): CoordinationModule {
-  const inquiryRouter = new InquiryRouter(roleRepo, conversationService, eventBus, logger);
+  const inquiryOrchestrator = new InquiryOrchestrator(roleRepo, eventPublisher, eventBus, logger);
   const inquiryEscalationService = new InquiryEscalationService(convRepo, roleRepo, eventPublisher, logger);
 
-  container.register(INQUIRY_ROUTER_TOKEN, { useValue: inquiryRouter });
+  container.register(INQUIRY_ROUTER_TOKEN, { useValue: inquiryOrchestrator });
   container.register(INQUIRY_ESCALATION_SERVICE_TOKEN, { useValue: inquiryEscalationService });
 
-  return { inquiryRouter, inquiryEscalationService };
+  return { inquiryOrchestrator, inquiryEscalationService };
 }

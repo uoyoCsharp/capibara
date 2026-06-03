@@ -4,6 +4,7 @@ import type { IConversationRepository } from '../interfaces/i-conversation.repos
 import type { IConversationMessageRepository } from '../interfaces/i-conversation-message.repository';
 import type { ConversationEventLogger } from '../persistence/conversation-event.logger';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { DomainEventMap, DomainEventType } from '@core/foundation/events';
 import { ConversationStateError, NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type {
@@ -23,7 +24,12 @@ export class ConversationService implements IConversationCommandService {
     private readonly msgRepo: IConversationMessageRepository,
     private readonly eventLogger: ConversationEventLogger,
     private readonly eventPublisher: IEventPublisher,
-  ) {}
+    private readonly eventBus: IEventBus,
+  ) {
+    this.eventBus.on('conversation:route-resolved', (event) => {
+      this.applyRouteResolution(event.payload);
+    });
+  }
 
   findById(id: string): Conversation | null {
     return this.convRepo.findById(id);
@@ -102,7 +108,7 @@ export class ConversationService implements IConversationCommandService {
     });
 
     if (targetRespondentRoleId) {
-      // Direct routing: skip InquiryRouter, assign respondent immediately
+      // Direct routing: skip InquiryOrchestrator, assign respondent immediately
       this.assignRespondent(
         conv.id,
         targetRespondentRoleId,
@@ -111,7 +117,7 @@ export class ConversationService implements IConversationCommandService {
       );
     } else {
       // Conversation is left in 'active' state with no respondent. Layer 2
-      // InquiryRouter subscribes to this event, reads Organization data, and
+      // InquiryOrchestrator subscribes to this event, reads Organization data, and
       // calls assignRespondent() to complete the routing decision.
       this.emitEvent('conversation:needs-routing', {
         conversationId: conv.id,
@@ -126,7 +132,7 @@ export class ConversationService implements IConversationCommandService {
   }
 
   /**
-   * Writes back the routing decision. Called by Layer 2 InquiryRouter after
+    * Writes back the routing decision. Called by Layer 2 InquiryOrchestrator after
    * reading Organization data to pick a respondent.
    *
    * Publishes conversation:respondent-assigned + conversation:response-needed
@@ -158,6 +164,27 @@ export class ConversationService implements IConversationCommandService {
       orgId: conv.orgId,
       roleId: respondentRoleId,
     });
+  }
+
+  private applyRouteResolution(payload: DomainEventMap['conversation:route-resolved']): void {
+    const conv = this.convRepo.findById(payload.conversationId);
+    if (!conv) return;
+
+    // Idempotent re-delivery: routing for the same respondent is a no-op.
+    if (
+      conv.respondentRoleId === payload.respondentRoleId
+      && conv.respondentType === payload.respondentType
+      && conv.state === 'waiting'
+    ) {
+      return;
+    }
+
+    this.assignRespondent(
+      payload.conversationId,
+      payload.respondentRoleId,
+      payload.respondentType,
+      payload.auditReason,
+    );
   }
 
   /**

@@ -8,7 +8,7 @@ import type { IPendingWakeRepository } from '@core/modules/orchestrator/interfac
 import type { WakeGateValidator } from '@core/modules/orchestrator/wake-gate.validator';
 import type { RunCoordinator } from '@core/modules/orchestrator/run.coordinator';
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
-import type { NotificationService } from '@core/modules/notification/notification.service';
+import type { INotificationService } from '@core/foundation/interfaces/i-notification.service';
 
 describe('ConversationOrchestrator — human-fallback notification', () => {
   let bus: MockEventBus;
@@ -17,7 +17,7 @@ describe('ConversationOrchestrator — human-fallback notification', () => {
   let wakeGateValidator: WakeGateValidator;
   let runCoordinator: RunCoordinator;
   let taskOrchestrator: TaskOrchestrator;
-  let notificationService: NotificationService;
+  let notificationService: INotificationService;
   let send: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

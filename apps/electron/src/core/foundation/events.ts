@@ -106,6 +106,13 @@ export interface ConversationNeedsRoutingPayload {
   taskId: string;
   conversationDepth: number;
 }
+export interface ConversationRouteResolvedPayload {
+  conversationId: string;
+  respondentRoleId: string | null;
+  respondentType: 'ai' | 'human';
+  auditReason: string;
+  eventId: string;
+}
 export interface ConversationRespondentAssignedPayload {
   conversationId: string;
   orgId: string;
@@ -267,6 +274,7 @@ export interface DomainEventMap {
   'conversation:message-added': ConversationMessageAddedPayload;
   'conversation:response-needed': ConversationResponseNeededPayload;
   'conversation:needs-routing': ConversationNeedsRoutingPayload;
+  'conversation:route-resolved': ConversationRouteResolvedPayload;
   'conversation:respondent-assigned': ConversationRespondentAssignedPayload;
   'conversation:resolved': ConversationResolvedPayload;
   'conversation:escalated': ConversationEscalatedPayload;

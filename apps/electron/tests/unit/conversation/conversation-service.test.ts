@@ -77,7 +77,7 @@ describe('ConversationService', () => {
     } as unknown as ConversationEventLogger;
     eventBus = new MockEventBus();
 
-    service = new ConversationService(convRepo, msgRepo, eventLogger, eventBus);
+    service = new ConversationService(convRepo, msgRepo, eventLogger, eventBus, eventBus);
   });
 
   describe('findById', () => {

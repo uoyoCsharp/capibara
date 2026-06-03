@@ -1,7 +1,7 @@
 import type * as acp from '@agentclientprotocol/sdk';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { IAcpSessionManager } from '../interfaces/i-acp-session.manager';
-import type { IAcpSessionRepository } from '../interfaces/i-acp-session.repository';
+import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
+import type { IAcpSessionRepository } from '@core/modules/acp/interfaces/i-acp-session.repository';
 import type {
   AcpSessionRecord,
   AgentCapabilities,
@@ -13,10 +13,10 @@ import type {
   PromptContent,
   PromptResult,
   SuspendReason,
-} from '../types/acp.types';
+} from '@core/modules/acp/types/acp.types';
 import type { AcpAgentSpawner, SessionContext } from './acp-agent.spawner';
-import type { AcpUpdateHandler } from '../handlers/acp-update.handler';
-import type { IModelPreferenceStore } from '../interfaces/i-model-preference.store';
+import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
+import type { IModelPreferenceStore } from '@core/modules/acp/interfaces/i-model-preference.store';
 import { assertTransition } from './session-lifecycle';
 import { normalizeModelState } from './model-state';
 
@@ -182,16 +182,25 @@ export class AcpSessionManager implements IAcpSessionManager {
     if (!runtime || record.resumeStrategy === 'rebuild' || record.status === 'expired') {
       await this.rebuild(record);
     } else {
-      const agentProcess = await this.spawner.getOrSpawn(runtime.agentId);
-      const connection = agentProcess.connection!;
-      if (record.resumeStrategy === 'resume') {
-        await connection.resumeSession({ sessionId: record.acpSessionId, cwd: runtime.cwd });
-      } else {
-        await connection.loadSession({
-          sessionId: record.acpSessionId,
-          cwd: runtime.cwd,
-          mcpServers: runtime.mcpServers,
+      try {
+        const agentProcess = await this.spawner.getOrSpawn(runtime.agentId);
+        const connection = agentProcess.connection!;
+        if (record.resumeStrategy === 'resume') {
+          await connection.resumeSession({ sessionId: record.acpSessionId, cwd: runtime.cwd });
+        } else {
+          await connection.loadSession({
+            sessionId: record.acpSessionId,
+            cwd: runtime.cwd,
+            mcpServers: runtime.mcpServers,
+          });
+        }
+      } catch (err) {
+        this.logger.warn('ACP session resume/load failed; rebuilding session', {
+          sessionId,
+          strategy: record.resumeStrategy,
+          error: String(err),
         });
+        await this.rebuild(record);
       }
     }
 

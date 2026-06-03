@@ -2,10 +2,10 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { Writable, Readable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { AgentRegistryEntry, AgentCapabilities, AgentProcess, AgentRegistryConfig } from '../types/acp.types';
-import type { AcpUpdateHandler } from '../handlers/acp-update.handler';
-import type { AcpPermissionHandler } from '../handlers/acp-permission.handler';
-import type { AcpFilesystemHandler } from '../handlers/acp-filesystem.handler';
+import type { AgentRegistryEntry, AgentCapabilities, AgentProcess, AgentRegistryConfig } from '@core/modules/acp/types/acp.types';
+import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
+import type { AcpPermissionHandler } from '@core/modules/acp/handlers/acp-permission.handler';
+import type { AcpFilesystemHandler } from '@core/modules/acp/handlers/acp-filesystem.handler';
 
 export interface SessionContext {
   sessionId: string;

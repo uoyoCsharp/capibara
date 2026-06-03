@@ -8,12 +8,13 @@ import type { IPlanningService } from '@core/modules/planning/interfaces/i-plann
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { CollaborationConfig } from '@core/modules/acp/types/acp.types';
-import { registerTaskTools } from './handlers/task-tools';
-import { registerConversationTools } from './handlers/conversation-tools';
-import { registerContextTools } from './handlers/context-tools';
-import { registerPlanTreeTools } from './handlers/plan-tree-tools';
+import { registerTaskToolProvider } from '@core/mcp/providers/task-tool.provider';
+import { registerConversationToolProvider } from '@core/mcp/providers/conversation-tool.provider';
+import { registerContextToolProvider } from '@core/mcp/providers/context-tool.provider';
+import { registerPlanTreeToolProvider } from '@core/mcp/providers/plan-tree-tool.provider';
+import type { IToolRegistry, ToolProvider } from './interfaces/i-tool-registry';
 
-export interface McpServerDeps {
+export interface McpProtocolDeps {
   taskService: ITaskService;
   taskStateMachine: ITaskStateMachine;
   processEngine: IProcessEngine;
@@ -25,22 +26,47 @@ export interface McpServerDeps {
   collaborationConfig?: CollaborationConfig | null;
 }
 
-export function buildCapibaraMcpServer(deps: McpServerDeps): McpServer {
+// Backward-compatible alias for existing production consumers.
+export type McpServerDeps = McpProtocolDeps;
+
+class ToolRegistry<TDeps> implements IToolRegistry<TDeps> {
+  private readonly providers: Array<ToolProvider<TDeps>> = [];
+
+  register(provider: ToolProvider<TDeps>): void {
+    this.providers.push(provider);
+  }
+
+  registerMany(providers: ReadonlyArray<ToolProvider<TDeps>>): void {
+    this.providers.push(...providers);
+  }
+
+  apply(server: McpServer, deps: TDeps): void {
+    for (const provider of this.providers) {
+      provider(server, deps);
+    }
+  }
+}
+
+function registerProviders(server: McpServer, deps: McpProtocolDeps): void {
+  const toolRegistry = new ToolRegistry<McpProtocolDeps>();
+  toolRegistry.registerMany([
+    registerTaskToolProvider,
+    registerConversationToolProvider,
+    registerContextToolProvider,
+    registerPlanTreeToolProvider,
+  ]);
+  toolRegistry.apply(server, deps);
+}
+
+export function buildCapibaraMcpServer(deps: McpProtocolDeps): McpServer {
   const server = new McpServer({
     name: 'capibara',
     version: '0.3.0',
   });
 
-  registerTools(server, deps);
+  registerProviders(server, deps);
 
   return server;
-}
-
-function registerTools(server: McpServer, deps: McpServerDeps): void {
-  registerTaskTools(server, deps);
-  registerConversationTools(server, deps);
-  registerContextTools(server, deps);
-  registerPlanTreeTools(server, deps);
 }
 
 /**
@@ -48,13 +74,13 @@ function registerTools(server: McpServer, deps: McpServerDeps): void {
  * Each SSE transport needs its own McpServer because the SDK only allows
  * one transport per Protocol instance.
  */
-export function createSseMcpServer(deps: McpServerDeps): McpServer {
+export function createSseMcpServer(deps: McpProtocolDeps): McpServer {
   const server = new McpServer({
     name: 'capibara',
     version: '0.3.0',
   });
 
-  registerTools(server, deps);
+  registerProviders(server, deps);
 
   return server;
 }

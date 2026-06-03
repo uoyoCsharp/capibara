@@ -1,32 +1,32 @@
 import { injectable } from 'tsyringe';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
+import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { DomainEvent } from '@core/foundation/events';
-import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import type { RoutingRequest, RoutingDecision } from './routing.types';
 
 /**
  * Layer 2 coordinator. Subscribes to `conversation:needs-routing` events
  * emitted by the Conversation module. Reads Organization data to decide
- * which Role should respond, then calls ConversationService.assignRespondent
- * to write the decision back.
+ * which Role should respond, then emits `conversation:route-resolved`
+ * so Conversation module applies the write-back.
  *
  * Conversation module has no knowledge of this component — the coupling
  * flows entirely through events + a narrow write-back API.
  */
 @injectable()
-export class InquiryRouter {
+export class InquiryOrchestrator {
   constructor(
     private readonly roleRepo: IRoleRepository,
-    private readonly conversationService: IConversationCommandService,
+    private readonly eventPublisher: IEventPublisher,
     private readonly eventBus: IEventBus,
     private readonly logger: ILogger,
   ) {}
 
   start(): void {
     this.eventBus.on('conversation:needs-routing', (e) => this.handle(e));
-    this.logger.info('InquiryRouter started');
+    this.logger.info('InquiryOrchestrator started');
   }
 
   private handle(event: DomainEvent<'conversation:needs-routing'>): void {
@@ -34,14 +34,15 @@ export class InquiryRouter {
 
     try {
       const decision = this.route({ conversationId, askingRoleId, orgId, taskId, conversationDepth });
-      this.conversationService.assignRespondent(
+      this.eventPublisher.publish('conversation:route-resolved', {
         conversationId,
-        decision.respondentRoleId,
-        decision.respondentType,
-        decision.auditReason,
-      );
+        respondentRoleId: decision.respondentRoleId,
+        respondentType: decision.respondentType,
+        auditReason: decision.auditReason,
+        eventId: `${event.timestamp}:${conversationId}`,
+      });
     } catch (err) {
-      this.logger.error('InquiryRouter failed', { conversationId, error: String(err) });
+      this.logger.error('InquiryOrchestrator failed', { conversationId, error: String(err) });
     }
   }
 

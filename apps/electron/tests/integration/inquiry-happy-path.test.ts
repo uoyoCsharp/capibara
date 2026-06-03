@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ConversationService } from '@core/modules/conversation/services/conversation.service';
-import { InquiryRouter } from '@core/modules/coordination/routing/inquiry.router';
+import { InquiryOrchestrator } from '@core/modules/coordination/routing/inquiry.orchestrator';
 import { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
 import { registerConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
 import { MockEventBus } from '../helpers/mock-event-bus';
@@ -26,7 +26,7 @@ import type { IPendingWakeRepository } from '@core/modules/orchestrator/interfac
  * Happy-path end-to-end: AI ↔ AI inquiry across the full lifecycle.
  *
  *   step 1  Role-A invokes createInquiry            → conversation:needs-routing
- *   step 2  InquiryRouter picks Role-B (parent)     → assignRespondent
+ *   step 2  InquiryOrchestrator picks Role-B (parent)     → publish route-resolved
  *   step 3  ConversationService transitions waiting → conversation:respondent-assigned
  *                                                    → conversation:response-needed
  *   step 4  ConversationOrchestrator dispatches Run → RunCoordinator.executeForConversation
@@ -48,7 +48,7 @@ interface Harness {
   convRepo: IConversationRepository;
   msgStore: ConversationMessage[];
   conversationService: ConversationService;
-  router: InquiryRouter;
+  router: InquiryOrchestrator;
   conversationOrchestrator: ConversationOrchestrator;
   runCoordinator: RunCoordinator;
   taskOrchestrator: TaskOrchestrator;
@@ -176,15 +176,15 @@ function buildHarness(): Harness {
   } as unknown as ConversationEventLogger;
 
   // Hierarchy: Tech Lead (parent) ← Frontend Dev (child).
-  // role-fe asks → InquiryRouter routes to its parent role-lead.
+  // role-fe asks → InquiryOrchestrator routes to its parent role-lead.
   const roleRepo = makeRoleRepo([
     makeRole({ id: ROLE_LEAD, name: 'Tech Lead', parentId: null }),
     makeRole({ id: ROLE_FE, name: 'Frontend Dev', parentId: ROLE_LEAD }),
   ]);
 
-  const conversationService = new ConversationService(convRepo, msgRepo, eventLogger, bus);
+  const conversationService = new ConversationService(convRepo, msgRepo, eventLogger, bus, bus);
 
-  const router = new InquiryRouter(roleRepo, conversationService, bus, logger);
+  const router = new InquiryOrchestrator(roleRepo, bus, bus, logger);
   router.start();
 
   const wakeGateValidator = {
@@ -216,7 +216,7 @@ function buildHarness(): Harness {
     wakeGateValidator,
     runCoordinator,
     taskOrchestrator,
-    { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
+    { send: vi.fn() } as unknown as import('@core/foundation/interfaces/i-notification.service').INotificationService,
   );
   conversationOrchestrator.start();
 
@@ -318,7 +318,7 @@ describe('Inquiry happy-path end-to-end', () => {
     const { data } = parseToolResult(raw);
 
     // The tool returns the freshly-created conversation; by the time it
-    // resolves, InquiryRouter has already written the respondent back.
+    // resolves, InquiryOrchestrator has already written the respondent back.
     expect(data).toMatchObject({
       conversationId: 'conv-1',
       respondentRoleId: ROLE_LEAD,

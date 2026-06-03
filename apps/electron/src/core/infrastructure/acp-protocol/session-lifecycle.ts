@@ -4,7 +4,7 @@ import type {
   CloseReason,
   LifecycleIntent,
   SuspendReason,
-} from '../types/acp.types';
+} from '@core/modules/acp/types/acp.types';
 
 /**
  * Pure session-lifecycle policy.

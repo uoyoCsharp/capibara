@@ -3,15 +3,15 @@ import type { ExecutorInput, ExecutorOutput } from '@core/modules/execution/type
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
-import type { IAcpSessionManager } from '../interfaces/i-acp-session.manager';
-import type { ISessionSuspensionManager } from '../interfaces/i-session-suspension.manager';
-import type { AcpUpdateHandler } from '../handlers/acp-update.handler';
-import type { AcpFilesystemHandler } from '../handlers/acp-filesystem.handler';
-import type { AcpPermissionHandler } from '../handlers/acp-permission.handler';
-import type { AcpAuditRepository } from '../persistence/acp-audit.repository';
-import type { AgentRegistryConfig, PromptContent, PromptResult } from '../types/acp.types';
-import type { AcpMcpConfigBuilder } from '../mcp/acp-mcp.config';
-import type { PendingInquiry } from '../collaboration/suspension.types';
+import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
+import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
+import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
+import type { AcpFilesystemHandler } from '@core/modules/acp/handlers/acp-filesystem.handler';
+import type { AcpPermissionHandler } from '@core/modules/acp/handlers/acp-permission.handler';
+import type { AcpAuditRepository } from '@core/modules/acp/persistence/acp-audit.repository';
+import type { AgentRegistryConfig, PromptContent, PromptResult } from '@core/modules/acp/types/acp.types';
+import type { AcpMcpConfigBuilder } from '@core/modules/acp/mcp/acp-mcp.config';
+import type { PendingInquiry } from '@core/modules/acp/collaboration/suspension.types';
 import { decideLifecycle } from './session-lifecycle';
 
 /**

@@ -98,17 +98,19 @@ export class SessionSuspensionManager implements ISessionSuspensionManager {
     if (!target || target.status === 'resolved') return null;
 
     // Mark this inquiry as resolved
+    const nowIso = new Date().toISOString();
     this.suspensionRepo.updateAwaitingStatus(
       target.id,
       'resolved',
       response,
-      new Date().toISOString(),
+      nowIso,
     );
 
     // Refresh awaiting list to check completion
-    const updatedList = this.suspensionRepo.findAwaitingBySuspensionId(suspension.id);
+    const refreshedList = this.suspensionRepo.findAwaitingBySuspensionId(suspension.id);
+    const updatedList = this.applyAggregationTimeoutIfNeeded(suspension, refreshedList, nowIso);
     const isReady = suspension.aggregationMode === 'all'
-      ? updatedList.every(a => a.status === 'resolved')
+      ? updatedList.every((a) => a.status === 'resolved' || a.status === 'timed_out')
       : updatedList.some(a => a.status === 'resolved');
 
     if (!isReady) {
@@ -159,5 +161,50 @@ export class SessionSuspensionManager implements ISessionSuspensionManager {
 
   getChainDepth(orgId: string, fromRoleId: string): number {
     return this.chainGuard.validateDepth(orgId, fromRoleId).currentDepth;
+  }
+
+  private applyAggregationTimeoutIfNeeded(
+    suspension: SessionSuspension,
+    awaitingList: ReturnType<ISuspensionRepository['findAwaitingBySuspensionId']>,
+    nowIso: string,
+  ): ReturnType<ISuspensionRepository['findAwaitingBySuspensionId']> {
+    if (suspension.aggregationMode !== 'all') {
+      return awaitingList;
+    }
+
+    const suspendedAt = Date.parse(suspension.suspendedAt);
+    const now = Date.parse(nowIso);
+    if (Number.isNaN(suspendedAt) || Number.isNaN(now)) {
+      return awaitingList;
+    }
+
+    if (now - suspendedAt < this.config.inquiryTimeoutMs) {
+      return awaitingList;
+    }
+
+    let timedOutCount = 0;
+    const updated = awaitingList.map((awaiting) => {
+      if (awaiting.status !== 'pending' && awaiting.status !== 'in_progress') {
+        return awaiting;
+      }
+
+      this.suspensionRepo.updateAwaitingStatus(awaiting.id, 'timed_out', undefined, nowIso);
+      timedOutCount += 1;
+      return {
+        ...awaiting,
+        status: 'timed_out' as const,
+        resolvedAt: nowIso,
+      };
+    });
+
+    if (timedOutCount > 0) {
+      this.logger.warn('Aggregation timeout reached for suspended session; pending inquiries marked timed_out', {
+        suspensionId: suspension.id,
+        timeoutMs: this.config.inquiryTimeoutMs,
+        timedOutCount,
+      });
+    }
+
+    return updated;
   }
 }

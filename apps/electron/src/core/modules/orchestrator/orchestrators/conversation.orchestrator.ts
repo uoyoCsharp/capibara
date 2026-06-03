@@ -6,7 +6,7 @@ import type { IConversationRepository } from '@core/modules/conversation/interfa
 import type { IConversationCommandService } from '@core/modules/conversation/interfaces/i-conversation-command.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
-import type { NotificationService } from '@core/modules/notification/notification.service';
+import type { INotificationService } from '@core/foundation/interfaces/i-notification.service';
 import type { IPendingWakeRepository } from '../interfaces/i-pending-wake.repository';
 import type { WakeGateValidator } from '../wake-gate.validator';
 import type { RunCoordinator } from '../run.coordinator';
@@ -38,7 +38,7 @@ export class ConversationOrchestrator {
     private readonly wakeGateValidator: WakeGateValidator,
     private readonly runCoordinator: RunCoordinator,
     private readonly taskOrchestrator: TaskOrchestrator,
-    private readonly notificationService: NotificationService,
+    private readonly notificationService: INotificationService,
     private readonly suspensionManager: ISessionSuspensionManager | null = null,
     private readonly conversationService: IConversationCommandService | null = null,
     private readonly acpSessionManager: IAcpSessionManager | null = null,

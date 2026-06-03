@@ -22,7 +22,7 @@ import type { CostTracker } from '@core/modules/execution/services/cost-tracker'
 import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
 import type { IBehaviorEngine } from '@core/modules/workflow/interfaces/i-behavior.engine';
-import type { NotificationService } from '@core/modules/notification/notification.service';
+import type { INotificationService } from '@core/foundation/interfaces/i-notification.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import { SqlitePendingWakeRepository } from '@core/modules/orchestrator/persistence/sqlite-pending-wake.repository';
@@ -59,7 +59,7 @@ export function registerOrchestratorModule(
   processEngine: IProcessEngine,
   taskStateMachine: ITaskStateMachine,
   behaviorEngine: IBehaviorEngine,
-  notificationService: NotificationService,
+  notificationService: INotificationService,
   suspensionManager: ISessionSuspensionManager | null = null,
   acpSessionManager: IAcpSessionManager | null = null,
 ): OrchestratorModule {

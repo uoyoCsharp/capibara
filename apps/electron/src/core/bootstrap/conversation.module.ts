@@ -5,6 +5,7 @@ import {
   CONVERSATION_SERVICE_TOKEN,
   CONVERSATION_CONTEXT_BUILDER_TOKEN,
 } from '@core/foundation/tokens';
+import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { ISqliteConnection } from '@core/foundation/interfaces/i-sqlite-connection';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
@@ -16,6 +17,7 @@ import { ConversationContextBuilder } from '@core/modules/conversation/context/c
 
 export function registerConversationModule(
   connection: ISqliteConnection,
+  eventBus: IEventBus,
   eventPublisher: IEventPublisher,
   _logger: ILogger,
 ): {
@@ -26,7 +28,13 @@ export function registerConversationModule(
   const convRepo = new SqliteConversationRepository(connection);
   const msgRepo = new SqliteConversationMessageRepository(connection);
   const eventLogger = new ConversationEventLogger(connection);
-  const conversationService = new ConversationService(convRepo, msgRepo, eventLogger, eventPublisher);
+  const conversationService = new ConversationService(
+    convRepo,
+    msgRepo,
+    eventLogger,
+    eventPublisher,
+    eventBus,
+  );
   const conversationContextBuilder = new ConversationContextBuilder(convRepo, msgRepo);
 
   container.register(CONVERSATION_REPO_TOKEN, { useValue: convRepo });

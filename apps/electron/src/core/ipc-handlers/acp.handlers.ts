@@ -3,7 +3,7 @@ import type { AcpAuditRepository } from '@core/modules/acp/persistence/acp-audit
 import type { SqliteSuspensionRepository } from '@core/modules/acp/persistence/sqlite-suspension.repository';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import type { IAcpSessionRepository } from '@core/modules/acp/interfaces/i-acp-session.repository';
-import type { AcpAgentSpawner } from '@core/modules/acp/client/acp-agent.spawner';
+import type { AcpAgentSpawner } from '@core/infrastructure/acp-protocol/acp-agent.spawner';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { SuspensionRecord, SuspensionAwaitingRecord } from '@core/shared/types';
 

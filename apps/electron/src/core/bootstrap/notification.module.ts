@@ -5,8 +5,8 @@ import {
 } from '@core/foundation/tokens';
 import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
-import { NotificationService } from '@core/modules/notification/notification.service';
+import { EventBroadcaster } from '@core/infrastructure/notification/event-broadcaster';
+import { NotificationService } from '@core/infrastructure/notification/notification.service';
 
 export function registerNotificationModule(
   eventBus: IEventBus,

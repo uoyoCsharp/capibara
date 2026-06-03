@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { McpServerDeps } from '../mcp-server.builder';
+import type { McpProtocolDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 
-export function registerTaskTools(server: McpServer, deps: McpServerDeps): void {
+export function registerTaskToolProvider(server: McpServer, deps: McpProtocolDeps): void {
   const { taskService, taskStateMachine, processEngine } = deps;
 
   server.registerTool(
@@ -41,7 +41,7 @@ export function registerTaskTools(server: McpServer, deps: McpServerDeps): void 
       if (!processEngine.validateTransition(task.orgId, task.status, targetStatus)) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
-            error: `Invalid transition: "${task.status}" → "${targetStatus}" is not allowed.`,
+            error: `Invalid transition: "${task.status}" -> "${targetStatus}" is not allowed.`,
             taskId: task.id,
             currentStatus: task.status,
             availableTransitions: availableTransitions.map((t) => t.to),

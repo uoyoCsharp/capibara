@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { McpServerDeps } from '../mcp-server.builder';
+import type { McpProtocolDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 
-export function registerConversationTools(server: McpServer, deps: McpServerDeps): void {
+export function registerConversationToolProvider(server: McpServer, deps: McpProtocolDeps): void {
   const { conversationService } = deps;
   const suspensionManager = deps.suspensionManager ?? null;
   const maxChainDepth = deps.collaborationConfig?.maxChainDepth ?? 5;
@@ -21,7 +21,6 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
       },
     },
     async ({ orgId, askingRoleId, taskId, question, targetRoleId }) => {
-      // Chain depth check
       if (suspensionManager) {
         const depth = suspensionManager.getChainDepth(orgId, askingRoleId);
         if (depth >= maxChainDepth) {
@@ -34,7 +33,6 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
           };
         }
 
-        // Circular detection: cannot ask a role that is waiting for your response
         if (targetRoleId) {
           const awaitingSuspension = suspensionManager.findSuspensionAwaitingRole(askingRoleId, orgId);
           if (awaitingSuspension && awaitingSuspension.roleId === targetRoleId) {
@@ -84,7 +82,6 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
     async ({ orgId, askingRoleId, taskId, targetRoleIds, question, waitMode: rawWaitMode }) => {
       const waitMode = rawWaitMode ?? 'all';
 
-      // Validate target count
       if (targetRoleIds.length > maxBroadcastTargets) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
@@ -101,7 +98,6 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
         };
       }
 
-      // Chain depth check
       if (suspensionManager) {
         const depth = suspensionManager.getChainDepth(orgId, askingRoleId);
         if (depth >= maxChainDepth) {
@@ -114,14 +110,13 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
           };
         }
 
-        // Circular detection: cannot ask any role that is waiting for your response
         const awaitingSuspension = suspensionManager.findSuspensionAwaitingRole(askingRoleId, orgId);
         if (awaitingSuspension) {
-          const circularTarget = targetRoleIds.find(t => t === awaitingSuspension.roleId);
+          const circularTarget = targetRoleIds.find((t) => t === awaitingSuspension.roleId);
           if (circularTarget) {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({
-                error: `Circular inquiry detected. Cannot ask ${circularTarget} — that role is waiting for your response.`,
+                error: `Circular inquiry detected. Cannot ask ${circularTarget} - that role is waiting for your response.`,
               }) }],
               isError: true,
             };
@@ -129,7 +124,6 @@ export function registerConversationTools(server: McpServer, deps: McpServerDeps
         }
       }
 
-      // Create directed inquiry for each target
       const results: Array<{ conversationId: string; targetRoleId: string; respondentRoleId: string | null; state: string }> = [];
       for (const targetRoleId of targetRoleIds) {
         const conv = conversationService.createInquiry(

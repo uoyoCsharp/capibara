@@ -9,8 +9,8 @@ import type { IPlanningService } from '@core/modules/planning/interfaces/i-plann
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { CollaborationConfig } from '@core/modules/acp/types/acp.types';
-import { buildCapibaraMcpServer, type McpServerDeps } from '@core/modules/mcp/mcp-server.builder';
-import { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
+import { buildCapibaraMcpServer, type McpServerDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
+import { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 
 export function registerMcpModule(
   logger: ILogger,

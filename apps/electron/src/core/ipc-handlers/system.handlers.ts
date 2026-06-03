@@ -7,14 +7,14 @@ import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { AgentRegistryConfig, CollaborationConfig } from '@core/modules/acp/types/acp.types';
-import type { AcpAgentSpawner } from '@core/modules/acp/client/acp-agent.spawner';
+import type { AcpAgentSpawner } from '@core/infrastructure/acp-protocol/acp-agent.spawner';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import type { IAcpSessionRepository } from '@core/modules/acp/interfaces/i-acp-session.repository';
-import type { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
+import type { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 import type { AcpMcpConfigBuilder } from '@core/modules/acp/mcp/acp-mcp.config';
-import type { McpServerDeps } from '@core/modules/mcp/mcp-server.builder';
+import type { McpServerDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 import type { DiagnosticSnapshot, AgentDiagnostic, SessionDiagnostic } from '@core/shared/types';
-import { buildCapibaraMcpServer } from '@core/modules/mcp/mcp-server.builder';
+import { buildCapibaraMcpServer } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }

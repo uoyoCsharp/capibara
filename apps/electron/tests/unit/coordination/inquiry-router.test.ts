@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { InquiryRouter } from '@core/modules/coordination/routing/inquiry.router';
-import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
+import { InquiryOrchestrator } from '@core/modules/coordination/routing/inquiry.orchestrator';
 import { MockEventBus } from '../../helpers/mock-event-bus';
 import { MockLogger } from '../../helpers/mock-logger';
 import { TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID } from '../../helpers/fixtures';
@@ -42,12 +41,21 @@ function emitNeedsRouting(bus: MockEventBus, askingRoleId = TEST_ROLE_ID): void 
   });
 }
 
-describe('InquiryRouter', () => {
-  let router: InquiryRouter;
+describe('InquiryOrchestrator', () => {
+  let router: InquiryOrchestrator;
   let roleRepo: IRoleRepository;
   let bus: MockEventBus;
-  let conversationService: ConversationService;
-  let assignRespondent: ReturnType<typeof vi.fn>;
+
+  function expectResolvedRoute(expected: Record<string, unknown>): void {
+    const event = bus.getLastEmitted('conversation:route-resolved');
+    expect(event).toBeDefined();
+    expect(event?.payload).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        ...expected,
+      }),
+    );
+  }
 
   beforeEach(() => {
     roleRepo = {
@@ -60,9 +68,7 @@ describe('InquiryRouter', () => {
       delete: vi.fn(),
     };
     bus = new MockEventBus();
-    assignRespondent = vi.fn();
-    conversationService = { assignRespondent } as unknown as ConversationService;
-    router = new InquiryRouter(roleRepo, conversationService, bus, new MockLogger());
+    router = new InquiryOrchestrator(roleRepo, bus, bus, new MockLogger());
     router.start();
   });
 
@@ -73,12 +79,11 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith(
-      'conv-1',
-      null,
-      'human',
-      expect.stringContaining('requires human approval'),
-    );
+    expectResolvedRoute({
+      respondentRoleId: null,
+      respondentType: 'human',
+      auditReason: expect.stringContaining('requires human approval'),
+    });
   });
 
   it('routes to parent role when available and active', () => {
@@ -91,12 +96,11 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith(
-      'conv-1',
-      'role-parent',
-      'ai',
-      expect.stringContaining('parent'),
-    );
+    expectResolvedRoute({
+      respondentRoleId: 'role-parent',
+      respondentType: 'ai',
+      auditReason: expect.stringContaining('parent'),
+    });
   });
 
   it('routes to parent as ai even when parent has requiresHumanApproval', () => {
@@ -109,7 +113,7 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-parent', 'ai', expect.any(String));
+    expectResolvedRoute({ respondentRoleId: 'role-parent', respondentType: 'ai' });
   });
 
   it('walks up to grandparent when direct parent is paused', () => {
@@ -125,12 +129,11 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith(
-      'conv-1',
-      'role-grand',
-      'ai',
-      expect.stringContaining('ancestor'),
-    );
+    expectResolvedRoute({
+      respondentRoleId: 'role-grand',
+      respondentType: 'ai',
+      auditReason: expect.stringContaining('ancestor'),
+    });
   });
 
   it('skips system-role ancestors when walking up', () => {
@@ -148,7 +151,7 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-grand', 'ai', expect.any(String));
+    expectResolvedRoute({ respondentRoleId: 'role-grand', respondentType: 'ai' });
   });
 
   it('breaks ancestor cycles without infinite loop', () => {
@@ -162,12 +165,11 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith(
-      'conv-1',
-      null,
-      'human',
-      expect.stringContaining('Human fallback'),
-    );
+    expectResolvedRoute({
+      respondentRoleId: null,
+      respondentType: 'human',
+      auditReason: expect.stringContaining('Human fallback'),
+    });
   });
 
   it('falls back to peer when parent is paused', () => {
@@ -182,12 +184,11 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith(
-      'conv-1',
-      'role-peer',
-      'ai',
-      expect.stringContaining('peer'),
-    );
+    expectResolvedRoute({
+      respondentRoleId: 'role-peer',
+      respondentType: 'ai',
+      auditReason: expect.stringContaining('peer'),
+    });
   });
 
   it('routes to peer sibling when no parent', () => {
@@ -197,7 +198,7 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-peer', 'ai', expect.any(String));
+    expectResolvedRoute({ respondentRoleId: 'role-peer', respondentType: 'ai' });
   });
 
   it('skips system roles when finding peers', () => {
@@ -208,7 +209,7 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-normal', 'ai', expect.any(String));
+    expectResolvedRoute({ respondentRoleId: 'role-normal', respondentType: 'ai' });
   });
 
   it('skips paused peers', () => {
@@ -219,7 +220,7 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith('conv-1', 'role-active', 'ai', expect.any(String));
+    expectResolvedRoute({ respondentRoleId: 'role-active', respondentType: 'ai' });
   });
 
   it('falls back to human when no AI roles available', () => {
@@ -228,12 +229,11 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus);
 
-    expect(assignRespondent).toHaveBeenCalledWith(
-      'conv-1',
-      null,
-      'human',
-      expect.stringContaining('Human fallback'),
-    );
+    expectResolvedRoute({
+      respondentRoleId: null,
+      respondentType: 'human',
+      auditReason: expect.stringContaining('Human fallback'),
+    });
   });
 
   it('falls back to human when asking role not found', () => {
@@ -241,16 +241,15 @@ describe('InquiryRouter', () => {
 
     emitNeedsRouting(bus, 'nonexistent');
 
-    expect(assignRespondent).toHaveBeenCalledWith(
-      'conv-1',
-      null,
-      'human',
-      expect.stringContaining('not found'),
-    );
+    expectResolvedRoute({
+      respondentRoleId: null,
+      respondentType: 'human',
+      auditReason: expect.stringContaining('not found'),
+    });
   });
 
-  it('logs and swallows errors from assignRespondent', () => {
-    assignRespondent.mockImplementation(() => {
+  it('logs and swallows errors from event publication', () => {
+    vi.spyOn(bus, 'publish').mockImplementation(() => {
       throw new Error('boom');
     });
 

@@ -1,8 +1,9 @@
 import { injectable } from 'tsyringe';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { INotificationService } from '@core/foundation/interfaces/i-notification.service';
 
 @injectable()
-export class NotificationService {
+export class NotificationService implements INotificationService {
   constructor(private readonly logger: ILogger) {}
 
   send(title: string, body: string): void {

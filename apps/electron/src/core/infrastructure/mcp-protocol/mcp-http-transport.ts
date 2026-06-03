@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { McpTransportDiagnostic } from '@core/shared/types';
-import type { McpServerDeps } from './mcp-server.builder';
+import type { McpProtocolDeps } from './mcp-server.builder';
 import { createSseMcpServer } from './mcp-server.builder';
 
 /**
@@ -28,7 +28,7 @@ export class McpHttpTransportManager {
 
   constructor(
     private readonly logger: ILogger,
-    private readonly deps: McpServerDeps,
+    private readonly deps: McpProtocolDeps,
   ) { }
 
   async start(mcpServer: McpServer): Promise<number> {

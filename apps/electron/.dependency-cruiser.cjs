@@ -16,7 +16,7 @@ module.exports = {
      * ------------------------------------------------------------------ */
     {
       name: 'no-core-to-adapters',
-      severity: 'warn',
+      severity: 'error',
       comment:
         'Domain Core only depends on foundation ports; must not import infrastructure / mcp / ipc-handlers',
       from: { path: `^${C}/modules/` },
@@ -30,7 +30,7 @@ module.exports = {
      * ------------------------------------------------------------------ */
     {
       name: 'd0-must-stay-leaf',
-      severity: 'warn',
+      severity: 'error',
       comment:
         'D0 (Organization) is the structural core; must not import other domain modules',
       from: { path: `^${C}/modules/organization/` },
@@ -47,7 +47,7 @@ module.exports = {
      * ------------------------------------------------------------------ */
     {
       name: 'no-upward-d1-to-d3',
-      severity: 'warn',
+      severity: 'error',
       comment:
         'D1 capability domains must not import D3 orchestration (no upward reverse edges)',
       from: {

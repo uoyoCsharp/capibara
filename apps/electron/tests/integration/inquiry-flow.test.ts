@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ConversationService } from '@core/modules/conversation/services/conversation.service';
-import { InquiryRouter } from '@core/modules/coordination/routing/inquiry.router';
+import { InquiryOrchestrator } from '@core/modules/coordination/routing/inquiry.orchestrator';
 import { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
 import { MockEventBus } from '../helpers/mock-event-bus';
 import { MockLogger } from '../helpers/mock-logger';
@@ -18,7 +18,8 @@ import type { IPendingWakeRepository } from '@core/modules/orchestrator/interfac
 /**
  * End-to-end inquiry flow:
  *   1. AI calls createInquiry → emits conversation:needs-routing
- *   2. InquiryRouter consumes it, reads Organization, calls assignRespondent
+ *   2. InquiryOrchestrator consumes it, reads Organization, emits conversation:route-resolved
+ *      and ConversationService applies assignment via event subscription
  *   3. ConversationService transitions to 'waiting' and emits
  *      conversation:respondent-assigned + conversation:response-needed
  *   4. ConversationOrchestrator picks up response-needed and invokes
@@ -29,7 +30,7 @@ describe('Inquiry flow integration', () => {
   let convRepo: IConversationRepository;
   let roleRepo: IRoleRepository;
   let conversationService: ConversationService;
-  let router: InquiryRouter;
+  let router: InquiryOrchestrator;
   let conversationOrchestrator: ConversationOrchestrator;
   let runCoordinator: RunCoordinator;
   let wakeGateValidator: WakeGateValidator;
@@ -134,9 +135,9 @@ describe('Inquiry flow integration', () => {
       role({ id: 'role-fe', name: 'Frontend Dev', parentId: 'role-lead' }),
     ]);
 
-    conversationService = new ConversationService(convRepo, msgRepo, eventLogger, bus);
+    conversationService = new ConversationService(convRepo, msgRepo, eventLogger, bus, bus);
 
-    router = new InquiryRouter(roleRepo, conversationService, bus, logger);
+    router = new InquiryOrchestrator(roleRepo, bus, bus, logger);
     router.start();
 
     wakeGateValidator = { validate: vi.fn().mockReturnValue({ allowed: true }) } as unknown as WakeGateValidator;
@@ -157,7 +158,7 @@ describe('Inquiry flow integration', () => {
 
     conversationOrchestrator = new ConversationOrchestrator(
       bus, logger, convRepo, pendingWakeRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
-      { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
+      { send: vi.fn() } as unknown as import('@core/foundation/interfaces/i-notification.service').INotificationService,
     );
     conversationOrchestrator.start();
   });
@@ -168,7 +169,7 @@ describe('Inquiry flow integration', () => {
     // needs-routing was emitted by createInquiry
     bus.assertEmitted('conversation:needs-routing');
 
-    // InquiryRouter consumed it → called assignRespondent → write-back happened
+    // InquiryOrchestrator consumed it → published route-resolved → write-back happened
     const conv = convRepo.findById('conv-1');
     expect(conv?.respondentRoleId).toBe('role-lead');
     expect(conv?.respondentType).toBe('ai');
@@ -189,7 +190,7 @@ describe('Inquiry flow integration', () => {
   it('routes to human fallback when no parent and no active peers', async () => {
     roleRepo = makeRoleRepo([role({ id: 'role-solo' })]);
     // Rebuild router+orchestrator so it uses the new repo (simple rebuild)
-    router = new InquiryRouter(roleRepo, conversationService, bus, new MockLogger());
+    router = new InquiryOrchestrator(roleRepo, bus, bus, new MockLogger());
     router.start();
 
     conversationService.createInquiry('org-1', 'role-solo', 'task-solo', 'Anyone?');
@@ -211,7 +212,7 @@ describe('Inquiry flow integration', () => {
       role({ id: 'role-lead', name: 'Lead', parentId: null }),
       role({ id: 'role-gated', parentId: 'role-lead', requiresHumanApproval: true }),
     ]);
-    router = new InquiryRouter(roleRepo, conversationService, bus, new MockLogger());
+    router = new InquiryOrchestrator(roleRepo, bus, bus, new MockLogger());
     router.start();
 
     conversationService.createInquiry('org-1', 'role-gated', 'task-x', 'Gated question');

@@ -31,8 +31,8 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
 import type { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
 import type { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
-import type { EventBroadcaster } from '@core/modules/notification/event-broadcaster';
-import type { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
+import type { EventBroadcaster } from '@core/infrastructure/notification/event-broadcaster';
+import type { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
 import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
 import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
@@ -118,8 +118,7 @@ export async function bootstrap(): Promise<void> {
   await acpModule.sessionManager.reconcileOnStartup();
 
   const workflow = registerWorkflowModule(sqliteConn, eventPublisher, logger, join(resourcesDir, 'workflows'), org.roleRepo);
-  const conversation = registerConversationModule(sqliteConn, eventPublisher, logger);
-  workflow.taskService.setConversationRepository(conversation.conversationRepo);
+  const conversation = registerConversationModule(sqliteConn, eventBus, eventPublisher, logger);
 
   const coordination = registerCoordinationModule(
     eventBus,
@@ -127,7 +126,6 @@ export async function bootstrap(): Promise<void> {
     logger,
     org.roleRepo,
     conversation.conversationRepo,
-    conversation.conversationService,
   );
 
   const execution = registerExecutionModule(
@@ -280,7 +278,7 @@ export async function bootstrap(): Promise<void> {
   conversationOrchestrator.start();
   runOrchestrator.start();
   eventBroadcaster.start();
-  coordination.inquiryRouter.start();
+  coordination.inquiryOrchestrator.start();
   planning.planningService.init();
   acpModule.sessionSweeper.start();
   eventPublisher.start();

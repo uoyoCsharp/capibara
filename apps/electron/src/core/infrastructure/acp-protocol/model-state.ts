@@ -1,5 +1,5 @@
 import type * as acp from '@agentclientprotocol/sdk';
-import type { AvailableModel, ModelState } from '../types/acp.types';
+import type { AvailableModel, ModelState } from '@core/modules/acp/types/acp.types';
 
 /** Empty (unsupported) model state — the agent advertised neither configOptions(model) nor models. */
 const UNSUPPORTED: ModelState = { models: [], currentModelId: null, mechanism: null };

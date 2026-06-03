@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { McpServerDeps } from '../mcp-server.builder';
+import type { McpProtocolDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 import type { PlanTreeNode, PlanTreeMode } from '@core/foundation/events';
 import type { PlanTreeValidationError } from '@core/modules/planning/validation/plan-tree.validator';
 
@@ -29,8 +29,8 @@ function normalizeDraftNode(v: unknown): PlanTreeNode {
   };
 }
 
-export function registerPlanTreeTools(server: McpServer, deps: McpServerDeps): void {
-  const { taskService, processEngine, roleService, conversationService, eventPublisher, planningService } = deps;
+export function registerPlanTreeToolProvider(server: McpServer, deps: McpProtocolDeps): void {
+  const { taskService, processEngine, conversationService, planningService } = deps;
 
   // The tree input is a recursive structure that Zod cannot fully validate
   // (recursive lazy schemas are not supported by Standard Schema).
@@ -39,19 +39,19 @@ export function registerPlanTreeTools(server: McpServer, deps: McpServerDeps): v
     'capibara_plan_submit_tree',
     {
       description: 'Submit a complete decomposition tree in a single call. Anchored to either a task ' +
-        '(rootTaskId) or a conversation (conversationId) — provide exactly one. ' +
+        '(rootTaskId) or a conversation (conversationId) - provide exactly one. ' +
         'Task anchor: tree root node type must match the task type; mode follows the task\'s planningMode ' +
         '(preview waits for approval, eager persists immediately). ' +
         'Conversation anchor (planning conversations): tree root may be any allowedAtRoot type; ' +
         'mode is always preview (human approval required); on approval the tree\'s root + descendants ' +
         'are created as root-level tasks. ' +
-        'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count ≤500, depth ≤10).',
+        'Server validates structure (type compatibility, leaf/non-leaf rules, assignee roles, node count <=500, depth <=10).',
       inputSchema: {
         rootTaskId: z.string().optional().describe(
-          'Task anchor — the current task ID (tree root type must match the task). Provide this OR conversationId.',
+          'Task anchor - the current task ID (tree root type must match the task). Provide this OR conversationId.',
         ),
         conversationId: z.string().optional().describe(
-          'Conversation anchor — the planning conversation ID. Provide this OR rootTaskId.',
+          'Conversation anchor - the planning conversation ID. Provide this OR rootTaskId.',
         ),
         tree: z.record(z.unknown()).describe(
           'The decomposition tree. Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
@@ -137,7 +137,6 @@ export function registerPlanTreeTools(server: McpServer, deps: McpServerDeps): v
         mode = 'preview';
       }
 
-      // Delegate validation + persistence to PlanningService (ADR-03)
       try {
         const result = planningService.submit({
           rootTaskId,
@@ -157,7 +156,6 @@ export function registerPlanTreeTools(server: McpServer, deps: McpServerDeps): v
           }) }],
         };
       } catch (err) {
-        // Map domain PlanTreeValidationError to MCP tool error (preserve error code set)
         const validationErr = err as PlanTreeValidationError;
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({

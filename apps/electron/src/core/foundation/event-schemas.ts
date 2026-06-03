@@ -74,6 +74,13 @@ const ConversationNeedsRoutingSchema = z.object({
   taskId: z.string(),
   conversationDepth: z.number(),
 });
+const ConversationRouteResolvedSchema = z.object({
+  conversationId: z.string(),
+  respondentRoleId: z.string().nullable(),
+  respondentType: z.enum(['ai', 'human']),
+  auditReason: z.string(),
+  eventId: z.string(),
+});
 const ConversationRespondentAssignedSchema = z.object({
   conversationId: z.string(),
   orgId: z.string(),
@@ -185,6 +192,7 @@ export const EVENT_SCHEMAS = {
   'conversation:message-added': ConversationMessageAddedSchema,
   'conversation:response-needed': ConversationResponseNeededSchema,
   'conversation:needs-routing': ConversationNeedsRoutingSchema,
+  'conversation:route-resolved': ConversationRouteResolvedSchema,
   'conversation:respondent-assigned': ConversationRespondentAssignedSchema,
   'conversation:resolved': ConversationResolvedSchema,
   'conversation:escalated': ConversationEscalatedSchema,

@@ -1,5 +1,5 @@
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
-import type { IAcpSessionManager } from '../interfaces/i-acp-session.manager';
+import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 
 /** Default interval between idle-TTL sweeps when not otherwise configured. */
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;

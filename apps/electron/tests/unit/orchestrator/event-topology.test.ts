@@ -147,7 +147,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
     );
     const conversationOrchestrator = new ConversationOrchestrator(
       bus, logger, convRepo, pendingWakeRepo, wakeGateValidator, runCoordinator, taskOrchestrator,
-      { send: vi.fn() } as unknown as import('@core/modules/notification/notification.service').NotificationService,
+      { send: vi.fn() } as unknown as import('@core/foundation/interfaces/i-notification.service').INotificationService,
     );
     const runOrchestrator = new RunOrchestrator(
       bus, logger, pendingWakeRepo, wakeGateValidator, retryScheduler, runCoordinator, taskOrchestrator,
@@ -260,7 +260,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
     });
   });
 
-  it('conversation:needs-routing → NOT handled by orchestrators (routed by InquiryRouter in coordination)', () => {
+  it('conversation:needs-routing → NOT handled by orchestrators (routed by InquiryOrchestrator in coordination)', () => {
     emit('conversation:needs-routing');
     expect(runCoordinator.executeForTask).not.toHaveBeenCalled();
     expect(runCoordinator.executeForConversation).not.toHaveBeenCalled();

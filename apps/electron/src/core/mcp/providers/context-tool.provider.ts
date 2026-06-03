@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { McpServerDeps } from '../mcp-server.builder';
+import type { McpProtocolDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 
-export function registerContextTools(server: McpServer, deps: McpServerDeps): void {
+export function registerContextToolProvider(server: McpServer, deps: McpProtocolDeps): void {
   const { taskService, roleService } = deps;
 
   server.registerTool(
