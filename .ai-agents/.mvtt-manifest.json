@@ -1,7 +1,7 @@
 {
-  "mvtt_version": "2.0.0-beta.3",
+  "mvtt_version": "2.0.0-beta.4",
   "installed_at": "2026-05-27T10:48:04.265Z",
-  "last_updated_at": "2026-06-01T03:19:51.214Z",
+  "last_updated_at": "2026-06-03T06:02:41.922Z",
   "files": {
     ".claude/skills/mvt-analyze/SKILL.md": {
       "hash": "sha256:434e9e12cc781894a26fe7c6df1aaebb208fccbcefb50b28eacdcc970747592c",
@@ -44,7 +44,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-implement/SKILL.md": {
-      "hash": "sha256:d6ca35fffffe774d68ab329857a5b5782cad56e70b77c3a299b55f0a69b3645e",
+      "hash": "sha256:c9dacf6113f5a98ff269ea61bf0c78170c2497c10be41257ec9eb1686794e3c0",
       "category": "generated"
     },
     ".claude/skills/mvt-init/SKILL.md": {
@@ -92,7 +92,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-update-plan/SKILL.md": {
-      "hash": "sha256:e9ea9cb4059342f56e4202430a9b7d5676c2a4d3e1a92d446feb93cd310eb1c1",
+      "hash": "sha256:6943035dbcb8e126a5a487ee4e0f6b1602ae31f82b92bff1a2631b9e70efe490",
       "category": "generated"
     },
     ".ai-agents/skills/_templates/analyze-output.md": {
@@ -124,7 +124,11 @@
       "category": "create_once"
     },
     ".ai-agents/registry.yaml": {
-      "hash": "sha256:895828b5a35116a6b6a2b09696300db53483f577ef62a98df8927ec7e5216ee7",
+      "hash": "sha256:6410e15b999ffdb06d6d71f3e85a8986efa23ebc9f3f5e58e0d30468d2c5d480",
+      "category": "create_once"
+    },
+    ".ai-agents/scripts/plan-update.cjs": {
+      "hash": "sha256:1c8db010a29862042285fb2e63ebf22038b17f17f9bbd43aa93993299923fe17",
       "category": "generated"
     },
     ".ai-agents/scripts/session-update.cjs": {
@@ -136,7 +140,7 @@
       "category": "create_once"
     },
     ".ai-agents/workspace/session.yaml": {
-      "hash": "sha256:0c28cf3d30ce4c42982ae2d981fdbd4dcb2b8ba5de6764a429706fc1356e51b0",
+      "hash": "sha256:4203d7ed8631c8d2de034c31b382becfbd3b1cf3512fa7b96293f2b757418c5a",
       "category": "create_once"
     },
     ".ai-agents/workspace/project-context.yaml": {

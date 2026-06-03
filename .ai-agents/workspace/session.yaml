@@ -2,52 +2,6 @@ session:
   initialized_at: 2026-05-27T18:48:00
   last_command: /mvt-update-plan
 history:
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-01T03:35:05.213Z
-    summary: ModelSelector '检测模型'按钮在 supported=true 时也显示，便于用户触发模型重新检测
-    change_id: ""
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-01T03:43:55.050Z
-    summary: 诊断 MCP SSE 未连接问题：ACP Agent 未主动连接到 SSE 端点，可能是 SDK 版本/配置/时序问题
-    change_id: 20260529-acp-model-selection
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-01T04:08:34.069Z
-    summary: 诊断 MCP SSE 未连接问题：根因是 composition-root 中 mcpTransport 从 sse 被改为
-      http（未提交修改），Claude Agent 不支持 Streamable HTTP 传输，导致 MCP 工具不可用；DevPanel
-      诊断也缺少 HTTP 连接状态追踪
-    change_id: 20260529-acp-model-selection
-  - skill: /mvt-fix
-    completed_at: 2026-06-01T04:14:40.217Z
-    summary: 修复 MCP 不可用问题：回退 mcpTransport 从 http 到 sse（根因）；补充
-      McpTransportDiagnostic.httpTransportReady 字段和 DevPanel HTTP 传输状态展示
-    change_id: 20260529-acp-model-selection
-  - skill: /mvt-analyze
-    completed_at: 2026-06-01T09:23:07.915Z
-    summary: 分析 planning 历史对话删除需求：仅终态对话可删，完整级联删除，确认弹窗交互
-    change_id: 20260601-planning-history-delete
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-01T09:33:01.601Z
-    summary: 实现 planning 历史对话删除功能：全链路穿透 Service->IPC->Preload->Store->UI，含确认弹窗和级联删除
-    change_id: ""
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-01T09:45:49.738Z
-    summary: 修复 planning 历史删除：显示实际错误信息，修复 delete 按钮布局，添加 escalated 到终态
-    change_id: ""
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-01T10:10:01.274Z
-    summary: 修复删除 planning 对话时 SQLite CHECK 约束冲突：提前清理 task_id=NULL 的 runs 和
-      pending_wakes
-    change_id: ""
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-01T10:35:50.608Z
-    summary: 诊断 MCP SSE 重连风暴：cancelConversation 不级联取消 Run/ACP Session/Agent 进程，新旧
-      session 的 MCP SSE 客户端在单槽位上形成重连循环
-    change_id: 20260601-planning-history-delete
-  - skill: /mvt-fix
-    completed_at: 2026-06-01T10:46:29.683Z
-    summary: 修复 MCP SSE 重连风暴：添加 conversation:cancelled 级联取消（Run + ACP Session +
-      Pending Wakes），7 个文件
-    change_id: 20260601-planning-history-delete
   - skill: /mvt-analyze
     completed_at: 2026-06-02T11:03:13.914Z
     summary: 分析 architecture-final-v2 全路线图重构需求,核对 G1-G4/OP 现状,提出 5 项执行级澄清
@@ -89,6 +43,53 @@ history:
     summary: t5-extract-service-engine-interfaces 标记为 done，current_task 推进到
       t6-eventize-routing-remove-cascade
     change_id: 20260602-architecture-refactor
+  - skill: /mvt-implement
+    completed_at: 2026-06-03T06:13:44.371Z
+    summary: 实现 t6：事件化 inquiry 路由回写并移除 TaskService 级联删除代码，完成装配与测试适配
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-03T06:31:13.183Z
+    summary: 更新计划失败：plan.yaml 存在重复键 completed_at，未应用任何任务状态变更
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-03T06:33:50.501Z
+    summary: 已将 t6 标记为 done 并自动推进 current_task 到 t7，进度 6/10
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-implement
+    completed_at: 2026-06-03T06:44:45.620Z
+    summary: 完成 t7：将 Notification 迁移到 infrastructure 并通过类型与架构校验
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-03T06:55:04.856Z
+    summary: 已将 t7 标记为 done，自动推进 current_task 到 t8，进度 7/10
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-implement
+    completed_at: 2026-06-03T08:07:36.564Z
+    summary: 完成 t8 生产代码迁移：MCP 协议层迁至 infrastructure，providers 落地并删除旧 modules/mcp
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-03T08:13:14.862Z
+    summary: 已将 t8 标记为 done 并自动推进 current_task 到 t9，进度 8/10
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-implement
+    completed_at: 2026-06-03T08:20:10.902Z
+    summary: 完成 t9 ACP 拆分：迁移 client 到 infrastructure/acp-protocol，落地 B-1/B-2/B-4，删除旧
+      client 文件并通过 typecheck 与 arch:check。
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-03T08:24:58.468Z
+    summary: 已将 t9-acp-split 标记为 done，附加实现产物并自动推进 current_task 到
+      t10-reclassify-layers-rename（进度 9/10）。
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-implement
+    completed_at: 2026-06-03T08:39:32.896Z
+    summary: 完成 t10：InquiryRouter 重命名为 InquiryOrchestrator，收紧依赖守卫为 error，并通过
+      typecheck 与 arch:check。
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-03T08:48:16.766Z
+    summary: 已将 t10-reclassify-layers-rename 标记为 done，计划完成 10/10，current_task 置空。
+    change_id: 20260602-architecture-refactor
 active_change:
   id: 20260602-architecture-refactor
   title: Capibara Architecture Refactor (architecture-final-v2)
@@ -104,4 +105,4 @@ changes:
     title: Capibara Architecture Refactor (architecture-final-v2)
     plan_path: .ai-agents/workspace/artifacts/20260602-architecture-refactor/plan.yaml
     status: active
-    updated_at: 2026-06-02T16:15:25.032Z
+    updated_at: 2026-06-03T08:48:16.766Z
