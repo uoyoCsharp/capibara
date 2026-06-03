@@ -10,7 +10,7 @@ interface Migration {
 const migrations: Migration[] = [
   {
     version: 1,
-    description: 'Greenfield baseline schema (single migration)',
+    description: 'Greenfield baseline schema (consolidated single migration)',
     up: (db) => {
       db.exec(`
         -- ═══════════════════════════════════════════════
@@ -55,6 +55,8 @@ const migrations: Migration[] = [
           consecutive_wake_count INTEGER NOT NULL DEFAULT 0,
           is_system_role INTEGER NOT NULL DEFAULT 0,
           status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'idle')),
+          file_access_paths TEXT,
+          tool_policy TEXT DEFAULT 'permissive',
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -121,7 +123,7 @@ const migrations: Migration[] = [
           initiator_role_id TEXT NOT NULL,
           respondent_role_id TEXT,
           respondent_type TEXT CHECK(respondent_type IN ('ai', 'human')),
-          task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+          task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
           parent_conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
           depth INTEGER NOT NULL DEFAULT 0,
           priority INTEGER NOT NULL DEFAULT 0,
@@ -176,7 +178,8 @@ const migrations: Migration[] = [
           task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
           conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
           role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-          status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
+          status TEXT NOT NULL DEFAULT 'running'
+            CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled', 'interrupted', 'suspended')),
           wake_reason TEXT NOT NULL,
           started_at TEXT,
           finished_at TEXT,
@@ -184,6 +187,8 @@ const migrations: Migration[] = [
           token_count INTEGER NOT NULL DEFAULT 0,
           summary TEXT,
           error_message TEXT,
+          acp_session_id TEXT,
+          agent_id TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           CHECK (task_id IS NOT NULL OR conversation_id IS NOT NULL)
         );
@@ -219,6 +224,11 @@ const migrations: Migration[] = [
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           CHECK (task_id IS NOT NULL OR conversation_id IS NOT NULL)
         );
+
+        -- Idempotency: only one pending wake per natural key.
+        -- COALESCE sentinel because SQLite treats NULLs as distinct in unique indexes.
+        CREATE UNIQUE INDEX ux_pending_wakes_dedup
+          ON pending_wakes(org_id, role_id, COALESCE(task_id, ''), COALESCE(conversation_id, ''), reason);
 
         -- ═══════════════════════════════════════════════
         -- 13. Outbox — transactional event publication
@@ -274,28 +284,9 @@ const migrations: Migration[] = [
         CREATE INDEX idx_pending_plan_trees_org ON pending_plan_trees(org_id, status);
         CREATE INDEX idx_pending_plan_trees_expires ON pending_plan_trees(expires_at)
           WHERE status IN ('active', 'refining');
-      `);
-    },
-  },
-  {
-    version: 2,
-    description: 'ACP Phase 2: Role policy columns + audit log tables',
-    up: (db) => {
-      db.exec(`
-        -- ═══════════════════════════════════════════════
-        -- Roles: add file access and tool policy columns
-        -- ═══════════════════════════════════════════════
-        ALTER TABLE roles ADD COLUMN file_access_paths TEXT;
-        ALTER TABLE roles ADD COLUMN tool_policy TEXT DEFAULT 'permissive';
 
         -- ═══════════════════════════════════════════════
-        -- Runs: add ACP session and agent references
-        -- ═══════════════════════════════════════════════
-        ALTER TABLE runs ADD COLUMN acp_session_id TEXT;
-        ALTER TABLE runs ADD COLUMN agent_id TEXT;
-
-        -- ═══════════════════════════════════════════════
-        -- File access audit log
+        -- 15. File access audit log (ACP)
         -- ═══════════════════════════════════════════════
         CREATE TABLE file_access_log (
           id TEXT PRIMARY KEY,
@@ -312,7 +303,7 @@ const migrations: Migration[] = [
         CREATE INDEX idx_file_access_log_role ON file_access_log(role_id, created_at);
 
         -- ═══════════════════════════════════════════════
-        -- Tool call audit log
+        -- 16. Tool call audit log (ACP)
         -- ═══════════════════════════════════════════════
         CREATE TABLE tool_call_log (
           id TEXT PRIMARY KEY,
@@ -331,55 +322,9 @@ const migrations: Migration[] = [
 
         CREATE INDEX idx_tool_call_log_session ON tool_call_log(session_id);
         CREATE INDEX idx_tool_call_log_run ON tool_call_log(run_id);
-      `);
-    },
-  },
-  {
-    version: 3,
-    description: 'ACP Phase 3a: Session suspension tables + runs suspended status',
-    up: (db) => {
-      db.exec(`
-        -- ═══════════════════════════════════════════════
-        -- Recreate runs table to add 'suspended' status
-        -- (SQLite does not support ALTER CHECK)
-        -- ═══════════════════════════════════════════════
-        CREATE TABLE runs_new (
-          id TEXT PRIMARY KEY,
-          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-          task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
-          conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
-          role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-          status TEXT NOT NULL DEFAULT 'running'
-            CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled', 'interrupted', 'suspended')),
-          wake_reason TEXT NOT NULL,
-          started_at TEXT,
-          finished_at TEXT,
-          cost_usd REAL NOT NULL DEFAULT 0,
-          token_count INTEGER NOT NULL DEFAULT 0,
-          summary TEXT,
-          error_message TEXT,
-          acp_session_id TEXT,
-          agent_id TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          CHECK (task_id IS NOT NULL OR conversation_id IS NOT NULL)
-        );
-
-        INSERT INTO runs_new (id, org_id, task_id, conversation_id, role_id, status, wake_reason,
-          started_at, finished_at, cost_usd, token_count, summary, error_message,
-          acp_session_id, agent_id, created_at)
-        SELECT id, org_id, task_id, conversation_id, role_id, status, wake_reason,
-          started_at, finished_at, cost_usd, token_count, summary, error_message,
-          acp_session_id, agent_id, created_at FROM runs;
-
-        DROP TABLE runs;
-        ALTER TABLE runs_new RENAME TO runs;
-
-        CREATE UNIQUE INDEX idx_runs_active_per_role
-          ON runs(role_id)
-          WHERE status = 'running';
 
         -- ═══════════════════════════════════════════════
-        -- Session Suspensions
+        -- 17. Session Suspensions (ACP)
         -- ═══════════════════════════════════════════════
         CREATE TABLE session_suspensions (
           id TEXT PRIMARY KEY,
@@ -393,6 +338,8 @@ const migrations: Migration[] = [
             CHECK (aggregation_mode IN ('all', 'any')),
           status TEXT NOT NULL DEFAULT 'suspended'
             CHECK (status IN ('suspended', 'resumed', 'timed_out', 'cancelled')),
+          parent_suspension_id TEXT REFERENCES session_suspensions(id),
+          chain_depth INTEGER NOT NULL DEFAULT 0,
           suspended_at TEXT NOT NULL DEFAULT (datetime('now')),
           resumed_at TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -402,7 +349,7 @@ const migrations: Migration[] = [
         CREATE INDEX idx_session_suspensions_role ON session_suspensions(role_id, status);
 
         -- ═══════════════════════════════════════════════
-        -- Suspension Awaiting (inquiries being waited for)
+        -- 18. Suspension Awaiting (inquiries being waited for)
         -- ═══════════════════════════════════════════════
         CREATE TABLE suspension_awaiting (
           id TEXT PRIMARY KEY,
@@ -418,26 +365,9 @@ const migrations: Migration[] = [
 
         CREATE INDEX idx_suspension_awaiting_suspension ON suspension_awaiting(suspension_id);
         CREATE INDEX idx_suspension_awaiting_conversation ON suspension_awaiting(conversation_id);
-      `);
-    },
-  },
-  {
-    version: 4,
-    description: 'ACP Phase 3b: Chain collaboration fields on session_suspensions',
-    up: (db) => {
-      db.exec(`
-        ALTER TABLE session_suspensions ADD COLUMN parent_suspension_id TEXT REFERENCES session_suspensions(id);
-        ALTER TABLE session_suspensions ADD COLUMN chain_depth INTEGER NOT NULL DEFAULT 0;
-      `);
-    },
-  },
-  {
-    version: 5,
-    description: 'ACP Session Lifecycle: persisted acp_sessions table (single source of lifecycle truth)',
-    up: (db) => {
-      db.exec(`
+
         -- ═══════════════════════════════════════════════
-        -- ACP Sessions — lean, persisted lifecycle record.
+        -- 19. ACP Sessions — lean, persisted lifecycle record.
         -- The agent process remains the source of truth for session *history*
         -- (via session/load); only non-derivable lifecycle facts live here.
         -- cwd/mcpServers/allowedPaths/capabilities are re-derived on rebuild.
@@ -475,67 +405,6 @@ const migrations: Migration[] = [
         CREATE INDEX idx_acp_sessions_role_org_status ON acp_sessions(role_id, org_id, status);
         -- Idle-TTL sweeper: status + suspend_reason + last_activity_at.
         CREATE INDEX idx_acp_sessions_idle_sweep ON acp_sessions(status, suspend_reason, last_activity_at);
-      `);
-    },
-  },
-  {
-    version: 6,
-    description: 'FK CASCADE: conversations.task_id ON DELETE CASCADE (table rebuild per ADR-04/ADR-11)',
-    up: (db) => {
-      // SQLite cannot alter FK constraints — rebuild the table.
-      // PRAGMA foreign_keys=OFF so the DROP doesn't cascade mid-migration.
-      db.pragma('foreign_keys = OFF');
-
-      db.exec(`
-        CREATE TABLE conversations_new (
-          id TEXT PRIMARY KEY,
-          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-          type TEXT NOT NULL CHECK(type IN ('inquiry', 'planning', 'adhoc', 'plan_review')),
-          state TEXT NOT NULL CHECK(state IN ('active', 'waiting', 'resolved', 'escalated', 'timed_out', 'cancelled', 'completed')),
-          initiator_role_id TEXT NOT NULL,
-          respondent_role_id TEXT,
-          respondent_type TEXT CHECK(respondent_type IN ('ai', 'human')),
-          task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
-          parent_conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
-          depth INTEGER NOT NULL DEFAULT 0,
-          priority INTEGER NOT NULL DEFAULT 0,
-          timeout_at TEXT,
-          external_session_id TEXT,
-          metadata TEXT DEFAULT '{}',
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-
-        INSERT INTO conversations_new SELECT * FROM conversations;
-
-        DROP TABLE conversations;
-        ALTER TABLE conversations_new RENAME TO conversations;
-
-        -- Recreate every index that existed on conversations
-        CREATE INDEX idx_conversations_org_state ON conversations(org_id, state);
-        CREATE INDEX idx_conversations_org_type ON conversations(org_id, type, state);
-        CREATE INDEX idx_conversations_task ON conversations(task_id, state);
-        CREATE INDEX idx_conversations_timeout ON conversations(timeout_at)
-          WHERE state = 'waiting';
-      `);
-
-      db.pragma('foreign_keys = ON');
-    },
-  },
-  {
-    version: 7,
-    description: 'pending_wakes idempotency: dedup + unique index ux_pending_wakes_dedup (ADR-05/ADR-06)',
-    up: (db) => {
-      // De-duplicate pre-existing rows: keep MIN(id) per natural key.
-      // COALESCE sentinel because SQLite treats NULLs as distinct in unique indexes.
-      db.exec(`
-        DELETE FROM pending_wakes WHERE id NOT IN (
-          SELECT MIN(id) FROM pending_wakes
-          GROUP BY org_id, role_id, COALESCE(task_id, ''), COALESCE(conversation_id, ''), reason
-        );
-
-        CREATE UNIQUE INDEX ux_pending_wakes_dedup
-          ON pending_wakes(org_id, role_id, COALESCE(task_id, ''), COALESCE(conversation_id, ''), reason);
       `);
     },
   },

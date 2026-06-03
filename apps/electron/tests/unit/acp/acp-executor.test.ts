@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AcpExecutor } from '@core/modules/acp/client/acp-executor';
+import { AcpExecutor } from '@core/infrastructure/acp-protocol/acp-executor';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
 import type { AcpMcpConfigBuilder } from '@core/modules/acp/mcp/acp-mcp.config';

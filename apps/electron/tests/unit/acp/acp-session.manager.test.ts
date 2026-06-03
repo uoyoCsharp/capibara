@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { AcpSessionManager } from '@core/modules/acp/client/acp-session.manager';
-import type { AcpAgentSpawner } from '@core/modules/acp/client/acp-agent.spawner';
+import { AcpSessionManager } from '@core/infrastructure/acp-protocol/acp-session.manager';
+import type { AcpAgentSpawner } from '@core/infrastructure/acp-protocol/acp-agent.spawner';
 import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
 import type { IAcpSessionRepository, CreateAcpSessionInput } from '@core/modules/acp/interfaces/i-acp-session.repository';
 import type { AcpSessionRecord, AcpSessionStatus, ModelState } from '@core/modules/acp/types/acp.types';

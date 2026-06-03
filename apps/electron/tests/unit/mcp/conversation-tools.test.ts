@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
+import { registerConversationTools } from '@core/mcp/providers/conversation-tool.provider';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';

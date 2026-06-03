@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerContextTools } from '@core/modules/mcp/handlers/context-tools';
+import { registerContextTools } from '@core/mcp/providers/context-tool.provider';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { RoleService } from '@core/modules/organization/services/role.service';

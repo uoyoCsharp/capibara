@@ -2,14 +2,6 @@ session:
   initialized_at: 2026-05-27T18:48:00
   last_command: /mvt-update-plan
 history:
-  - skill: /mvt-analyze
-    completed_at: 2026-06-02T11:03:13.914Z
-    summary: 分析 architecture-final-v2 全路线图重构需求,核对 G1-G4/OP 现状,提出 5 项执行级澄清
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-design
-    completed_at: 2026-06-02T11:11:57.114Z
-    summary: 完成全路线图重构架构设计:12 项 ADR(含 5 项破坏性),迁移 v6/v7 表重建+幂等索引,模块/接口/数据流/文件结构落地
-    change_id: 20260602-architecture-refactor
   - skill: /mvt-plan-dev
     completed_at: 2026-06-02T11:17:39.333Z
     summary: 生成全路线图重构 plan.yaml:13 工作单元合并为 10 任务,Phase 0 安全网为前置门槛
@@ -89,6 +81,15 @@ history:
   - skill: /mvt-update-plan
     completed_at: 2026-06-03T08:48:16.766Z
     summary: 已将 t10-reclassify-layers-rename 标记为 done，计划完成 10/10，current_task 置空。
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-quick-dev
+    completed_at: 2026-06-03T09:35:15.727Z
+    summary: 将 migrations.ts 的 v1-v7 汇总为单个 v1 基线 schema
+    change_id: ""
+  - skill: /mvt-test
+    completed_at: 2026-06-03T10:39:25.758Z
+    summary: Fixed 10 test import path issues, restored 87% of test suites from 57%
+      to 87% pass rate
     change_id: 20260602-architecture-refactor
 active_change:
   id: 20260602-architecture-refactor

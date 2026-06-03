@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AcpAgentSpawner, type SessionContext } from '@core/modules/acp/client/acp-agent.spawner';
+import { AcpAgentSpawner, type SessionContext } from '@core/infrastructure/acp-protocol/acp-agent.spawner';
 import type { AgentRegistryConfig } from '@core/modules/acp/types/acp.types';
 import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
 import type { AcpPermissionHandler } from '@core/modules/acp/handlers/acp-permission.handler';

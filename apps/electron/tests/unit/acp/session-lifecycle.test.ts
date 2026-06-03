@@ -5,7 +5,7 @@ import {
   canTransition,
   assertTransition,
   type LifecycleContext,
-} from '@core/modules/acp/client/session-lifecycle';
+} from '@core/infrastructure/acp-protocol/session-lifecycle';
 import type { AcpSessionStatus } from '@core/modules/acp/types/acp.types';
 
 function ctx(overrides: Partial<LifecycleContext> = {}): LifecycleContext {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type * as acp from '@agentclientprotocol/sdk';
-import { normalizeModelState } from '@core/modules/acp/client/model-state';
+import { normalizeModelState } from '@core/infrastructure/acp-protocol/model-state';
 
 function response(overrides: Partial<acp.NewSessionResponse> = {}): acp.NewSessionResponse {
   return { sessionId: 'sess-1', ...overrides } as acp.NewSessionResponse;

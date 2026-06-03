@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerTaskTools } from '@core/modules/mcp/handlers/task-tools';
+import { registerTaskTools } from '@core/mcp/providers/task-tool.provider';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';

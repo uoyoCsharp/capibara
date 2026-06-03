@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AcpSessionSweeper } from '@core/modules/acp/client/acp-session.sweeper';
+import { AcpSessionSweeper } from '@core/infrastructure/acp-protocol/acp-session.sweeper';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import { MockLogger } from '../../helpers/mock-logger';
 

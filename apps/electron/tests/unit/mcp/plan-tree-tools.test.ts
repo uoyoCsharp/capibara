@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   registerPlanTreeTools,
   __testing__,
-} from '@core/modules/mcp/handlers/plan-tree-tools';
+} from '@core/mcp/providers/plan-tree-tool.provider';
 import { validatePlanTree, MAX_TREE_NODES, MAX_TREE_DEPTH } from '@core/modules/planning/validation/plan-tree.validator';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { ITaskService } from '@core/modules/workflow/interfaces/i-task.service';

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import { InquiryOrchestrator } from '@core/modules/coordination/routing/inquiry.orchestrator';
 import { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
-import { registerConversationTools } from '@core/modules/mcp/handlers/conversation-tools';
+import { registerConversationTools } from '@core/mcp/providers/conversation-tool.provider';
 import { MockEventBus } from '../helpers/mock-event-bus';
 import { MockLogger } from '../helpers/mock-logger';
 import { MockMcpServer, parseToolResult } from '../helpers/mock-mcp-server';

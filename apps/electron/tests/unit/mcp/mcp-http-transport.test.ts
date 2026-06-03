@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { McpHttpTransportManager } from '@core/modules/mcp/mcp-http-transport';
+import { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpServerDeps } from '@core/modules/mcp/mcp-server.builder';
