@@ -4,9 +4,7 @@ import type { McpTransportType } from '../types/acp.types';
 
 /**
  * Builds MCP server configuration for ACP sessions.
- * Supports both SSE and Streamable HTTP transports.
- * SSE is the default for broad Claude Code compatibility;
- * Streamable HTTP is available for newer clients.
+ * Supports both Streamable HTTP and SSE transports.
  */
 export class AcpMcpConfigBuilder {
   private mcpHttpPort = 0;
@@ -25,9 +23,9 @@ export class AcpMcpConfigBuilder {
 
   /**
    * Build MCP server config list for an ACP session.
-   * @param transport - Preferred transport type: 'sse' (default) or 'http'
+   * @param transport - Preferred transport type: 'http' (default) or 'sse'
    */
-  buildMcpServers(transport: McpTransportType = 'sse'): acp.McpServer[] {
+  buildMcpServers(transport: McpTransportType = 'http'): acp.McpServer[] {
     if (this.mcpHttpPort === 0) {
       this.logger.warn('MCP HTTP port not set, returning empty MCP servers');
       return [];

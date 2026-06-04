@@ -98,7 +98,7 @@ export interface AgentCapabilities {
   supportsLoad: boolean;
   /** Whether the agent advertises `sessionCapabilities.list` (session/list discovery). */
   supportsList: boolean;
-  supportedMcpTransports: ('stdio' | 'sse')[];
+  supportedMcpTransports: ('stdio' | 'sse' | 'http')[];
 }
 
 export interface AgentProcess {

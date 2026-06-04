@@ -258,8 +258,9 @@ export interface AgentDiagnostic {
 export interface McpTransportDiagnostic {
   listening: boolean;
   port: number;
+  /** Whether an SSE client is currently connected via the /sse endpoint. */
   sseClientConnected: boolean;
-  /** Whether the Streamable HTTP transport is connected (has at least one active session). */
+  /** Whether the Streamable HTTP transport is initialized and ready to accept connections. */
   httpTransportReady: boolean;
 }
 

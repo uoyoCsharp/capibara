@@ -87,7 +87,7 @@ export async function bootstrap(): Promise<void> {
         command: 'node',
         args: [resolvedAgentEntry],
         env: agentEnv,
-        mcpTransport: 'sse' as const,
+        mcpTransport: 'http' as const,
       },
     ];
 

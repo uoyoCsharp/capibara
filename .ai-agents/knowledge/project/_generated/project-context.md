@@ -59,7 +59,6 @@ The codebase is a pnpm monorepo with a single `apps/electron` sub-project. The E
 | **Planning** | `modules/planning/` | Plan tree submission, approval, discard, refinement, and expiration |
 | **Prompt** | `modules/prompt/` | System prompt construction: scenario resolution, context assembly, strategy-specific rendering |
 | **MCP** | `mcp/providers/` | Primary-side MCP tool providers (task, conversation, context, plan-tree) |
-| **Notification** | `modules/notification/` | Desktop notifications and event broadcasting from main process to renderer |
 
 ### Foundation & Infrastructure -- `apps/electron/src/core/`
 

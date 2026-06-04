@@ -229,9 +229,9 @@ export class AcpAgentSpawner {
     const supportsList = !!sessionCaps?.list;
 
     const mcpCaps = caps.mcpCapabilities;
-    const transports: ('stdio' | 'sse')[] = [];
+    const transports: ('stdio' | 'sse' | 'http')[] = [];
     // McpCapabilities has http/sse/acp fields — stdio is implied as default
-    if (mcpCaps?.http) transports.push('sse');
+    if (mcpCaps?.http) transports.push('http');
     if (mcpCaps?.sse) transports.push('sse');
     if (transports.length === 0) transports.push('stdio'); // default to stdio
 
