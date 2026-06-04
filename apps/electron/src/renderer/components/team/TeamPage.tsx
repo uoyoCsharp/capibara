@@ -115,6 +115,7 @@ export function TeamPage({ orgId }: TeamPageProps) {
           onUpdate={handleUpdateRole}
           onDelete={handleDeleteRole}
           onClose={() => setSelectedRoleId(null)}
+          onRefresh={() => orgId && loadRoles(orgId)}
         />
       )}
     </div>

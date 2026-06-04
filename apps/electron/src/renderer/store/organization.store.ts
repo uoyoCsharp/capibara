@@ -18,6 +18,9 @@ interface OrganizationState {
   updateRole: (input: unknown) => Promise<RoleRecord | null>;
   deleteRole: (id: string, orgId: string) => Promise<boolean>;
 
+  uploadAvatar: (roleId: string, imageBuffer: ArrayBuffer, mimeType: string) => Promise<{ width: number; height: number } | null>;
+  removeAvatar: (roleId: string) => Promise<boolean>;
+
   loadSkills: () => Promise<void>;
   createSkill: (input: unknown) => Promise<SkillRecord | null>;
   deleteSkill: (id: string) => Promise<boolean>;
@@ -74,6 +77,30 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
     const result = await api().deleteRole(id);
     if (result.ok) {
       await get().loadRoles(orgId);
+      return true;
+    }
+    return false;
+  },
+
+  uploadAvatar: async (roleId, imageBuffer, mimeType) => {
+    const result = await api().uploadAvatar(roleId, imageBuffer, mimeType);
+    if (result.ok) {
+      const { currentOrgId } = get();
+      if (currentOrgId) {
+        await get().loadRoles(currentOrgId);
+      }
+      return result.data;
+    }
+    return null;
+  },
+
+  removeAvatar: async (roleId) => {
+    const result = await api().removeAvatar(roleId);
+    if (result.ok) {
+      const { currentOrgId } = get();
+      if (currentOrgId) {
+        await get().loadRoles(currentOrgId);
+      }
       return true;
     }
     return false;

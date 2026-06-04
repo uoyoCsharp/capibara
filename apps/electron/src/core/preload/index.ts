@@ -15,6 +15,25 @@ const api = {
   updateRole: (input: unknown) => ipcRenderer.invoke('capibara:role:update', input),
   deleteRole: (id: string) => ipcRenderer.invoke('capibara:role:delete', id),
 
+  // Role Avatars
+  uploadAvatar: (roleId: string, imageBuffer: ArrayBuffer, mimeType: string) =>
+    ipcRenderer.invoke('capibara:role:upload-avatar', roleId, imageBuffer, mimeType),
+  removeAvatar: (roleId: string) =>
+    ipcRenderer.invoke('capibara:role:remove-avatar', roleId),
+  getAvatar: async (roleId: string) => {
+    const result = await ipcRenderer.invoke('capibara:role:get-avatar', roleId);
+    if (result.ok && result.data) {
+      const { avatar, mimeType } = result.data;
+      const binaryString = atob(avatar);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return { ok: true, data: { avatar: bytes.buffer, mimeType } };
+    }
+    return result;
+  },
+
   // Skills
   getSkills: () => ipcRenderer.invoke('capibara:skill:list'),
   getSkill: (id: string) => ipcRenderer.invoke('capibara:skill:get', id),

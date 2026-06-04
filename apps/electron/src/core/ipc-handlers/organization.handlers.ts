@@ -114,4 +114,57 @@ export function registerOrganizationHandlers(
       ));
     } catch (e) { return err('VALIDATION_ERROR', String(e)); }
   });
+
+  // Avatar endpoints
+  ipcMain.handle('capibara:role:upload-avatar', async (
+    _ev,
+    roleId: string,
+    imageBuffer: ArrayBuffer,
+    mimeType: string,
+  ) => {
+    try {
+      const buffer = Buffer.from(imageBuffer);
+      const result = await roleService.uploadAvatar(roleId, buffer, mimeType);
+      if (!result.ok) {
+        logger.warn(`Avatar upload failed for role ${roleId}: ${result.error.message}`);
+      }
+      return result;
+    } catch (e) {
+      logger.error(`Avatar upload error for role ${roleId}: ${String(e)}`);
+      return err('INTERNAL', String(e));
+    }
+  });
+
+  ipcMain.handle('capibara:role:remove-avatar', async (_ev, roleId: string) => {
+    try {
+      const result = roleService.removeAvatar(roleId);
+      if (!result.ok) {
+        logger.warn(`Avatar removal failed for role ${roleId}: ${result.error.message}`);
+      }
+      return result;
+    } catch (e) {
+      logger.error(`Avatar removal error for role ${roleId}: ${String(e)}`);
+      return err('INTERNAL', String(e));
+    }
+  });
+
+  ipcMain.handle('capibara:role:get-avatar', async (_ev, roleId: string) => {
+    try {
+      const result = roleService.getAvatar(roleId);
+      if (!result.ok) {
+        logger.warn(`Avatar fetch failed for role ${roleId}: ${result.error.message}`);
+      }
+      if (result.ok && result.data) {
+        const avatarData = result.data;
+        return ok({
+          avatar: avatarData.avatar.toString('base64'),
+          mimeType: avatarData.mimeType,
+        });
+      }
+      return result;
+    } catch (e) {
+      logger.error(`Avatar fetch error for role ${roleId}: ${String(e)}`);
+      return err('INTERNAL', String(e));
+    }
+  });
 }

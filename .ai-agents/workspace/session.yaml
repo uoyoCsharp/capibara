@@ -3,42 +3,6 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-test
-    completed_at: 2026-06-03T10:39:25.758Z
-    summary: Fixed 10 test import path issues, restored 87% of test suites from 57%
-      to 87% pass rate
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-sync-context
-    completed_at: 2026-06-04T04:18:10.447Z
-    summary: "Synced project context with architecture refactor change
-      20260602-architecture-refactor: added 5 core terms, 4 domain layer
-      concepts, 7 business rules, and updated module paths for infrastructure
-      relocation"
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-sync-context
-    completed_at: 2026-06-04T04:20:57.563Z
-    summary: "Converted ASCII diagrams to mermaid format: updated Module Dependency
-      Graph and Layer Structure to reflect current infrastructure relocation"
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-analyze-code
-    completed_at: 2026-06-04T04:24:13.307Z
-    summary: "已重新生成 project-context.md: 更新 Mermaid 图表、模块路径、业务规则和 API 概览，反映架构重构后的最新代码状态"
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-04T04:51:59.456Z
-    summary: 诊断 MCP SSE 连接失败：MCP SDK 1.29.0 已弃用 SSE 传输，Claude Code 客户端可能已迁移至
-      Streamable HTTP，与当前 sse 配置不匹配
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-fix
-    completed_at: 2026-06-04T05:42:25.449Z
-    summary: 修复 MCP 传输协议不匹配：将 mcpTransport 从 'sse' 切换到 'http' (Streamable HTTP)，修复
-      spawner 传输映射和类型定义
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-04T05:51:31.812Z
-    summary: 诊断开发者面板 SSE 状态显示过时：上一轮将 MCP 传输切换到 Streamable HTTP 后，诊断字段仍追踪 SSE
-      连接，导致面板始终显示未连接
-    change_id: 20260602-architecture-refactor
   - skill: /mvt-fix
     completed_at: 2026-06-04T05:54:11.489Z
     summary: MCP SSE 诊断显示过时（非功能性问题）：MCP 工具调用已成功，但开发者面板仍显示 SSE 未连接状态，建议使用
@@ -103,6 +67,43 @@ history:
     summary: Marked t3-service-avatar-processing as done, advanced current_task to
       t4-ipc-handlers-preload
     change_id: 20260604-role-custom-avatar
+  - skill: /mvt-implement
+    completed_at: 2026-06-04T14:02:15.359Z
+    summary: "Completed t4-ipc-handlers-preload: added IPC handlers and preload API
+      for avatar upload/remove/get endpoints with ArrayBuffer/Base64 conversion"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-04T14:13:22.797Z
+    summary: Marked t4-ipc-handlers-preload as done, advanced current_task to
+      t5-ui-avatar-components
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-implement
+    completed_at: 2026-06-04T14:20:54.435Z
+    summary: "Completed t5-ui-avatar-components: created AvatarDisplay and
+      AvatarUploadDialog React components with validation, default avatar
+      generation, and shadcn/ui integration"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-04T14:23:10.739Z
+    summary: Marked t5-ui-avatar-components as done, advanced current_task to
+      t6-integration-store-components
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-implement
+    completed_at: 2026-06-04T14:30:01.489Z
+    summary: "Completed t6-integration-store-components: added
+      uploadAvatar/removeAvatar to organization store and integrated
+      AvatarDisplay into RoleCard with automatic role list refresh"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-review
+    completed_at: 2026-06-04T14:33:44.197Z
+    summary: "Completed comprehensive code review of avatar feature: 0 critical
+      issues, 3 warnings, 5 suggestions - overall approve with comments"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-fix
+    completed_at: 2026-06-04T14:37:02.427Z
+    summary: "Fixed 3 warnings from code review: memory leak in AvatarDisplay, error
+      logging in IPC handlers, loading state in AvatarUploadDialog"
+    change_id: 20260604-role-custom-avatar
 active_change:
   id: 20260604-role-custom-avatar
   title: Role Custom Avatar Feature
@@ -123,4 +124,4 @@ changes:
     title: Role Custom Avatar Feature
     plan_path: .ai-agents/workspace/artifacts/20260604-role-custom-avatar/plan.yaml
     status: active
-    updated_at: 2026-06-04T10:47:09.911Z
+    updated_at: 2026-06-04T14:23:10.739Z
