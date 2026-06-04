@@ -408,6 +408,18 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    description: 'Add avatar support to roles (BLOB storage)',
+    up: (db) => {
+      db.exec(`
+        -- Add avatar BLOB and MIME type columns to roles table
+        -- Avatar is optional: NULL means no custom avatar (use default)
+        ALTER TABLE roles ADD COLUMN avatar BLOB;
+        ALTER TABLE roles ADD COLUMN avatar_mime_type TEXT;
+      `);
+    },
+  },
 ];
 
 export interface RunMigrationsOptions {

@@ -8,4 +8,10 @@ export interface IRoleRepository {
   create(input: CreateRoleInput): Role;
   update(input: UpdateRoleInput): Role;
   delete(id: string): void;
+
+  /** Update avatar BLOB and MIME type for a role. Pass null values to remove avatar. */
+  updateRoleAvatar(roleId: string, avatarBuffer: Buffer | null, mimeType: string | null): void;
+
+  /** Retrieve avatar data and MIME type for a role. Returns null if no avatar exists. */
+  getRoleAvatar(roleId: string): { avatar: Buffer; mimeType: string } | null;
 }

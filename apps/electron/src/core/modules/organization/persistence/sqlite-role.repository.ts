@@ -21,6 +21,8 @@ interface RoleRow {
   status: string;
   file_access_paths: string | null;
   tool_policy: string | null;
+  avatar: Buffer | null;
+  avatar_mime_type: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +44,8 @@ function toRole(row: RoleRow): Role {
     status: row.status as Role['status'],
     fileAccessPaths: row.file_access_paths ? JSON.parse(row.file_access_paths) as string[] : null,
     toolPolicy: (row.tool_policy as Role['toolPolicy']) ?? 'permissive',
+    avatar: row.avatar,
+    avatarMimeType: row.avatar_mime_type,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -86,14 +90,15 @@ export class SqliteRoleRepository implements IRoleRepository {
     const now = new Date().toISOString();
     this.connection.getDb()
       .prepare(`
-        INSERT INTO roles (id, org_id, name, parent_id, persona, knowledge_base_refs, skill_ids, can_approve, can_delegate, requires_human_approval, is_system_role, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO roles (id, org_id, name, parent_id, persona, knowledge_base_refs, skill_ids, can_approve, can_delegate, requires_human_approval, is_system_role, avatar, avatar_mime_type, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         id, input.orgId, input.name, input.parentId, input.persona,
         JSON.stringify(input.knowledgeBaseRefs), JSON.stringify(input.skillIds),
         input.canApprove ? 1 : 0, input.canDelegate ? 1 : 0,
         input.requiresHumanApproval ? 1 : 0, input.isSystemRole ? 1 : 0,
+        input.avatar?.data ?? null, input.avatar?.mimeType ?? null,
         now, now,
       );
     return this.findById(id)!;
@@ -131,5 +136,20 @@ export class SqliteRoleRepository implements IRoleRepository {
       .prepare('DELETE FROM roles WHERE id = ?')
       .run(id);
     if (info.changes === 0) throw new NotFoundError('Role', id);
+  }
+
+  updateRoleAvatar(roleId: string, avatarBuffer: Buffer | null, mimeType: string | null): void {
+    const info = this.connection.getDb()
+      .prepare('UPDATE roles SET avatar = ?, avatar_mime_type = ? WHERE id = ?')
+      .run(avatarBuffer, mimeType, roleId);
+    if (info.changes === 0) throw new NotFoundError('Role', roleId);
+  }
+
+  getRoleAvatar(roleId: string): { avatar: Buffer; mimeType: string } | null {
+    const row = this.connection.getDb()
+      .prepare('SELECT avatar, avatar_mime_type FROM roles WHERE id = ?')
+      .get(roleId) as { avatar: Buffer | null; avatar_mime_type: string | null } | undefined;
+    if (!row || !row.avatar) return null;
+    return { avatar: row.avatar, mimeType: row.avatar_mime_type! };
   }
 }

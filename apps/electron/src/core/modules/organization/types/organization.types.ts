@@ -4,6 +4,17 @@ export type ToolPolicyMode = 'permissive' | 'restrictive' | 'ask_user';
 export type SkillCategory = 'analysis' | 'design' | 'implementation' | 'review' | 'test' | 'general';
 export type SkillSource = 'builtin' | 'template' | 'custom';
 
+export interface AvatarData {
+  /** Avatar image data as Buffer */
+  data: Buffer;
+  /** MIME type (e.g., 'image/jpeg', 'image/png') */
+  mimeType: string;
+  /** Image width in pixels */
+  width: number;
+  /** Image height in pixels */
+  height: number;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -34,6 +45,10 @@ export interface Role {
   status: RoleStatus;
   fileAccessPaths: string[] | null;
   toolPolicy: ToolPolicyMode;
+  /** Optional avatar BLOB data */
+  avatar: Buffer | null;
+  /** Optional avatar MIME type */
+  avatarMimeType: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,6 +95,7 @@ export interface CreateRoleInput {
   canDelegate: boolean;
   requiresHumanApproval: boolean;
   isSystemRole?: boolean;
+  avatar?: AvatarData | null;
 }
 
 export interface UpdateRoleInput {
@@ -95,6 +111,7 @@ export interface UpdateRoleInput {
   status?: RoleStatus;
   fileAccessPaths?: string[] | null;
   toolPolicy?: ToolPolicyMode;
+  avatar?: AvatarData | null;
 }
 
 export interface CreateSkillInput {

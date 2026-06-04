@@ -3,49 +3,6 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-03T06:33:50.501Z
-    summary: 已将 t6 标记为 done 并自动推进 current_task 到 t7，进度 6/10
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-implement
-    completed_at: 2026-06-03T06:44:45.620Z
-    summary: 完成 t7：将 Notification 迁移到 infrastructure 并通过类型与架构校验
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-03T06:55:04.856Z
-    summary: 已将 t7 标记为 done，自动推进 current_task 到 t8，进度 7/10
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-implement
-    completed_at: 2026-06-03T08:07:36.564Z
-    summary: 完成 t8 生产代码迁移：MCP 协议层迁至 infrastructure，providers 落地并删除旧 modules/mcp
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-03T08:13:14.862Z
-    summary: 已将 t8 标记为 done 并自动推进 current_task 到 t9，进度 8/10
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-implement
-    completed_at: 2026-06-03T08:20:10.902Z
-    summary: 完成 t9 ACP 拆分：迁移 client 到 infrastructure/acp-protocol，落地 B-1/B-2/B-4，删除旧
-      client 文件并通过 typecheck 与 arch:check。
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-03T08:24:58.468Z
-    summary: 已将 t9-acp-split 标记为 done，附加实现产物并自动推进 current_task 到
-      t10-reclassify-layers-rename（进度 9/10）。
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-implement
-    completed_at: 2026-06-03T08:39:32.896Z
-    summary: 完成 t10：InquiryRouter 重命名为 InquiryOrchestrator，收紧依赖守卫为 error，并通过
-      typecheck 与 arch:check。
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-03T08:48:16.766Z
-    summary: 已将 t10-reclassify-layers-rename 标记为 done，计划完成 10/10，current_task 置空。
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-03T09:35:15.727Z
-    summary: 将 migrations.ts 的 v1-v7 汇总为单个 v1 基线 schema
-    change_id: ""
   - skill: /mvt-test
     completed_at: 2026-06-03T10:39:25.758Z
     summary: Fixed 10 test import path issues, restored 87% of test suites from 57%
@@ -95,11 +52,62 @@ history:
     completed_at: 2026-06-04T06:06:54.747Z
     summary: 恢复开发者面板 SSE 状态显示：同时显示 SSE 客户端连接状态和 Streamable HTTP 就绪状态，完整反映两种传输协议的连接情况
     change_id: ""
+  - skill: /mvt-analyze
+    completed_at: 2026-06-04T10:40:06.559Z
+    summary: Analyzed custom avatar feature requirements and created change
+      20260604-role-custom-avatar
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-analyze
+    completed_at: 2026-06-04T10:42:19.796Z
+    summary: "Resolved all critical ambiguities for avatar feature: SQLite BLOB
+      storage, system directory, optional, no editing, no external API"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-design
+    completed_at: 2026-06-04T10:45:56.536Z
+    summary: Completed architecture design for role avatar feature with SQLite BLOB
+      storage, 3 ADRs, and 10-file implementation plan
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-plan-dev
+    completed_at: 2026-06-04T10:47:09.911Z
+    summary: Created 6-task development plan for role avatar feature with database,
+      service, IPC, and UI layers
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-implement
+    completed_at: 2026-06-04T10:53:10.426Z
+    summary: "Completed t1-database-types-foundation: added avatar migration v2 and
+      TypeScript interfaces for avatar support"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-04T10:54:09.040Z
+    summary: Marked t1-database-types-foundation as done, advanced current_task to
+      t2-repository-avatar-persistence
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-implement
+    completed_at: 2026-06-04T10:57:02.100Z
+    summary: "Completed t2-repository-avatar-persistence: added updateRoleAvatar and
+      getRoleAvatar methods to repository interface and implementation"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-04T10:57:43.435Z
+    summary: Marked t2-repository-avatar-persistence as done, advanced current_task
+      to t3-service-avatar-processing
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-implement
+    completed_at: 2026-06-04T11:02:21.306Z
+    summary: "Completed t3-service-avatar-processing: added uploadAvatar,
+      removeAvatar, getAvatar methods with image validation, magic bytes
+      checking, and sharp-based resize"
+    change_id: 20260604-role-custom-avatar
+  - skill: /mvt-update-plan
+    completed_at: 2026-06-04T11:03:08.905Z
+    summary: Marked t3-service-avatar-processing as done, advanced current_task to
+      t4-ipc-handlers-preload
+    change_id: 20260604-role-custom-avatar
 active_change:
-  id: 20260602-architecture-refactor
-  title: Capibara Architecture Refactor (architecture-final-v2)
-  created_at: 2026-06-02T11:17:39.333Z
-  plan_path: .ai-agents/workspace/artifacts/20260602-architecture-refactor/plan.yaml
+  id: 20260604-role-custom-avatar
+  title: Role Custom Avatar Feature
+  created_at: 2026-06-04T10:47:09.911Z
+  plan_path: .ai-agents/workspace/artifacts/20260604-role-custom-avatar/plan.yaml
 changes:
   - id: 20260601-planning-history-delete
     title: Planning history delete
@@ -110,4 +118,9 @@ changes:
     title: Capibara Architecture Refactor (architecture-final-v2)
     plan_path: .ai-agents/workspace/artifacts/20260602-architecture-refactor/plan.yaml
     status: active
-    updated_at: 2026-06-03T08:48:16.766Z
+    updated_at: 2026-06-04T10:40:06.559Z
+  - id: 20260604-role-custom-avatar
+    title: Role Custom Avatar Feature
+    plan_path: .ai-agents/workspace/artifacts/20260604-role-custom-avatar/plan.yaml
+    status: active
+    updated_at: 2026-06-04T10:47:09.911Z
