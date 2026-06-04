@@ -1,16 +1,8 @@
 session:
   initialized_at: 2026-05-27T18:48:00
   last_command: /mvt-update-plan
+  last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-plan-dev
-    completed_at: 2026-06-02T11:17:39.333Z
-    summary: 生成全路线图重构 plan.yaml:13 工作单元合并为 10 任务,Phase 0 安全网为前置门槛
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-implement
-    completed_at: 2026-06-02T14:57:31.176Z
-    summary: "实现 G-1 Layering CI guard: 添加 .dependency-cruiser.cjs (4条禁止规则+§8.2白名单)
-      和 arch:check 脚本, 20条warn级违规已识别"
-    change_id: 20260602-architecture-refactor
   - skill: /mvt-update-plan
     completed_at: 2026-06-02T14:59:13.837Z
     summary: t1-layering-ci-guard 标记为 done，current_task 推进到 t2-sink-plan-tree-invariants
@@ -90,6 +82,18 @@ history:
     completed_at: 2026-06-03T10:39:25.758Z
     summary: Fixed 10 test import path issues, restored 87% of test suites from 57%
       to 87% pass rate
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-sync-context
+    completed_at: 2026-06-04T04:18:10.447Z
+    summary: "Synced project context with architecture refactor change
+      20260602-architecture-refactor: added 5 core terms, 4 domain layer
+      concepts, 7 business rules, and updated module paths for infrastructure
+      relocation"
+    change_id: 20260602-architecture-refactor
+  - skill: /mvt-sync-context
+    completed_at: 2026-06-04T04:20:57.563Z
+    summary: "Converted ASCII diagrams to mermaid format: updated Module Dependency
+      Graph and Layer Structure to reflect current infrastructure relocation"
     change_id: 20260602-architecture-refactor
 active_change:
   id: 20260602-architecture-refactor

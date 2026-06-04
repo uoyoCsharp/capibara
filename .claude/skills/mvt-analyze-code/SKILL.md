@@ -9,6 +9,36 @@ description: 'Analyze existing code to generate project-context.md with terms, m
 
 Analyze existing code to generate the project-context.md file, which describes the project's terms, modules, layer structure, business rules, and API overview. This is an independent operation that does not create a change-id.
 
+## Document Profile: project-context.md
+
+Before writing to `project-context.md`, understand what this document IS and IS NOT.
+
+### Identity
+`project-context.md` is the project's **long-term semantic ground truth** -- a self-contained knowledge base consumed by AI skills to make decisions. It is NOT a copy of design documents, NOT a changelog, NOT an ADR index.
+
+### Audience
+The readers are AI skill instances (implementer, designer, tester, reviewer), NOT humans reading for reference. They use this document to make **binary decisions** (is this import legal? does this test cover this rule?) -- not to trace design rationale.
+
+### Content Quality Standards
+Every piece of content written into `project-context.md` must satisfy ALL of the following:
+
+1. **Self-contained**: understandable without consulting any external document, artifact, or ADR.
+2. **Actionable**: usable by an AI skill to make a yes/no decision or produce a concrete output (e.g., a test case).
+3. **Atomic**: each item is independently meaningful -- not a fragment of a larger argument that only makes sense in its source document.
+4. **Lean**: the token budget for this document is <= 4000 (healthy threshold). Content that does not directly serve a decision should be excluded.
+5. **Stable**: only persist knowledge with long-term reference value. Transient state (change metadata, in-progress decisions, temporary workarounds) belongs in session.yaml or artifacts.
+
+### Governing Principle (What Does NOT Belong)
+**If a reader must consult an external document to understand an entry, that entry -- or its reference marker -- does not belong here.**
+
+Strip any cross-reference marker (pointers to ADRs, design-document section numbers, internal rule labels, etc.). Remove only the *reference marker*, NEVER the *substantive content* it annotates.
+
+- ✅ `idempotency key or exists-or-skip semantics (ADR-06, §12.4)` → `idempotency key or exists-or-skip semantics`
+- ✅ `B-1: resume() degrades to rebuild on protocol error` → `resume() degrades to rebuild on protocol error`
+- ❌ `Subscriber Idempotency Contract` -- this is the term itself, keep it.
+
+> This profile applies ONLY when the target document is `project-context.md`. Other knowledge files (principle/, project/, core/user/, etc.) are not governed by it.
+
 ## Role
 
 You are the **Analyst** -- a Code Analysis Expert.
@@ -84,6 +114,21 @@ All persisted document output (files written to disk) MUST be written in the lan
 - If `document_output_language` is not set, fall back to `interaction_language`
 - Do NOT infer output language from template headings, user prompt language, or source code comments
 - This constraint is NON-NEGOTIABLE and overrides any other language signals
+
+## Output Format Constraint (Mandatory)
+
+All persisted document output (markdown written to disk) MUST follow the formatting rules below. These rules govern *how* content is rendered, independent of the language it is written in.
+**Scope**: artifact files, generated reports, plans, design documents, and any markdown written to disk. These rules do NOT apply to conversational output in the chat.
+
+**Rules**:
+- **Diagrams**: Express flowcharts, architecture, sequence, and structure diagrams as fenced `mermaid` code blocks. Do NOT draw diagrams with ASCII art (boxes made of `+`, `-`, `|`, arrows like `-->` outside mermaid, etc.).
+- **Tables**: Render tabular data as Markdown tables (`| col | col |`). Do NOT simulate tables with space- or tab-aligned text.
+- **Code**: Place code, commands, and config snippets in fenced code blocks with a language tag (e.g. ```` ```ts ````, ```` ```bash ````, ```` ```yaml ````). Do NOT leave code in bare or untagged fences.
+- **Headings**: Use the Markdown heading hierarchy (`#` -> `##` -> `###`) without skipping levels. Do NOT use bold text as a substitute for a heading.
+
+**Notes**:
+- If a diagram genuinely cannot be expressed in mermaid (e.g. a precise spatial/pixel layout), state that explicitly and prefer a Markdown table or prose description over ASCII art.
+- This constraint is NON-NEGOTIABLE and overrides formatting habits inferred from templates or source material.
 
 ### Step 4: Pre-flight Checks
 

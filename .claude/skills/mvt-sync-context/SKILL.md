@@ -89,6 +89,21 @@ All persisted document output (files written to disk) MUST be written in the lan
 - Do NOT infer output language from template headings, user prompt language, or source code comments
 - This constraint is NON-NEGOTIABLE and overrides any other language signals
 
+## Output Format Constraint (Mandatory)
+
+All persisted document output (markdown written to disk) MUST follow the formatting rules below. These rules govern *how* content is rendered, independent of the language it is written in.
+**Scope**: artifact files, generated reports, plans, design documents, and any markdown written to disk. These rules do NOT apply to conversational output in the chat.
+
+**Rules**:
+- **Diagrams**: Express flowcharts, architecture, sequence, and structure diagrams as fenced `mermaid` code blocks. Do NOT draw diagrams with ASCII art (boxes made of `+`, `-`, `|`, arrows like `-->` outside mermaid, etc.).
+- **Tables**: Render tabular data as Markdown tables (`| col | col |`). Do NOT simulate tables with space- or tab-aligned text.
+- **Code**: Place code, commands, and config snippets in fenced code blocks with a language tag (e.g. ```` ```ts ````, ```` ```bash ````, ```` ```yaml ````). Do NOT leave code in bare or untagged fences.
+- **Headings**: Use the Markdown heading hierarchy (`#` -> `##` -> `###`) without skipping levels. Do NOT use bold text as a substitute for a heading.
+
+**Notes**:
+- If a diagram genuinely cannot be expressed in mermaid (e.g. a precise spatial/pixel layout), state that explicitly and prefer a Markdown table or prose description over ASCII art.
+- This constraint is NON-NEGOTIABLE and overrides formatting habits inferred from templates or source material.
+
 ### Step 4: Pre-flight Checks
 
 For each check below, if the condition holds, perform the action implied by its **Level**:
@@ -103,14 +118,44 @@ For each check below, if the condition holds, perform the action implied by its 
 | 1 | `session.initialized_at` is empty | BLOCK | Session not initialized. Run `/mvt-init` first. |
 | 2 | `.ai-agents/knowledge/project/_generated/project-context.md exists` is empty | BLOCK | project-context.md not found. Run `/mvt-analyze-code` to create the initial document; this skill only handles incremental updates. |
 
+## Document Profile: project-context.md
+
+Before writing to `project-context.md`, understand what this document IS and IS NOT.
+
+### Identity
+`project-context.md` is the project's **long-term semantic ground truth** -- a self-contained knowledge base consumed by AI skills to make decisions. It is NOT a copy of design documents, NOT a changelog, NOT an ADR index.
+
+### Audience
+The readers are AI skill instances (implementer, designer, tester, reviewer), NOT humans reading for reference. They use this document to make **binary decisions** (is this import legal? does this test cover this rule?) -- not to trace design rationale.
+
+### Content Quality Standards
+Every piece of content written into `project-context.md` must satisfy ALL of the following:
+
+1. **Self-contained**: understandable without consulting any external document, artifact, or ADR.
+2. **Actionable**: usable by an AI skill to make a yes/no decision or produce a concrete output (e.g., a test case).
+3. **Atomic**: each item is independently meaningful -- not a fragment of a larger argument that only makes sense in its source document.
+4. **Lean**: the token budget for this document is <= 4000 (healthy threshold). Content that does not directly serve a decision should be excluded.
+5. **Stable**: only persist knowledge with long-term reference value. Transient state (change metadata, in-progress decisions, temporary workarounds) belongs in session.yaml or artifacts.
+
+### Governing Principle (What Does NOT Belong)
+**If a reader must consult an external document to understand an entry, that entry -- or its reference marker -- does not belong here.**
+
+Strip any cross-reference marker (pointers to ADRs, design-document section numbers, internal rule labels, etc.). Remove only the *reference marker*, NEVER the *substantive content* it annotates.
+
+- ✅ `idempotency key or exists-or-skip semantics (ADR-06, §12.4)` → `idempotency key or exists-or-skip semantics`
+- ✅ `B-1: resume() degrades to rebuild on protocol error` → `resume() degrades to rebuild on protocol error`
+- ❌ `Subscriber Idempotency Contract` -- this is the term itself, keep it.
+
+> This profile applies ONLY when the target document is `project-context.md`. Other knowledge files (principle/, project/, core/user/, etc.) are not governed by it.
+
 ## Execution Flow
 
 ### Step 1: Identify Completed Changes
 - **What**: produce a candidate list of change-ids whose artifacts will be aggregated.
 - **How**:
   1. Read `session.yaml`. Collect `changes[]` entries with `status: done`.
-  2. For each candidate, verify `.ai-agents/workspace/artifacts/{change-id}/` exists AND contains at least one of `analysis.md` or `design.md`. Drop entries with only `plan.yaml`.
-  3. (Fallback) If `changes[]` is empty, scan `.ai-agents/workspace/artifacts/*/` directly; offer those with `analysis.md` or `design.md`, marked `unindexed`.
+  2. For each candidate, verify `.ai-agents/workspace/artifacts/{change-id}/` exists AND contains at least one of `analysis.md` or `implementation.md`. Drop entries with only `plan.yaml`, or with only `design.md` (design artifacts are not aggregated -- see Step 3).
+  3. (Fallback) If `changes[]` is empty, scan `.ai-agents/workspace/artifacts/*/` directly; offer those with `analysis.md` or `implementation.md`, marked `unindexed`.
   4. Exclude already-archived or irrelevant changes:
      - **Indexed changes**: exclude any `changes[]` entry with `status: abandoned`. For `status: done` entries, Step 1.2's directory existence check already filters out those whose artifacts have been moved to `artifacts/_archived/` by `/mvt-cleanup`.
      - **Fallback scan**: when scanning `artifacts/*/` directly, skip any path under `artifacts/_archived/` (the unified archive directory managed by `/mvt-cleanup`).
@@ -137,57 +182,85 @@ This step establishes the **target structure** that aggregated content must fit 
 2. Parse the current `.md` into a section map:
    - Each top-level `##` heading -> one section anchor.
    - Record: section title (verbatim), byte range, and a 1-line semantic summary derived from the section's content (e.g., "lists domain terms with definitions" or "describes module dependencies").
-   - The summary is what enables matching in Step 3 -- section titles may be in any language and may not match conventional names (Terms / Modules / etc.).
+   - The summary is what enables matching in Step 5 -- section titles may be in any language and may not match conventional names (Terms / Modules / etc.).
 3. If the document has zero `##` sections (single block) -> STOP. Recommend `/mvt-analyze-code` to establish a sectioned baseline first.
-4. Read `.ai-agents/workspace/project-context.yaml`. Record current `projects[].source_paths`, `modules`, and `tech_stack` for diff comparison in Step 4d.
+4. Read `.ai-agents/workspace/project-context.yaml`. Record current `projects[].source_paths`, `modules`, and `tech_stack` for diff comparison in Step 5d.
 
-### Step 3: Extract and Classify Artifact Content
+### Step 3: Extract Artifact Content
 
-- **What**: from each selected change-id, extract atomic knowledge items and classify them against the section map from Step 2.
+- **What**: from each selected change-id, extract atomic knowledge items (do not classify yet).
 - **How**:
-  1. For each selected change-id, read available artifacts (`analysis.md`, `implementation.md`).
+  1. For each selected change-id, read available artifacts (`analysis.md`, `implementation.md`). Do NOT read `design.md` -- design artifacts are not aggregated by this skill.
   2. Extract atomic items. Typical sources:
      - `analysis.md` -> domain terms, actors, business rules, constraints
      - `implementation.md` -> files added/changed (informs `.yaml` source_paths), realized vs deviated design points
-  3. For each item, match to a section from the Step 2 map:
+
+### Step 4: Normalize Extracted Content
+
+Before classifying extracted items against the section map, normalize each item per the **Document Profile: project-context.md** section loaded above. This step strips intra-artifact cross-references -- meaningful in their source document but noise in project-context.md -- before they enter the merge pipeline.
+
+1. For each extracted item, apply the normalization rules below (the governing principle lives in the Document Profile; this table lists concrete patterns, non-exhaustive):
+
+   | Pattern | Example | Normalization |
+   |---------|---------|---------------|
+   | ADR reference with section number | `(ADR-06, §12.4)` | Remove the reference; keep the substantive content it annotates |
+   | Bare ADR reference | `per ADR-06`, `(ADR-06)` | Remove entirely |
+   | Section number reference | `§12.4`, `§3.2.1` | Remove entirely |
+   | Design rule label prefix | `B-1:`, `D-7:`, `C-3:` | Remove the prefix; keep the rule text |
+   | Parenthesized design label | `(D-7)`, `(B-4)` | Remove entirely |
+   | Cross-artifact link phrase | `see §X`, `refer to ADR-N` | Remove the link phrase |
+   | Other reference pointing outside project-context.md | Any pattern not listed above | Apply the governing principle: if understanding requires an external document, strip the reference marker |
+
+   **Critical**: strip only the *reference marker*, never the *substantive content* it annotates.
+
+2. After normalization, re-evaluate each item:
+   - Still contains substantive content -> keep for classification in Step 5.
+   - Was entirely a cross-reference with no independent semantic value -> drop it (it is a pointer, not knowledge).
+3. Any normalization that removes content from a `modify` item (where the item modifies an existing entry) must be flagged in the update plan (Step 6, Table 6b) so the user can verify the substantive meaning was preserved.
+
+### Step 5: Classify Artifact Content
+
+- **What**: classify each normalized item against the section map from Step 2.
+- **How**:
+  1. For each item, match to a section from the Step 2 map:
      - Match by semantic similarity to **section title + 1-line summary**, not by exact string.
      - Confidence levels:
        - **mapped**: exactly one section matches with high confidence
        - **ambiguous**: 2+ sections plausibly match
        - **orphan**: no section matches; propose a new section name
-  4. For each item, also detect change type relative to current section content:
+  2. For each item, also detect change type relative to current section content:
      - `new` -- target section does not contain this entity
      - `modify` -- target section mentions the entity but artifact provides a different value
      - `redundant` -- already present, no change (will be filtered out, not shown to user)
 
-### Step 4: Render the Update Plan (Four Tables)
+### Step 6: Render the Update Plan (Four Tables)
 
-#### 4a. Section-mapped items
+#### 6a. Section-mapped items
 | # | change-id | item | type | target section | classification |
 |---|-----------|------|------|----------------|----------------|
 
-#### 4b. Conflicts requiring resolution (every `modify` item)
+#### 6b. Conflicts requiring resolution (every `modify` item)
 | # | item | section | current value | proposed value (from {change-id}) |
 |---|------|---------|---------------|-----------------------------------|
 
-#### 4c. Ambiguous and orphan items
+#### 6c. Ambiguous and orphan items
 | # | item | reason | candidate sections (or proposed new section) |
 |---|------|--------|----------------------------------------------|
 
-#### 4d. Implied yaml changes
+#### 6d. Implied yaml changes
 | # | yaml field | current | proposed |
 |---|------------|---------|----------|
 
-### Step 5: User Confirmation (Per-Table)
+### Step 7: User Confirmation (Per-Table)
 
-- **4a**: default = accept all. User input: indices to drop, or `e <n>` to edit a single item's target section.
-- **4b**: **explicit per-row decision required**. Format `<index>:<keep|replace|edit>`. Example: `1:replace,2:keep,3:edit`. No default.
-- **4c**: per row, user picks an existing section, types a new section name, or `skip`.
-- **4d**: default = accept; user can drop indices.
+- **6a**: default = accept all. User input: indices to drop, or `e <n>` to edit a single item's target section.
+- **6b**: **explicit per-row decision required**. Format `<index>:<keep|replace|edit>`. Example: `1:replace,2:keep,3:edit`. No default.
+- **6c**: per row, user picks an existing section, types a new section name, or `skip`.
+- **6d**: default = accept; user can drop indices.
 
 Then ask: **"Run optional read-only code verification before applying? (y/n)"**
 
-### Step 6: (Optional) Read-only Code Verification
+### Step 8: (Optional) Read-only Code Verification
 
 This step catches artifacts claiming entities never actually delivered. It is **read-only** -- it never writes anything to `.md` or `.yaml`.
 
@@ -206,9 +279,9 @@ If user opts in:
 
 3. Re-render the apply list with `verified` / `unverified` markers; final confirmation.
 
-If user skips verification: proceed directly to Step 7 with Step 5 selections.
+If user skips verification: proceed directly to Step 9 with Step 7 selections.
 
-### Step 7: Apply Updates (Merge Mode)
+### Step 9: Apply Updates (Merge Mode)
 
 - **Pre-write**:
   1. Backup: `project-context.md` -> `project-context.md.bak`; `project-context.yaml` -> `project-context.yaml.bak`. Overwrite any prior `.bak`.
@@ -219,15 +292,16 @@ If user skips verification: proceed directly to Step 7 with Step 5 selections.
   2. Each `modify` item with `replace`: replace the matching line in place. Smallest possible diff.
   3. Each `orphan` item with new-section choice: append a new `##` section at end of file.
   4. **Never delete** any existing line. **Never reorder** existing sections.
+  5. All merged content must already be normalized per Step 4 rules. Do not re-introduce stripped references during inline replacement or append operations.
 
 - **Update `project-context.yaml`** (structured merge):
-  1. Apply accepted entries from Table 4d.
+  1. Apply accepted entries from Table 6d.
   2. Add new `source_paths` to matching project entry; add new modules to `modules[]`.
   3. **Never delete** an existing yaml entry in this skill.
 
 - **Atomicity**: temp + rename per file. If `.md` write succeeds but `.yaml` fails (or vice versa) -> restore the failed one from `.bak`, keep the other; report partial success.
 
-### Step 8: Report
+### Step 10: Report
 
 1. **Applied summary** -- counts: items added / modified / skipped / orphaned-into-new-section
 2. **Files changed** -- paths + byte deltas
@@ -241,7 +315,7 @@ If user skips verification: proceed directly to Step 7 with Step 5 selections.
    - Aggregated >= 1 change -> "Run `/mvt-cleanup` to archive these completed changes."
    - Verification flagged code-only entities -> "Run `/mvt-analyze-code` to capture missing entities."
 
-### Step 9: State Update
+### Step 11: State Update
 Apply the State Update rules defined in the **State Update** section below.
 - The `--set-synced` parameter updates `session.last_synced_at`.
 
@@ -254,10 +328,10 @@ Apply the State Update rules defined in the **State Update** section below.
 | Selected change-id has only `plan.yaml` | Filtered in Step 1; will not appear |
 | `modify` with `replace` but the existing line cannot be located deterministically | Fall back to append + flag as duplicate-needs-manual-edit; do NOT silently overwrite the wrong line |
 | `.md.bak` already exists | Overwrite (only the most recent backup matters) |
-| User aborts at Step 5 | Do not write; report "no changes applied" |
-| Step 6 verification finds zero matches for everything | Strong warning; require explicit confirm before proceeding (artifacts likely describe planned, not delivered, work) |
-| Two artifacts contradict each other (design says layer A, implementation says layer B) | Surface in Table 4b as cross-artifact conflict; user picks |
-| change-id was archived between Step 1 and Step 7 | Skip with note; do not error the run |
+| User aborts at Step 7 | Do not write; report "no changes applied" |
+| Step 8 verification finds zero matches for everything | Strong warning; require explicit confirm before proceeding (artifacts likely describe planned, not delivered, work) |
+| Two artifacts contradict each other (analysis claims rule X, implementation realizes rule Y) | Surface in Table 6b as cross-artifact conflict; user picks |
+| change-id was archived between Step 1 and Step 9 | Skip with note; do not error the run |
 
 ## State Update
 

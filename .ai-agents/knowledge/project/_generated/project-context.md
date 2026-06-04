@@ -37,6 +37,11 @@ The codebase is a pnpm monorepo with a single `apps/electron` sub-project. The E
 | Template | Pre-defined org structure (roles, skills, process schema) loaded from JSON files for quick workspace setup |
 | Decomposition | The process of breaking a parent task into child tasks, either by AI (plan tree) or manually |
 | Circuit Breaker | Wake gate limit on consecutive agent wake-ups per role (`maxConsecutiveWakes`) |
+| Hexagonal skeleton | Primary (inbound/driving) + Domain Core + Secondary (outbound/driven) adapters. Conceptual roles by control-flow direction. |
+| Transactional Outbox | Write event to outbox table in the same tx as business data, publish asynchronously. Outbox delivery semantics; the dual obligation is that every subscriber is idempotent. |
+| Port / Adapter | Domain-defined interface / concrete class implementing it. |
+| Front door / Back door | TaskOrchestrator (pre-Run admission) / RunOrchestrator (post-Run continuation). |
+| IExecutor | The existing AI abstraction boundary; Execution touches AI only via this port. Planning has zero AI references. |
 
 ## Module Structure
 
@@ -49,19 +54,19 @@ The codebase is a pnpm monorepo with a single `apps/electron` sub-project. The E
 | **Conversation** | `modules/conversation/` | Multi-party conversation lifecycle, state transitions, message persistence, routing signals |
 | **Coordination** | `modules/coordination/` | Inquiry routing to respondents, timeout escalation up role hierarchy |
 | **Execution** | `modules/execution/` | Run lifecycle (start/complete/fail/cancel/suspend), cost tracking, execution logging |
-| **ACP** | `modules/acp/` | Agent Client Protocol: subprocess management, sessions, permission enforcement, file access control, collaboration suspension/resume |
+| **ACP** | `modules/acp/` | ACP domain policies and collaboration (client mechanics in infrastructure/acp-protocol) |
 | **Orchestrator** | `modules/orchestrator/` | Top-level event-driven coordination: task scheduling, wake gating, retry logic, run dispatch |
 | **Planning** | `modules/planning/` | Plan tree submission, approval, discard, refinement, and expiration |
 | **Prompt** | `modules/prompt/` | System prompt construction: scenario resolution, context assembly, strategy-specific rendering |
-| **MCP** | `modules/mcp/` | In-process MCP server with HTTP transport exposing tools to AI agents |
+| **MCP** | `mcp/providers/` | Primary-side MCP tool providers (task, conversation, context, plan-tree) |
 | **Notification** | `modules/notification/` | Desktop notifications and event broadcasting from main process to renderer |
 
 ### Foundation & Infrastructure -- `apps/electron/src/core/`
 
 | Area | Path | Responsibility |
 |------|------|---------------|
-| **Foundation** | `foundation/` | Interfaces (ILogger, IEventBus, IEventPublisher, ISqliteConnection, IOutboxRepository), domain events, error types, DI tokens |
-| **Infrastructure** | `infrastructure/` | Concrete implementations: PinoLogger, EmitteryEventBus, OutboxEventPublisher (transactional outbox), SqliteConnection, auto-updater |
+| **Foundation** | `foundation/` | Interfaces (ILogger, IEventBus, IEventPublisher, ISqliteConnection, IOutboxRepository, INotificationService, IToolRegistry), domain events, error types, DI tokens |
+| **Infrastructure** | `infrastructure/` | Concrete implementations: PinoLogger, EmitteryEventBus, OutboxEventPublisher (transactional outbox), SqliteConnection, auto-updater, notification adapters, MCP protocol mechanics (server builder + transport), ACP client mechanics (spawner, executor, session manager, sweeper) |
 | **Bootstrap** | `bootstrap/` | Composition root: manual DI wiring, module registration in dependency order, startup reconciliation |
 | **Config** | `config/` | Layered config loading (defaults -> global -> project -> env), Zod validation |
 | **IPC Handlers** | `ipc-handlers/` | Thin adapters: ipcMain.handle() registration for 60+ channels in capibara:domain:action format |
@@ -87,73 +92,123 @@ The codebase is a pnpm monorepo with a single `apps/electron` sub-project. The E
 
 ### Module Dependency Graph
 
+```mermaid
+graph TD
+    subgraph "Leaf Modules (D0 Structural Core)"
+        Organization
+        Conversation
+        Workflow
+    end
+    
+    subgraph "D1 Capability Domains"
+        Coordination
+        Planning
+        Execution
+        ACP_Domain
+    end
+    
+    subgraph "D2 Derived Services"
+        Prompt
+    end
+    
+    subgraph "D3 Reactive Orchestration"
+        Orchestrator
+        InquiryOrchestrator
+    end
+    
+    subgraph "Infrastructure (Technical/Mechanics)"
+        MCP_Protocol[infrastructure/mcp-protocol]
+        ACP_Client[infrastructure/acp-protocol]
+        Notification_Adapter[infrastructure/notification]
+    end
+    
+    subgraph "Primary Adapters"
+        MCP_Providers[core/mcp/providers]
+    end
+    
+    %% Dependency flows
+    Organization --> Coordination
+    Conversation --> Coordination
+    Workflow --> Coordination
+    
+    Conversation --> Planning
+    Workflow --> Planning
+    
+    Coordination --> InquiryOrchestrator
+    Planning --> Prompt
+    
+    Orchestrator --> Execution
+    InquiryOrchestrator --> ACP_Domain
+    
+    ACP_Domain --> Conversation
+    ACP_Client --> ACP_Domain
+    
+    MCP_Providers --> Coordination
+    MCP_Providers --> Planning
+    MCP_Providers --> Conversation
+    MCP_Providers --> Organization
 ```
-Organization (leaf)     Conversation (leaf)     Workflow (leaf)
-      |                      |                      |
-      +------+---------------+-----------+----------+
-             |                           |
-         Coordination              Planning
-             |                           |
-      +------+------+           +--------+--------+
-      |             |           |                 |
-   Orchestrator  MCP          Prompt              |
-      |             |           |                 |
-      +------+------+-+--------+-+---------+------+
-             |        |          |         |
-          Execution   ACP   (ACP depends on Conversation)
-```
+
+**Key dependency rules:**
+- Leaf modules (Organization, Conversation, Workflow) have no dependencies
+- D1 modules depend only on leaves and other D1 modules
+- D3 modules (Orchestrator, InquiryOrchestrator) orchestrate across D1 domains
+- Infrastructure implements foundation interfaces but core modules never import from infrastructure directly
+- MCP Providers are primary adapters that depend on domain services; protocol mechanics are in infrastructure
 
 ## Layer Structure
 
-```
-+----------------------------------------------------------+
-|                    Renderer (React)                        |
-|  Pages -> Components -> Hooks -> Zustand Stores           |
-|  All API calls via window.capibara (preload bridge)       |
-+----------------------------------------------------------+
-                           |  IPC (ipcRenderer.invoke / ipcMain.handle)
-                           v
-+----------------------------------------------------------+
-|                    Preload Script                         |
-|  contextBridge.exposeInMainWorld('capibara', api)        |
-|  Pure passthrough, zero business logic                    |
-+----------------------------------------------------------+
-                           |  ipcRenderer.invoke
-                           v
-+----------------------------------------------------------+
-|                    IPC Handlers                           |
-|  Thin adapters: validate input -> call service -> ok/err |
-|  Channel format: capibara:<domain>:<action>              |
-+----------------------------------------------------------+
-                           |
-                           v
-+----------------------------------------------------------+
-|                    Core Modules                           |
-|  Domain services, engines, persistence                   |
-|  Depends only on foundation interfaces                   |
-+----------------------------------------------------------+
-                           |
-                           v
-+----------------------------------------------------------+
-|                    Foundation                             |
-|  Interfaces, domain events, error types, DI tokens       |
-|  Defines contracts: ILogger, IEventBus, IEventPublisher  |
-+----------------------------------------------------------+
-                           |
-                           v
-+----------------------------------------------------------+
-|                    Infrastructure                         |
-|  Concrete implementations: PinoLogger, SqliteConnection  |
-|  EmitteryEventBus, OutboxEventPublisher                  |
-+----------------------------------------------------------+
+```mermaid
+graph TD
+    subgraph "Layer 1: Renderer (React)"
+        A[Pages] --> B[Components] --> C[Hooks] --> D[Zustand Stores]
+        E["All API calls via window.capibara (preload bridge)"]
+    end
+    
+    F[Preload Script] -->|"contextBridge.exposeInMainWorld('capibara', api)"| G[IPC Handlers]
+    G -->|"ipcRenderer.invoke"| H[Core Modules]
+    H -->|"ipcMain.handle"| F
+    
+    I[IPC Handlers] -->|"Thin adapters: validate input → call service → ok/err"| J[Core Modules]
+    J -->|"Domain services, engines, persistence"| K[Foundation Interfaces]
+    K -->|"Interfaces, domain events, error types, DI tokens"| L[Infrastructure]
+    L -->|"PinoLogger, SqliteConnection, EventBus, OutboxPublisher"| M[MCP Protocol Mechanics]
+    M -->|"Server builder, transport, ToolRegistry"| N[ACP Client Mechanics]
+    N -->|"Spawner, executor, session manager, sweeper"| O[Notification Adapters]
+    O -->|"EventBroadcaster, notification service"| K
+    
+    subgraph J
+        J1[Organization] --> J2[Coordination] --> J3[Workflow]
+        J4[Conversation] --> J5[Planning] --> J6[Prompt]
+        J7[Execution] --> J8[Orchestrators]
+        J9[InquiryOrchestrator] --> J10[ACP Domain]
+    end
+    
+    subgraph L
+        L1[Core Modules: depends only on foundation interfaces]
+        L2[Bootstrap: composition root knows both foundation + infrastructure]
+        L3[Foundation: defines contracts, not implementations]
+    end
+    
+    style F fill:#e1f5fe
+    style G fill:#fff3e0
+    style K fill:#f3e5f5
+    style L fill:#e8f5e8
 ```
 
 **Key architectural rules:**
-- Modules depend only on foundation interfaces, never on infrastructure
-- Bootstrap/composition-root is the only place that knows about both
+- **Modules depend only on foundation interfaces, never on infrastructure** — bootstrap/composition-root is the only place that knows about both
 - IEventPublisher (publish) vs IEventBus (subscribe): services publish, infrastructure subscribes
 - Transactional outbox guarantees at-least-once event delivery across process restarts
 - All IPC responses use DesktopResult discriminated union (no exceptions cross the boundary)
+- dependency-cruiser rules enforced at `error` severity in CI (blocking merge)
+- Four forbidden rules: `no-core-to-adapters`, `d0-must-stay-leaf`, `no-upward-d1-to-d3`, `same-module-allowed-cross-module-forbidden`
+
+**Domain layer concepts:**
+- **D0-D3 layers**: Domain Core role labels—D0 structural core (Organization), D1 capability domains (Conversation/Workflow/acp-domain/Execution/Planning), D2 derived services (Prompt), D3 reactive orchestration (Coordination + 3 Orchestrators)
+- **Layer = role label**: Layers explain "why a module is here", NOT strict dependency rank. Same-layer dependencies allowed. The dependency truth is the §7 DAG, enforced by dependency-cruiser
+- **Folder convention**: Top-level folders group by technical-vs-business, NOT inbound-vs-outbound. `infrastructure/` = all technical/framework mechanics (both mcp-protocol and acp-protocol live here)
+- **Dependency guard**: dependency-cruiser CI rules promoting the dependency DAG from a diagram to an enforced, machine-checked rule set
 
 ## Key Business Rules
 
@@ -210,6 +265,20 @@ Organization (leaf)     Conversation (leaf)     Workflow (leaf)
 ### Configuration
 - Layered loading: defaults -> global config (~/capibara/config.json) -> project config -> environment variables
 - All config validated via Zod schema at load time
+
+### Naming and Layer Classification
+- D3 active orchestration units use the `Orchestrator` suffix; never `Service`
+- `InquiryEscalationService` is passive (polled via `scanAndEscalate()`) — keeps `Service`
+- `InquiryOrchestrator` is active (subscribes `conversation:route-resolved` events) — renamed from InquiryRouter
+
+### Event-Driven Patterns
+- `conversation:route-resolved` event: Coordination publishes route decision; Conversation subscribes and applies idempotent write-back (no direct service-to-service calls)
+- Idempotency strategy for event re-delivery: if conversation is already in `waiting` with same `respondentRoleId` and `respondentType`, subscriber no-ops
+
+### ACP Behavior Fixes
+- Resume fallback: if `resumeSession` or load fails, system falls back to `rebuild(record)` to avoid hard-failing recovery
+- Aggregation timeout with `timed_out` states: for `aggregationMode='all'`, pending/in-progress awaitings are marked `timed_out` after `inquiryTimeoutMs` from suspension timestamp; both `resolved` and `timed_out` are terminal states preventing indefinite suspension
+- Restrictive permission mode: denies by default unless explicit allowlisting is implemented; `ask_user` mode denies until interactive approval flow is available
 
 ## API Overview
 
