@@ -32,14 +32,12 @@ You are the **Conductor** -- a Workflow Coordinator.
 
 | Variant | Description |
 |---------|-------------|
-| `/mvt-init` | Standard initialization (scan + detect + write index) |
-| `/mvt-init --refresh` | Re-scan existing project -- preserve user state, update auto-detectable fields, show diff before writing |
+| `/mvt-init` | Standard initialization or interactive refresh (scan + detect + write index; re-scan on existing project with user confirmation) |
 
 ## Activation Protocol
 
-### Step 1: Load Context (Context Foundation)
-Load the following files as foundational context:
-- `.ai-agents/workspace/session.yaml` -- Current workflow state
+### Step 1: Load Context
+Load these files as foundational context:
 - `.ai-agents/workspace/project-context.yaml` -- Project index (structural info)
 - `.ai-agents/registry.yaml` -- Available skills registry and knowledge declarations
 
@@ -47,23 +45,53 @@ Extended context for this skill:
 - Scan project root for config files (package.json, requirements.txt, pom.xml, etc.)
 - Scan project root for directory structure (src/, lib/, app/, tests/, etc.)
 
-### Step 2: Load Knowledge
+### Step 2: Resolve Project Scope (PS)
 
-Read `.ai-agents/registry.yaml` and load every file referenced under:
-- `knowledge.shared` (loaded by all skills)
-- `skills.<current-skill>.knowledge` (this skill's specific knowledge, if present)
+Read `project-context.yaml > projects[]`.
 
-For each entry, resolve files relative to `.ai-agents/{source}`:
-- If the entry lists `files: [...]`, load those files.
-- If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
+**Single project** (`projects.length == 1`): Set PS = [sole project name]. Skip remaining PS steps.
 
-Skip any path that does not exist.
+**Multi-project** (`projects.length > 1`):
+**Mode A -- Plan-driven** (active plan exists and skill operates on plan tasks):
+1. **Plan signal**: PS = current task's `project` array from plan's `current_tasks`. Drop stale project names (not in `projects[]`), fall through.
+2. **Path match**: Match current working paths against `projects[].path` and `source_paths`.
+3. **Prompt**: If still unresolved, list candidates and ask user. Never silently load all projects.
 
-### Archived Artifacts Convention
+**Mode B -- Non-plan** (no active plan or ad-hoc changes):
+Defer PS to execution: identify change target, match against `projects[].path` and `source_paths`, load project-specific knowledge on demand (Step 3).
 
-The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+### Step 3: Load Knowledge
 
-### Step 3: Load Config & Apply Preferences (Config Foundation)
+Registry uses project-keyed maps; `_all` is a reserved key (all projects). Applies to both top-level `knowledge` and `skills.<name>.knowledge`.
+
+**Knowledge Loading Protocol**:
+For each knowledge entry in the registry, follow these steps:
+1. **Read the `source` field** from the registry entry (e.g., `knowledge/project/_generated/`).
+2. **Construct the base directory**: join `.ai-agents/` with the `source` value → `.ai-agents/{source_value}/`.
+3. **Load files**:
+   - `files: [a.md, b.md]` → load `.ai-agents/{source_value}/a.md`, `.ai-agents/{source_value}/b.md`.
+   - `files_from_manifest: true` → read `.ai-agents/{source_value}/manifest.yaml`, load entries with `auto_load: true`.
+4. **Skip non-existent paths** silently (do not error or warn).
+
+**Worked example**:
+Given this registry entry:
+```yaml
+- id: project-context
+  source: knowledge/project/_generated/
+  files:
+    - project-context.md
+```
+Resolution: `.ai-agents/` + `knowledge/project/_generated/` + `project-context.md` = `.ai-agents/knowledge/project/_generated/project-context.md`
+
+**Anti-pattern -- DO NOT**:
+- Guess or hardcode base directories (e.g., `.ai-agents/workspace/`).
+- Assume a default path structure. The `source` field value is the authoritative path component.
+
+**At activation** (both modes): load `knowledge._all` + `skills.<current-skill>.knowledge._all`.
+**Mode A** (additionally): for each P in PS, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]`.
+**Mode B** (during execution): on demand, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]` for identified project(s).
+
+### Step 4: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
 **Language**:
@@ -102,7 +130,7 @@ All persisted document output (markdown written to disk) MUST follow the formatt
 - If a diagram genuinely cannot be expressed in mermaid (e.g. a precise spatial/pixel layout), state that explicitly and prefer a Markdown table or prose description over ASCII art.
 - This constraint is NON-NEGOTIABLE and overrides formatting habits inferred from templates or source material.
 
-### Step 4: Pre-flight Checks
+### Step 5: Pre-flight Checks
 
 For each check below, if the condition holds, perform the action implied by its **Level**:
 
@@ -206,6 +234,8 @@ For each project:
 - Name, path, type
 - Tech stack (language, framework, build tool, test framework)
 
+**Project naming constraint**: each project name must match `[a-zA-Z0-9][a-zA-Z0-9_-]*` (no leading underscore). Validate all detected names against this constraint; if a name violates it (e.g., auto-detected as `_internal`), prompt the user to provide a valid alternative before proceeding.
+
 Wait for user to confirm or adjust:
 - `yes` -- Accept all
 - Provide corrections -- User specifies which fields to change
@@ -229,6 +259,7 @@ For each target file, check if it already exists:
      - name: "{project_name}"
        path: "{relative_path}"
        type: "{project_type}"
+       source_paths: []
        tech_stack:
          primary_language: "{language}"
          secondary_languages: [{...}]
@@ -236,6 +267,7 @@ For each target file, check if it already exists:
          build_tool: "{build_tool}"
          test_framework: "{test_framework}"
    ```
+   `source_paths` is populated by `/mvt-analyze-code` based on analyzed code structure. On initial `/mvt-init`, leave as empty array.
    For multi-project repos, include one entry per detected project.
 
 #### 5.3 Post-write validation
@@ -243,34 +275,40 @@ For each target file, check if it already exists:
 After writing all files, validate:
 - `project-context.yaml` is valid YAML with `projects[]` containing at least one entry
 - Each project entry has required fields: `name`, `path`, `type`, `tech_stack.primary_language`
-- `session.yaml` is structurally intact and contains: `session` (with `initialized_at`, `last_synced_at`), `active_change` (with `plan_path`), `changes` (array), `history`
 
 If any validation fails → report the specific error and offer to retry or skip.
 
-### Step 6: Refresh Mode Handling (--refresh only)
+### Step 6: Refresh Mode Handling (Interactive)
 
-When `--refresh` is specified:
+When `mvt-init` is executed and existing MVTT artifacts are detected:
 
-1. **Preserve** the following from existing files:
+1. **Prompt user**: "Existing MVTT configuration found. Refresh to re-scan project structure? (y/n)"
+   - If `n` -> stop, no changes made.
+   - If `y` -> proceed with refresh.
+
+2. **Re-scan** project structure using Steps 1-3 above.
+
+3. **Compare** new vs existing `projects[]`. If project changes detected (added/removed/renamed sub-projects):
+   - Show diff: "+N added / -N removed / ~N renamed"
+   - Confirm before writing.
+
+4. **Preserve** the following from existing files:
    - `session.yaml` > `history`
    - `project-context.yaml` > any user-added custom fields (fields not in the standard schema)
    - `config.yaml` > `preferences` section
 
-2. **Update** only auto-detectable fields:
+5. **Update** only auto-detectable fields:
    - `tech_stack` (re-scan and update)
    - `type` (re-infer)
+   - `source_paths` (re-scan)
 
-3. **Diff and confirm**: Show a summary of what will change vs what will be preserved. Ask for confirmation before writing.
+6. **After writing** -> prompt: "Project structure updated. Recommend running `/mvt-analyze-code` to sync semantic context."
 
-4. **Old format migration**: If existing `project-context.yaml` uses old format (has top-level `project`, `requirements`, `architecture`, `environment` keys):
-   - Wrap `project.*` as `projects[0]` with `name="default"`, `path="."`
-   - Discard `requirements`, `architecture` sections -- suggest running `/mvt-analyze-code` to regenerate
-   - Discard `environment` section
-   - Discard any `pattern` related fields
+7. **Orphan knowledge entries**: After refresh, if any knowledge entries in `registry.yaml` reference a project name not in the updated `projects[]`, prompt: "N orphan knowledge entries found for project(s) not in projects list: {names}. Consider `/mvt-manage-context remove` to clean up."
 
 ### Step 7: Determine Project State (drives next-step recommendation)
 
-After Step 5 writes are committed, classify the project state to select the appropriate next_suggestions branch from registry.yaml:
+After Step 5 writes are committed, classify the project state to select the appropriate recommendation branch in the **Suggested Next Steps** section below:
 
 | Condition | Detection logic |
 |-----------|-----------------|
@@ -278,7 +316,7 @@ After Step 5 writes are committed, classify the project state to select the appr
 | `empty_project` | Step 1 found no source files AND no package manager file (truly empty or docs-only repo) -- the recommended next step is `/mvt-manage-context` to manually capture context |
 | `default` | Neither condition matched (rare -- fallback path) |
 
-Pass the resolved condition to the output template so the suggested next steps section renders the matching branch from `registry.yaml > skills.mvt-init.next_suggestions.conditional[]`.
+Use the resolved condition to render the matching branch in the **Suggested Next Steps** section (Conditional Recommendations).
 
 ## State Update
 
@@ -312,6 +350,7 @@ If the script fails (non-zero exit), do NOT abort the skill's main task. Continu
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-init`) and the current project state.
+**Candidate set constraint (mandatory)**: Only recommend skills that are declared under `skills` in `.ai-agents/registry.yaml`.
 
 ### Conditional Recommendations
 

@@ -19,7 +19,7 @@ You are the **Conductor** -- a Workflow Coordinator.
 - If workflow in progress -> Highlight recent skill history and next recommended step
 - If project-context.md missing -> Suggest `/mvt-analyze-code` to generate semantic context
 - If one or more plans exist -> Show Changes Overview table with progress for all plans
-- If an in_progress plan has a current_task -> Suggest the matching skill_hint as next step
+- If an in_progress plan has current_tasks -> Suggest the matching skill_hint as next step
 
 ### Boundaries
 - Do NOT analyze requirements (use `/mvt-analyze` instead)
@@ -28,29 +28,58 @@ You are the **Conductor** -- a Workflow Coordinator.
 
 ## Activation Protocol
 
-### Step 1: Load Context (Context Foundation)
-Load the following files as foundational context:
-- `.ai-agents/workspace/session.yaml` -- Current workflow state
+### Step 1: Load Context
+Load these files as foundational context:
 - `.ai-agents/workspace/project-context.yaml` -- Project index (structural info)
 - `.ai-agents/registry.yaml` -- Available skills registry and knowledge declarations
 
-### Step 2: Load Knowledge
+### Step 2: Resolve Project Scope (PS)
 
-Read `.ai-agents/registry.yaml` and load every file referenced under:
-- `knowledge.shared` (loaded by all skills)
-- `skills.<current-skill>.knowledge` (this skill's specific knowledge, if present)
+Read `project-context.yaml > projects[]`.
 
-For each entry, resolve files relative to `.ai-agents/{source}`:
-- If the entry lists `files: [...]`, load those files.
-- If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
+**Single project** (`projects.length == 1`): Set PS = [sole project name]. Skip remaining PS steps.
 
-Skip any path that does not exist.
+**Multi-project** (`projects.length > 1`):
+**Mode A -- Plan-driven** (active plan exists and skill operates on plan tasks):
+1. **Plan signal**: PS = current task's `project` array from plan's `current_tasks`. Drop stale project names (not in `projects[]`), fall through.
+2. **Path match**: Match current working paths against `projects[].path` and `source_paths`.
+3. **Prompt**: If still unresolved, list candidates and ask user. Never silently load all projects.
 
-### Archived Artifacts Convention
+**Mode B -- Non-plan** (no active plan or ad-hoc changes):
+Defer PS to execution: identify change target, match against `projects[].path` and `source_paths`, load project-specific knowledge on demand (Step 3).
 
-The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+### Step 3: Load Knowledge
 
-### Step 3: Load Config & Apply Preferences (Config Foundation)
+Registry uses project-keyed maps; `_all` is a reserved key (all projects). Applies to both top-level `knowledge` and `skills.<name>.knowledge`.
+
+**Knowledge Loading Protocol**:
+For each knowledge entry in the registry, follow these steps:
+1. **Read the `source` field** from the registry entry (e.g., `knowledge/project/_generated/`).
+2. **Construct the base directory**: join `.ai-agents/` with the `source` value → `.ai-agents/{source_value}/`.
+3. **Load files**:
+   - `files: [a.md, b.md]` → load `.ai-agents/{source_value}/a.md`, `.ai-agents/{source_value}/b.md`.
+   - `files_from_manifest: true` → read `.ai-agents/{source_value}/manifest.yaml`, load entries with `auto_load: true`.
+4. **Skip non-existent paths** silently (do not error or warn).
+
+**Worked example**:
+Given this registry entry:
+```yaml
+- id: project-context
+  source: knowledge/project/_generated/
+  files:
+    - project-context.md
+```
+Resolution: `.ai-agents/` + `knowledge/project/_generated/` + `project-context.md` = `.ai-agents/knowledge/project/_generated/project-context.md`
+
+**Anti-pattern -- DO NOT**:
+- Guess or hardcode base directories (e.g., `.ai-agents/workspace/`).
+- Assume a default path structure. The `source` field value is the authoritative path component.
+
+**At activation** (both modes): load `knowledge._all` + `skills.<current-skill>.knowledge._all`.
+**Mode A** (additionally): for each P in PS, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]`.
+**Mode B** (during execution): on demand, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]` for identified project(s).
+
+### Step 4: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
 **Language**:
@@ -62,7 +91,7 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 - `preferences.output.data_format` → Use this format for data sections in artifacts
 - `preferences.context_routing.relevance_threshold` → Used by `/mvt-manage-context add` for AI routing (default 70 if missing)
 
-### Step 4: Pre-flight Checks
+### Step 5: Pre-flight Checks
 
 For each check below, if the condition holds, perform the action implied by its **Level**:
 
@@ -88,16 +117,16 @@ For each check below, if the condition holds, perform the action implied by its 
 ### Step 2: Build Activity Timeline
 - **What**: produce the most-recent-first list of history entries with derived metadata.
 - **How**:
-  1. Read `history` from `session.yaml`.
+  1. Read `.ai-agents/workspace/session.yaml`, extract `history`.
   2. For each entry, attach: relative time (e.g., "2h ago"), `change_id` (if present), and the originating skill name.
   3. Limit to the last 10 entries for the rendered table; keep full count separately for the summary line.
 
 ### Step 3: Discover All Plans (Multi-Change Dashboard)
 - **What**: produce the canonical plan list across the workspace.
 - **How**:
-  1. Iterate `changes[]` from `session.yaml`. For each entry with a `plan_path`, attempt to read the plan file.
+  1. From the session data loaded above, iterate `changes[]`. For each entry with a `plan_path`, attempt to read the plan file.
   2. Glob `.ai-agents/workspace/artifacts/*/plan.yaml` to find any plans not registered in `changes` (mark them `unindexed`). **Exclude paths under `artifacts/_archived/`** — those are completed changes archived by `/mvt-cleanup`.
-  3. For each plan, extract: `change_id`, `title`, `status`, `current_task`, task progress (`done/total`), `updated_at`, `skill_hint` (from current task if present).
+  3. For each plan, extract: `change_id`, `title`, `status`, `current_tasks`, task progress (`done/total`), `updated_at`, `skill_hint` (from current task if present).
   4. If a plan file is present but malformed, include a row with `(corrupt)` in the status column and mark the file path; do not abort.
 - **Branches**:
 
@@ -115,19 +144,44 @@ For each check below, if the condition holds, perform the action implied by its 
   2. **Projects** -- table: name | type | tech stack (truncated). Cap at 10 rows; collapse the rest into `+N more`.
   3. **Semantic Context** -- one line: `project-context.md present` / `missing -- run /mvt-analyze-code`.
   4. **Active Change** -- if `active_change` exists: id, title, start time. Else: `none`.
+  4a. **Epic Progress** -- if `active_epic.id` is non-empty:
+     - Read `epic.yaml` via `active_epic.epic_path`. If the file is missing or unreadable, render `(epic.yaml not found at {path})` and skip this section.
+     - Compute progress: count children with `status` in `["done", "abandoned"]` as completed; total = `children.length`.
+     - Render:
+
+       ```markdown
+       ## Epic: {epic_title} ({epic_id})
+       Progress: {done}/{total} done -- Status: {status}
+
+       | Sub-change | Status | depends_on | Internal Progress |
+       |------------|--------|------------|-------------------|
+       | {title} | {status} | {deps or --} | {plan progress or --} |
+       ```
+
+     - For each child in `epic.yaml.children[]`:
+       - `depends_on`: comma-separated list of change_ids, or `--` if empty.
+       - `Internal Progress`: for a child with `status: active`, attempt to read its plan.yaml from `.ai-agents/workspace/artifacts/{change_id}/plan.yaml`. If found, show `{done_count}/{total_count} tasks`. If not found, show `--`. For non-active children, show `--`.
+     - Below the table, render a context line:
+       - If `active_change.id` is non-empty (within-epic active change): "Current: **{active_child_title}**. Run `/mvt-resume` to continue."
+       - If `active_change.id` is empty (epic-pending state): "Next sub-change: **{current_change_title}**. Run `/mvt-analyze` to start."
   5. **Changes Overview** -- table from Step 3 (skip if no plans). Render with these columns:
 
-     | change-id | title | status | progress | current_task | updated_at |
-     |-----------|-------|--------|----------|--------------|------------|
+     | change-id | title | status | progress | current_tasks | project | updated_at |
+     |-----------|-------|--------|----------|---------------|---------|------------|
+
+     For `current_tasks`, display as a compact representation: if single-project, show the task id only; if multi-project, show `web: t2, api: t1` format. The `project` column lists the distinct projects across all tasks in the plan.
+
+     If any task has `deliverables.freshness == "stale"`, append a warning row: "Stale deliverables: {task_ids} -- run `/mvt-implement` to refresh"
   6. **Skill History** -- last 5 rows of the timeline from Step 2.
 
 - Hard cap: total rendered output should not exceed ~120 lines. If it would, truncate Skill History first; never truncate the active change or Changes Overview header rows.
 
 ### Step 5: Suggest Next Step
 - Resolution order (first match wins):
-  1. `active_change` has a plan in `in_progress`, `current_task` is set -> suggest the task's `skill_hint` (or, if missing, recommend `/mvt-update-plan` to set `current_task`).
-  2. `project-context.md` is missing -> suggest `/mvt-analyze-code`.
-  3. No `active_change` or no active plan -> suggest `/mvt-analyze` to start a new feature OR `/mvt-help` to browse the catalog.
+  1. `active_change` has a plan in `in_progress`, `current_tasks` has entries -> suggest the relevant task's `skill_hint` (or, if missing, recommend `/mvt-update-plan` to set `current_tasks`).
+  2. `active_epic.id` non-empty AND `active_change.id` empty (epic-pending state) -> suggest `/mvt-analyze` -- Start the next sub-change in the epic.
+  3. `project-context.md` is missing -> suggest `/mvt-analyze-code`.
+  4. No `active_change` or no active plan -> suggest `/mvt-analyze` to start a new feature OR `/mvt-help` to browse the catalog.
 - The suggestion must be a single line: skill command + one-clause reason.
 
 ## Edge Cases & Errors
@@ -137,11 +191,14 @@ For each check below, if the condition holds, perform the action implied by its 
 | `session.yaml` missing entirely | Render a minimal report (Projects section if available) and recommend `/mvt-init` |
 | `session.yaml` corrupt (parse error) | Surface error with file path, render Projects only, recommend `/mvt-init` to reinitialize |
 | `changes[]` references a `plan_path` that no longer exists | Include in Changes Overview with `(missing)` marker; do not delete the index entry from this skill |
-| Plan file's `current_task` references a task id not in `tasks[]` | Render `current_task` as `(invalid: <id>)`; do not attempt to fix |
+| Plan file's `current_tasks` references a task id not in `tasks[]` | Render `current_tasks` entry as `(invalid: <id>)`; do not attempt to fix |
 | Plan file's `status` is not one of the known values | Render the raw value verbatim; flag in skip-checks of the report |
 | Both `changes[]` and the artifact glob find the same plan | Deduplicate by `change_id`; prefer the indexed entry's metadata |
 | Multiple `in_progress` plans | All rendered in Changes Overview; Step 5's suggestion picks the most recently updated; mention the count in the suggestion line |
 | Workspace contains zero projects | Render header only with a single suggestion: `/mvt-init` |
+| `active_epic.epic_path` points to missing `epic.yaml` | Render `(epic.yaml not found at {path})` in Epic Progress section; skip the section |
+| `epic.yaml` parse error | Surface one-line error with file path, skip Epic Progress section; do not attempt repair |
+| `epic.yaml.current_change` points to non-existent child | Show `(invalid: {id})` in the child table context line |
 
 ## State Update
 
@@ -150,12 +207,13 @@ This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`.
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-status`) and the current project state.
+**Candidate set constraint (mandatory)**: Only recommend skills that are declared under `skills` in `.ai-agents/registry.yaml`.
 
 ### Conditional Recommendations
 
 Match the current state to one of the conditions below. If none match, use `default`.
 
-- **`active change with current_task`** → `/mvt-resume` -- Resume work on the current task
+- **`active change with current_tasks`** → `/mvt-resume` -- Resume work on the current task
 - **`project-context.md missing`** → `/mvt-analyze-code` -- Generate semantic project context
 - **`no active change`** → `/mvt-analyze` -- Start analyzing a new feature
 

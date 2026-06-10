@@ -54,19 +54,15 @@ You are the **Analyst** -- a Code Analysis Expert.
 - Do NOT recommend technologies (use `/mvt-design` instead)
 - Do NOT write implementation code (use `/mvt-implement` instead)
 
-## Variants
+## Invocation
 
-| Variant | Description |
-|---------|-------------|
-| `/mvt-analyze-code` | Analyze the first (or only) project |
-| `/mvt-analyze-code --all` | Analyze all projects in the workspace |
-| `/mvt-analyze-code {name}` | Analyze a specific project by name |
+`/mvt-analyze-code` — single entry point, no arguments or flags.
+When multiple projects exist, the skill interactively prompts the user to select the target(s).
 
 ## Activation Protocol
 
-### Step 1: Load Context (Context Foundation)
-Load the following files as foundational context:
-- `.ai-agents/workspace/session.yaml` -- Current workflow state
+### Step 1: Load Context
+Load these files as foundational context:
 - `.ai-agents/workspace/project-context.yaml` -- Project index (structural info)
 - `.ai-agents/registry.yaml` -- Available skills registry and knowledge declarations
 
@@ -75,23 +71,53 @@ Extended context for this skill:
 - .ai-agents/skills/_templates/project-context.md -- Default template for output structure
 - .ai-agents/skills/_templates/custom/project-context.md -- Custom template (if exists)
 
-### Step 2: Load Knowledge
+### Step 2: Resolve Project Scope (PS)
 
-Read `.ai-agents/registry.yaml` and load every file referenced under:
-- `knowledge.shared` (loaded by all skills)
-- `skills.<current-skill>.knowledge` (this skill's specific knowledge, if present)
+Read `project-context.yaml > projects[]`.
 
-For each entry, resolve files relative to `.ai-agents/{source}`:
-- If the entry lists `files: [...]`, load those files.
-- If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
+**Single project** (`projects.length == 1`): Set PS = [sole project name]. Skip remaining PS steps.
 
-Skip any path that does not exist.
+**Multi-project** (`projects.length > 1`):
+**Mode A -- Plan-driven** (active plan exists and skill operates on plan tasks):
+1. **Plan signal**: PS = current task's `project` array from plan's `current_tasks`. Drop stale project names (not in `projects[]`), fall through.
+2. **Path match**: Match current working paths against `projects[].path` and `source_paths`.
+3. **Prompt**: If still unresolved, list candidates and ask user. Never silently load all projects.
 
-### Archived Artifacts Convention
+**Mode B -- Non-plan** (no active plan or ad-hoc changes):
+Defer PS to execution: identify change target, match against `projects[].path` and `source_paths`, load project-specific knowledge on demand (Step 3).
 
-The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+### Step 3: Load Knowledge
 
-### Step 3: Load Config & Apply Preferences (Config Foundation)
+Registry uses project-keyed maps; `_all` is a reserved key (all projects). Applies to both top-level `knowledge` and `skills.<name>.knowledge`.
+
+**Knowledge Loading Protocol**:
+For each knowledge entry in the registry, follow these steps:
+1. **Read the `source` field** from the registry entry (e.g., `knowledge/project/_generated/`).
+2. **Construct the base directory**: join `.ai-agents/` with the `source` value → `.ai-agents/{source_value}/`.
+3. **Load files**:
+   - `files: [a.md, b.md]` → load `.ai-agents/{source_value}/a.md`, `.ai-agents/{source_value}/b.md`.
+   - `files_from_manifest: true` → read `.ai-agents/{source_value}/manifest.yaml`, load entries with `auto_load: true`.
+4. **Skip non-existent paths** silently (do not error or warn).
+
+**Worked example**:
+Given this registry entry:
+```yaml
+- id: project-context
+  source: knowledge/project/_generated/
+  files:
+    - project-context.md
+```
+Resolution: `.ai-agents/` + `knowledge/project/_generated/` + `project-context.md` = `.ai-agents/knowledge/project/_generated/project-context.md`
+
+**Anti-pattern -- DO NOT**:
+- Guess or hardcode base directories (e.g., `.ai-agents/workspace/`).
+- Assume a default path structure. The `source` field value is the authoritative path component.
+
+**At activation** (both modes): load `knowledge._all` + `skills.<current-skill>.knowledge._all`.
+**Mode A** (additionally): for each P in PS, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]`.
+**Mode B** (during execution): on demand, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]` for identified project(s).
+
+### Step 4: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
 **Language**:
@@ -130,7 +156,7 @@ All persisted document output (markdown written to disk) MUST follow the formatt
 - If a diagram genuinely cannot be expressed in mermaid (e.g. a precise spatial/pixel layout), state that explicitly and prefer a Markdown table or prose description over ASCII art.
 - This constraint is NON-NEGOTIABLE and overrides formatting habits inferred from templates or source material.
 
-### Step 4: Pre-flight Checks
+### Step 5: Pre-flight Checks
 
 For each check below, if the condition holds, perform the action implied by its **Level**:
 
@@ -154,17 +180,15 @@ This is an independent operation — no workflow prerequisites required.
 
 ### Step 1: Determine Analysis Target
 
-Identify which project(s) to analyze:
+Identify which project(s) to analyze using interactive routing:
 
-| Variant | Target |
-|---------|--------|
-| `/mvt-analyze-code` | Analyze the first project in `project-context.yaml` (or the only one) |
-| `/mvt-analyze-code --all` | Analyze all projects listed in `project-context.yaml` |
-| `/mvt-analyze-code {name}` | Analyze the project matching the given name |
-
-For each target project:
-1. Read its `path` from `project-context.yaml`
-2. Use `path` as the source directory for analysis
+1. Read `project-context.yaml > projects[]` to get the list of registered projects.
+2. **Single project** (only one entry): automatically select it — no prompt needed.
+3. **Multiple projects**: present an interactive selection menu:
+   - List each project by `name` with its `path`
+   - Include an option to **analyze all projects**
+   - Wait for user selection before proceeding
+4. For each selected project, read its `path` and use it as the source directory for analysis.
 
 ### Step 2: Load Template
 
@@ -224,14 +248,17 @@ Identify public interfaces:
    - Fill each template section with analysis results
    - If a section has no relevant content, include the heading with "(No relevant content detected)"
 
-2. Write the output to `.ai-agents/knowledge/project/_generated/project-context.md`:
-   - If analyzing a single project, write that project's section
-   - If analyzing multiple projects (`--all`), write all sections separated by `---`
-   - If the file already exists, merge with existing content:
-     - Replace sections for re-analyzed projects
-     - Preserve sections for projects NOT in this analysis run
+2. Write the output to `.ai-agents/knowledge/project/_generated/project-context.md` (always the flat path, regardless of project count).
+   - **Single-project**: write the full document.
+   - **Multi-project**: use `# Project: {name}` as the top-level heading to separate each project's content sections within the single file.
 
-3. Do NOT update `project-context.yaml` -- it is the lean index, managed by `/mvt-init` and `/mvt-sync-context` only
+3. If the output file already exists:
+   - **Single-project**: replace the whole file.
+   - **Multi-project**: replace only the `# Project: {name}` section(s) for re-analyzed projects; preserve sections for projects NOT in this analysis run.
+
+4. **Populate `source_paths`** in `project-context.yaml`: after analyzing each project, update the matching project entry's `source_paths` array with the detected source directories (e.g., `["src/", "test/"]`). This overwrites the empty default set by `/mvt-init`.
+
+5. Do NOT update other fields in `project-context.yaml` -- only `source_paths` is touched by this skill.
 
 ## Artifact Structure
 Read the document structure template from: `.ai-agents/skills/_templates/project-context.md`
@@ -263,6 +290,7 @@ If the script fails (non-zero exit), do NOT abort the skill's main task. Continu
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-analyze-code`) and the current project state.
+**Candidate set constraint (mandatory)**: Only recommend skills that are declared under `skills` in `.ai-agents/registry.yaml`.
 
 ### Conditional Recommendations
 

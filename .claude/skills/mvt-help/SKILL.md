@@ -15,29 +15,58 @@ You are the **Conductor** -- a Workflow Coordinator.
 
 ## Activation Protocol
 
-### Step 1: Load Context (Context Foundation)
-Load the following files as foundational context:
-- `.ai-agents/workspace/session.yaml` -- Current workflow state
+### Step 1: Load Context
+Load these files as foundational context:
 - `.ai-agents/workspace/project-context.yaml` -- Project index (structural info)
 - `.ai-agents/registry.yaml` -- Available skills registry and knowledge declarations
 
-### Step 2: Load Knowledge
+### Step 2: Resolve Project Scope (PS)
 
-Read `.ai-agents/registry.yaml` and load every file referenced under:
-- `knowledge.shared` (loaded by all skills)
-- `skills.<current-skill>.knowledge` (this skill's specific knowledge, if present)
+Read `project-context.yaml > projects[]`.
 
-For each entry, resolve files relative to `.ai-agents/{source}`:
-- If the entry lists `files: [...]`, load those files.
-- If the entry lists `files_from_manifest: true`, read `{source}/manifest.yaml` and load every `files[]` entry where `auto_load: true`.
+**Single project** (`projects.length == 1`): Set PS = [sole project name]. Skip remaining PS steps.
 
-Skip any path that does not exist.
+**Multi-project** (`projects.length > 1`):
+**Mode A -- Plan-driven** (active plan exists and skill operates on plan tasks):
+1. **Plan signal**: PS = current task's `project` array from plan's `current_tasks`. Drop stale project names (not in `projects[]`), fall through.
+2. **Path match**: Match current working paths against `projects[].path` and `source_paths`.
+3. **Prompt**: If still unresolved, list candidates and ask user. Never silently load all projects.
 
-### Archived Artifacts Convention
+**Mode B -- Non-plan** (no active plan or ad-hoc changes):
+Defer PS to execution: identify change target, match against `projects[].path` and `source_paths`, load project-specific knowledge on demand (Step 3).
 
-The directory `.ai-agents/workspace/artifacts/_archived/` contains change-id directories that have been archived by `/mvt-cleanup`. All skills that scan `artifacts/` MUST exclude `_archived/` from their scan scope unless explicitly inspecting archived content.
+### Step 3: Load Knowledge
 
-### Step 3: Load Config & Apply Preferences (Config Foundation)
+Registry uses project-keyed maps; `_all` is a reserved key (all projects). Applies to both top-level `knowledge` and `skills.<name>.knowledge`.
+
+**Knowledge Loading Protocol**:
+For each knowledge entry in the registry, follow these steps:
+1. **Read the `source` field** from the registry entry (e.g., `knowledge/project/_generated/`).
+2. **Construct the base directory**: join `.ai-agents/` with the `source` value → `.ai-agents/{source_value}/`.
+3. **Load files**:
+   - `files: [a.md, b.md]` → load `.ai-agents/{source_value}/a.md`, `.ai-agents/{source_value}/b.md`.
+   - `files_from_manifest: true` → read `.ai-agents/{source_value}/manifest.yaml`, load entries with `auto_load: true`.
+4. **Skip non-existent paths** silently (do not error or warn).
+
+**Worked example**:
+Given this registry entry:
+```yaml
+- id: project-context
+  source: knowledge/project/_generated/
+  files:
+    - project-context.md
+```
+Resolution: `.ai-agents/` + `knowledge/project/_generated/` + `project-context.md` = `.ai-agents/knowledge/project/_generated/project-context.md`
+
+**Anti-pattern -- DO NOT**:
+- Guess or hardcode base directories (e.g., `.ai-agents/workspace/`).
+- Assume a default path structure. The `source` field value is the authoritative path component.
+
+**At activation** (both modes): load `knowledge._all` + `skills.<current-skill>.knowledge._all`.
+**Mode A** (additionally): for each P in PS, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]`.
+**Mode B** (during execution): on demand, load `knowledge[P]` + `skills.<current-skill>.knowledge[P]` for identified project(s).
+
+### Step 4: Load Config & Apply Preferences (Config Foundation)
 Read `.ai-agents/config.yaml` and enforce the following throughout this entire session:
 
 **Language**:
@@ -48,9 +77,6 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 - `preferences.output.no_emojis` → If true, never use emojis
 - `preferences.output.data_format` → Use this format for data sections in artifacts
 - `preferences.context_routing.relevance_threshold` → Used by `/mvt-manage-context add` for AI routing (default 70 if missing)
-
-### Step 4: Pre-flight Checks
-- No blocking checks required.
 
 ## Execution Flow
 
@@ -65,8 +91,9 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 
   | Condition | Recommendation |
   |-----------|---------------|
-  | `session.yaml` missing or `initialized_at` empty | `/mvt-init` -- Initialize the project |
+  | `.ai-agents/workspace/session.yaml` missing or `initialized_at` empty | `/mvt-init` -- Initialize the project |
   | Initialized AND `project-context.md` does not exist | `/mvt-analyze-code` -- Analyze existing code |
+  | `active_epic.id` non-empty AND `active_change.id` empty (epic-pending) | `/mvt-analyze` -- Start the next sub-change in the epic |
   | No requirements (no `analysis.md` for active change AND no completed `/mvt-analyze` in `history`) | `/mvt-analyze` -- Analyze requirements |
   | No requirements, but user describes a simple change directly | `/mvt-quick-dev` -- Implement a simple change quickly |
   | Requirements present, no `design.md` | `/mvt-design` -- Design architecture |
@@ -79,14 +106,11 @@ Read `.ai-agents/config.yaml` and enforce the following throughout this entire s
 
 ### Step 3: Display Skills Catalog
 Read `registry.yaml` > `skills` section.
-Group skills by `category` field and display as tables:
-- `workflow` -> "Workflow Skills (sequential phases)"
-- `shortcut` -> "Shortcut Skills (anytime, no prerequisites)"
-- `project` -> "Project Management Skills"
-- `utility` -> "Utility Skills"
+Display all skills as a single flat table (no grouping; the section comment headers in `registry.yaml` already group them by role for human readers):
+- Header row: `Skill | Description`
 
 For each skill, show: `/{skill-name}` | `description` field from registry.
-Sort within each group by declaration order in registry.
+Sort by declaration order in registry.
 
 ### Step 4: Show Workflow Diagram
 Display the standard workflow with current position highlighted:
@@ -99,6 +123,9 @@ flowchart LR
     E --> F[review] --> G[test]
 
     C -.->|simple change| Q[quick-dev]
+    C -.->|epic scale| DC[decompose]
+    DC --> C2[analyze<br/>epic-child]
+    C2 --> D
 ```
 
 Color-code based on current progress: green (done), yellow (current/recommended), gray (pending). The "current" node is whichever skill the Step 2 table recommended; "done" is determined by the same evidence the Step 2 table consumed.
@@ -110,7 +137,7 @@ Color-code based on current progress: green (done), yellow (current/recommended)
   | Question pattern | Response |
   |------------------|----------|
   | "What should I do next?" / no specific question | Repeat the Step 2 recommendation in one line, followed by a one-clause reason citing the matched condition |
-  | "What does `/mvt-X` do?" / asks about a specific skill | Read the skill's metadata from `registry.yaml`, show: name, description, category, dependencies, knowledge entries (if any), template (if any). If the skill has a `path`, mention "see SKILL.md for the full procedure" -- do NOT inline the full SKILL.md content (too large) |
+  | "What does `/mvt-X` do?" / asks about a specific skill | Read the skill's metadata from `registry.yaml`, show: name, description, knowledge entries (if any), template (if any). Mention "see the skill's SKILL.md for the full procedure" -- do NOT inline the full SKILL.md content (too large) |
   | "Compare `/mvt-X` and `/mvt-Y`" | Pull descriptions from registry; if both are workflow skills, mention their relative position in the diagram |
   | Asks about something not in registry | Reply: "No skill matches that. Available skills: see catalog above." Do not invent skills |
 
@@ -123,7 +150,8 @@ Color-code based on current progress: green (done), yellow (current/recommended)
 | `changes[]` references a `plan_path` that no longer exists | Ignore for help purposes; do not warn -- `/mvt-status` is the right place for that |
 | User invokes `/mvt-help` while inside an active change with Critical review findings | Step 2's recommendation is `/mvt-fix`; surface this prominently above the catalog |
 | User asks about a custom skill (registry entry with `custom: true`) | Treat identically to built-ins; the only difference is showing `custom: true` in the metadata view |
-| Workflow diagram cannot be rendered (mermaid unsupported in environment) | Fall back to a textual flow: `init -> analyze-code -> analyze -> design -> [plan-dev] -> implement -> review -> test` |
+| Workflow diagram cannot be rendered (mermaid unsupported in environment) | Fall back to a textual flow: `init -> analyze-code -> analyze -> [decompose (epic) -> analyze (epic-child)] -> design -> [plan-dev] -> implement -> review -> test` |
+| Epic-pending state (`active_epic` non-empty, `active_change` empty) | Step 2's recommendation is `/mvt-analyze` to start the next sub-change; the decompose path is shown in the workflow diagram |
 
 ## Output Format
 
@@ -151,6 +179,7 @@ This skill is read-only and does NOT modify `.ai-agents/workspace/session.yaml`.
 ## Suggested Next Steps
 
 Recommend 2-3 relevant next skills based on the skill just completed (`mvt-help`) and the current project state.
+**Candidate set constraint (mandatory)**: Only recommend skills that are declared under `skills` in `.ai-agents/registry.yaml`.
 
 ### Conditional Recommendations
 

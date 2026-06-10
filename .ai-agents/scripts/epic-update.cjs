@@ -7314,7 +7314,7 @@ var require_dist = __commonJS({
   }
 });
 
-// sources/scripts/plan-update.js
+// sources/scripts/epic-update.js
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");
 var import_yaml = __toESM(require_dist(), 1);
@@ -7342,395 +7342,329 @@ function loadSoleProject(projectRoot) {
     return null;
   }
 }
-var VALID_STATUSES = ["pending", "in_progress", "done", "blocked", "skipped"];
-var TERMINAL_STATUSES = ["done", "blocked", "skipped"];
-var PROJECT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-var VALID_FRESHNESS = ["current", "stale"];
+var VALID_CHILD_STATUSES = ["pending", "active", "done", "abandoned"];
+var TERMINAL_STATUSES = ["done", "abandoned"];
 var ERRORS = {
-  MISSING_PLAN: () => "Missing required argument: --plan",
-  MISSING_TASK: () => "Missing required argument: --task",
-  MISSING_STATUS: () => "Missing required argument: --status",
-  INVALID_STATUS: (val) => `Invalid --status "${val}". Must be one of: ${VALID_STATUSES.join(", ")}.`,
-  PLAN_NOT_FOUND: (p) => `Plan not found at ${p}. Run /mvt-plan-dev to create one.`,
-  PLAN_PARSE_FAILED: (detail) => `Failed to parse plan.yaml: ${detail}. Fix the file manually; not repairing silently.`,
-  TASK_NOT_FOUND: (id, valid) => `Task "${id}" not found. Valid task ids: ${valid.length ? valid.join(", ") : "(none)"}.`,
-  VALIDATION_FAILED: (errs) => `Plan validation failed; file not written:
+  MISSING_EPIC: () => "Missing required argument: --epic (or --validate <path>)",
+  NO_OPERATION: () => "No operation specified. Use --complete-child, --set-child-status, --switch-active, --add-child, or --validate.",
+  EPIC_NOT_FOUND: (p) => `Epic file not found at ${p}.`,
+  EPIC_PARSE_FAILED: (detail) => `Failed to parse epic.yaml: ${detail}`,
+  CHILD_NOT_FOUND: (id, valid) => `Child "${id}" not found. Valid children: ${valid.length ? valid.join(", ") : "(none)"}.`,
+  VALIDATION_FAILED: (errs) => `Epic validation failed:
   - ${errs.join("\n  - ")}`,
-  PLAN_WRITE_FAILED: (detail) => `Failed to write plan.yaml: ${detail}`,
-  INVALID_PROJECT_NAME: (name) => `Invalid project name "${name}". Must match ${PROJECT_NAME_RE.source} (no leading underscore).`,
-  INVALID_TASK_PROJECT: (taskId, proj, valid) => `Task "${taskId}" has project "${proj}" not in --projects list: ${valid.join(", ")}.`,
-  INVALID_FRESHNESS: (taskId, val) => `Task "${taskId}" has invalid deliverables.freshness "${val}". Must be one of: ${VALID_FRESHNESS.join(", ")}.`,
-  STALE_TASK_NOT_FOUND: (id, valid) => `--mark-deliverable-stale task "${id}" not found. Valid task ids: ${valid.length ? valid.join(", ") : "(none)"}.`,
-  INVALID_DELIVERABLES_POINTER: (val) => `Invalid --deliverables-pointer "${val}". Only "current" is supported.`
+  EPIC_WRITE_FAILED: (detail) => `Failed to write epic.yaml: ${detail}`,
+  INVALID_CHILD_STATUS: (val) => `Invalid --child-status "${val}". Must be one of: ${VALID_CHILD_STATUSES.join(", ")}.`,
+  MISSING_CHILD_STATUS: () => "--set-child-status requires --child-status <status>",
+  MULTIPLE_ACTIVE: () => "Cannot activate: another child is already active. Use --switch-active for atomic reorder.",
+  UNRESOLVED_DEPS: (id, deps) => `Cannot activate "${id}": unresolved depends_on: ${deps.join(", ")}`,
+  ADD_CHILD_MISSING: () => "--add-child requires an id argument",
+  ADD_CHILD_TITLE_MISSING: (id) => `--add-child "${id}" requires --child-title`
 };
 function parseArgs(argv) {
-  const args2 = {};
+  const args = {};
+  const addChildren = [];
   for (let i = 2; i < argv.length; i++) {
-    if (argv[i].startsWith("--")) {
-      const key = argv[i].slice(2);
+    const arg = argv[i];
+    if (arg === "--add-child") {
       const next = argv[i + 1];
       if (next && !next.startsWith("--")) {
-        args2[key] = next;
+        addChildren.push({ id: next });
         i++;
       } else {
-        args2[key] = true;
+        addChildren.push({ id: true });
       }
-    }
-  }
-  return args2;
-}
-function validateArgs(args2) {
-  if (!args2.plan || args2.plan === true) return ERRORS.MISSING_PLAN();
-  if (!args2.task || args2.task === true) return ERRORS.MISSING_TASK();
-  if (!args2.status || args2.status === true) return ERRORS.MISSING_STATUS();
-  if (!VALID_STATUSES.includes(args2.status)) return ERRORS.INVALID_STATUS(args2.status);
-  return null;
-}
-function applyUpdate(plan, args2, now) {
-  const task = plan.tasks.find((t) => t.id === args2.task);
-  const oldStatus = task.status;
-  task.status = args2.status;
-  if (args2.artifacts && args2.artifacts !== true) {
-    const incoming = args2.artifacts.split(",").map((s) => s.trim()).filter(Boolean);
-    if (incoming.length) {
-      if (!task.artifacts || typeof task.artifacts !== "object") {
-        task.artifacts = { files: [] };
-      }
-      if (!Array.isArray(task.artifacts.files)) {
-        task.artifacts.files = [];
-      }
-      const seen = new Set(task.artifacts.files);
-      for (const f of incoming) {
-        if (!seen.has(f)) {
-          task.artifacts.files.push(f);
-          seen.add(f);
-        }
-      }
-    }
-  }
-  if (args2.notes && args2.notes !== true) {
-    task.notes = args2.notes;
-  }
-  if (args2.status === "done" && !task.completed_at) {
-    task.completed_at = now;
-  } else if (args2.status !== "done") {
-    task.completed_at = null;
-  }
-  if (args2["deliverables-pointer"] && args2["deliverables-pointer"] !== true) {
-    if (args2["deliverables-pointer"] !== "current") {
-      return { error: ERRORS.INVALID_DELIVERABLES_POINTER(args2["deliverables-pointer"]) };
-    }
-    task.deliverables = { freshness: "current" };
-  }
-  if (args2["mark-deliverable-stale"] && args2["mark-deliverable-stale"] !== true) {
-    const staleIds = args2["mark-deliverable-stale"].split(",").map((s) => s.trim()).filter(Boolean);
-    for (const staleTaskId of staleIds) {
-      const staleTask = plan.tasks.find((t) => t.id === staleTaskId);
-      if (staleTask) {
-        if (!staleTask.deliverables || typeof staleTask.deliverables !== "object") {
-          staleTask.deliverables = { freshness: "stale" };
-        } else {
-          staleTask.deliverables.freshness = "stale";
-        }
-      }
-    }
-  }
-  plan.updated_at = now;
-  return { id: task.id, title: task.title || "", old_status: oldStatus, new_status: args2.status };
-}
-function recomputeCurrentTasks(plan, changedTaskId, projectList) {
-  let warning = null;
-  const changedTask = plan.tasks.find((t) => t.id === changedTaskId);
-  const changedToTerminal = changedTask && TERMINAL_STATUSES.includes(changedTask.status);
-  const priorActiveProjects = new Set(
-    Object.keys(plan.current_tasks || {})
-  );
-  const resolvedIds = new Set(
-    plan.tasks.filter((t) => t.status === "done" || t.status === "skipped").map((t) => t.id)
-  );
-  const projects = projectList && projectList.length > 0 ? projectList : loadSoleProject(findProjectRootFromPath(args.plan)) || ["default"];
-  const currentTasks = {};
-  for (const proj of projects) {
-    const inProgressForProject = plan.tasks.filter(
-      (t) => t.status === "in_progress" && getTaskProjects(t).includes(proj)
-    );
-    if (inProgressForProject.length > 0) {
-      currentTasks[proj] = inProgressForProject[0].id;
       continue;
     }
-    const nextPending = plan.tasks.find(
-      (t) => t.status === "pending" && getTaskProjects(t).includes(proj) && (t.depends_on || []).every((d) => resolvedIds.has(d))
-    );
-    if (nextPending) {
-      nextPending.status = "in_progress";
-      currentTasks[proj] = nextPending.id;
-    }
-  }
-  let switchNotification = null;
-  if (changedToTerminal && changedTask) {
-    const newActiveProjects = new Set(Object.keys(currentTasks));
-    const newlyActive = [...newActiveProjects].filter((p) => !priorActiveProjects.has(p));
-    if (newlyActive.length > 0) {
-      switchNotification = {
-        project_switch: {
-          from: [...priorActiveProjects].filter((p) => !newActiveProjects.has(p)),
-          to: newlyActive
+    if (arg === "--child-title" || arg === "--child-scope" || arg === "--child-depends-on") {
+      const next = argv[i + 1];
+      if (addChildren.length > 0 && next) {
+        const current = addChildren[addChildren.length - 1];
+        if (arg === "--child-depends-on") {
+          current.depends_on = next.split(",").map((s) => s.trim()).filter(Boolean);
+        } else {
+          current[arg.slice(8)] = next;
         }
-      };
+        i++;
+      }
+      continue;
     }
-  }
-  const allDone = plan.tasks.every((t) => t.status === "done");
-  const anyInProgress = plan.tasks.some((t) => t.status === "in_progress");
-  const anyPending = plan.tasks.some((t) => t.status === "pending");
-  if (allDone) {
-    plan.status = "done";
-    plan.current_tasks = {};
-  } else {
-    plan.current_tasks = currentTasks;
-    if (anyInProgress || Object.keys(currentTasks).length > 0) {
-      plan.status = "in_progress";
-    } else if (anyPending) {
-      plan.status = "in_progress";
-      warning = "All remaining tasks are blocked by dependencies; resolve a blocker before continuing.";
-    }
-  }
-  return { warning, project_switch: switchNotification };
-}
-function getTaskProjects(task) {
-  if (Array.isArray(task.project) && task.project.length > 0) {
-    return task.project;
-  }
-  return ["default"];
-}
-function deriveProjectList(tasks) {
-  const projects = /* @__PURE__ */ new Set();
-  for (const t of tasks) {
-    for (const p of getTaskProjects(t)) {
-      projects.add(p);
-    }
-  }
-  return [...projects];
-}
-function validatePlan(plan, projectList) {
-  const errors = [];
-  const tasks = Array.isArray(plan.tasks) ? plan.tasks : [];
-  const ids = tasks.map((t) => t.id);
-  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
-  if (dupes.length) {
-    errors.push(`Duplicate task ids: ${[...new Set(dupes)].join(", ")}`);
-  }
-  const idSet = new Set(ids);
-  for (const t of tasks) {
-    for (const d of t.depends_on || []) {
-      if (!idSet.has(d)) {
-        errors.push(`Task "${t.id}" depends_on unknown task "${d}"`);
+    if (arg.startsWith("--")) {
+      const key = arg.slice(2);
+      const next = argv[i + 1];
+      if (key === "set-child-status" && next && !next.startsWith("--")) {
+        args[key] = next;
+        i++;
+        const statusVal = argv[i + 1];
+        if (statusVal && !statusVal.startsWith("--")) {
+          args["child-status"] = statusVal;
+          i++;
+        }
+        continue;
+      }
+      if (next && !next.startsWith("--")) {
+        args[key] = next;
+        i++;
+      } else {
+        args[key] = true;
       }
     }
   }
-  const cycle = findCycle(tasks, projectList);
-  if (cycle) {
-    errors.push(`Dependency cycle detected: ${cycle.join(" -> ")}`);
+  if (addChildren.length > 0) args["add-child"] = addChildren;
+  return args;
+}
+function validateArgs(args) {
+  if (!args.epic && !args.validate) return ERRORS.MISSING_EPIC();
+  const hasOp = args["complete-child"] || args["set-child-status"] || args["switch-active"] || args["add-child"] || args.validate;
+  if (!hasOp) return ERRORS.NO_OPERATION();
+  if (args["set-child-status"] && !args["child-status"]) return ERRORS.MISSING_CHILD_STATUS();
+  if (args["child-status"] && !VALID_CHILD_STATUSES.includes(args["child-status"]))
+    return ERRORS.INVALID_CHILD_STATUS(args["child-status"]);
+  return null;
+}
+function findCycle(children) {
+  const idSet = new Set(children.map((c) => c.change_id));
+  const inDegree = new Map(children.map((c) => [c.change_id, 0]));
+  const adj = new Map(children.map((c) => [c.change_id, []]));
+  for (const c of children) {
+    for (const dep of c.depends_on || []) {
+      if (idSet.has(dep)) {
+        adj.get(dep).push(c.change_id);
+        inDegree.set(c.change_id, (inDegree.get(c.change_id) || 0) + 1);
+      }
+    }
   }
-  const projects = projectList && projectList.length > 0 ? projectList : loadSoleProject(findProjectRootFromPath(args.plan)) || ["default"];
-  for (const proj of projects) {
-    const inProgressForProject = tasks.filter(
-      (t) => t.status === "in_progress" && getTaskProjects(t).includes(proj)
-    );
-    if (inProgressForProject.length > 1) {
+  const queue = [];
+  for (const [id, deg] of inDegree) {
+    if (deg === 0) queue.push(id);
+  }
+  let processed = 0;
+  while (queue.length > 0) {
+    const node = queue.shift();
+    processed++;
+    for (const neighbor of adj.get(node) || []) {
+      const newDeg = inDegree.get(neighbor) - 1;
+      inDegree.set(neighbor, newDeg);
+      if (newDeg === 0) queue.push(neighbor);
+    }
+  }
+  if (processed < children.length) {
+    const inCycle = children.filter((c) => inDegree.get(c.change_id) > 0).map((c) => c.change_id);
+    return ["cycle", ...inCycle];
+  }
+  return null;
+}
+function validateEpic(epic) {
+  const errors = [];
+  const children = Array.isArray(epic.children) ? epic.children : [];
+  const ids = children.map((c) => c.change_id);
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  if (dupes.length) errors.push(`Duplicate change_ids: ${[...new Set(dupes)].join(", ")}`);
+  const idSet = new Set(ids);
+  for (const c of children) {
+    for (const d of c.depends_on || []) {
+      if (!idSet.has(d)) {
+        errors.push(`Child "${c.change_id}" depends_on unknown child "${d}"`);
+      }
+    }
+  }
+  const cycle = findCycle(children);
+  if (cycle) errors.push(`Dependency cycle: ${cycle.join(" -> ")}`);
+  if (epic.current_change) {
+    const target = children.find((c) => c.change_id === epic.current_change);
+    if (!target) {
+      errors.push(`current_change "${epic.current_change}" does not reference a child`);
+    } else if (!["pending", "active"].includes(target.status)) {
       errors.push(
-        `More than one task is in_progress for project "${proj}": ${inProgressForProject.map((t) => t.id).join(", ")}`
+        `current_change "${epic.current_change}" has status "${target.status}" (must be pending or active)`
       );
     }
   }
-  if (projectList && projectList.length > 0) {
-    for (const t of tasks) {
-      if (Array.isArray(t.project)) {
-        for (const p of t.project) {
-          if (!projectList.includes(p)) {
-            errors.push(ERRORS.INVALID_TASK_PROJECT(t.id, p, projectList));
-          }
-        }
-      }
-    }
+  const activeCount = children.filter((c) => c.status === "active").length;
+  if (activeCount > 1) {
+    errors.push(
+      `Multiple active children (${activeCount}): ${children.filter((c) => c.status === "active").map((c) => c.change_id).join(", ")}`
+    );
   }
-  if (projectList && projectList.length > 0) {
-    for (const p of projectList) {
-      if (!PROJECT_NAME_RE.test(p)) {
-        errors.push(ERRORS.INVALID_PROJECT_NAME(p));
-      }
-    }
-  }
-  for (const t of tasks) {
-    if (!Array.isArray(t.acceptance) || t.acceptance.length === 0) {
-      errors.push(`Task "${t.id}" has no acceptance criteria`);
-    }
-  }
-  for (const t of tasks) {
-    if (t.status !== "done" && t.completed_at != null) {
-      errors.push(`Task "${t.id}" is not done but has completed_at set`);
-    }
-  }
-  for (const t of tasks) {
-    if (t.deliverables && typeof t.deliverables === "object") {
-      if (!VALID_FRESHNESS.includes(t.deliverables.freshness)) {
-        errors.push(ERRORS.INVALID_FRESHNESS(t.id, t.deliverables.freshness));
-      }
-    }
-  }
-  if (plan.status === "done") {
-    if (plan.current_tasks && Object.keys(plan.current_tasks).length > 0) {
-      errors.push("plan.status is done but current_tasks is not empty");
-    }
-  } else if (plan.current_tasks && typeof plan.current_tasks === "object") {
-    for (const [proj, taskId] of Object.entries(plan.current_tasks)) {
-      const ct = tasks.find((t) => t.id === taskId);
-      if (!ct) {
-        errors.push(`current_tasks["${proj}"] = "${taskId}" does not reference a task`);
-      } else if (ct.status !== "pending" && ct.status !== "in_progress") {
-        errors.push(
-          `current_tasks["${proj}"] = "${taskId}" has status "${ct.status}" (must be pending or in_progress)`
-        );
-      }
-    }
+  const allTerminal = children.length > 0 && children.every((c) => TERMINAL_STATUSES.includes(c.status));
+  if (allTerminal && epic.status === "in_progress") {
+    errors.push("All children are done/abandoned but epic status is still in_progress");
   }
   return errors;
 }
-function findCycle(tasks, projectList) {
-  if (!projectList || projectList.length <= 1) {
-    return findCycleInSubgraph(tasks, tasks.map((t) => t.id));
+function recomputeCurrentChange(epic) {
+  const children = epic.children || [];
+  const resolvedIds = new Set(
+    children.filter((c) => TERMINAL_STATUSES.includes(c.status)).map((c) => c.change_id)
+  );
+  const next = children.find(
+    (c) => c.status === "pending" && (c.depends_on || []).every((d) => resolvedIds.has(d))
+  );
+  if (next) {
+    next.status = "active";
+    epic.current_change = next.change_id;
+  } else {
+    epic.current_change = "";
+    const allTerminal = children.length > 0 && children.every((c) => TERMINAL_STATUSES.includes(c.status));
+    if (allTerminal) epic.status = "done";
   }
-  const taskMap = new Map(tasks.map((t) => [t.id, t]));
-  for (const proj of projectList) {
-    const idSet = new Set(
-      tasks.filter((t) => getTaskProjects(t).includes(proj)).map((t) => t.id)
-    );
-    const queue = [...idSet];
-    for (const id of queue) {
-      for (const dep of taskMap.get(id)?.depends_on || []) {
-        if (!idSet.has(dep)) {
-          idSet.add(dep);
-          queue.push(dep);
-        }
-      }
-    }
-    const cycle = findCycleInSubgraph(tasks, [...idSet]);
-    if (cycle) return cycle;
-  }
-  return null;
+  return next ? next.change_id : "";
 }
-function findCycleInSubgraph(tasks, taskIds) {
-  const idSet = new Set(taskIds);
-  const adj = /* @__PURE__ */ new Map();
-  for (const t of tasks) {
-    if (!idSet.has(t.id)) continue;
-    adj.set(t.id, (t.depends_on || []).filter((d) => idSet.has(d)));
+function completeChild(epic, changeId, now) {
+  const child = (epic.children || []).find((c) => c.change_id === changeId);
+  if (!child) return { error: ERRORS.CHILD_NOT_FOUND(changeId, (epic.children || []).map((c) => c.change_id)) };
+  const oldStatus = child.status;
+  child.status = "done";
+  child.completed_at = now;
+  const nextId = recomputeCurrentChange(epic);
+  const doneCount = (epic.children || []).filter((c) => c.status === "done").length;
+  return {
+    child: { change_id: changeId, old_status: oldStatus, new_status: "done" },
+    current_change: nextId,
+    epic_status: epic.status,
+    progress: { done: doneCount, total: (epic.children || []).length }
+  };
+}
+function setChildStatus(epic, changeId, status, now) {
+  const child = (epic.children || []).find((c) => c.change_id === changeId);
+  if (!child) return { error: ERRORS.CHILD_NOT_FOUND(changeId, (epic.children || []).map((c) => c.change_id)) };
+  if (status === "active") {
+    const existing = (epic.children || []).find(
+      (c) => c.status === "active" && c.change_id !== changeId
+    );
+    if (existing) return { error: ERRORS.MULTIPLE_ACTIVE() };
   }
-  const WHITE = 0, GRAY = 1, BLACK = 2;
-  const color = new Map(taskIds.map((id) => [id, WHITE]));
-  const stack = [];
-  function dfs(node) {
-    color.set(node, GRAY);
-    stack.push(node);
-    for (const dep of adj.get(node) || []) {
-      if (!color.has(dep)) continue;
-      if (color.get(dep) === GRAY) {
-        const start = stack.indexOf(dep);
-        return [...stack.slice(start), dep];
-      }
-      if (color.get(dep) === WHITE) {
-        const found = dfs(dep);
-        if (found) return found;
-      }
+  const oldStatus = child.status;
+  child.status = status;
+  if (status === "done") child.completed_at = now;
+  else if (oldStatus === "done" && status !== "done") child.completed_at = null;
+  if (status === "active") epic.current_change = changeId;
+  const doneCount = (epic.children || []).filter((c) => c.status === "done").length;
+  return {
+    child: { change_id: changeId, old_status: oldStatus, new_status: status },
+    current_change: epic.current_change || "",
+    epic_status: epic.status,
+    progress: { done: doneCount, total: (epic.children || []).length }
+  };
+}
+function switchActive(epic, changeId) {
+  const children = epic.children || [];
+  const target = children.find((c) => c.change_id === changeId);
+  if (!target) return { error: ERRORS.CHILD_NOT_FOUND(changeId, children.map((c) => c.change_id)) };
+  const resolvedIds = new Set(
+    children.filter((c) => TERMINAL_STATUSES.includes(c.status)).map((c) => c.change_id)
+  );
+  const unresolved = (target.depends_on || []).filter((d) => !resolvedIds.has(d));
+  if (unresolved.length) return { error: ERRORS.UNRESOLVED_DEPS(changeId, unresolved) };
+  for (const c of children) {
+    if (c.status === "active" && c.change_id !== changeId) {
+      c.status = "pending";
     }
-    stack.pop();
-    color.set(node, BLACK);
-    return null;
   }
-  for (const id of taskIds) {
-    if (color.get(id) === WHITE) {
-      const found = dfs(id);
-      if (found) return found;
+  target.status = "active";
+  epic.current_change = changeId;
+  const doneCount = children.filter((c) => c.status === "done").length;
+  return {
+    child: { change_id: changeId, old_status: "pending", new_status: "active" },
+    current_change: changeId,
+    epic_status: epic.status,
+    progress: { done: doneCount, total: children.length }
+  };
+}
+function addChild(epic, childrenToAdd, epicPath) {
+  if (!Array.isArray(childrenToAdd) || childrenToAdd.length === 0) {
+    return { error: ERRORS.ADD_CHILD_MISSING() };
+  }
+  epic.children = epic.children || [];
+  const defaultProject = loadSoleProject(findProjectRootFromPath(epicPath)) || ["default"];
+  for (const child of childrenToAdd) {
+    if (!child.id || child.id === true) return { error: ERRORS.ADD_CHILD_MISSING() };
+    if (!child.title) return { error: ERRORS.ADD_CHILD_TITLE_MISSING(child.id) };
+    if (epic.children.some((c) => c.change_id === child.id)) {
+      return { error: `Duplicate change_id "${child.id}" in children` };
     }
+    epic.children.push({
+      change_id: child.id,
+      title: child.title,
+      status: "pending",
+      depends_on: child.depends_on || [],
+      project: defaultProject,
+      scope: child.scope || "",
+      completed_at: null
+    });
   }
-  return null;
+  const doneCount = epic.children.filter((c) => c.status === "done").length;
+  return {
+    child: { change_id: childrenToAdd[childrenToAdd.length - 1].id, new_status: "pending" },
+    current_change: epic.current_change || "",
+    epic_status: epic.status,
+    progress: { done: doneCount, total: epic.children.length }
+  };
 }
 function main() {
-  const args2 = parseArgs(process.argv);
-  const argErr = validateArgs(args2);
+  const args = parseArgs(process.argv);
+  const argErr = validateArgs(args);
   if (argErr) {
     process.stderr.write(argErr + "\n");
     process.exit(1);
   }
-  if (!(0, import_node_fs.existsSync)(args2.plan)) {
-    process.stderr.write(ERRORS.PLAN_NOT_FOUND(args2.plan) + "\n");
+  const epicPath = args.epic || args.validate;
+  if (!(0, import_node_fs.existsSync)(epicPath)) {
+    process.stderr.write(ERRORS.EPIC_NOT_FOUND(epicPath) + "\n");
     process.exit(1);
   }
-  let plan;
+  let epic;
   try {
-    plan = (0, import_yaml.parse)((0, import_node_fs.readFileSync)(args2.plan, "utf-8"));
+    epic = (0, import_yaml.parse)((0, import_node_fs.readFileSync)(epicPath, "utf-8"));
   } catch (e) {
-    process.stderr.write(ERRORS.PLAN_PARSE_FAILED(e.message) + "\n");
+    process.stderr.write(ERRORS.EPIC_PARSE_FAILED(e.message) + "\n");
     process.exit(1);
   }
-  if (!plan || !Array.isArray(plan.tasks)) {
-    process.stderr.write(ERRORS.PLAN_PARSE_FAILED("missing tasks[]") + "\n");
+  if (!epic || typeof epic !== "object") {
+    process.stderr.write(ERRORS.EPIC_PARSE_FAILED("not a valid YAML object") + "\n");
     process.exit(1);
   }
-  if (!plan.tasks.some((t) => t.id === args2.task)) {
-    process.stderr.write(
-      ERRORS.TASK_NOT_FOUND(args2.task, plan.tasks.map((t) => t.id)) + "\n"
-    );
-    process.exit(1);
-  }
-  let projectList = null;
-  if (args2.projects && args2.projects !== true) {
-    projectList = args2.projects.split(",").map((s) => s.trim()).filter(Boolean);
-  } else {
-    projectList = deriveProjectList(plan.tasks);
-  }
-  if (plan.current_task != null && (!plan.current_tasks || typeof plan.current_tasks !== "object")) {
-    plan.current_tasks = { default: plan.current_task };
-  }
-  if ("current_task" in plan) {
-    delete plan.current_task;
-  }
-  if (!plan.current_tasks) {
-    plan.current_tasks = {};
+  if (args.validate) {
+    const errors2 = validateEpic(epic);
+    if (errors2.length) {
+      process.stderr.write(ERRORS.VALIDATION_FAILED(errors2) + "\n");
+      process.exit(1);
+    }
+    process.stdout.write(JSON.stringify({ ok: true, valid: true }) + "\n");
+    process.exit(0);
   }
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  const taskChange = applyUpdate(plan, args2, now);
-  if (taskChange.error) {
-    process.stderr.write(taskChange.error + "\n");
+  let result;
+  if (args["complete-child"]) {
+    result = completeChild(epic, args["complete-child"], now);
+  } else if (args["set-child-status"]) {
+    result = setChildStatus(epic, args["set-child-status"], args["child-status"], now);
+  } else if (args["switch-active"]) {
+    result = switchActive(epic, args["switch-active"]);
+  } else if (args["add-child"]) {
+    result = addChild(epic, args["add-child"], args.epic);
+  }
+  if (result.error) {
+    process.stderr.write(result.error + "\n");
     process.exit(1);
   }
-  const { warning, project_switch: switchNotif } = recomputeCurrentTasks(plan, args2.task, projectList);
-  const validationErrors = validatePlan(plan, projectList);
-  if (validationErrors.length) {
-    process.stderr.write(ERRORS.VALIDATION_FAILED(validationErrors) + "\n");
+  const errors = validateEpic(epic);
+  if (errors.length) {
+    process.stderr.write(ERRORS.VALIDATION_FAILED(errors) + "\n");
     process.exit(1);
   }
-  const tmpPath = args2.plan + ".tmp";
+  epic.updated_at = now;
+  const tmpPath = epicPath + ".tmp";
   try {
-    (0, import_node_fs.writeFileSync)(tmpPath, (0, import_yaml.stringify)(plan, { lineWidth: 200 }), "utf-8");
-    (0, import_node_fs.renameSync)(tmpPath, args2.plan);
+    (0, import_node_fs.writeFileSync)(tmpPath, (0, import_yaml.stringify)(epic, { lineWidth: 200 }), "utf-8");
+    (0, import_node_fs.renameSync)(tmpPath, epicPath);
   } catch (e) {
     try {
       if ((0, import_node_fs.existsSync)(tmpPath)) (0, import_node_fs.unlinkSync)(tmpPath);
     } catch {
     }
-    process.stderr.write(ERRORS.PLAN_WRITE_FAILED(e.message) + "\n");
+    process.stderr.write(ERRORS.EPIC_WRITE_FAILED(e.message) + "\n");
     process.exit(1);
   }
-  const doneCount = plan.tasks.filter((t) => t.status === "done").length;
-  const result = {
-    ok: true,
-    task: taskChange,
-    current_tasks: plan.current_tasks,
-    plan_status: plan.status,
-    progress: { done: doneCount, total: plan.tasks.length },
-    ...warning ? { warning } : {},
-    ...switchNotif ? switchNotif : {}
-  };
-  process.stdout.write(JSON.stringify(result) + "\n");
+  process.stdout.write(JSON.stringify({ ok: true, ...result }) + "\n");
 }
 main();
