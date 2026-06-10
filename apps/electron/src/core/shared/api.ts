@@ -46,6 +46,11 @@ export interface CapibaraApi {
   updateRole: (input: unknown) => Promise<DesktopResult<RoleRecord>>;
   deleteRole: (id: string) => Promise<DesktopResult<null>>;
 
+  // ─── Role Avatars ────────────────────────────────────────────────
+  uploadAvatar: (roleId: string, imageBuffer: ArrayBuffer, mimeType: string) => Promise<DesktopResult<{ width: number; height: number }>>;
+  removeAvatar: (roleId: string) => Promise<DesktopResult<null>>;
+  getAvatar: (roleId: string) => Promise<DesktopResult<{ avatar: ArrayBuffer; mimeType: string } | null>>;
+
   // ─── Skills ──────────────────────────────────────────────────────
   getSkills: () => Promise<DesktopResult<SkillRecord[]>>;
   getSkill: (id: string) => Promise<DesktopResult<SkillRecord | null>>;

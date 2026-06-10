@@ -87,6 +87,23 @@ export interface LocaleMessages {
     deleteWithChildren: string;
     deleteWithChildrenMessage: string;
     deleteAnyway: string;
+    avatarLabel: string;
+    uploadAvatarButton: string;
+  };
+
+  avatar: {
+    uploadTitle: string;
+    uploadDescription: string;
+    selectImage: string;
+    avatarPreview: string;
+    uploadSuccess: string;
+    uploading: string;
+    uploadButton: string;
+    invalidFormat: string;
+    fileTooLarge: string;
+    uploadFailed: string;
+    failedToLoad: string;
+    avatarAlt: string;
   };
 
   skillSelector: {

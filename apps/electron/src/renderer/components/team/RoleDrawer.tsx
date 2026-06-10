@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Trash, FloppyDisk } from '@phosphor-icons/react';
 import type { RoleRecord } from '@core/shared/types';
 import { SkillSelector } from './SkillSelector';
+import { AvatarDisplay } from './AvatarDisplay';
+import { AvatarUploadDialog } from './AvatarUploadDialog';
 import {
   Sheet,
   SheetContent,
@@ -38,9 +40,10 @@ interface RoleDrawerProps {
   onUpdate: (input: unknown) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
+  onRefresh?: () => void;
 }
 
-export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDrawerProps) {
+export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose, onRefresh }: RoleDrawerProps) {
   const t = useT();
   const [name, setName] = useState(role.name);
   const [persona, setPersona] = useState(role.persona);
@@ -55,6 +58,7 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
   const [fileAccessPaths, setFileAccessPaths] = useState(role.fileAccessPaths?.join('\n') ?? '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [showAvatarUpload, setShowAvatarUpload] = useState(false);
 
   useEffect(() => {
     setName(role.name);
@@ -129,6 +133,28 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
           </SheetHeader>
 
           <div className="flex-1 overflow-auto px-5 py-5 space-y-6">
+            {/* Avatar */}
+            <div>
+              <Label className="text-xs uppercase tracking-wider mb-1.5">
+                {t.roleDrawer?.avatarLabel ?? 'Avatar'}
+              </Label>
+              <div className="flex items-center gap-3">
+                <AvatarDisplay
+                  roleId={role.id}
+                  roleName={role.name}
+                  size={64}
+                  className="shrink-0"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAvatarUpload(true)}
+                >
+                  {t.roleDrawer?.uploadAvatarButton ?? 'Upload Avatar'}
+                </Button>
+              </div>
+            </div>
+
             {/* Name */}
             <div>
               <Label className="text-xs uppercase tracking-wider mb-1.5">
@@ -341,6 +367,14 @@ export function RoleDrawer({ role, roles, onUpdate, onDelete, onClose }: RoleDra
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Avatar Upload Dialog */}
+      <AvatarUploadDialog
+        roleId={role.id}
+        open={showAvatarUpload}
+        onOpenChange={setShowAvatarUpload}
+        onUploadSuccess={() => onRefresh?.()}
+      />
     </>
   );
 }

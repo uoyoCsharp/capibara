@@ -4,6 +4,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useT } from '../../hooks/use-locale';
 import type { TreeNode } from './role-tree';
+import { AvatarDisplay } from './AvatarDisplay';
 
 interface RoleCardProps {
   node: TreeNode;
@@ -54,9 +55,10 @@ export function RoleCard({ node, depth, roles, onSelect, isLast = false }: RoleC
           onClick={() => onSelect(node.role.id)}
         >
           <div className="flex items-center gap-3">
-            <UserCircle
+            <AvatarDisplay
+              roleId={node.role.id}
+              roleName={node.role.name}
               size={32}
-              weight="fill"
               className="shrink-0 text-muted-foreground/80 group-hover:text-primary transition-colors"
             />
             <div className="flex-1 min-w-0">

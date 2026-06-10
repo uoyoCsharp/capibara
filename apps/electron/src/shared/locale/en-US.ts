@@ -72,6 +72,23 @@ export const enUS: LocaleMessages = {
     deleteWithChildren: 'Delete Role with Children?',
     deleteWithChildrenMessage: 'This role has child roles. They will become orphaned (moved to root level) after deletion.',
     deleteAnyway: 'Delete Anyway',
+    avatarLabel: 'Avatar',
+    uploadAvatarButton: 'Upload Avatar',
+  },
+
+  avatar: {
+    uploadTitle: 'Upload Avatar',
+    uploadDescription: 'Upload a custom avatar image for this role. Supported formats: JPEG, PNG, GIF, WebP (max 5MB).',
+    selectImage: 'Select Image',
+    avatarPreview: 'Avatar preview',
+    uploadSuccess: 'Avatar uploaded successfully!',
+    uploading: 'Uploading...',
+    uploadButton: 'Upload Avatar',
+    invalidFormat: 'Invalid format. Please upload a JPEG, PNG, GIF, or WebP image.',
+    fileTooLarge: 'File too large. Maximum size is 5MB.',
+    uploadFailed: 'Upload failed',
+    failedToLoad: 'Failed to load avatar',
+    avatarAlt: "{roleName}'s avatar",
   },
 
   skillSelector: {

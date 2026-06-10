@@ -36,7 +36,7 @@ export class RoleService implements IRoleQueryService {
   constructor(
     private readonly roleRepo: IRoleRepository,
     private readonly eventPublisher: IEventPublisher,
-  ) {}
+  ) { }
 
   findById(id: string): Role | null {
     return this.roleRepo.findById(id);

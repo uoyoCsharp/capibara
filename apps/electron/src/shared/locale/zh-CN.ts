@@ -72,6 +72,23 @@ export const zhCN: LocaleMessages = {
     deleteWithChildren: '删除角色及其子角色？',
     deleteWithChildrenMessage: '该角色有子角色。删除后，子角色将变为孤立角色（移至根级别）。',
     deleteAnyway: '仍然删除',
+    avatarLabel: '头像',
+    uploadAvatarButton: '上传头像',
+  },
+
+  avatar: {
+    uploadTitle: '上传头像',
+    uploadDescription: '为该角色上传自定义头像图片。支持格式：JPEG、PNG、GIF、WebP（最大 5MB）。',
+    selectImage: '选择图片',
+    avatarPreview: '头像预览',
+    uploadSuccess: '头像上传成功！',
+    uploading: '上传中...',
+    uploadButton: '上传头像',
+    invalidFormat: '格式无效。请上传 JPEG、PNG、GIF 或 WebP 格式的图片。',
+    fileTooLarge: '文件过大。最大大小为 5MB。',
+    uploadFailed: '上传失败',
+    failedToLoad: '加载头像失败',
+    avatarAlt: '{roleName} 的头像',
   },
 
   skillSelector: {
