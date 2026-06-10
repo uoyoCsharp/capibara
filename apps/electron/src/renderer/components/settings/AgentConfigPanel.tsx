@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Robot, GitBranch, ShieldCheck } from '@phosphor-icons/react';
 import type { AgentConfigSummary } from '@core/shared/types';
 import { Badge } from '../ui/badge';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select';
 import { useT } from '../../hooks/use-locale';
+import { toast } from '../../store/toast.store';
 import { ModelSelector } from './ModelSelector';
 
 const api = () => window.capibara;
@@ -11,12 +13,37 @@ export function AgentConfigPanel() {
   const t = useT();
   const ac = t.settings.agentConfig;
   const [config, setConfig] = useState<AgentConfigSummary | null>(null);
+  const [changing, setChanging] = useState(false);
+  const [modelSupported, setModelSupported] = useState(true);
 
   useEffect(() => {
     void api().getAgentConfig().then((result) => {
       if (result.ok) setConfig(result.data);
     });
   }, []);
+
+  useEffect(() => {
+    void api().getModelState().then((result) => {
+      if (result.ok) setModelSupported(result.data.supported);
+    });
+  }, [config?.defaultAgent]);
+
+  const handleAgentChange = async (agentId: string) => {
+    setChanging(true);
+    try {
+      const result = await api().setDefaultAgent(agentId);
+      if (result.ok) {
+        setConfig((prev) => prev ? { ...prev, defaultAgent: result.data.defaultAgent } : prev);
+        toast.success(ac.defaultAgentSet);
+        const modelResult = await api().getModelState();
+        if (modelResult.ok) setModelSupported(modelResult.data.supported);
+      } else {
+        toast.error(ac.defaultAgentSetFailed);
+      }
+    } finally {
+      setChanging(false);
+    }
+  };
 
   if (!config) return null;
 
@@ -31,20 +58,22 @@ export function AgentConfigPanel() {
         <p className="text-sm text-muted-foreground">{ac.description}</p>
 
         <div className="space-y-2">
-          {config.registry.map((agent) => (
-            <div
-              key={agent.id}
-              className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{agent.name}</span>
-                {agent.id === config.defaultAgent && (
-                  <Badge variant="secondary" className="text-xs">{ac.defaultAgent}</Badge>
-                )}
-              </div>
-              <code className="text-xs text-muted-foreground">{agent.command}</code>
-            </div>
-          ))}
+          <label className="text-xs text-muted-foreground">{ac.defaultAgentLabel}</label>
+          <Select value={config.defaultAgent} onValueChange={handleAgentChange} disabled={changing}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {config.registry.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  <span className="flex items-center justify-between w-full gap-2">
+                    <span>{agent.name}</span>
+                    <code className="text-xs text-muted-foreground">{agent.command}</code>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Global deny patterns */}
@@ -61,10 +90,12 @@ export function AgentConfigPanel() {
         </div>
       </section>
 
-      {/* Model Selection */}
-      <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
-        <ModelSelector />
-      </section>
+      {/* Model Selection - only show if current agent supports it */}
+      {modelSupported && (
+        <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
+          <ModelSelector />
+        </section>
+      )}
 
       {/* Collaboration Config */}
       <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">

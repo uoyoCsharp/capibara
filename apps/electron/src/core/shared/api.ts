@@ -180,6 +180,7 @@ export interface CapibaraApi {
   getSystemHealth: () => Promise<DesktopResult<{ status: string; timestamp: string }>>;
   checkSystemDeps: () => Promise<DesktopResult<unknown>>;
   getAgentConfig: () => Promise<DesktopResult<AgentConfigSummary>>;
+  setDefaultAgent: (agentId: string) => Promise<DesktopResult<{ defaultAgent: string }>>;
 
   // ─── ACP Model Selection ─────────────────────────────────────────
   getModelState: () => Promise<DesktopResult<ModelStateSummary>>;

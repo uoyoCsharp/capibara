@@ -129,6 +129,7 @@ export function createMockCapibaraApi(): MockCapibaraApiController {
       globalFilePolicy: { denyPatterns: ['**/.env'] },
       collaboration: { maxChainDepth: 5, maxBroadcastTargets: 5, maxResumeCount: 10, inquiryTimeoutMs: 300000 },
     })),
+    setDefaultAgent: vi.fn().mockResolvedValue(ok({ defaultAgent: 'claude-agent' })),
 
     // Scheduler
     getExecutionState: vi.fn().mockResolvedValue(ok({ paused: false })),

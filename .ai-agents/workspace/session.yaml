@@ -3,111 +3,52 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-test
-    completed_at: 2026-06-03T10:39:25.758Z
-    summary: Fixed 10 test import path issues, restored 87% of test suites from 57%
-      to 87% pass rate
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-sync-context
-    completed_at: 2026-06-04T04:18:10.447Z
-    summary: "Synced project context with architecture refactor change
-      20260602-architecture-refactor: added 5 core terms, 4 domain layer
-      concepts, 7 business rules, and updated module paths for infrastructure
-      relocation"
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-sync-context
-    completed_at: 2026-06-04T04:20:57.563Z
-    summary: "Converted ASCII diagrams to mermaid format: updated Module Dependency
-      Graph and Layer Structure to reflect current infrastructure relocation"
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-analyze-code
-    completed_at: 2026-06-04T04:24:13.307Z
-    summary: "已重新生成 project-context.md: 更新 Mermaid 图表、模块路径、业务规则和 API 概览，反映架构重构后的最新代码状态"
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-04T04:51:59.456Z
-    summary: 诊断 MCP SSE 连接失败：MCP SDK 1.29.0 已弃用 SSE 传输，Claude Code 客户端可能已迁移至
-      Streamable HTTP，与当前 sse 配置不匹配
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-fix
-    completed_at: 2026-06-04T05:42:25.449Z
-    summary: 修复 MCP 传输协议不匹配：将 mcpTransport 从 'sse' 切换到 'http' (Streamable HTTP)，修复
-      spawner 传输映射和类型定义
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-04T05:51:31.812Z
-    summary: 诊断开发者面板 SSE 状态显示过时：上一轮将 MCP 传输切换到 Streamable HTTP 后，诊断字段仍追踪 SSE
-      连接，导致面板始终显示未连接
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-fix
-    completed_at: 2026-06-04T05:54:11.489Z
-    summary: MCP SSE 诊断显示过时（非功能性问题）：MCP 工具调用已成功，但开发者面板仍显示 SSE 未连接状态，建议使用
-      /mvt-quick-dev 更新诊断字段
-    change_id: 20260602-architecture-refactor
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-04T06:01:59.966Z
-    summary: 修复开发者面板 MCP 诊断显示：移除已弃用的 SSE 客户端连接字段，更新为显示 Streamable HTTP 传输就绪状态
-    change_id: ""
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-04T06:06:54.747Z
-    summary: 恢复开发者面板 SSE 状态显示：同时显示 SSE 客户端连接状态和 Streamable HTTP 就绪状态，完整反映两种传输协议的连接情况
-    change_id: ""
-  - skill: /mvt-analyze
-    completed_at: 2026-06-04T10:40:06.559Z
-    summary: Analyzed custom avatar feature requirements and created change
-      20260604-role-custom-avatar
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-analyze
-    completed_at: 2026-06-04T10:42:19.796Z
-    summary: "Resolved all critical ambiguities for avatar feature: SQLite BLOB
-      storage, system directory, optional, no editing, no external API"
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-design
-    completed_at: 2026-06-04T10:45:56.536Z
-    summary: Completed architecture design for role avatar feature with SQLite BLOB
-      storage, 3 ADRs, and 10-file implementation plan
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-plan-dev
-    completed_at: 2026-06-04T10:47:09.911Z
-    summary: Created 6-task development plan for role avatar feature with database,
-      service, IPC, and UI layers
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-implement
-    completed_at: 2026-06-04T10:53:10.426Z
-    summary: "Completed t1-database-types-foundation: added avatar migration v2 and
-      TypeScript interfaces for avatar support"
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-04T10:54:09.040Z
-    summary: Marked t1-database-types-foundation as done, advanced current_task to
-      t2-repository-avatar-persistence
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-implement
-    completed_at: 2026-06-04T10:57:02.100Z
-    summary: "Completed t2-repository-avatar-persistence: added updateRoleAvatar and
-      getRoleAvatar methods to repository interface and implementation"
-    change_id: 20260604-role-custom-avatar
   - skill: /mvt-update-plan
     completed_at: 2026-06-04T10:57:43.435Z
-    summary: Marked t2-repository-avatar-persistence as done, advanced current_task
-      to t3-service-avatar-processing
+    summary: Marked t2-repository-avatar-persistence as done, advanced current_task to t3-service-avatar-processing
     change_id: 20260604-role-custom-avatar
   - skill: /mvt-implement
     completed_at: 2026-06-04T11:02:21.306Z
-    summary: "Completed t3-service-avatar-processing: added uploadAvatar,
-      removeAvatar, getAvatar methods with image validation, magic bytes
-      checking, and sharp-based resize"
+    summary: "Completed t3-service-avatar-processing: added uploadAvatar, removeAvatar, getAvatar methods with image validation, magic bytes checking, and sharp-based resize"
     change_id: 20260604-role-custom-avatar
   - skill: /mvt-update-plan
     completed_at: 2026-06-04T11:03:08.905Z
-    summary: Marked t3-service-avatar-processing as done, advanced current_task to
-      t4-ipc-handlers-preload
+    summary: Marked t3-service-avatar-processing as done, advanced current_task to t4-ipc-handlers-preload
     change_id: 20260604-role-custom-avatar
+  - skill: /mvt-analyze
+    completed_at: 2026-06-10T08:45:29.300Z
+    summary: Analyzed OpenCode ACP integration requirements; OpenCode has native ACP support, architecture is already agent-agnostic, change is bootstrap + UI level
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-quick-dev
+    completed_at: 2026-06-10T08:56:08.777Z
+    summary: 实现 OpenCode ACP 集成：添加 agent 注册、运行时切换 UI、SQLite 持久化
+    change_id: ""
+  - skill: /mvt-review
+    completed_at: 2026-06-10T09:00:12.679Z
+    summary: "Code review completed: 0 critical, 1 warning (execSync blocks main thread), 2 suggestions (use AgentRegistryEntry type, add UI feedback)"
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-fix
+    completed_at: 2026-06-10T10:39:36.550Z
+    summary: 修复审查问题：异步化 agent 发现、使用 AgentRegistryEntry 类型、添加 UI 反馈
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-fix
+    completed_at: 2026-06-10T10:46:02.124Z
+    summary: 修复模型检测 bug：将值捕获改为引用捕获，确保切换默认 agent 后模型 API 使用正确的 agent
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-quick-dev
+    completed_at: 2026-06-10T10:58:37.778Z
+    summary: UI 调整：agent 选择改为下拉框，模型选择器根据 agent 能力条件显示
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-fix
+    completed_at: 2026-06-10T11:10:00.892Z
+    summary: "修复 Windows spawn ENOENT：添加 shell: true 支持 .cmd 文件执行"
+    change_id: 20260610-opencode-acp-integration
 active_change:
-  id: 20260604-role-custom-avatar
-  title: Role Custom Avatar Feature
-  created_at: 2026-06-04T10:47:09.911Z
-  plan_path: .ai-agents/workspace/artifacts/20260604-role-custom-avatar/plan.yaml
+  id: 20260610-opencode-acp-integration
+  title: OpenCode ACP Integration
+  created_at: 2026-06-10T08:45:29.300Z
+  plan_path: ""
+  epic_id: ""
 changes:
   - id: 20260601-planning-history-delete
     title: Planning history delete
@@ -123,4 +64,5 @@ changes:
     title: Role Custom Avatar Feature
     plan_path: .ai-agents/workspace/artifacts/20260604-role-custom-avatar/plan.yaml
     status: active
-    updated_at: 2026-06-04T10:47:09.911Z
+    updated_at: 2026-06-10T08:45:29.300Z
+    epic_id: ""

@@ -5,6 +5,7 @@ import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-sess
 import type { IAcpSessionRepository } from '@core/modules/acp/interfaces/i-acp-session.repository';
 import type { AcpAgentSpawner } from '@core/infrastructure/acp-protocol/acp-agent.spawner';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { AgentRegistryConfig } from '@core/modules/acp/types/acp.types';
 import type { SuspensionRecord, SuspensionAwaitingRecord } from '@core/shared/types';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
@@ -14,7 +15,7 @@ export function registerAcpHandlers(
   auditRepo: AcpAuditRepository,
   suspensionRepo: SqliteSuspensionRepository,
   sessionManager: IAcpSessionManager,
-  defaultAgentId: string,
+  agentConfig: AgentRegistryConfig,
   spawner: AcpAgentSpawner,
   sessionRepo: IAcpSessionRepository,
   logger: ILogger,
@@ -68,13 +69,13 @@ export function registerAcpHandlers(
 
   // ─── Model Selection (ADR-5) ─────────────────────────────────────
   ipcMain.handle('capibara:acp:model-state', async () => {
-    try { return ok(sessionManager.getModelState(defaultAgentId)); }
+    try { return ok(sessionManager.getModelState(agentConfig.defaultAgent)); }
     catch (e) { return err('INTERNAL', String(e)); }
   });
 
   ipcMain.handle('capibara:acp:set-model', async (_ev, modelId: string) => {
     try {
-      return ok(sessionManager.setSelectedModel(defaultAgentId, modelId));
+      return ok(sessionManager.setSelectedModel(agentConfig.defaultAgent, modelId));
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'ValidationError') {
         return err('VALIDATION', e.message);
@@ -85,7 +86,7 @@ export function registerAcpHandlers(
 
   ipcMain.handle('capibara:acp:probe-models', async () => {
     try {
-      return ok(await sessionManager.probeModels(defaultAgentId));
+      return ok(await sessionManager.probeModels(agentConfig.defaultAgent));
     } catch (e) { return err('INTERNAL', String(e)); }
   });
 

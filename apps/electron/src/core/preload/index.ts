@@ -131,6 +131,7 @@ const api = {
   getSystemHealth: () => ipcRenderer.invoke('capibara:system:health'),
   checkSystemDeps: () => ipcRenderer.invoke('capibara:system:check-deps'),
   getAgentConfig: () => ipcRenderer.invoke('capibara:system:agent-config'),
+  setDefaultAgent: (agentId: string) => ipcRenderer.invoke('capibara:system:set-default-agent', agentId),
 
   // ACP Model Selection
   getModelState: () => ipcRenderer.invoke('capibara:acp:model-state'),

@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { app } from 'electron';
 import { loadConfig } from '@core/config/config.loader';
 import { PinoLogger } from '@core/infrastructure/observability/pino-logger';
@@ -28,6 +30,7 @@ import { registerPlanTreeHandlers } from '@core/ipc-handlers/plan-tree.handlers'
 import { registerSystemHandlers } from '@core/ipc-handlers/system.handlers';
 import { registerAcpHandlers } from '@core/ipc-handlers/acp.handlers';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { AgentRegistryEntry } from '@core/modules/acp/types/acp.types';
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
 import type { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
 import type { RunOrchestrator } from '@core/modules/orchestrator/orchestrators/run.orchestrator';
@@ -51,6 +54,25 @@ function normalizeDefaultAgentId(requested: string | null | undefined): string {
   return requested;
 }
 
+const execAsync = promisify(exec);
+
+async function resolveOpenCodeExecutable(log: ILogger): Promise<string | null> {
+  if (process.env.OPENCODE_EXECUTABLE) {
+    return process.env.OPENCODE_EXECUTABLE;
+  }
+  try {
+    const cmd = process.platform === 'win32' ? 'where opencode' : 'which opencode';
+    const { stdout } = await execAsync(cmd, { timeout: 3000 });
+    const result = stdout.trim();
+    return result.split('\n')[0]?.trim() || null;
+  } catch {
+    log.warn('OpenCode executable not found on PATH; opencode-agent will not be available', {
+      hint: 'Set OPENCODE_EXECUTABLE env var or install opencode (https://opencode.ai)',
+    });
+    return null;
+  }
+}
+
 export async function bootstrap(): Promise<void> {
   const config = loadConfig();
   logger = new PinoLogger(config.logging.level);
@@ -71,27 +93,45 @@ export async function bootstrap(): Promise<void> {
   const resolvedAgentEntry = process.env.CLAUDE_AGENT_ACP_ENTRY
     ?? _require.resolve('@agentclientprotocol/claude-agent-acp/dist/index.js');
 
-  // claude-agent-acp auto-discovers Claude Code via its bundled
-  // @anthropic-ai/claude-agent-sdk platform binary.  Only forward
-  // CLAUDE_CODE_EXECUTABLE when the user explicitly sets it in the
-  // system environment (e.g. to pin a specific agent binary version).
   const agentEnv: Record<string, string> = {};
   if (process.env.CLAUDE_CODE_EXECUTABLE) {
     agentEnv.CLAUDE_CODE_EXECUTABLE = process.env.CLAUDE_CODE_EXECUTABLE;
   }
 
-  const registry = [
-      {
-        id: 'claude-agent',
-        name: 'Claude Agent',
-        command: 'node',
-        args: [resolvedAgentEntry],
-        env: agentEnv,
-        mcpTransport: 'http' as const,
-      },
-    ];
+  const registry: AgentRegistryEntry[] = [
+    {
+      id: 'claude-agent',
+      name: 'Claude Agent',
+      command: 'node',
+      args: [resolvedAgentEntry],
+      env: agentEnv,
+      mcpTransport: 'http' as const,
+    },
+  ];
 
-  const requestedDefaultAgent = normalizeDefaultAgentId(config.agents?.defaultAgent);
+  const openCodePath = await resolveOpenCodeExecutable(logger);
+  if (openCodePath) {
+    registry.push({
+      id: 'opencode-agent',
+      name: 'OpenCode',
+      command: openCodePath,
+      args: ['acp'],
+      mcpTransport: 'http' as const,
+    });
+  }
+
+  const persistedDefaultAgent = (() => {
+    try {
+      const row = sqliteConn.getDb()
+        .prepare("SELECT value FROM settings WHERE key = 'default_agent'")
+        .get() as { value: string } | undefined;
+      return row?.value ?? null;
+    } catch { return null; }
+  })();
+
+  const requestedDefaultAgent = normalizeDefaultAgentId(
+    persistedDefaultAgent ?? config.agents?.defaultAgent,
+  );
   const hasRequestedDefault = registry.some((entry) => entry.id === requestedDefaultAgent);
   const resolvedDefaultAgent = hasRequestedDefault ? requestedDefaultAgent : registry[0]!.id;
 
@@ -219,7 +259,7 @@ export async function bootstrap(): Promise<void> {
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);
-  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository, acpModule.sessionManager, agentConfig.defaultAgent, acpModule.spawner, acpModule.sessionRepository, logger);
+  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository, acpModule.sessionManager, agentConfig, acpModule.spawner, acpModule.sessionRepository, logger);
   registerSystemHandlers({
     connection: sqliteConn,
     runRepo: execution.runRepo,

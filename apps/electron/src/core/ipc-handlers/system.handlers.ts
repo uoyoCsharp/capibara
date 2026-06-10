@@ -173,6 +173,23 @@ export function registerSystemHandlers(deps: SystemHandlersDeps): void {
     });
   });
 
+  ipcMain.handle('capibara:system:set-default-agent', async (_ev, agentId: string) => {
+    try {
+      const exists = agentConfig.registry.some((a) => a.id === agentId);
+      if (!exists) {
+        return err('NOT_FOUND', `Agent not registered: ${agentId}`);
+      }
+      agentConfig.defaultAgent = agentId;
+      connection.getDb()
+        .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_agent', ?)")
+        .run(agentId);
+      logger.info('Default agent changed', { agentId });
+      return ok({ defaultAgent: agentId });
+    } catch (e) {
+      return err('INTERNAL', String(e));
+    }
+  });
+
   // ─── Dev Diagnostics (ADR-2) ──────────────────────────────────────
   ipcMain.handle('capibara:dev:diagnose', async () => {
     try {

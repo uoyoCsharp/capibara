@@ -348,6 +348,11 @@ export interface LocaleMessages {
       agentCommand: string;
       agentStatus: string;
       defaultAgent: string;
+      defaultAgentLabel: string;
+      setAsDefault: string;
+      settingDefault: string;
+      defaultAgentSet: string;
+      defaultAgentSetFailed: string;
       denyPatterns: string;
       collaborationTitle: string;
       collaborationDescription: string;
