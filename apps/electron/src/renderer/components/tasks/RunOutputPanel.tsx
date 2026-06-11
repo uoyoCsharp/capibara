@@ -3,6 +3,7 @@ import { CircleNotch, CheckCircle, XCircle, Clock, Terminal, FolderOpen, Pause, 
 import { MarkdownContent } from '../ui/markdown-content';
 import type { RunRecord, ToolCallLogRecord } from '@core/shared/types';
 import { useRunLogs } from '../../hooks/use-run-logs';
+import { useToolCalls } from '../../hooks/use-tool-calls';
 import { Badge } from '../ui/badge';
 import { useT } from '../../hooks/use-locale';
 import { ToolCallTimeline } from './ToolCallTimeline';
@@ -31,10 +32,8 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
 
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? null;
   const isRunning = selectedRun?.status === 'running';
-  const isSuspended = selectedRun?.status === 'suspended';
 
-  const { entries, assistantText } = useRunLogs(isRunning ? selectedRunId : null);
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const { entries } = useRunLogs(isRunning ? selectedRunId : null);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const initialScrollDoneRef = useRef(false);
   const [historicToolCalls, setHistoricToolCalls] = useState<ToolCallLogRecord[]>([]);
@@ -78,10 +77,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
       initialScrollDoneRef.current = true;
       return;
     }
-    if (entries.length > 0) {
-      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [entries, historicLogs]);
+  }, [historicLogs]);
 
   const truncatedHistoricLogs = useMemo(() => {
     if (historicLogs.length <= MAX_DISPLAY_LINES) {
@@ -135,29 +131,37 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
     }
   };
 
+  if (isRunning && selectedRun) {
+    return (
+      <div className="space-y-3">
+        <RunOutputHeader
+          runs={runs}
+          selectedRunId={selectedRunId}
+          onSelectRun={setSelectedRunId}
+          onOpenLogDir={handleOpenLogDir}
+          statusIcon={statusIcon}
+        />
+        <LiveLoadingView
+          entries={entries}
+          selectedRun={selectedRun}
+          statusIcon={statusIcon}
+          statusLabel={statusLabel}
+          t={t}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
-      {/* Run selector */}
-      {runs.length > 1 && (
-        <div className="flex gap-1.5 flex-wrap">
-          {runs.map((run, idx) => (
-            <button
-              key={run.id}
-              onClick={() => setSelectedRunId(run.id)}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-                run.id === selectedRunId
-                  ? 'bg-primary/10 text-primary border border-primary/30'
-                  : 'bg-muted text-muted-foreground hover:bg-accent'
-              }`}
-            >
-              {statusIcon(run.status)}
-              {format(t.runOutput.runNumber, { n: runs.length - idx })}
-            </button>
-          ))}
-        </div>
-      )}
+      <RunOutputHeader
+        runs={runs}
+        selectedRunId={selectedRunId}
+        onSelectRun={setSelectedRunId}
+        onOpenLogDir={handleOpenLogDir}
+        statusIcon={statusIcon}
+      />
 
-      {/* Run summary */}
       {selectedRun && (
         <div className="space-y-2 rounded-lg border border-border p-3 bg-muted/30">
           <div className="flex items-center justify-between">
@@ -193,48 +197,25 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
         </div>
       )}
 
-      {/* Real-time assistant text (while running) */}
-      {isRunning && assistantText && (
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t.runOutput.aiOutput}</p>
-          <div className="rounded-lg border border-border bg-background p-3 max-h-[300px] overflow-auto">
-            <MarkdownContent content={assistantText} />
-          </div>
-        </div>
-      )}
-
-      {/* Tool call timeline */}
       <ToolCallTimeline
         runId={selectedRunId}
-        isRunning={isRunning}
-        historicToolCalls={!isRunning ? historicToolCalls : undefined}
+        isRunning={false}
+        historicToolCalls={historicToolCalls}
       />
 
-      {/* Audit log (for completed/suspended runs) */}
-      {!isRunning && selectedRunId && (
+      {selectedRunId && (
         <AuditLogPanel runId={selectedRunId} />
       )}
 
-      {/* Log output */}
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <Terminal size={12} />
             {t.runOutput.executionLog}
-            {!isRunning && historicLogs.length > MAX_DISPLAY_LINES && (
+            {historicLogs.length > MAX_DISPLAY_LINES && (
               <span className="font-normal normal-case">{format(t.runOutput.linesSuffix, { n: historicLogs.length })}</span>
             )}
           </p>
-          {selectedRunId && (
-            <button
-              onClick={handleOpenLogDir}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title={t.runOutput.openLogsTitle}
-            >
-              <FolderOpen size={12} />
-              {t.runOutput.openLogs}
-            </button>
-          )}
         </div>
         <div ref={logContainerRef} className="rounded-lg border border-border bg-zinc-950 p-3 max-h-[400px] overflow-auto font-mono text-xs">
           {loadingLogs && (
@@ -243,8 +224,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
             </div>
           )}
 
-          {/* Historic logs (for completed runs) — truncated */}
-          {!isRunning && truncatedHistoricLogs.head.length > 0 && (
+          {truncatedHistoricLogs.head.length > 0 && (
             <>
               {truncatedHistoricLogs.head.map((line, i) => (
                 <LogLine key={i} raw={line} />
@@ -260,25 +240,163 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
             </>
           )}
 
-          {/* Real-time logs (for running) — show latest entries */}
-          {isRunning && entries.map((entry, i) => (
-            <div key={i} className={entry.stream === 'stderr' ? 'text-red-400' : 'text-green-300'}>
-              {entry.chunk}
-            </div>
-          ))}
-
-          {!loadingLogs && !isRunning && historicLogs.length === 0 && (
+          {!loadingLogs && historicLogs.length === 0 && (
             <span className="text-zinc-500">{t.runOutput.noLogsRecorded}</span>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-          {isRunning && entries.length === 0 && (
-            <span className="text-zinc-500 flex items-center gap-2">
-              <CircleNotch size={12} className="animate-spin" /> {t.runOutput.waitingForOutput}
+interface RunOutputHeaderProps {
+  runs: RunRecord[];
+  selectedRunId: string | null;
+  onSelectRun: (id: string) => void;
+  onOpenLogDir: () => void;
+  statusIcon: (status: string) => React.ReactNode;
+}
+
+function RunOutputHeader({ runs, selectedRunId, onSelectRun, onOpenLogDir, statusIcon }: RunOutputHeaderProps) {
+  const t = useT();
+
+  return (
+    <>
+      {runs.length > 1 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {runs.map((run, idx) => (
+            <button
+              key={run.id}
+              onClick={() => onSelectRun(run.id)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                run.id === selectedRunId
+                  ? 'bg-primary/10 text-primary border border-primary/30'
+                  : 'bg-muted text-muted-foreground hover:bg-accent'
+              }`}
+            >
+              {statusIcon(run.status)}
+              {format(t.runOutput.runNumber, { n: runs.length - idx })}
+            </button>
+          ))}
+        </div>
+      )}
+      {selectedRunId && (
+        <div className="flex justify-end">
+          <button
+            onClick={onOpenLogDir}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title={t.runOutput.openLogsTitle}
+          >
+            <FolderOpen size={12} />
+            {t.runOutput.openLogs}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+interface LiveLoadingViewProps {
+  entries: ReturnType<typeof useRunLogs>['entries'];
+  selectedRun: RunRecord;
+  statusIcon: (status: string) => React.ReactNode;
+  statusLabel: (status: string) => string;
+  t: ReturnType<typeof useT>;
+}
+
+function isStructuredMarker(chunk: string): boolean {
+  try {
+    const parsed = JSON.parse(chunk);
+    return parsed.type === 'tool_call_start' || parsed.type === 'tool_call_update' || parsed.type === 'plan';
+  } catch {
+    return false;
+  }
+}
+
+function parseLogChunk(raw: string): string | null {
+  if (isStructuredMarker(raw)) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.type === 'input') {
+      return `Prompt: ${parsed.roleId ?? 'unknown'} / ${parsed.wakeReason ?? 'wake'}`;
+    }
+    if (parsed.tool) return parsed.tool;
+    if (parsed.title) return parsed.title;
+    if (parsed.message) return parsed.message;
+    return null;
+  } catch {
+    const trimmed = raw.trim();
+    return trimmed.length > 200 ? trimmed.slice(0, 200) + '...' : trimmed;
+  }
+}
+
+function LiveLoadingView({ entries, selectedRun, statusIcon, statusLabel, t }: LiveLoadingViewProps) {
+  const [displayText, setDisplayText] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(true);
+  const pendingTextRef = useRef<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { toolCalls } = useToolCalls(selectedRun.id);
+  const activeToolCall = toolCalls.find(tc => tc.status === 'running');
+
+  const latestPlainEntry = useMemo(() => {
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const parsed = parseLogChunk(entries[i].chunk);
+      if (parsed !== null) return parsed;
+    }
+    return null;
+  }, [entries]);
+
+  useEffect(() => {
+    const newText = activeToolCall?.title || latestPlainEntry;
+    if (newText !== displayText && newText !== null) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      pendingTextRef.current = newText;
+      setIsVisible(false);
+      timerRef.current = setTimeout(() => {
+        setDisplayText(pendingTextRef.current);
+        setIsVisible(true);
+        timerRef.current = null;
+      }, 150);
+    } else if (newText === null && displayText !== null) {
+      setDisplayText(null);
+    }
+  }, [activeToolCall?.title, latestPlainEntry]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-background/50">
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          {statusIcon(selectedRun.status)}
+          <span className="text-sm font-medium">{statusLabel(selectedRun.status)}</span>
+          {selectedRun.startedAt && (
+            <span className="text-xs text-muted-foreground">
+              {new Date(selectedRun.startedAt).toLocaleTimeString()}
             </span>
           )}
-
-          <div ref={logEndRef} />
         </div>
+      </div>
+
+      <div className="px-4 py-6 min-h-[80px] flex items-center">
+        {displayText ? (
+          <div className={`flex items-center gap-2 w-full transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
+            <span className="text-sm text-foreground truncate">{displayText}</span>
+          </div>
+        ) : (
+          <div className={`flex items-center gap-2 w-full text-muted-foreground transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-pulse flex-shrink-0" />
+            <span className="text-sm">{t.runOutput.waitingForOutput}</span>
+          </div>
+        )}
       </div>
     </div>
   );

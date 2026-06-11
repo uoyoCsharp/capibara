@@ -8,6 +8,9 @@ import type { IConversationCommandService } from '@core/modules/conversation/int
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { LifecycleIntent, WakeReason } from '@core/modules/execution/types/execution.types';
 import type { ResumeDecision } from '@core/modules/acp/collaboration/suspension.types';
+import type { ITaskRepository } from '@core/modules/workflow/interfaces/i-task.repository';
+import type { IProcessEngine } from '@core/modules/workflow/interfaces/i-process.engine';
+import type { ITaskStateMachine } from '@core/modules/workflow/interfaces/i-task.state-machine';
 
 @injectable()
 export class RunCoordinator {
@@ -19,6 +22,9 @@ export class RunCoordinator {
     private readonly conversationService: IConversationCommandService,
     private readonly orgRepo: IOrganizationRepository,
     private readonly logger: ILogger,
+    private readonly taskRepo: ITaskRepository,
+    private readonly processEngine: IProcessEngine,
+    private readonly taskStateMachine: ITaskStateMachine,
   ) {}
 
   async executeForTask(
@@ -28,6 +34,8 @@ export class RunCoordinator {
     wakeReason: WakeReason,
     locale: string,
   ): Promise<{ runId: string; status: string }> {
+    this.advanceTaskToActive(taskId, orgId);
+
     const prompt = this.promptBuilder.buildForTask(taskId, roleId, locale, wakeReason);
     if (!prompt) {
       this.logger.error('Failed to build prompt for task', { taskId, roleId });
@@ -152,5 +160,28 @@ export class RunCoordinator {
     });
 
     return { runId: result.runId, status: result.status };
+  }
+
+  private advanceTaskToActive(taskId: string, orgId: string): void {
+    const task = this.taskRepo.findById(taskId);
+    if (!task) return;
+
+    const currentCategory = this.processEngine.getStatusCategory(orgId, task.status);
+    if (currentCategory === 'active') return;
+    if (currentCategory !== 'initial') return;
+
+    const transitions = this.processEngine.getAvailableTransitions(orgId, task.status);
+    const target = transitions.find(
+      (t) => this.processEngine.getStatusCategory(orgId, t.to) === 'active',
+    );
+    if (!target) return;
+
+    try {
+      this.taskStateMachine.transition(taskId, target.to, { triggeredBy: 'system' });
+    } catch (err) {
+      this.logger.error('Failed to advance task to active', {
+        taskId, target: target.to, error: String(err),
+      });
+    }
   }
 }

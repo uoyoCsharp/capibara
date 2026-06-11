@@ -197,8 +197,11 @@ function buildInstructions(ctx: PromptContext, scenario: PromptScenario): string
       'Because there is no human review, the cost of guessing is high — if scope, ownership, or acceptance is genuinely ambiguous, call `mcp__capibara__capibara_ask_question` to confirm with your supervisor before submitting.' +
       collaborationGuide,
     execute_leaf:
-      'Execute this task directly. ' +
-      'When finished, use `mcp__capibara__capibara_task_transition` to advance to the next status (refer to the Workflow Status section).' +
+      'The system has already started this task (status is now active/in_progress). ' +
+      'Execute the task directly. ' +
+      'When finished, you MUST call `mcp__capibara__capibara_task_transition` to advance to the next status (refer to the Workflow Status section). ' +
+      'Do NOT attempt to transition from the initial status (e.g. pending) to in_progress — the system has already done this for you. ' +
+      'Your task is incomplete until you call `mcp__capibara__capibara_task_transition`.' +
       collaborationGuide,
     revision:
       'Your previous work needs revision. ' +

@@ -3,34 +3,6 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-11T03:15:39.558Z
-    summary: Planning page plan tree sidebar now hidden by default, auto-expands when proposal arrives
-    change_id: ""
-  - skill: /mvt-review
-    completed_at: 2026-06-11T03:17:24.297Z
-    summary: Review of planning page plan tree hide/show change - approved with 1 suggestion
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-fix
-    completed_at: 2026-06-11T03:19:34.963Z
-    summary: Removed ineffective transition-all duration-200 class from hidden plan tree pane
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-fix
-    completed_at: 2026-06-11T03:44:20.234Z
-    summary: Fixed scheduler status indicator showing planning conversation runs as active task runs
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-quick-dev
-    completed_at: 2026-06-11T03:47:53.589Z
-    summary: Planning history entries now show colored state badges with localized labels
-    change_id: ""
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-11T04:08:00.369Z
-    summary: "Diagnosed Electron main process crash (exit code 1): no global unhandled rejection/exception handlers, multiple unguarded promise chains"
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-fix
-    completed_at: 2026-06-11T04:11:41.321Z
-    summary: Added global uncaughtException/unhandledRejection handlers and fixed unguarded promise chains to prevent process crash
-    change_id: 20260610-opencode-acp-integration
   - skill: /mvt-refactor
     completed_at: 2026-06-11T06:05:49.561Z
     summary: "Extracted 4 helper functions from bootstrap() in composition-root.ts: buildAgentConfig(), registerAllIpcHandlers(), wirePostBootstrap(), startAllServices(). Exported module types from 7
@@ -44,10 +16,38 @@ history:
     completed_at: 2026-06-11T06:29:23.551Z
     summary: "Fixed all 88 pre-existing test failures across 12 test files: renamed outdated MCP provider imports, added missing constructor args, corrected stale test expectations"
     change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-design
+    completed_at: 2026-06-11T08:14:52.050Z
+    summary: "Designed task execution status reliability fix: prompt timing correction, smart completion on success, enhanced prompt instruction"
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-implement
+    completed_at: 2026-06-11T08:31:26.111Z
+    summary: "Implemented task execution status reliability fix: moved advanceTaskToActive before prompt build, added autoAdvanceOnSuccess on run success, enhanced execute_leaf prompt instruction"
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-analyze
+    completed_at: 2026-06-11T08:47:31.165Z
+    summary: "Analyzed run output loading UX redesign: replace running-state display with clean loading animation + latest log entry scrolling, auto-switch to full historical view on completion"
+    change_id: 20260611-run-output-loading
+  - skill: /mvt-design
+    completed_at: 2026-06-11T08:49:26.998Z
+    summary: "Designed run output loading UX: binary display mode (live-loading vs historical), rolling 5-entry window during execution, auto-transition on completion, single file change"
+    change_id: 20260611-run-output-loading
+  - skill: /mvt-implement
+    completed_at: 2026-06-11T08:54:32.047Z
+    summary: "Implemented run output loading UX: binary display mode with LiveLoadingView during execution, auto-transition to historical view on completion"
+    change_id: 20260611-run-output-loading
+  - skill: /mvt-review
+    completed_at: 2026-06-11T09:03:21.622Z
+    summary: "Reviewed RunOutputPanel.tsx: 0 critical, 2 warnings (dead code), 3 suggestions. Verdict: Approve with comments"
+    change_id: 20260611-run-output-loading
+  - skill: /mvt-fix
+    completed_at: 2026-06-11T09:28:54.876Z
+    summary: "Removed dead code: unused logEndRef and unreachable assistantText block in historical view"
+    change_id: 20260611-run-output-loading
 active_change:
-  id: 20260610-opencode-acp-integration
-  title: OpenCode ACP Integration
-  created_at: 2026-06-10T08:45:29.300Z
+  id: 20260611-run-output-loading
+  title: Run Output Loading UX Redesign
+  created_at: 2026-06-11T08:47:31.165Z
   plan_path: ""
   epic_id: ""
 changes:
@@ -66,4 +66,10 @@ changes:
     plan_path: .ai-agents/workspace/artifacts/20260604-role-custom-avatar/plan.yaml
     status: active
     updated_at: 2026-06-10T08:45:29.300Z
+    epic_id: ""
+  - id: 20260610-opencode-acp-integration
+    title: OpenCode ACP Integration
+    plan_path: ""
+    status: active
+    updated_at: 2026-06-11T08:47:31.165Z
     epic_id: ""

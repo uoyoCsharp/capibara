@@ -132,7 +132,9 @@ export class RunEngine implements IRunEngine {
 
       this.logger.info('Run finished', { runId: run.id, status: result.status, tokenCount });
 
-      if (result.status !== 'suspended') {
+      if (result.status === 'succeeded') {
+        this.autoAdvanceOnSuccess(params.taskId);
+      } else if (result.status !== 'suspended') {
         this.rollbackTaskIfActive(params.taskId);
       }
 
@@ -271,7 +273,6 @@ export class RunEngine implements IRunEngine {
       this.logger.error('Failed to advance task to active', { taskId, target: target.to, error: String(err) });
     }
   }
-
   private rollbackTaskIfActive(taskId: string | null | undefined): void {
     if (!taskId) return;
     const task = this.taskRepo.findById(taskId);
@@ -290,6 +291,50 @@ export class RunEngine implements IRunEngine {
         taskId, from: task.status, to: initial.name, error: String(err),
       });
     }
+  }
+
+  private autoAdvanceOnSuccess(taskId: string | null | undefined): void {
+    if (!taskId) return;
+    const task = this.taskRepo.findById(taskId);
+    if (!task) return;
+
+    const category = this.processEngine.getStatusCategory(task.orgId, task.status);
+    if (category !== 'active') return;
+
+    const transitions = this.processEngine.getAvailableTransitions(task.orgId, task.status);
+
+    const approvalTarget = transitions.find(
+      (t) => this.processEngine.getStatusCategory(task.orgId, t.to) === 'approval',
+    );
+    if (approvalTarget) {
+      try {
+        this.taskStateMachine.transition(taskId, approvalTarget.to, { triggeredBy: 'system' });
+      } catch (err) {
+        this.logger.error('Failed to auto-advance to approval', {
+          taskId, target: approvalTarget.to, error: String(err),
+        });
+      }
+      return;
+    }
+
+    const terminalTarget = transitions.find(
+      (t) => this.processEngine.getStatusCategory(task.orgId, t.to) === 'terminal',
+    );
+    if (terminalTarget) {
+      try {
+        this.taskStateMachine.transition(taskId, terminalTarget.to, { triggeredBy: 'system' });
+      } catch (err) {
+        this.logger.error('Failed to auto-advance to terminal', {
+          taskId, target: terminalTarget.to, error: String(err),
+        });
+      }
+      return;
+    }
+
+    this.logger.warn('No approval/terminal transition found on success; rolling back to initial', {
+      taskId, currentStatus: task.status,
+    });
+    this.rollbackTaskIfActive(taskId);
   }
 
   private emitStreamingEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
