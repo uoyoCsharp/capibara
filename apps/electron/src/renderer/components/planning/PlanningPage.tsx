@@ -236,7 +236,7 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className={`${hasTree ? 'flex-[3]' : 'flex-1'} border-r border-border flex flex-col min-w-0`}>
+        <div className={`flex-1 flex flex-col min-w-0 ${hasTree ? 'border-r border-border' : ''}`}>
           <PlanningChat
             conversationId={conversation.id}
             roles={roles}
@@ -246,7 +246,7 @@ export function PlanningPage({ orgId }: PlanningPageProps) {
           />
         </div>
         <div
-          className={`${hasTree ? 'flex-[2]' : 'w-72 shrink-0'} flex flex-col min-w-0 transition-all duration-200`}
+          className={`${hasTree ? 'flex-[2]' : 'hidden'} flex flex-col min-w-0`}
         >
           <PlanPreviewPane
             conversationId={conversation.id}

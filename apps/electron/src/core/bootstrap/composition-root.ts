@@ -63,8 +63,13 @@ async function resolveOpenCodeExecutable(log: ILogger): Promise<string | null> {
   try {
     const cmd = process.platform === 'win32' ? 'where opencode' : 'which opencode';
     const { stdout } = await execAsync(cmd, { timeout: 3000 });
-    const result = stdout.trim();
-    return result.split('\n')[0]?.trim() || null;
+    const candidates = stdout.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    if (candidates.length === 0) return null;
+    if (process.platform === 'win32') {
+      const native = candidates.find(c => /\.(cmd|exe|bat)$/i.test(c));
+      if (native) return native;
+    }
+    return candidates[0] ?? null;
   } catch {
     log.warn('OpenCode executable not found on PATH; opencode-agent will not be available', {
       hint: 'Set OPENCODE_EXECUTABLE env var or install opencode (https://opencode.ai)',

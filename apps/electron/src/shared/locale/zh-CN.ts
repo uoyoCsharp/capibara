@@ -436,6 +436,15 @@ export const zhCN: LocaleMessages = {
       deleteTitle: '删除规划会话？',
       deleteMessage: '此操作不可撤销。对话及所有关联数据将被永久删除。',
       deleteFailed: '删除规划会话失败',
+      states: {
+        active: '进行中',
+        waiting: '等待中',
+        resolved: '已解决',
+        completed: '已完成',
+        cancelled: '已取消',
+        timed_out: '已超时',
+        escalated: '已升级',
+      },
     },
   },
 

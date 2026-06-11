@@ -438,6 +438,15 @@ export const enUS: LocaleMessages = {
       deleteTitle: 'Delete planning session?',
       deleteMessage: 'This action cannot be undone. The conversation and all associated data will be permanently removed.',
       deleteFailed: 'Failed to delete planning session',
+      states: {
+        active: 'Active',
+        waiting: 'Waiting',
+        resolved: 'Resolved',
+        completed: 'Completed',
+        cancelled: 'Cancelled',
+        timed_out: 'Timed out',
+        escalated: 'Escalated',
+      },
     },
   },
 

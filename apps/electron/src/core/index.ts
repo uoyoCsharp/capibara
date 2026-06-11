@@ -38,6 +38,14 @@ async function createWindow(): Promise<void> {
   registerAutoUpdater(mainWindow);
 }
 
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled rejection:', reason);
+});
+
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   await bootstrap();
@@ -48,6 +56,8 @@ app.whenReady().then(async () => {
       await createWindow();
     }
   });
+}).catch((err) => {
+  console.error('[FATAL] App initialization failed:', err);
 });
 
 app.on('window-all-closed', () => {

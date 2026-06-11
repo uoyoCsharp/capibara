@@ -70,7 +70,7 @@ export function SchedulerControlButton({
     ]);
     if (runsRes.ok && runsRes.data) {
       const active = (runsRes.data as RunRecord[]).filter(
-        (r) => r.status === 'running',
+        (r) => r.status === 'running' && r.taskId !== null,
       );
       setActiveRunCount(active.length);
     }

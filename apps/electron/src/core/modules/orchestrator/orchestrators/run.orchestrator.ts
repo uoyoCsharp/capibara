@@ -45,8 +45,10 @@ export class RunOrchestrator {
   }
 
   private onRunEnded(orgId: string): void {
-    this.drainPendingWakes(orgId);
-    this.taskOrchestrator.scheduleNext(orgId);
+    const dispatched = this.drainPendingWakes(orgId);
+    if (!dispatched) {
+      this.taskOrchestrator.scheduleNext(orgId);
+    }
   }
 
   /**
@@ -60,10 +62,14 @@ export class RunOrchestrator {
    *
    * Only one wake is consumed per call. The resulting run will eventually
    * end, re-triggering onRunEnded → drainPendingWakes, forming a chain.
+   *
+   * @returns true if a wake was dispatched, false otherwise.
+   *          When true, the caller should skip scheduleNext to avoid
+   *          double-dispatching the same task.
    */
-  private drainPendingWakes(orgId: string): void {
+  private drainPendingWakes(orgId: string): boolean {
     const next = this.pendingWakeRepo.findNext(orgId);
-    if (!next) return;
+    if (!next) return false;
 
     this.pendingWakeRepo.delete(next.id);
 
@@ -77,7 +83,7 @@ export class RunOrchestrator {
         conversationId: next.conversationId,
         priority: next.priority,
       });
-      return;
+      return false;
     }
 
     this.logger.info('Draining pending wake', {
@@ -95,7 +101,7 @@ export class RunOrchestrator {
         .catch((err) => {
           this.logger.error('Pending wake execution failed', { error: String(err) });
         });
-      return;
+      return true;
     }
 
     if (next.taskId !== null) {
@@ -110,9 +116,10 @@ export class RunOrchestrator {
         .catch((err) => {
           this.logger.error('Pending wake execution failed', { error: String(err) });
         });
-      return;
+      return true;
     }
 
     this.logger.error('Pending wake has neither taskId nor conversationId; dropping', { id: next.id });
+    return false;
   }
 }

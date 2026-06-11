@@ -40,6 +40,8 @@ export class FileLogService {
         mkdirSync(dir, { recursive: true });
       }
       await appendFile(filePath, content, 'utf-8');
+    }).catch((err) => {
+      console.error('[FileLogService] Write failed:', err);
     });
     this.writeQueues.set(runId, next);
   }

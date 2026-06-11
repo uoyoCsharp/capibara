@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, ChatCircleText, CircleNotch, Plus, Trash } from '@phosphor-icons/react';
 import type { PlanningHistoryRecord } from '@core/shared/types';
 import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,16 @@ import { cn } from '../../lib/utils';
 const TERMINAL_STATES = new Set<PlanningHistoryRecord['state']>([
   'resolved', 'cancelled', 'completed', 'timed_out', 'escalated',
 ]);
+
+const STATE_STYLES: Record<PlanningHistoryRecord['state'], string> = {
+  active: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400',
+  waiting: 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400',
+  resolved: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400',
+  completed: 'bg-muted text-muted-foreground border-border',
+  cancelled: 'bg-muted text-muted-foreground border-border',
+  timed_out: 'bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400',
+  escalated: 'bg-orange-500/10 text-orange-600 border-orange-500/20 dark:text-orange-400',
+};
 
 interface DeleteResult {
   ok: boolean;
@@ -114,9 +125,12 @@ export function PlanningHistory({ entries, isLoading, onSelect, onNew, onBack, o
                         {formatTimestamp(entry.updatedAt)}
                       </p>
                     </div>
-                    <span className="text-[11px] text-muted-foreground shrink-0">
-                      {entry.state}
-                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn('text-[11px] font-normal shrink-0', STATE_STYLES[entry.state])}
+                    >
+                      {t.planning.history.states[entry.state]}
+                    </Badge>
                   </button>
                   <div className="shrink-0 pr-2">
                     {canDelete && (

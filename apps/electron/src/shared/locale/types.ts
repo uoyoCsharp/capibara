@@ -450,6 +450,15 @@ export interface LocaleMessages {
       deleteTitle: string;
       deleteMessage: string;
       deleteFailed: string;
+      states: {
+        active: string;
+        waiting: string;
+        resolved: string;
+        completed: string;
+        cancelled: string;
+        timed_out: string;
+        escalated: string;
+      };
     };
   };
 

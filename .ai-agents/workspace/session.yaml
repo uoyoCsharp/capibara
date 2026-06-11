@@ -3,45 +3,45 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-04T10:57:43.435Z
-    summary: Marked t2-repository-avatar-persistence as done, advanced current_task to t3-service-avatar-processing
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-implement
-    completed_at: 2026-06-04T11:02:21.306Z
-    summary: "Completed t3-service-avatar-processing: added uploadAvatar, removeAvatar, getAvatar methods with image validation, magic bytes checking, and sharp-based resize"
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-update-plan
-    completed_at: 2026-06-04T11:03:08.905Z
-    summary: Marked t3-service-avatar-processing as done, advanced current_task to t4-ipc-handlers-preload
-    change_id: 20260604-role-custom-avatar
-  - skill: /mvt-analyze
-    completed_at: 2026-06-10T08:45:29.300Z
-    summary: Analyzed OpenCode ACP integration requirements; OpenCode has native ACP support, architecture is already agent-agnostic, change is bootstrap + UI level
+  - skill: /mvt-fix
+    completed_at: 2026-06-11T02:50:04.750Z
+    summary: "Fixed Windows opencode path resolution: prefer .cmd/.exe over POSIX shell shim"
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-11T03:02:37.346Z
+    summary: "Confirmed race condition in RunOrchestrator.onRunEnded: drainPendingWakes and scheduleNext both dispatch the same task, causing 'already has an active run' error"
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-fix
+    completed_at: 2026-06-11T03:06:18.235Z
+    summary: Fixed race condition in RunOrchestrator.onRunEnded by making drainPendingWakes return boolean and skipping scheduleNext when a wake was dispatched
     change_id: 20260610-opencode-acp-integration
   - skill: /mvt-quick-dev
-    completed_at: 2026-06-10T08:56:08.777Z
-    summary: 实现 OpenCode ACP 集成：添加 agent 注册、运行时切换 UI、SQLite 持久化
+    completed_at: 2026-06-11T03:15:39.558Z
+    summary: Planning page plan tree sidebar now hidden by default, auto-expands when proposal arrives
     change_id: ""
   - skill: /mvt-review
-    completed_at: 2026-06-10T09:00:12.679Z
-    summary: "Code review completed: 0 critical, 1 warning (execSync blocks main thread), 2 suggestions (use AgentRegistryEntry type, add UI feedback)"
+    completed_at: 2026-06-11T03:17:24.297Z
+    summary: Review of planning page plan tree hide/show change - approved with 1 suggestion
     change_id: 20260610-opencode-acp-integration
   - skill: /mvt-fix
-    completed_at: 2026-06-10T10:39:36.550Z
-    summary: 修复审查问题：异步化 agent 发现、使用 AgentRegistryEntry 类型、添加 UI 反馈
+    completed_at: 2026-06-11T03:19:34.963Z
+    summary: Removed ineffective transition-all duration-200 class from hidden plan tree pane
     change_id: 20260610-opencode-acp-integration
   - skill: /mvt-fix
-    completed_at: 2026-06-10T10:46:02.124Z
-    summary: 修复模型检测 bug：将值捕获改为引用捕获，确保切换默认 agent 后模型 API 使用正确的 agent
+    completed_at: 2026-06-11T03:44:20.234Z
+    summary: Fixed scheduler status indicator showing planning conversation runs as active task runs
     change_id: 20260610-opencode-acp-integration
   - skill: /mvt-quick-dev
-    completed_at: 2026-06-10T10:58:37.778Z
-    summary: UI 调整：agent 选择改为下拉框，模型选择器根据 agent 能力条件显示
+    completed_at: 2026-06-11T03:47:53.589Z
+    summary: Planning history entries now show colored state badges with localized labels
+    change_id: ""
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-11T04:08:00.369Z
+    summary: "Diagnosed Electron main process crash (exit code 1): no global unhandled rejection/exception handlers, multiple unguarded promise chains"
     change_id: 20260610-opencode-acp-integration
   - skill: /mvt-fix
-    completed_at: 2026-06-10T11:10:00.892Z
-    summary: "修复 Windows spawn ENOENT：添加 shell: true 支持 .cmd 文件执行"
+    completed_at: 2026-06-11T04:11:41.321Z
+    summary: Added global uncaughtException/unhandledRejection handlers and fixed unguarded promise chains to prevent process crash
     change_id: 20260610-opencode-acp-integration
 active_change:
   id: 20260610-opencode-acp-integration
