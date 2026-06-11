@@ -8,10 +8,15 @@ import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import { EventBroadcaster } from '@core/infrastructure/notification/event-broadcaster';
 import { NotificationService } from '@core/infrastructure/notification/notification.service';
 
+export interface NotificationModule {
+  eventBroadcaster: EventBroadcaster;
+  notificationService: NotificationService;
+}
+
 export function registerNotificationModule(
   eventBus: IEventBus,
   logger: ILogger,
-): { eventBroadcaster: EventBroadcaster; notificationService: NotificationService } {
+): NotificationModule {
   const eventBroadcaster = new EventBroadcaster(eventBus, logger);
   const notificationService = new NotificationService(logger);
 

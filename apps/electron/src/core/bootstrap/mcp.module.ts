@@ -12,6 +12,11 @@ import type { CollaborationConfig } from '@core/modules/acp/types/acp.types';
 import { buildCapibaraMcpServer, type McpServerDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 import { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 
+export interface McpModule {
+  mcpServer: McpServer;
+  mcpTransport: McpHttpTransportManager;
+}
+
 export function registerMcpModule(
   logger: ILogger,
   taskService: ITaskService,
@@ -23,7 +28,7 @@ export function registerMcpModule(
   eventPublisher: IEventPublisher,
   suspensionManager?: ISessionSuspensionManager | null,
   collaborationConfig?: CollaborationConfig | null,
-): { mcpServer: McpServer; mcpTransport: McpHttpTransportManager } {
+): McpModule {
   const deps: McpServerDeps = {
     taskService,
     taskStateMachine,

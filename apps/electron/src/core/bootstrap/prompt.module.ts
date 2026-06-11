@@ -10,6 +10,11 @@ import type { IOrganizationRepository } from '@core/modules/organization/interfa
 import { RunContext } from '@core/modules/prompt/context/run.context';
 import { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
 
+export interface PromptModule {
+  promptBuilder: PromptBuilder;
+  runContext: RunContext;
+}
+
 export function registerPromptModule(
   taskRepo: ITaskRepository,
   roleRepo: IRoleRepository,
@@ -18,7 +23,7 @@ export function registerPromptModule(
   convContextBuilder: ConversationContextBuilder,
   processEngine: IProcessEngine,
   orgRepo: IOrganizationRepository,
-): { promptBuilder: PromptBuilder; runContext: RunContext } {
+): PromptModule {
   const runContext = new RunContext(taskRepo, roleRepo, skillRepo, convRepo, convContextBuilder, processEngine, orgRepo);
   const promptBuilder = new PromptBuilder(runContext);
 

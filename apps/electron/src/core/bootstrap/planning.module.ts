@@ -12,6 +12,10 @@ import type { IRoleQueryService } from '@core/modules/organization/interfaces/i-
 import { PlanningService } from '@core/modules/planning/planning.service';
 import { SqlitePendingPlanTreeRepository } from '@core/modules/planning/persistence/sqlite-pending-plan-tree.repository';
 
+export interface PlanningModule {
+  planningService: PlanningService;
+}
+
 export function registerPlanningModule(
   taskService: ITaskService,
   taskStateMachine: ITaskStateMachine,
@@ -22,7 +26,7 @@ export function registerPlanningModule(
   logger: ILogger,
   conversationService: IConversationCommandService,
   roleService: IRoleQueryService,
-): { planningService: PlanningService } {
+): PlanningModule {
   const pendingPlanTreeRepo = new SqlitePendingPlanTreeRepository(connection);
 
   const planningService = new PlanningService(

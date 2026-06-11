@@ -16,12 +16,7 @@ import { SkillService } from '@core/modules/organization/services/skill.service'
 import { OrgTemplateService } from '@core/modules/organization/services/org-template.service';
 import { SkillSeeder } from '@core/modules/organization/services/skill-seeder';
 
-export function registerOrganizationModule(
-  connection: ISqliteConnection,
-  eventPublisher: IEventPublisher,
-  logger: ILogger,
-  templatesDir: string,
-): {
+export interface OrganizationModule {
   organizationService: OrganizationService;
   roleService: RoleService;
   skillService: SkillService;
@@ -30,7 +25,14 @@ export function registerOrganizationModule(
   orgRepo: SqliteOrganizationRepository;
   roleRepo: SqliteRoleRepository;
   skillRepo: SqliteSkillRepository;
-} {
+}
+
+export function registerOrganizationModule(
+  connection: ISqliteConnection,
+  eventPublisher: IEventPublisher,
+  logger: ILogger,
+  templatesDir: string,
+): OrganizationModule {
   const orgRepo = new SqliteOrganizationRepository(connection);
   const roleRepo = new SqliteRoleRepository(connection);
   const skillRepo = new SqliteSkillRepository(connection);

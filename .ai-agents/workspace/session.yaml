@@ -4,14 +4,6 @@ session:
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
   - skill: /mvt-fix
-    completed_at: 2026-06-11T02:50:04.750Z
-    summary: "Fixed Windows opencode path resolution: prefer .cmd/.exe over POSIX shell shim"
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-11T03:02:37.346Z
-    summary: "Confirmed race condition in RunOrchestrator.onRunEnded: drainPendingWakes and scheduleNext both dispatch the same task, causing 'already has an active run' error"
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-fix
     completed_at: 2026-06-11T03:06:18.235Z
     summary: Fixed race condition in RunOrchestrator.onRunEnded by making drainPendingWakes return boolean and skipping scheduleNext when a wake was dispatched
     change_id: 20260610-opencode-acp-integration
@@ -42,6 +34,15 @@ history:
   - skill: /mvt-fix
     completed_at: 2026-06-11T04:11:41.321Z
     summary: Added global uncaughtException/unhandledRejection handlers and fixed unguarded promise chains to prevent process crash
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-refactor
+    completed_at: 2026-06-11T06:05:49.561Z
+    summary: "Extracted 4 helper functions from bootstrap() in composition-root.ts: buildAgentConfig(), registerAllIpcHandlers(), wirePostBootstrap(), startAllServices(). Exported module types from 7
+      module files."
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-refactor
+    completed_at: 2026-06-11T06:11:19.472Z
+    summary: Moved reconcileOrphanedActiveTasks from composition-root.ts to TaskStateMachine class
     change_id: 20260610-opencode-acp-integration
 active_change:
   id: 20260610-opencode-acp-integration

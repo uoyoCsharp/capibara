@@ -10,4 +10,5 @@ export interface ITaskStateMachine {
   transition(taskId: string, newStatus: TaskStatus, opts?: { triggeredBy?: 'user' | 'system' }): Task;
   confirmApproval(taskId: string, nextStatus: TaskStatus): Task;
   rejectApproval(taskId: string, revertStatus: TaskStatus): Task;
+  reconcileOrphanedActiveTasks(orgIds: string[]): void;
 }

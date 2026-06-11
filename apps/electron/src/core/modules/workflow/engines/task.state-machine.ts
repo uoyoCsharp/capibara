@@ -180,6 +180,29 @@ export class TaskStateMachine implements ITaskStateMachine {
     return this.taskRepo.findById(taskId)!;
   }
 
+  reconcileOrphanedActiveTasks(orgIds: string[]): void {
+    let total = 0;
+    for (const orgId of orgIds) {
+      const initial = this.processEngine.getInitialStatus(orgId);
+      if (!initial) continue;
+
+      for (const task of this.taskRepo.findByOrgId(orgId)) {
+        if (this.processEngine.getStatusCategory(orgId, task.status) !== 'active') continue;
+        try {
+          this.transition(task.id, initial.name, { triggeredBy: 'system' });
+          total += 1;
+        } catch (err) {
+          this.logger.error('Failed to reconcile orphaned active task on startup', {
+            taskId: task.id, from: task.status, to: initial.name, error: String(err),
+          });
+        }
+      }
+    }
+    if (total > 0) {
+      this.logger.info('Reconciled orphaned active tasks on startup', { count: total });
+    }
+  }
+
   private emitEvent<T extends DomainEventType>(type: T, payload: DomainEventMap[T]): void {
     this.eventPublisher.publish(type, payload);
   }

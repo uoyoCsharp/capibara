@@ -20,20 +20,22 @@ import { BehaviorEngine } from '@core/modules/workflow/engines/behavior.engine';
 import { TaskService } from '@core/modules/workflow/services/task.service';
 import { ProcessTemplateService } from '@core/modules/workflow/services/process-template.service';
 
-export function registerWorkflowModule(
-  connection: ISqliteConnection,
-  eventPublisher: IEventPublisher,
-  logger: ILogger,
-  workflowsDir: string,
-  roleRepo: IRoleRepository,
-): {
+export interface WorkflowModule {
   taskRepo: SqliteTaskRepository;
   taskService: TaskService;
   processEngine: ProcessEngine;
   taskStateMachine: TaskStateMachine;
   behaviorEngine: BehaviorEngine;
   processTemplateService: ProcessTemplateService;
-} {
+}
+
+export function registerWorkflowModule(
+  connection: ISqliteConnection,
+  eventPublisher: IEventPublisher,
+  logger: ILogger,
+  workflowsDir: string,
+  roleRepo: IRoleRepository,
+): WorkflowModule {
   const taskRepo = new SqliteTaskRepository(connection);
   const schemaRepo = new SqliteProcessSchemaRepository(connection);
   const processEngine = new ProcessEngine(schemaRepo, logger);

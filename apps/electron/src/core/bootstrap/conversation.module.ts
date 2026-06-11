@@ -15,16 +15,18 @@ import { ConversationEventLogger } from '@core/modules/conversation/persistence/
 import { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import { ConversationContextBuilder } from '@core/modules/conversation/context/conversation-context.builder';
 
+export interface ConversationModule {
+  conversationService: ConversationService;
+  conversationRepo: SqliteConversationRepository;
+  conversationContextBuilder: ConversationContextBuilder;
+}
+
 export function registerConversationModule(
   connection: ISqliteConnection,
   eventBus: IEventBus,
   eventPublisher: IEventPublisher,
   _logger: ILogger,
-): {
-  conversationService: ConversationService;
-  conversationRepo: SqliteConversationRepository;
-  conversationContextBuilder: ConversationContextBuilder;
-} {
+): ConversationModule {
   const convRepo = new SqliteConversationRepository(connection);
   const msgRepo = new SqliteConversationMessageRepository(connection);
   const eventLogger = new ConversationEventLogger(connection);
