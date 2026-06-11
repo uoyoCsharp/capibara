@@ -129,11 +129,10 @@ describe('ToolPermissionPolicy', () => {
         kind: 'read',
       });
 
-      // Currently restrictive falls back to permissive (denylist only)
-      expect(result.allowed).toBe(true);
+      expect(result.allowed).toBe(false);
     });
 
-    it('should handle ask_user mode (falls back to permissive)', () => {
+    it('should handle ask_user mode (falls back to deny)', () => {
       const repo = createMockRoleRepo({ toolPolicy: 'ask_user' });
       const policy = new ToolPermissionPolicy(repo);
 
@@ -143,7 +142,7 @@ describe('ToolPermissionPolicy', () => {
         kind: 'edit',
       });
 
-      expect(result.allowed).toBe(true);
+      expect(result.allowed).toBe(false);
     });
   });
 });

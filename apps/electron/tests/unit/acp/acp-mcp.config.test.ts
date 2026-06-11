@@ -19,16 +19,16 @@ describe('AcpMcpConfigBuilder', () => {
       expect(logger.logs.some(l => l.level === 'warn')).toBe(true);
     });
 
-    it('should return SSE MCP server config by default', () => {
+    it('should return HTTP MCP server config by default', () => {
       builder.setHttpPort(3456);
 
       const result = builder.buildMcpServers();
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
-        type: 'sse',
+        type: 'http',
         name: 'capibara',
-        url: 'http://127.0.0.1:3456/sse',
+        url: 'http://127.0.0.1:3456/mcp',
         headers: [],
       });
     });

@@ -239,7 +239,7 @@ describe('SessionSuspensionManager', () => {
     });
 
     it('returns null when not all resolved (mode=all)', () => {
-      const susp = makeSuspension({ id: 'susp-x', aggregationMode: 'all' });
+      const susp = makeSuspension({ id: 'susp-x', aggregationMode: 'all', suspendedAt: new Date().toISOString() });
       vi.mocked(repo.findByConversationId).mockReturnValue(susp);
 
       const aw1 = makeAwaiting({ id: 'aw-1', conversationId: 'conv-1', status: 'pending' });

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { registerContextTools } from '@core/mcp/providers/context-tool.provider';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { registerContextToolProvider } from '@core/mcp/providers/context-tool.provider';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { RoleService } from '@core/modules/organization/services/role.service';
@@ -72,7 +72,7 @@ describe('Context Tools (MCP Handlers)', () => {
     } as unknown as RoleService;
 
     mockServer = new MockMcpServer();
-    registerContextTools(mockServer as any, { taskService, roleService } as any);
+    registerContextToolProvider(mockServer as any, { taskService, roleService } as any);
   });
 
   describe('capibara_context - tasks query', () => {

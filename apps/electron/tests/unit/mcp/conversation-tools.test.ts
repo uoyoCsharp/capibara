@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { registerConversationTools } from '@core/mcp/providers/conversation-tool.provider';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { registerConversationToolProvider } from '@core/mcp/providers/conversation-tool.provider';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
@@ -37,7 +37,7 @@ describe('Conversation Tools (MCP Handlers)', () => {
     } as unknown as ConversationService;
 
     mockServer = new MockMcpServer();
-    registerConversationTools(mockServer as any, { conversationService } as any);
+    registerConversationToolProvider(mockServer as any, { conversationService } as any);
   });
 
   describe('capibara_ask_question', () => {
@@ -85,7 +85,7 @@ describe('Conversation Tools (MCP Handlers)', () => {
     beforeEach(() => {
       suspensionManager = createMockSuspensionManager();
       mockServer = new MockMcpServer();
-      registerConversationTools(mockServer as any, {
+      registerConversationToolProvider(mockServer as any, {
         conversationService,
         suspensionManager,
         collaborationConfig: testConfig,
@@ -152,7 +152,7 @@ describe('Conversation Tools (MCP Handlers)', () => {
     beforeEach(() => {
       suspensionManager = createMockSuspensionManager();
       mockServer = new MockMcpServer();
-      registerConversationTools(mockServer as any, {
+      registerConversationToolProvider(mockServer as any, {
         conversationService,
         suspensionManager,
         collaborationConfig: testConfig,

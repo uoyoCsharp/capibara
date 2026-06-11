@@ -110,6 +110,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
       create: vi.fn(),
       delete: vi.fn(),
       deleteByRoleId: vi.fn(),
+      deleteByConversationId: vi.fn(),
     };
     runRepo = {
       findById: vi.fn(),
@@ -127,6 +128,7 @@ describe('Event topology — every DomainEventType routes deterministically', ()
     runCoordinator = {
       executeForTask: vi.fn().mockResolvedValue({ runId: 'r', status: 'succeeded' }),
       executeForConversation: vi.fn().mockResolvedValue({ runId: 'r', status: 'succeeded' }),
+      cancelForConversation: vi.fn().mockResolvedValue(undefined),
     } as unknown as RunCoordinator;
     taskScheduler = { findNextTask: vi.fn().mockReturnValue(null) } as unknown as TaskScheduler;
     taskStateMachine = {

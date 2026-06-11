@@ -3,6 +3,7 @@ import { RunCoordinator } from '@core/modules/orchestrator/run.coordinator';
 import { MockLogger } from '../../helpers/mock-logger';
 import { TEST_ORG_ID, TEST_ROLE_ID, TEST_TASK_ID } from '../../helpers/fixtures';
 import type { IRunEngine } from '@core/modules/execution/interfaces/i-run-engine';
+import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
 import type { PromptBuilder } from '@core/modules/prompt/builder/prompt.builder';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
 import type { IOrganizationRepository } from '@core/modules/organization/interfaces/i-organization.repository';
@@ -51,6 +52,7 @@ function createConversation(overrides?: Partial<Conversation>): Conversation {
 describe('RunCoordinator', () => {
   let coordinator: RunCoordinator;
   let runEngine: IRunEngine;
+  let runRepo: IRunRepository;
   let promptBuilder: PromptBuilder;
   let convRepo: IConversationRepository;
   let conversationService: IConversationCommandService;
@@ -64,6 +66,15 @@ describe('RunCoordinator', () => {
       onLog: vi.fn(),
       onAssistantText: vi.fn(),
     };
+    runRepo = {
+      findById: vi.fn(),
+      findByConversationId: vi.fn(),
+      findByOrgId: vi.fn(),
+      findByTaskId: vi.fn(),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      markOrphanedAsInterrupted: vi.fn(),
+    } as unknown as IRunRepository;
     promptBuilder = {
       buildForTask: vi.fn().mockReturnValue('task prompt content'),
       buildForConversation: vi.fn().mockReturnValue('conversation prompt content'),
@@ -96,6 +107,7 @@ describe('RunCoordinator', () => {
 
     coordinator = new RunCoordinator(
       runEngine,
+      runRepo,
       promptBuilder,
       convRepo,
       conversationService,

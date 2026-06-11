@@ -1,8 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  registerPlanTreeTools,
-  __testing__,
-} from '@core/mcp/providers/plan-tree-tool.provider';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { registerPlanTreeToolProvider } from '@core/mcp/providers/plan-tree-tool.provider';
 import { validatePlanTree, MAX_TREE_NODES, MAX_TREE_DEPTH } from '@core/modules/planning/validation/plan-tree.validator';
 import { MockMcpServer, parseToolResult } from '../../helpers/mock-mcp-server';
 import type { ITaskService } from '@core/modules/workflow/interfaces/i-task.service';
@@ -171,14 +168,14 @@ describe('capibara_plan_submit_tree (MCP tool)', () => {
 
         return {
           mode: input.mode,
-          nodeCount: 2,
-          maxDepth: 2,
+          nodeCount: 3,
+          maxDepth: 3,
         };
       }),
     };
 
     mockServer = new MockMcpServer();
-    registerPlanTreeTools(mockServer as any, {
+    registerPlanTreeToolProvider(mockServer as any, {
       taskService,
       processEngine,
       roleService,

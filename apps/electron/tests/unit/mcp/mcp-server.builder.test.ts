@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildCapibaraMcpServer, type McpServerDeps } from '@core/modules/mcp/mcp-server.builder';
+import { buildCapibaraMcpServer, type McpServerDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 import { MockMcpServer } from '../../helpers/mock-mcp-server';
 
 // Mock all handler registration modules so buildCapibaraMcpServer calls
 // our captured register functions without pulling in real dependencies.
 vi.mock('@core/mcp/providers/task-tool.provider', () => ({
-  registerTaskTools: vi.fn(),
+  registerTaskToolProvider: vi.fn(),
 }));
 vi.mock('@core/mcp/providers/conversation-tool.provider', () => ({
-  registerConversationTools: vi.fn(),
+  registerConversationToolProvider: vi.fn(),
 }));
 vi.mock('@core/mcp/providers/context-tool.provider', () => ({
-  registerContextTools: vi.fn(),
+  registerContextToolProvider: vi.fn(),
 }));
 vi.mock('@core/mcp/providers/plan-tree-tool.provider', () => ({
-  registerPlanTreeTools: vi.fn(),
+  registerPlanTreeToolProvider: vi.fn(),
 }));
 
 // Mock the SDK McpServer with our MockMcpServer so we can inspect calls
@@ -29,10 +29,10 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   },
 }));
 
-import { registerTaskTools } from '@core/mcp/providers/task-tool.provider';
-import { registerConversationTools } from '@core/mcp/providers/conversation-tool.provider';
-import { registerContextTools } from '@core/mcp/providers/context-tool.provider';
-import { registerPlanTreeTools } from '@core/mcp/providers/plan-tree-tool.provider';
+import { registerTaskToolProvider } from '@core/mcp/providers/task-tool.provider';
+import { registerConversationToolProvider } from '@core/mcp/providers/conversation-tool.provider';
+import { registerContextToolProvider } from '@core/mcp/providers/context-tool.provider';
+import { registerPlanTreeToolProvider } from '@core/mcp/providers/plan-tree-tool.provider';
 
 function stubDeps(): McpServerDeps {
   return {
@@ -41,6 +41,7 @@ function stubDeps(): McpServerDeps {
     processEngine: {} as McpServerDeps['processEngine'],
     conversationService: {} as McpServerDeps['conversationService'],
     roleService: {} as McpServerDeps['roleService'],
+    planningService: {} as McpServerDeps['planningService'],
     eventPublisher: {} as McpServerDeps['eventPublisher'],
     suspensionManager: null,
     collaborationConfig: null,
@@ -67,27 +68,27 @@ describe('buildCapibaraMcpServer', () => {
   it('invokes all four handler registration functions', () => {
     const server = buildCapibaraMcpServer(deps);
 
-    expect(registerTaskTools).toHaveBeenCalledOnce();
-    expect(registerTaskTools).toHaveBeenCalledWith(server, deps);
+    expect(registerTaskToolProvider).toHaveBeenCalledOnce();
+    expect(registerTaskToolProvider).toHaveBeenCalledWith(server, deps);
 
-    expect(registerConversationTools).toHaveBeenCalledOnce();
-    expect(registerConversationTools).toHaveBeenCalledWith(server, deps);
+    expect(registerConversationToolProvider).toHaveBeenCalledOnce();
+    expect(registerConversationToolProvider).toHaveBeenCalledWith(server, deps);
 
-    expect(registerContextTools).toHaveBeenCalledOnce();
-    expect(registerContextTools).toHaveBeenCalledWith(server, deps);
+    expect(registerContextToolProvider).toHaveBeenCalledOnce();
+    expect(registerContextToolProvider).toHaveBeenCalledWith(server, deps);
 
-    expect(registerPlanTreeTools).toHaveBeenCalledOnce();
-    expect(registerPlanTreeTools).toHaveBeenCalledWith(server, deps);
+    expect(registerPlanTreeToolProvider).toHaveBeenCalledOnce();
+    expect(registerPlanTreeToolProvider).toHaveBeenCalledWith(server, deps);
   });
 
   it('passes the same server instance to every registration function', () => {
     const server = buildCapibaraMcpServer(deps);
 
     const calls = [
-      vi.mocked(registerTaskTools).mock.calls[0]![0],
-      vi.mocked(registerConversationTools).mock.calls[0]![0],
-      vi.mocked(registerContextTools).mock.calls[0]![0],
-      vi.mocked(registerPlanTreeTools).mock.calls[0]![0],
+      vi.mocked(registerTaskToolProvider).mock.calls[0]![0],
+      vi.mocked(registerConversationToolProvider).mock.calls[0]![0],
+      vi.mocked(registerContextToolProvider).mock.calls[0]![0],
+      vi.mocked(registerPlanTreeToolProvider).mock.calls[0]![0],
     ];
 
     for (const arg of calls) {
@@ -99,14 +100,14 @@ describe('buildCapibaraMcpServer', () => {
     deps.suspensionManager = { suspend: vi.fn() } as unknown as McpServerDeps['suspensionManager'];
     buildCapibaraMcpServer(deps);
 
-    expect(vi.mocked(registerConversationTools).mock.calls[0]![1]).toBe(deps);
+    expect(vi.mocked(registerConversationToolProvider).mock.calls[0]![1]).toBe(deps);
   });
 
   it('passes deps including optional collaborationConfig', () => {
     deps.collaborationConfig = { maxChainDepth: 5 } as unknown as McpServerDeps['collaborationConfig'];
     buildCapibaraMcpServer(deps);
 
-    expect(vi.mocked(registerConversationTools).mock.calls[0]![1]).toBe(deps);
+    expect(vi.mocked(registerConversationToolProvider).mock.calls[0]![1]).toBe(deps);
   });
 
   it('returns the McpServer instance', () => {
@@ -130,13 +131,13 @@ describe('buildCapibaraMcpServer - tool registration completeness', () => {
     ];
 
     // Bypass vi.mock() to get the real implementations
-    const { registerTaskTools: realTaskTools } =
+    const { registerTaskToolProvider: realTaskTools } =
       await vi.importActual<typeof import('@core/mcp/providers/task-tool.provider')>('@core/mcp/providers/task-tool.provider');
-    const { registerConversationTools: realConvTools } =
+    const { registerConversationToolProvider: realConvTools } =
       await vi.importActual<typeof import('@core/mcp/providers/conversation-tool.provider')>('@core/mcp/providers/conversation-tool.provider');
-    const { registerContextTools: realCtxTools } =
+    const { registerContextToolProvider: realCtxTools } =
       await vi.importActual<typeof import('@core/mcp/providers/context-tool.provider')>('@core/mcp/providers/context-tool.provider');
-    const { registerPlanTreeTools: realPlanTools } =
+    const { registerPlanTreeToolProvider: realPlanTools } =
       await vi.importActual<typeof import('@core/mcp/providers/plan-tree-tool.provider')>('@core/mcp/providers/plan-tree-tool.provider');
 
     const captureServer = new MockMcpServer();

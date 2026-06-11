@@ -71,7 +71,7 @@ function extractPreloadMethodNames(): Set<string> {
   // We identify the api literal bounds by 'const api = {' ... '};' and
   // then parse indented "name:" lines inside.
   const startIdx = src.indexOf('const api = {');
-  const endIdx = src.indexOf('};', startIdx);
+  const endIdx = src.indexOf('\n};', startIdx);
   if (startIdx === -1 || endIdx === -1) throw new Error('preload api literal not found');
   const body = src.slice(startIdx, endIdx);
   const methods = new Set<string>();

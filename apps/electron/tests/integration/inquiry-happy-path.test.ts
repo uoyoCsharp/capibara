@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ConversationService } from '@core/modules/conversation/services/conversation.service';
 import { InquiryOrchestrator } from '@core/modules/coordination/routing/inquiry.orchestrator';
 import { ConversationOrchestrator } from '@core/modules/orchestrator/orchestrators/conversation.orchestrator';
-import { registerConversationTools } from '@core/mcp/providers/conversation-tool.provider';
+import { registerConversationToolProvider } from '@core/mcp/providers/conversation-tool.provider';
 import { MockEventBus } from '../helpers/mock-event-bus';
 import { MockLogger } from '../helpers/mock-logger';
 import { MockMcpServer, parseToolResult } from '../helpers/mock-mcp-server';
@@ -306,7 +306,7 @@ describe('Inquiry happy-path end-to-end', () => {
 
   it('MCP capibara_ask_question entry produces the same routed inquiry', async () => {
     const mockServer = new MockMcpServer();
-    registerConversationTools(mockServer as any, { conversationService: h.conversationService } as any);
+    registerConversationToolProvider(mockServer as any, { conversationService: h.conversationService } as any);
     const handler = mockServer.getHandler('capibara_ask_question');
 
     const raw = await handler({

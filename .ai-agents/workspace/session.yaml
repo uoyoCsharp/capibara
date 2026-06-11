@@ -3,10 +3,6 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-fix
-    completed_at: 2026-06-11T03:06:18.235Z
-    summary: Fixed race condition in RunOrchestrator.onRunEnded by making drainPendingWakes return boolean and skipping scheduleNext when a wake was dispatched
-    change_id: 20260610-opencode-acp-integration
   - skill: /mvt-quick-dev
     completed_at: 2026-06-11T03:15:39.558Z
     summary: Planning page plan tree sidebar now hidden by default, auto-expands when proposal arrives
@@ -43,6 +39,10 @@ history:
   - skill: /mvt-refactor
     completed_at: 2026-06-11T06:11:19.472Z
     summary: Moved reconcileOrphanedActiveTasks from composition-root.ts to TaskStateMachine class
+    change_id: 20260610-opencode-acp-integration
+  - skill: /mvt-fix
+    completed_at: 2026-06-11T06:29:23.551Z
+    summary: "Fixed all 88 pre-existing test failures across 12 test files: renamed outdated MCP provider imports, added missing constructor args, corrected stale test expectations"
     change_id: 20260610-opencode-acp-integration
 active_change:
   id: 20260610-opencode-acp-integration
