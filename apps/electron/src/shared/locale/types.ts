@@ -177,6 +177,15 @@ export interface LocaleMessages {
     };
   };
 
+  dependencies: {
+    label: string;
+    none: string;
+    addPlaceholder: string;
+    addBtn: string;
+    addError: string;
+    removeError: string;
+  };
+
   runOutput: {
     noRuns: string;
     runNumber: string;

@@ -420,6 +420,30 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    description: 'Add task_dependencies table for prerequisite relationships',
+    up: (db) => {
+      db.exec(`
+        -- ═══════════════════════════════════════════════
+        -- Task Dependencies — directed prerequisite graph
+        -- dependent_task_id depends on dependency_task_id
+        -- ═══════════════════════════════════════════════
+        CREATE TABLE task_dependencies (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          dependent_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          dependency_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(dependent_task_id, dependency_task_id)
+        );
+
+        CREATE INDEX idx_task_dependencies_dependent ON task_dependencies(dependent_task_id);
+        CREATE INDEX idx_task_dependencies_dependency ON task_dependencies(dependency_task_id);
+        CREATE INDEX idx_task_dependencies_org ON task_dependencies(org_id);
+      `);
+    },
+  },
 ];
 
 export interface RunMigrationsOptions {

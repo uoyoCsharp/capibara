@@ -9,6 +9,7 @@ import {
   Sparkle,
   NoteBlank,
   Note,
+  Link,
 } from '@phosphor-icons/react';
 import type {
   PlanDraftNodeRecord,
@@ -379,6 +380,12 @@ function PlanDraftNode({
                 {node.children.length} child{node.children.length === 1 ? '' : 'ren'}
               </span>
             )}
+            {node.dependsOn && node.dependsOn.length > 0 && (
+              <Badge variant="outline" className="text-[10px] gap-1 border-orange-500/30 text-orange-600 bg-orange-500/10">
+                <Link size={10} weight="bold" />
+                {node.dependsOn.length} dep{node.dependsOn.length === 1 ? '' : 's'}
+              </Badge>
+            )}
             {hasDescription && (
               <button
                 type="button"
@@ -397,6 +404,15 @@ function PlanDraftNode({
               </button>
             )}
           </div>
+          {node.dependsOn && node.dependsOn.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {node.dependsOn.map((dep, i) => (
+                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 border border-orange-500/20">
+                  {dep}
+                </span>
+              ))}
+            </div>
+          )}
           {hasDescription && showDescription && (
             <p className="text-xs leading-relaxed text-muted-foreground mt-1.5 border-l-2 border-border/60 pl-2.5 whitespace-pre-wrap">
               {node.description}

@@ -71,6 +71,13 @@ const api = {
   confirmApproval: (taskId: string, nextStatus: string) => ipcRenderer.invoke('capibara:task:approve', taskId, nextStatus),
   rejectApproval: (taskId: string, revertStatus: string) => ipcRenderer.invoke('capibara:task:reject', taskId, revertStatus),
 
+  // Task Dependencies
+  getTaskDependencies: (taskId: string) => ipcRenderer.invoke('capibara:dependency:list', taskId),
+  getTaskDependents: (taskId: string) => ipcRenderer.invoke('capibara:dependency:dependents', taskId),
+  addTaskDependency: (input: unknown) => ipcRenderer.invoke('capibara:dependency:add', input),
+  removeTaskDependency: (dependencyId: string) => ipcRenderer.invoke('capibara:dependency:remove', dependencyId),
+  getTaskDependenciesByOrgId: (orgId: string) => ipcRenderer.invoke('capibara:dependency:list-by-org', orgId),
+
   // Process Schema
   getProcessSchema: (orgId: string) => ipcRenderer.invoke('capibara:process:get-schema', orgId),
   saveProcessSchema: (orgId: string, schema: unknown) => ipcRenderer.invoke('capibara:process:save-schema', orgId, schema),

@@ -5,6 +5,8 @@ import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-sess
 import type { IAcpSessionRepository } from '@core/modules/acp/interfaces/i-acp-session.repository';
 import type { AcpAgentSpawner } from '@core/infrastructure/acp-protocol/acp-agent.spawner';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
+import type { IRunRepository } from '@core/modules/execution/interfaces/i-run.repository';
+import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { AgentRegistryConfig } from '@core/modules/acp/types/acp.types';
 import type { SuspensionRecord, SuspensionAwaitingRecord } from '@core/shared/types';
 
@@ -19,6 +21,8 @@ export function registerAcpHandlers(
   spawner: AcpAgentSpawner,
   sessionRepo: IAcpSessionRepository,
   logger: ILogger,
+  runRepo: IRunRepository,
+  eventBus: IEventBus,
 ): void {
   // ─── Audit: tool call logs ────────────────────────────────────────
   ipcMain.handle('capibara:audit:tool-calls', async (_ev, runId: string) => {
@@ -98,6 +102,23 @@ export function registerAcpHandlers(
       let expiredSessionCount = 0;
       for (const s of sessions) {
         try {
+          // Emit run:cancelled event if session has an associated active run
+          if (s.runId) {
+            const run = runRepo.findById(s.runId);
+            if (run && run.status === 'running') {
+              runRepo.updateStatus(s.runId, 'cancelled');
+              eventBus.emit({
+                type: 'run:cancelled',
+                timestamp: new Date().toISOString(),
+                payload: {
+                  runId: s.runId,
+                  orgId: run.orgId,
+                  roleId: run.roleId,
+                  tokenCount: run.tokenCount ?? 0,
+                },
+              });
+            }
+          }
           await sessionManager.expire(s.id);
           expiredSessionCount++;
         } catch (e) {
@@ -114,6 +135,24 @@ export function registerAcpHandlers(
   // ─── Dev: Close Session ───────────────────────────────────────────
   ipcMain.handle('capibara:dev:close-session', async (_ev, sessionId: string) => {
     try {
+      // Emit run:cancelled event if session has an associated active run
+      const session = sessionRepo.findById(sessionId);
+      if (session && session.runId) {
+        const run = runRepo.findById(session.runId);
+        if (run && run.status === 'running') {
+          runRepo.updateStatus(session.runId, 'cancelled');
+          eventBus.emit({
+            type: 'run:cancelled',
+            timestamp: new Date().toISOString(),
+            payload: {
+              runId: session.runId,
+              orgId: run.orgId,
+              roleId: run.roleId,
+              tokenCount: run.tokenCount ?? 0,
+            },
+          });
+        }
+      }
       await sessionManager.close(sessionId, 'user_closed');
       return ok(null);
     } catch (e) {

@@ -31,6 +31,7 @@ import { registerPlanTreeHandlers } from '@core/ipc-handlers/plan-tree.handlers'
 import { registerSystemHandlers } from '@core/ipc-handlers/system.handlers';
 import { registerAcpHandlers } from '@core/ipc-handlers/acp.handlers';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
+import type { IEventBus } from '@core/foundation/interfaces/i-event-bus';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { AgentRegistryEntry } from '@core/modules/acp/types/acp.types';
 import type { TaskOrchestrator } from '@core/modules/orchestrator/orchestrators/task.orchestrator';
@@ -164,9 +165,10 @@ function registerAllIpcHandlers(
   config: CapibaraConfig,
   mcp: McpModule,
   eventPublisher: IEventPublisher,
+  eventBus: IEventBus,
 ): void {
   registerOrganizationHandlers(org.organizationService, org.roleService, org.skillService, org.orgTemplateService, logger);
-  registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService);
+  registerWorkflowHandlers(workflow.taskService, workflow.taskStateMachine, workflow.processEngine, workflow.processTemplateService, workflow.taskDependencyService);
   registerConversationHandlers(conversation.conversationService);
   registerExecutionHandlers(
     execution.runRepo,
@@ -177,7 +179,7 @@ function registerAllIpcHandlers(
     execution.fileLogService,
   );
   registerPlanTreeHandlers(planning.planningService);
-  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository, acpModule.sessionManager, agentConfig, acpModule.spawner, acpModule.sessionRepository, logger);
+  registerAcpHandlers(acpModule.auditRepository, acpModule.suspensionRepository, acpModule.sessionManager, agentConfig, acpModule.spawner, acpModule.sessionRepository, logger, execution.runRepo, eventBus);
   registerSystemHandlers({
     connection: sqliteConn,
     runRepo: execution.runRepo,
@@ -351,7 +353,7 @@ export async function bootstrap(): Promise<void> {
   eventBroadcaster = notification.eventBroadcaster;
   mcpTransport = mcp.mcpTransport;
 
-  registerAllIpcHandlers(org, workflow, conversation, execution, planning, orchestratorMod, agentConfig, config, mcp, eventPublisher);
+  registerAllIpcHandlers(org, workflow, conversation, execution, planning, orchestratorMod, agentConfig, config, mcp, eventPublisher, eventBus);
   wirePostBootstrap(org, workflow, conversation, planning, prompt);
   startAllServices(coordination, planning);
   eventPublisher.start();

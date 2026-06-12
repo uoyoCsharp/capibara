@@ -49,6 +49,22 @@ const TaskCompletedSchema = z.object({
   status: z.string(),
 });
 
+// Task Dependency ────────────────────────────────────────────────
+const TaskDependencyAddedSchema = z.object({
+  orgId: z.string(),
+  dependentTaskId: z.string(),
+  dependencyTaskId: z.string(),
+});
+const TaskDependencyRemovedSchema = z.object({
+  orgId: z.string(),
+  dependencyId: z.string(),
+});
+const TaskDependencyResolvedSchema = z.object({
+  orgId: z.string(),
+  dependentTaskId: z.string(),
+  dependencyTaskId: z.string(),
+});
+
 // Conversation ─────────────────────────────────────────────────
 const ConversationTypeSchema = z.enum(['inquiry', 'planning', 'adhoc', 'plan_review']);
 const ConversationCreatedSchema = z.object({
@@ -128,6 +144,7 @@ const PlanTreeNodeSchema: z.ZodType<{
   title: string;
   description: string;
   assigneeRoleId: string;
+  dependsOn?: string[];
   children: Array<z.infer<typeof PlanTreeNodeSchema>>;
 }> = z.lazy(() =>
   z.object({
@@ -135,6 +152,7 @@ const PlanTreeNodeSchema: z.ZodType<{
     title: z.string().min(1),
     description: z.string().min(1),
     assigneeRoleId: z.string().min(1),
+    dependsOn: z.array(z.string().min(1)).optional(),
     children: z.array(PlanTreeNodeSchema),
   }),
 );
@@ -187,6 +205,9 @@ export const EVENT_SCHEMAS = {
   'task:approval-confirmed': TaskApprovalTransitionSchema,
   'task:approval-rejected': TaskApprovalTransitionSchema,
   'task:completed': TaskCompletedSchema,
+  'task:dependency-added': TaskDependencyAddedSchema,
+  'task:dependency-removed': TaskDependencyRemovedSchema,
+  'task:dependency-resolved': TaskDependencyResolvedSchema,
 
   'conversation:created': ConversationCreatedSchema,
   'conversation:message-added': ConversationMessageAddedSchema,

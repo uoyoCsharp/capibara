@@ -3,52 +3,52 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-refactor
-    completed_at: 2026-06-11T06:05:49.561Z
-    summary: "Extracted 4 helper functions from bootstrap() in composition-root.ts: buildAgentConfig(), registerAllIpcHandlers(), wirePostBootstrap(), startAllServices(). Exported module types from 7
-      module files."
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-refactor
-    completed_at: 2026-06-11T06:11:19.472Z
-    summary: Moved reconcileOrphanedActiveTasks from composition-root.ts to TaskStateMachine class
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-fix
-    completed_at: 2026-06-11T06:29:23.551Z
-    summary: "Fixed all 88 pre-existing test failures across 12 test files: renamed outdated MCP provider imports, added missing constructor args, corrected stale test expectations"
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-design
-    completed_at: 2026-06-11T08:14:52.050Z
-    summary: "Designed task execution status reliability fix: prompt timing correction, smart completion on success, enhanced prompt instruction"
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-implement
-    completed_at: 2026-06-11T08:31:26.111Z
-    summary: "Implemented task execution status reliability fix: moved advanceTaskToActive before prompt build, added autoAdvanceOnSuccess on run success, enhanced execute_leaf prompt instruction"
-    change_id: 20260610-opencode-acp-integration
-  - skill: /mvt-analyze
-    completed_at: 2026-06-11T08:47:31.165Z
-    summary: "Analyzed run output loading UX redesign: replace running-state display with clean loading animation + latest log entry scrolling, auto-switch to full historical view on completion"
-    change_id: 20260611-run-output-loading
-  - skill: /mvt-design
-    completed_at: 2026-06-11T08:49:26.998Z
-    summary: "Designed run output loading UX: binary display mode (live-loading vs historical), rolling 5-entry window during execution, auto-transition on completion, single file change"
-    change_id: 20260611-run-output-loading
-  - skill: /mvt-implement
-    completed_at: 2026-06-11T08:54:32.047Z
-    summary: "Implemented run output loading UX: binary display mode with LiveLoadingView during execution, auto-transition to historical view on completion"
-    change_id: 20260611-run-output-loading
   - skill: /mvt-review
-    completed_at: 2026-06-11T09:03:21.622Z
-    summary: "Reviewed RunOutputPanel.tsx: 0 critical, 2 warnings (dead code), 3 suggestions. Verdict: Approve with comments"
-    change_id: 20260611-run-output-loading
+    completed_at: 2026-06-12T08:10:01.313Z
+    summary: "Reviewed task dependency system (t1-t6): found 1 critical bug in BehaviorEngine.onDependencyResolved (wrong status category filter), 2 warnings (hardcoded terminal statuses, N+1 queries), 2
+      suggestions"
+    change_id: 20260612-task-dependency
   - skill: /mvt-fix
-    completed_at: 2026-06-11T09:28:54.876Z
-    summary: "Removed dead code: unused logEndRef and unreachable assistantText block in historical view"
-    change_id: 20260611-run-output-loading
+    completed_at: 2026-06-12T08:26:51.332Z
+    summary: 修复审查发现的 1 个关键问题和 2 个警告：C-1 BehaviorEngine 状态过滤错误、W-1 硬编码终端状态、W-2 N+1 查询问题
+    change_id: 20260612-task-dependency
+  - skill: /mvt-test
+    completed_at: 2026-06-12T08:33:47.486Z
+    summary: 编写依赖系统单元测试：repository (19 tests), service (14 tests), behavior-engine (11 tests)，共 44 个测试全部通过，计划完成 (7/7)
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-12T09:20:13.946Z
+    summary: 添加 Task Dependency System 多语言支持：types.ts, en-US.ts, zh-CN.ts 中添加 dependencies section
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-12T09:35:30.109Z
+    summary: 修复 planning mode 依赖显示问题：MCP tool 描述添加 dependsOn 说明、PlanDraftNodeRecord 类型添加 dependsOn 字段、PlanTreeReview 和 PlanPreviewPane 渲染依赖信息
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-12T09:40:34.253Z
+    summary: "确认设置页切换agent后模型选择区域不显示的bug: AgentConfigPanel条件渲染在agent无缓存模型状态时隐藏了ModelSelector"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-12T09:44:15.142Z
+    summary: "修复设置页切换agent后模型选择区域不显示: 移除AgentConfigPanel中多余的modelSupported条件渲染,ModelSelector始终显示"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-12T09:53:12.905Z
+    summary: "确认DevPanel操作导致Planning输入框禁用的bug: sessionManager.expire/close不触发run:cancelled事件,isAIBusy卡在true"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-12T10:03:13.300Z
+    summary: "修复DevPanel操作导致Planning输入框禁用: 在session终止时触发run:cancelled事件"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-12T10:09:23.090Z
+    summary: "分析OpenCode agent启动失败: 确认为外部agent错误而非Capibara bug"
+    change_id: 20260612-task-dependency
 active_change:
-  id: 20260611-run-output-loading
-  title: Run Output Loading UX Redesign
-  created_at: 2026-06-11T08:47:31.165Z
-  plan_path: ""
+  id: 20260612-task-dependency
+  title: Task Dependency System
+  created_at: 2026-06-12T06:17:19.515Z
+  plan_path: .ai-agents/workspace/artifacts/20260612-task-dependency/plan.yaml
   epic_id: ""
 changes:
   - id: 20260601-planning-history-delete
@@ -72,4 +72,16 @@ changes:
     plan_path: ""
     status: active
     updated_at: 2026-06-11T08:47:31.165Z
+    epic_id: ""
+  - id: 20260611-run-output-loading
+    title: Run Output Loading UX Redesign
+    plan_path: ""
+    status: active
+    updated_at: 2026-06-12T06:05:51.189Z
+    epic_id: ""
+  - id: 20260612-task-dependency
+    title: Task Dependency System
+    plan_path: .ai-agents/workspace/artifacts/20260612-task-dependency/plan.yaml
+    status: active
+    updated_at: 2026-06-12T08:33:47.486Z
     epic_id: ""

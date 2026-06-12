@@ -162,6 +162,15 @@ export const enUS: LocaleMessages = {
     },
   },
 
+  dependencies: {
+    label: 'Dependencies',
+    none: 'No dependencies. This task can start immediately.',
+    addPlaceholder: 'Add dependency...',
+    addBtn: 'Add',
+    addError: 'Failed to add dependency. Circular dependency detected.',
+    removeError: 'Failed to remove dependency',
+  },
+
   runOutput: {
     noRuns: 'No runs yet for this task.',
     runNumber: 'Run #{n}',

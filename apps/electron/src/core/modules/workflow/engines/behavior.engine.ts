@@ -2,6 +2,7 @@ import { injectable } from 'tsyringe';
 import type { IBehaviorEngine } from '../interfaces/i-behavior.engine';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
+import type { ITaskDependencyRepository } from '../interfaces/i-task-dependency.repository';
 import type { IProcessEngine } from '../interfaces/i-process.engine';
 import type { ITaskStateMachine } from '../interfaces/i-task.state-machine';
 import type {
@@ -16,6 +17,7 @@ import type {
 @injectable()
 export class BehaviorEngine implements IBehaviorEngine {
   private evaluating = new Set<string>();
+  private dependencyRepo: ITaskDependencyRepository | null = null;
 
   constructor(
     private readonly taskRepo: ITaskRepository,
@@ -23,6 +25,10 @@ export class BehaviorEngine implements IBehaviorEngine {
     private readonly taskStateMachine: ITaskStateMachine,
     private readonly logger: ILogger,
   ) {}
+
+  setDependencyRepo(repo: ITaskDependencyRepository): void {
+    this.dependencyRepo = repo;
+  }
 
   onStatusEnter(task: Task): void {
     this.evaluateAndExecute('on_status_enter', task);
@@ -42,6 +48,36 @@ export class BehaviorEngine implements IBehaviorEngine {
     if (!parent) return;
 
     this.evaluateAndExecute('on_all_children_terminal', parent);
+  }
+
+  onDependencyResolved(completedTask: Task): void {
+    if (!this.dependencyRepo) return;
+
+    const dependents = this.dependencyRepo.findByDependencyTaskId(completedTask.id);
+    for (const dep of dependents) {
+      const dependentTask = this.taskRepo.findById(dep.dependentTaskId);
+      if (!dependentTask) continue;
+
+      if (this.processEngine.getStatusCategory(dependentTask.orgId, dependentTask.status) === 'terminal') continue;
+
+      const allDeps = this.dependencyRepo.findByDependentTaskId(dep.dependentTaskId);
+      const allResolved = allDeps.every((d) => {
+        const depTask = this.taskRepo.findById(d.dependencyTaskId);
+        if (!depTask) return true;
+        return this.processEngine.getStatusCategory(depTask.orgId, depTask.status) === 'terminal';
+      });
+
+      if (allResolved) {
+        try {
+          this.taskStateMachine.transition(dep.dependentTaskId, 'pending', { triggeredBy: 'system' });
+        } catch (err) {
+          this.logger.warn('Failed to transition dependent task from blocked to pending', {
+            taskId: dep.dependentTaskId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    }
   }
 
   private evaluateAndExecute(trigger: BehaviorTrigger, task: Task): void {

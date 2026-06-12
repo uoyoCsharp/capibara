@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CaretDown, CaretRight, Check, Trash, ChatCircle, CircleNotch } from '@phosphor-icons/react';
+import { CaretDown, CaretRight, Check, Trash, ChatCircle, CircleNotch, Link } from '@phosphor-icons/react';
 import type { PlanDraftNodeRecord, PendingTreeRecord, RoleRecord } from '@core/shared/types';
 import { usePlanTreeStore } from '../../store/plan-tree.store';
 import { useT } from '../../hooks/use-locale';
@@ -285,7 +285,22 @@ function PlanDraftNode({
             {hasChildren && (
               <span className="text-[10px] text-muted-foreground">{node.children.length} child{node.children.length === 1 ? '' : 'ren'}</span>
             )}
+            {node.dependsOn && node.dependsOn.length > 0 && (
+              <Badge variant="outline" className="text-[10px] gap-1 border-orange-500/30 text-orange-600 bg-orange-500/10">
+                <Link size={10} weight="bold" />
+                {node.dependsOn.length} dep{node.dependsOn.length === 1 ? '' : 's'}
+              </Badge>
+            )}
           </div>
+          {node.dependsOn && node.dependsOn.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {node.dependsOn.map((dep, i) => (
+                <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 border border-orange-500/20">
+                  {dep}
+                </span>
+              ))}
+            </div>
+          )}
           {node.description && (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{node.description}</p>
           )}

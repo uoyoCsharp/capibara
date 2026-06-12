@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle, CircleNotch, XCircle } from '@phosphor-icons/react';
+import { ListChecks, Plus, CaretRight, CaretDown, ShieldWarning, CheckCircle, CircleNotch, XCircle, Lock } from '@phosphor-icons/react';
 import { useTaskStore } from '../../store/task.store';
 import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
 import { useEventSubscription } from '../../hooks/use-event-subscription';
@@ -115,6 +115,7 @@ function TaskRow({
 
         {terminal && <CheckCircle size={16} className="text-green-500" />}
         {isRunning && <CircleNotch size={16} className="text-blue-500 animate-spin" />}
+        {task.status === 'blocked' && <Lock size={16} className="text-red-500" weight="fill" />}
 
         <span className={`text-xs px-1.5 py-0.5 rounded ${
           terminal ? 'bg-green-500/10 text-green-600' :
@@ -358,6 +359,7 @@ export function TasksPage({ orgId }: TasksPageProps) {
       {selectedTask && (
         <TaskDetailDrawer
           task={selectedTask}
+          tasks={tasks}
           roles={roles}
           typeLabel={typeLabel}
           statusLabel={statusLabel}

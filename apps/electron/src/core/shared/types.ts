@@ -74,6 +74,17 @@ export interface TaskRecord {
   updatedAt: string;
 }
 
+export interface TaskDependencyRecord {
+  id: string;
+  orgId: string;
+  dependentTaskId: string;
+  dependencyTaskId: string;
+  dependentTaskTitle?: string;
+  dependencyTaskTitle?: string;
+  dependencyTaskStatus?: string;
+  createdAt: string;
+}
+
 export interface RunRecord {
   id: string;
   orgId: string;
@@ -142,6 +153,7 @@ export interface PlanDraftNodeRecord {
   title: string;
   description: string;
   assigneeRoleId: string;
+  dependsOn?: string[];
   children: PlanDraftNodeRecord[];
 }
 

@@ -162,6 +162,15 @@ export const zhCN: LocaleMessages = {
     },
   },
 
+  dependencies: {
+    label: '依赖项',
+    none: '无依赖项。此任务可立即开始。',
+    addPlaceholder: '添加依赖...',
+    addBtn: '添加',
+    addError: '添加依赖失败。检测到循环依赖。',
+    removeError: '删除依赖失败',
+  },
+
   runOutput: {
     noRuns: '此任务暂无运行记录。',
     runNumber: '运行 #{n}',

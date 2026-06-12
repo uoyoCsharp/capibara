@@ -114,5 +114,20 @@ export interface BatchCreateTaskInput {
   title: string;
   description: string;
   assigneeRoleId: string | null;
+  dependsOn?: string[];
   children?: BatchCreateTaskInput[];
+}
+
+export interface TaskDependency {
+  id: string;
+  orgId: string;
+  dependentTaskId: string;
+  dependencyTaskId: string;
+  createdAt: string;
+}
+
+export interface CreateTaskDependencyInput {
+  orgId: string;
+  dependentTaskId: string;
+  dependencyTaskId: string;
 }

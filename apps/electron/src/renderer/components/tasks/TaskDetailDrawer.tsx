@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash, UserCircle, XCircle } from '@phosphor-icons/react';
 import type { TaskRecord, RoleRecord } from '@core/shared/types';
 import {
@@ -22,6 +22,8 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { RunOutputPanel } from './RunOutputPanel';
+import { DependencySelector } from './DependencySelector';
+import { useTaskStore } from '../../store/task.store';
 import { useT } from '../../hooks/use-locale';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,6 +31,7 @@ type AnyLocale = any;
 
 interface TaskDetailDrawerProps {
   task: TaskRecord;
+  tasks: TaskRecord[];
   roles: RoleRecord[];
   typeLabel: (name: string) => string;
   statusLabel: (name: string) => string;
@@ -41,6 +44,7 @@ interface TaskDetailDrawerProps {
 
 export function TaskDetailDrawer({
   task,
+  tasks,
   roles,
   typeLabel,
   statusLabel,
@@ -52,6 +56,11 @@ export function TaskDetailDrawer({
 }: TaskDetailDrawerProps) {
   const t = useT() as AnyLocale;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const loadDependencies = useTaskStore((s) => s.loadDependencies);
+
+  useEffect(() => {
+    void loadDependencies(task.id);
+  }, [task.id, loadDependencies]);
 
   const assignee = roles.find((r) => r.id === task.assigneeRoleId);
   const terminal = isTerminal(task.status);
@@ -112,6 +121,17 @@ export function TaskDetailDrawer({
                     <p className="text-sm text-foreground whitespace-pre-wrap">{task.description}</p>
                   </div>
                 )}
+
+                {/* Dependencies */}
+                <div className="space-y-1.5">
+                  <Separator />
+                  <DependencySelector
+                    task={task}
+                    tasks={tasks}
+                    statusLabel={statusLabel}
+                    isTerminal={isTerminal}
+                  />
+                </div>
 
                 {/* Metadata */}
                 <div className="space-y-3">

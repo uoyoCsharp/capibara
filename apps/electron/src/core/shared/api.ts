@@ -4,6 +4,7 @@ import type {
   RoleRecord,
   SkillRecord,
   TaskRecord,
+  TaskDependencyRecord,
   RunRecord,
   ConversationRecord,
   ConversationMessageRecord,
@@ -79,6 +80,13 @@ export interface CapibaraApi {
   // ─── Approval (Task state transitions) ───────────────────────────
   confirmApproval: (taskId: string, nextStatus: string) => Promise<DesktopResult<TaskRecord>>;
   rejectApproval: (taskId: string, revertStatus: string) => Promise<DesktopResult<TaskRecord>>;
+
+  // ─── Task Dependencies ──────────────────────────────────────────
+  getTaskDependencies: (taskId: string) => Promise<DesktopResult<TaskDependencyRecord[]>>;
+  getTaskDependents: (taskId: string) => Promise<DesktopResult<TaskDependencyRecord[]>>;
+  addTaskDependency: (input: unknown) => Promise<DesktopResult<TaskDependencyRecord>>;
+  removeTaskDependency: (dependencyId: string) => Promise<DesktopResult<null>>;
+  getTaskDependenciesByOrgId: (orgId: string) => Promise<DesktopResult<TaskDependencyRecord[]>>;
 
   // ─── Process Schema ──────────────────────────────────────────────
   getProcessSchema: (orgId: string) => Promise<DesktopResult<unknown>>;

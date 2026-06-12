@@ -14,19 +14,12 @@ export function AgentConfigPanel() {
   const ac = t.settings.agentConfig;
   const [config, setConfig] = useState<AgentConfigSummary | null>(null);
   const [changing, setChanging] = useState(false);
-  const [modelSupported, setModelSupported] = useState(true);
 
   useEffect(() => {
     void api().getAgentConfig().then((result) => {
       if (result.ok) setConfig(result.data);
     });
   }, []);
-
-  useEffect(() => {
-    void api().getModelState().then((result) => {
-      if (result.ok) setModelSupported(result.data.supported);
-    });
-  }, [config?.defaultAgent]);
 
   const handleAgentChange = async (agentId: string) => {
     setChanging(true);
@@ -35,8 +28,6 @@ export function AgentConfigPanel() {
       if (result.ok) {
         setConfig((prev) => prev ? { ...prev, defaultAgent: result.data.defaultAgent } : prev);
         toast.success(ac.defaultAgentSet);
-        const modelResult = await api().getModelState();
-        if (modelResult.ok) setModelSupported(modelResult.data.supported);
       } else {
         toast.error(ac.defaultAgentSetFailed);
       }
@@ -90,12 +81,10 @@ export function AgentConfigPanel() {
         </div>
       </section>
 
-      {/* Model Selection - only show if current agent supports it */}
-      {modelSupported && (
-        <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
-          <ModelSelector />
-        </section>
-      )}
+      {/* Model Selection */}
+      <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">
+        <ModelSelector />
+      </section>
 
       {/* Collaboration Config */}
       <section className="rounded-xl border border-border p-[var(--card-padding)] space-y-4">

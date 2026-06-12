@@ -1,18 +1,25 @@
 import { injectable } from 'tsyringe';
 import type { ITaskService } from '../interfaces/i-task.service';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
+import type { ITaskDependencyRepository } from '../interfaces/i-task-dependency.repository';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import { ValidationError, NotFoundError } from '@core/foundation/errors/capibara.errors';
 import type { IProcessEngine } from '../interfaces/i-process.engine';
-import type { Task, CreateTaskInput, BatchCreateTaskInput } from '../types/workflow.types';
+import type { Task, CreateTaskInput, BatchCreateTaskInput, TaskDependency, CreateTaskDependencyInput } from '../types/workflow.types';
 
 @injectable()
 export class TaskService implements ITaskService {
+  private dependencyRepo: ITaskDependencyRepository | null = null;
+
   constructor(
     private readonly taskRepo: ITaskRepository,
     private readonly processEngine: IProcessEngine,
     private readonly eventPublisher: IEventPublisher,
   ) {}
+
+  setDependencyRepo(repo: ITaskDependencyRepository): void {
+    this.dependencyRepo = repo;
+  }
 
   findById(id: string): Task | null {
     return this.taskRepo.findById(id);
@@ -80,23 +87,77 @@ export class TaskService implements ITaskService {
 
   batchCreate(orgId: string, parentId: string | null, items: BatchCreateTaskInput[]): Task[] {
     const created: Task[] = [];
-    for (const item of items) {
-      const task = this.create({
-        orgId,
-        parentId,
-        type: item.type,
-        title: item.title,
-        description: item.description,
-        assigneeRoleId: item.assigneeRoleId,
-      });
-      created.push(task);
+    const titleToTask = new Map<string, Task>();
 
-      if (item.children && item.children.length > 0) {
-        const childTasks = this.batchCreate(orgId, task.id, item.children);
-        created.push(...childTasks);
+    const createRecursive = (parentTaskId: string | null, nodes: BatchCreateTaskInput[]): void => {
+      for (const item of nodes) {
+        const task = this.create({
+          orgId,
+          parentId: parentTaskId,
+          type: item.type,
+          title: item.title,
+          description: item.description,
+          assigneeRoleId: item.assigneeRoleId,
+        });
+        created.push(task);
+        titleToTask.set(item.title, task);
+
+        if (item.children && item.children.length > 0) {
+          createRecursive(task.id, item.children);
+        }
+      }
+    };
+
+    createRecursive(parentId, items);
+
+    if (this.dependencyRepo) {
+      for (const item of items) {
+        this.resolveDependencies(item, titleToTask, orgId);
       }
     }
+
     return created;
+  }
+
+  private resolveDependencies(
+    item: BatchCreateTaskInput,
+    titleToTask: Map<string, Task>,
+    orgId: string,
+  ): void {
+    const dependentTask = titleToTask.get(item.title);
+    if (!dependentTask || !item.dependsOn || item.dependsOn.length === 0) {
+      if (item.children) {
+        for (const child of item.children) {
+          this.resolveDependencies(child, titleToTask, orgId);
+        }
+      }
+      return;
+    }
+
+    for (const depTitle of item.dependsOn) {
+      const dependencyTask = titleToTask.get(depTitle);
+      if (!dependencyTask) {
+        throw new ValidationError(`Dependency target not found in batch: "${depTitle}"`);
+      }
+
+      if (this.dependencyRepo!.canReach(dependencyTask.id, dependentTask.id)) {
+        throw new ValidationError(
+          `Circular dependency detected: "${item.title}" -> "${depTitle}" would create a cycle`,
+        );
+      }
+
+      this.dependencyRepo!.create({
+        orgId,
+        dependentTaskId: dependentTask.id,
+        dependencyTaskId: dependencyTask.id,
+      });
+    }
+
+    if (item.children) {
+      for (const child of item.children) {
+        this.resolveDependencies(child, titleToTask, orgId);
+      }
+    }
   }
 
   delete(id: string): void {
@@ -106,5 +167,32 @@ export class TaskService implements ITaskService {
     }
 
     this.taskRepo.delete(id);
+  }
+
+  addDependency(input: CreateTaskDependencyInput): TaskDependency {
+    if (!this.dependencyRepo) {
+      throw new ValidationError('Dependency repository not configured');
+    }
+    return this.dependencyRepo.create(input);
+  }
+
+  removeDependency(dependencyId: string): void {
+    if (!this.dependencyRepo) {
+      throw new ValidationError('Dependency repository not configured');
+    }
+    const dep = this.dependencyRepo.findById(dependencyId);
+    if (!dep) throw new NotFoundError('TaskDependency', dependencyId);
+    this.dependencyRepo.deleteByDependentTaskId(dep.dependentTaskId);
+    this.dependencyRepo.deleteByDependencyTaskId(dep.dependencyTaskId);
+  }
+
+  getDependencies(taskId: string): TaskDependency[] {
+    if (!this.dependencyRepo) return [];
+    return this.dependencyRepo.findByDependentTaskId(taskId);
+  }
+
+  getDependents(taskId: string): TaskDependency[] {
+    if (!this.dependencyRepo) return [];
+    return this.dependencyRepo.findByDependencyTaskId(taskId);
   }
 }

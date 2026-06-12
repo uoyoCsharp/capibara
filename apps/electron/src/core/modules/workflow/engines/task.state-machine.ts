@@ -1,6 +1,7 @@
 import { injectable } from 'tsyringe';
 import type { ITaskStateMachine } from '../interfaces/i-task.state-machine';
 import type { ITaskRepository } from '../interfaces/i-task.repository';
+import type { ITaskDependencyRepository } from '../interfaces/i-task-dependency.repository';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IEventPublisher } from '@core/foundation/interfaces/i-event-publisher';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
@@ -13,6 +14,7 @@ import type { Task, TaskStatus } from '../types/workflow.types';
 @injectable()
 export class TaskStateMachine implements ITaskStateMachine {
   private behaviorEngine: IBehaviorEngine | null = null;
+  private dependencyRepo: ITaskDependencyRepository | null = null;
 
   constructor(
     private readonly taskRepo: ITaskRepository,
@@ -24,6 +26,10 @@ export class TaskStateMachine implements ITaskStateMachine {
 
   setBehaviorEngine(engine: IBehaviorEngine): void {
     this.behaviorEngine = engine;
+  }
+
+  setDependencyRepo(repo: ITaskDependencyRepository): void {
+    this.dependencyRepo = repo;
   }
 
   /**
@@ -59,6 +65,14 @@ export class TaskStateMachine implements ITaskStateMachine {
     }
 
     const category = this.processEngine.getStatusCategory(task.orgId, newStatus);
+
+    if (category === 'active' && this.dependencyRepo) {
+      const terminalStatuses = this.processEngine.getStatusesByCategory(task.orgId, 'terminal').map((s) => s.name);
+      if (this.dependencyRepo.hasUnresolvedDependencies(taskId, terminalStatuses)) {
+        this.logger.debug('Task has unresolved dependencies, blocking transition to active', { taskId, from: currentStatus, to: newStatus });
+        throw new TaskStateError(currentStatus, newStatus, 'task has unresolved dependencies');
+      }
+    }
 
     if (category === 'approval' && this.taskRepo.hasChildren(taskId)) {
       this.logger.debug('Non-leaf task cannot enter approval state', { taskId, from: currentStatus, to: newStatus });
@@ -101,6 +115,10 @@ export class TaskStateMachine implements ITaskStateMachine {
 
     if (category === 'terminal') {
       this.emitEvent('task:completed', { taskId, orgId: task.orgId, status: newStatus });
+      if (this.behaviorEngine) {
+        const freshTask = this.taskRepo.findById(taskId)!;
+        this.behaviorEngine.onDependencyResolved(freshTask);
+      }
     }
 
     if (this.behaviorEngine) {

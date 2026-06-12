@@ -12,6 +12,8 @@ function isDraftNode(v: unknown): v is PlanTreeNode {
     typeof o.title === 'string' && o.title.length > 0 &&
     typeof o.description === 'string' &&
     typeof o.assigneeRoleId === 'string' && o.assigneeRoleId.length > 0 &&
+    (o.dependsOn === undefined || o.dependsOn === null ||
+      (Array.isArray(o.dependsOn) && o.dependsOn.every((d) => typeof d === 'string' && d.length > 0))) &&
     ((o.children === undefined || o.children === null) ||
       (Array.isArray(o.children) && o.children.every(isDraftNode)))
   );
@@ -20,11 +22,13 @@ function isDraftNode(v: unknown): v is PlanTreeNode {
 function normalizeDraftNode(v: unknown): PlanTreeNode {
   const o = v as Record<string, unknown>;
   const rawChildren = Array.isArray(o.children) ? o.children : [];
+  const rawDependsOn = Array.isArray(o.dependsOn) ? o.dependsOn : undefined;
   return {
     type: o.type as string,
     title: o.title as string,
     description: o.description as string,
     assigneeRoleId: o.assigneeRoleId as string,
+    dependsOn: rawDependsOn as string[] | undefined,
     children: rawChildren.map((c) => normalizeDraftNode(c)),
   };
 }
@@ -54,7 +58,10 @@ export function registerPlanTreeToolProvider(server: McpServer, deps: McpProtoco
           'Conversation anchor - the planning conversation ID. Provide this OR rootTaskId.',
         ),
         tree: z.record(z.unknown()).describe(
-          'The decomposition tree. Each node: { type, title, description, assigneeRoleId, children: [...] }. Leaves have children: [].',
+          'The decomposition tree. Each node: { type, title, description, assigneeRoleId, dependsOn?: string[], children: [...] }. ' +
+          'Leaves have children: []. ' +
+          'dependsOn is optional: an array of sibling task titles this task depends on (e.g. ["Design API", "Write tests"]). ' +
+          'Dependencies enforce execution order - a task cannot start until all its dependencies are complete.',
         ),
       },
     },

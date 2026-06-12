@@ -82,6 +82,22 @@ export interface TaskCompletedPayload {
   status: string;
 }
 
+// Task Dependency ────────────────────────────────────────────────
+export interface TaskDependencyAddedPayload {
+  orgId: string;
+  dependentTaskId: string;
+  dependencyTaskId: string;
+}
+export interface TaskDependencyRemovedPayload {
+  orgId: string;
+  dependencyId: string;
+}
+export interface TaskDependencyResolvedPayload {
+  orgId: string;
+  dependentTaskId: string;
+  dependencyTaskId: string;
+}
+
 // Conversation ─────────────────────────────────────────────────
 export interface ConversationCreatedPayload {
   conversationId: string;
@@ -204,6 +220,7 @@ export interface PlanTreeNode {
   title: string;
   description: string;
   assigneeRoleId: string;
+  dependsOn?: string[];
   children: PlanTreeNode[];
 }
 
@@ -268,6 +285,9 @@ export interface DomainEventMap {
   'task:approval-confirmed': TaskApprovalConfirmedPayload;
   'task:approval-rejected': TaskApprovalRejectedPayload;
   'task:completed': TaskCompletedPayload;
+  'task:dependency-added': TaskDependencyAddedPayload;
+  'task:dependency-removed': TaskDependencyRemovedPayload;
+  'task:dependency-resolved': TaskDependencyResolvedPayload;
 
   // Conversation
   'conversation:created': ConversationCreatedPayload;

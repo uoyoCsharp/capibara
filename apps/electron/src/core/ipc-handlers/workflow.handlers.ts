@@ -3,15 +3,34 @@ import type { TaskService } from '@core/modules/workflow/services/task.service';
 import type { TaskStateMachine } from '@core/modules/workflow/engines/task.state-machine';
 import type { ProcessEngine } from '@core/modules/workflow/engines/process.engine';
 import type { ProcessTemplateService } from '@core/modules/workflow/services/process-template.service';
+import type { TaskDependencyService } from '@core/modules/workflow/services/task-dependency.service';
+import type { TaskDependency } from '@core/modules/workflow/types/workflow.types';
+import type { TaskDependencyRecord } from '@core/shared/types';
 
 function ok<T>(data: T) { return { ok: true as const, data }; }
 function err(code: string, message: string) { return { ok: false as const, error: { code, message } }; }
+
+function toDependencyRecord(dep: TaskDependency, taskService: TaskService): TaskDependencyRecord {
+  const dependentTask = taskService.findById(dep.dependentTaskId);
+  const dependencyTask = taskService.findById(dep.dependencyTaskId);
+  return {
+    id: dep.id,
+    orgId: dep.orgId,
+    dependentTaskId: dep.dependentTaskId,
+    dependencyTaskId: dep.dependencyTaskId,
+    dependentTaskTitle: dependentTask?.title,
+    dependencyTaskTitle: dependencyTask?.title,
+    dependencyTaskStatus: dependencyTask?.status,
+    createdAt: dep.createdAt,
+  };
+}
 
 export function registerWorkflowHandlers(
   taskService: TaskService,
   taskStateMachine: TaskStateMachine,
   processEngine: ProcessEngine,
   processTemplateService: ProcessTemplateService,
+  taskDependencyService: TaskDependencyService,
 ): void {
   ipcMain.handle('capibara:task:list', async (_ev, orgId: string) => {
     try { return ok(taskService.findByOrgId(orgId)); }
@@ -81,5 +100,38 @@ export function registerWorkflowHandlers(
   ipcMain.handle('capibara:process:templates', async () => {
     try { return ok(processTemplateService.getTemplates()); }
     catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  ipcMain.handle('capibara:dependency:list', async (_ev, taskId: string) => {
+    try {
+      const deps = taskDependencyService.getDependencies(taskId);
+      return ok(deps.map((d) => toDependencyRecord(d, taskService)));
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  ipcMain.handle('capibara:dependency:dependents', async (_ev, taskId: string) => {
+    try {
+      const deps = taskDependencyService.getDependents(taskId);
+      return ok(deps.map((d) => toDependencyRecord(d, taskService)));
+    } catch (e) { return err('INTERNAL', String(e)); }
+  });
+
+  ipcMain.handle('capibara:dependency:add', async (_ev, input: unknown) => {
+    try {
+      const dep = taskDependencyService.addDependency(input as Parameters<typeof taskDependencyService.addDependency>[0]);
+      return ok(toDependencyRecord(dep, taskService));
+    } catch (e) { return err('VALIDATION_ERROR', String(e)); }
+  });
+
+  ipcMain.handle('capibara:dependency:remove', async (_ev, dependencyId: string) => {
+    try { taskDependencyService.removeDependency(dependencyId); return ok(null); }
+    catch (e) { return err('VALIDATION_ERROR', String(e)); }
+  });
+
+  ipcMain.handle('capibara:dependency:list-by-org', async (_ev, orgId: string) => {
+    try {
+      const deps = taskDependencyService.getDependenciesByOrgId(orgId);
+      return ok(deps.map((d) => toDependencyRecord(d, taskService)));
+    } catch (e) { return err('INTERNAL', String(e)); }
   });
 }

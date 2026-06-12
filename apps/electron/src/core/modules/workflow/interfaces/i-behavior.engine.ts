@@ -7,5 +7,6 @@ import type { Task, BehaviorCondition } from '../types/workflow.types';
 export interface IBehaviorEngine {
   onStatusEnter(task: Task): void;
   onChildCompleted(childTask: Task): void;
+  onDependencyResolved(completedTask: Task): void;
   evaluateCondition(condition: BehaviorCondition | null | undefined, context: Record<string, unknown>): boolean;
 }

@@ -1,0 +1,193 @@
+version: 1
+change_id: 20260612-task-dependency
+title: Task Dependency System
+created_at: 2026-06-12T06:20:00.000Z
+updated_at: 2026-06-12T08:33:32.638Z
+status: done
+current_tasks: {}
+tasks:
+  - id: t1-migration-types
+    title: Database migration and domain types
+    status: done
+    completed_at: 2026-06-12T06:34:42.389Z
+    depends_on: []
+    project:
+      - electron
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - apps/electron/src/core/infrastructure/persistence/sqlite/migrations.ts
+        - apps/electron/src/core/modules/workflow/types/workflow.types.ts
+    notes: >
+      Add task_dependencies table migration (version 8) with columns: id, org_id, dependent_task_id, dependency_task_id, created_at. Both FK columns reference tasks(id) ON DELETE CASCADE. Add unique
+      index on (dependent_task_id, dependency_task_id). Add indexes on both FK columns for reverse lookups. Extend workflow.types.ts with TaskDependency interface and CreateTaskDependencyInput. Extend
+      BatchCreateTaskInput with optional dependsOn: string[] field. Refer to ADR-01 and ADR-06 in design.md.
+    acceptance:
+      - Migration v8 creates task_dependencies table with correct schema
+      - Migration applies cleanly on existing database (no data loss)
+      - TaskDependency and CreateTaskDependencyInput types compile without errors
+      - BatchCreateTaskInput includes optional dependsOn field
+      - tsc clean; existing tests pass
+  - id: t2-repository-service
+    title: Dependency repository and service with cycle detection
+    status: done
+    completed_at: 2026-06-12T06:42:04.496Z
+    depends_on:
+      - t1-migration-types
+    project:
+      - electron
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - apps/electron/src/core/modules/workflow/interfaces/i-task-dependency.repository.ts
+        - apps/electron/src/core/modules/workflow/persistence/sqlite-task-dependency.repository.ts
+        - apps/electron/src/core/modules/workflow/services/task-dependency.service.ts
+    notes: >
+      Create ITaskDependencyRepository interface with methods: findById, findByDependentTaskId, findByDependencyTaskId, findByOrgId, create, deleteByDependentTaskId, deleteByDependencyTaskId,
+      deleteByTaskId, hasUnresolvedDependencies, canReach. Implement SqliteTaskDependencyRepository. Create TaskDependencyService with addDependency (includes DFS cycle detection via canReach) and
+      removeDependency methods. Cycle detection: DFS from dependency_task_id following existing edges; if dependent_task_id is reachable, reject with ValidationError. Per ADR-01 and ADR-04.
+    acceptance:
+      - ITaskDependencyRepository interface defines all required methods
+      - SqliteTaskDependencyRepository implements all methods with correct SQL
+      - Cycle detection rejects A->B->A and A->B->C->A patterns
+      - Cycle detection allows valid DAG dependencies
+      - deleteByTaskId removes dependencies in both directions
+      - tsc clean; existing tests pass
+  - id: t3-state-machine-behavior
+    title: State machine and behavior engine integration
+    status: done
+    completed_at: 2026-06-12T06:55:55.401Z
+    depends_on:
+      - t2-repository-service
+    project:
+      - electron
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - apps/electron/src/core/modules/workflow/engines/task.state-machine.ts
+        - apps/electron/src/core/modules/workflow/engines/behavior.engine.ts
+        - apps/electron/src/core/modules/workflow/interfaces/i-task.service.ts
+        - apps/electron/src/core/modules/workflow/interfaces/i-behavior.engine.ts
+        - apps/electron/src/core/modules/workflow/services/task.service.ts
+        - apps/electron/src/core/bootstrap/workflow.module.ts
+        - apps/electron/src/core/bootstrap/composition-root.ts
+    notes: >
+      Inject ITaskDependencyRepository into TaskStateMachine. In transition(), when transitioning TO active category (in_progress), check hasUnresolvedDependencies and throw TaskStateError if true
+      (defense in depth per ADR-05). After emitting task:completed, call behaviorEngine.onDependencyResolved(completedTask). Add onDependencyResolved method to BehaviorEngine: query dependents of
+      completed task, check if all their dependencies are terminal, transition qualified tasks from blocked to pending. Extend ITaskService with addDependency/removeDependency/
+      getDependencies/getDependents. Extend TaskService with dependency CRUD and batchCreate dependsOn resolution. Wire TaskDependencyRepository and TaskDependencyService in workflow.module.ts and
+      composition-root.ts. Per ADR-02, ADR-03, ADR-05.
+    acceptance:
+      - TaskStateMachine rejects transition to active when unresolved dependencies exist
+      - BehaviorEngine.onDependencyResolved transitions blocked->pending when all deps terminal
+      - BehaviorEngine.onDependencyResolved leaves task blocked when deps remain
+      - TaskService.addDependency creates dependency and transitions task to blocked
+      - TaskService.batchCreate resolves dependsOn titles to task IDs
+      - Workflow module wires all new dependencies correctly
+      - tsc clean; existing tests pass
+  - id: t4-api-ipc
+    title: Events, IPC handlers, preload, and shared API contract
+    status: done
+    completed_at: 2026-06-12T07:21:51.762Z
+    depends_on:
+      - t3-state-machine-behavior
+    project:
+      - electron
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - apps/electron/src/core/foundation/events.ts
+        - apps/electron/src/core/ipc-handlers/workflow.handlers.ts
+        - apps/electron/src/core/preload/index.ts
+        - apps/electron/src/core/shared/types.ts
+        - apps/electron/src/core/shared/api.ts
+        - apps/electron/src/core/foundation/event-schemas.ts
+        - apps/electron/src/core/bootstrap/composition-root.ts
+    notes: >
+      Add TaskDependencyAddedPayload, TaskDependencyRemovedPayload, TaskDependencyResolvedPayload to events.ts and DomainEventMap. Add capibara:dependency:add, capibara:dependency:remove,
+      capibara:dependency:list, capibara:dependency:dependents IPC handlers in workflow.handlers.ts. Add corresponding preload methods. Add TaskDependencyRecord to shared/types.ts (with denormalized
+      title/status fields for UI convenience). Extend CapibaraApi interface with getTaskDependencies, getTaskDependents, addTaskDependency, removeTaskDependency methods.
+    acceptance:
+      - All new event types compile and are registered in DomainEventMap
+      - IPC handlers return correct DesktopResult for all dependency operations
+      - Preload methods match CapibaraApi interface (parity test passes)
+      - TaskDependencyRecord includes denormalized title/status fields
+      - tsc clean; existing tests pass
+  - id: t5-ui-components
+    title: UI dependency selector and blocked status display
+    status: done
+    completed_at: 2026-06-12T07:58:33.380Z
+    depends_on:
+      - t4-api-ipc
+    project:
+      - electron
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - apps/electron/src/renderer/store/task.store.ts
+        - apps/electron/src/renderer/components/tasks/DependencySelector.tsx
+        - apps/electron/src/renderer/components/tasks/TaskDetailDrawer.tsx
+        - apps/electron/src/renderer/components/tasks/TasksPage.tsx
+    notes: >
+      Extend task.store.ts to load dependencies alongside tasks (new loadDependencies action, dependencies state). Create DependencySelector component: shows current dependencies with status
+      indicators, allows adding/removing dependencies via task search dropdown, shows error toast on cycle detection. Add dependencies section to TaskDetailDrawer using DependencySelector. Add blocked
+      status indicator to TasksPage task rows (show lock icon or "Blocked" badge when task status is blocked). Update task store to refresh dependencies after add/remove operations.
+    acceptance:
+      - TaskDetailDrawer shows dependencies section with current dependencies
+      - DependencySelector allows adding dependencies via task search
+      - Adding a dependency that creates a cycle shows error toast
+      - Removing a dependency updates the list immediately
+      - TasksPage shows blocked indicator on blocked tasks
+      - tsc clean; existing tests pass
+  - id: t6-planning-mode
+    title: Planning mode dependency support
+    status: done
+    completed_at: 2026-06-12T08:03:34.028Z
+    depends_on:
+      - t3-state-machine-behavior
+    project:
+      - electron
+    skill_hint: mvt-implement
+    artifacts:
+      files:
+        - apps/electron/src/core/modules/workflow/services/task.service.ts
+        - apps/electron/src/core/modules/planning/planning.service.ts
+        - apps/electron/src/core/modules/mcp/providers/plan-tree.provider.ts
+        - apps/electron/src/core/foundation/events.ts
+        - apps/electron/src/core/foundation/event-schemas.ts
+        - apps/electron/src/core/mcp/providers/plan-tree-tool.provider.ts
+    notes: >
+      Extend plan tree submission to support dependsOn field in tree nodes. In TaskService.batchCreate, after creating all tasks, resolve dependsOn title references to actual task IDs using the
+      title->id map. Create dependency relationships via TaskDependencyService (with cycle detection). Update PlanTreeNode type in events.ts to include optional dependsOn field. Update
+      plan-tree.provider.ts to pass dependsOn through to PlanningService. Per ADR-06.
+    acceptance:
+      - Plan tree submission accepts dependsOn field on nodes
+      - batchCreate resolves dependsOn titles to task IDs correctly
+      - Dependency cycle in plan tree causes submission to fail with validation error
+      - Dependencies are created after task creation in same transaction
+      - tsc clean; existing tests pass
+  - id: t7-unit-tests
+    title: Unit tests for dependency system
+    status: done
+    completed_at: 2026-06-12T08:33:32.638Z
+    depends_on:
+      - t5-ui-components
+      - t6-planning-mode
+    project:
+      - electron
+    skill_hint: mvt-test
+    artifacts:
+      files:
+        - apps/electron/tests/unit/workflow/task-dependency.repository.test.ts
+        - apps/electron/tests/unit/workflow/task-dependency.service.test.ts
+        - apps/electron/tests/unit/workflow/behavior-engine.dependency.test.ts
+    notes: >
+      Write unit tests for: (1) SqliteTaskDependencyRepository — CRUD operations, cycle detection via canReach, cascade delete behavior. (2) TaskDependencyService — addDependency with valid/invalid
+      cases, cycle detection (direct and transitive), self-dependency rejection, descendant-dependency rejection. (3) BehaviorEngine — onDependencyResolved transitions blocked->pending when all deps
+      terminal, leaves blocked when deps remain, handles multiple dependents, idempotent on re-delivery. Follow existing test patterns in the codebase.
+    acceptance:
+      - Repository tests cover all CRUD methods and canReach cycle detection
+      - Service tests cover valid dependencies, direct cycles, transitive cycles
+      - BehaviorEngine tests cover dependency resolution and non-resolution cases
+      - All new tests pass; no existing tests broken
+      - vitest run completes with 0 failures
