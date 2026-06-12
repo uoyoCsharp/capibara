@@ -1,7 +1,7 @@
 {
   "mvtt_version": "2.0.0-beta.6",
   "installed_at": "2026-05-27T10:48:04.265Z",
-  "last_updated_at": "2026-06-11T10:03:37.176Z",
+  "last_updated_at": "2026-06-12T03:59:26.607Z",
   "platforms": [
     "claude"
   ],
@@ -15,11 +15,11 @@
       "category": "generated"
     },
     ".claude/skills/mvt-bug-detect/SKILL.md": {
-      "hash": "sha256:31d7249390f36f34e7a5cb068666ae922c19677d6ad75562457e9c4ad8df881a",
+      "hash": "sha256:5e1bb825fb5123e5402fc9920ddb3deb0d653974fb36d8a69e8a183a71d54d93",
       "category": "generated"
     },
     ".claude/skills/mvt-check-context/SKILL.md": {
-      "hash": "sha256:f38899107d4702a2cae7aa485d24c1408b99a8843c84cc0fa53fe239d6e0289f",
+      "hash": "sha256:6bdbcc9224dc42338ab3ed7aaace379065ec021398e01bac5dc53df371d0e11c",
       "category": "generated"
     },
     ".claude/skills/mvt-cleanup/SKILL.md": {
@@ -27,7 +27,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-config/SKILL.md": {
-      "hash": "sha256:738272c96007693d0867087213bb139b8a1a373b079e439e8e45a94bf69c06f8",
+      "hash": "sha256:05c215a50c401a7bd571ecf1e6f7a9a90651761b4fb6ccf409f56c2f26c6061f",
       "category": "generated"
     },
     ".claude/skills/mvt-create-skill/SKILL.md": {
@@ -47,7 +47,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-help/SKILL.md": {
-      "hash": "sha256:d96c20f48628fa4cc68a1bcec8e294f060b5011b5db6da18bf3675dd5cb490d6",
+      "hash": "sha256:837ded9ec75f08e44c74eb8bbe5e87fe3bb9308f56516b6281d23ec0577e0059",
       "category": "generated"
     },
     ".claude/skills/mvt-implement/SKILL.md": {
@@ -75,7 +75,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-resume/SKILL.md": {
-      "hash": "sha256:7cef3dc99f09f28493258bd769fb7a17dd016affc7a5e2e7e1979f5218f960e2",
+      "hash": "sha256:d3bf64f72835ce8d9731260fc44e0d4f47a37dc1f229f05081d853ddbbea56d9",
       "category": "generated"
     },
     ".claude/skills/mvt-review/SKILL.md": {
@@ -83,7 +83,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-status/SKILL.md": {
-      "hash": "sha256:ded7b69bce0d12297c932d058fc3c231191f567c63ee80e2695b736727d2d1c9",
+      "hash": "sha256:a3563da9113d78cb985b213dafcfd1bc36fce6f3fbf45596b0f2c8e7c5b2ee38",
       "category": "generated"
     },
     ".claude/skills/mvt-sync-context/SKILL.md": {
@@ -91,7 +91,7 @@
       "category": "generated"
     },
     ".claude/skills/mvt-template/SKILL.md": {
-      "hash": "sha256:f00861bd85b06bcfb7948a0ddf4541f72f44aa700726af19f0d1f7adbc44abba",
+      "hash": "sha256:11deff9ba03eee2c35ac1fadc9e531e5232160b98f3b9945ebc2849a1903e6d6",
       "category": "generated"
     },
     ".claude/skills/mvt-test/SKILL.md": {
