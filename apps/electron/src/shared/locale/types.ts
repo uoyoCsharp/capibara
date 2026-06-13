@@ -679,6 +679,7 @@ export interface LocaleMessages {
       reconnectConfirm: string;
       reconnectSuccess: string;
       reconnectError: string;
+      lastErrorPrefix: string;
     };
     sessions: {
       title: string;

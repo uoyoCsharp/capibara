@@ -274,6 +274,12 @@ export interface McpTransportDiagnostic {
   sseClientConnected: boolean;
   /** Whether the Streamable HTTP transport is initialized and ready to accept connections. */
   httpTransportReady: boolean;
+  /**
+   * Most recent transport-level error message observed since start
+   * (onerror callback, /mcp handler throw, or readiness-probe failure).
+   * Null when no error has been observed.
+   */
+  lastError: string | null;
 }
 
 export interface SessionDiagnostic {

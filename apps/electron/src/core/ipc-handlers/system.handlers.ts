@@ -193,7 +193,7 @@ export function registerSystemHandlers(deps: SystemHandlersDeps): void {
   // ─── Dev Diagnostics (ADR-2) ──────────────────────────────────────
   ipcMain.handle('capibara:dev:diagnose', async () => {
     try {
-      const snapshot: DiagnosticSnapshot = { agents: [], mcpTransport: { listening: false, port: 0, sseClientConnected: false, httpTransportReady: false }, sessions: [], scannedAt: new Date().toISOString() };
+      const snapshot: DiagnosticSnapshot = { agents: [], mcpTransport: { listening: false, port: 0, sseClientConnected: false, httpTransportReady: false, lastError: null }, sessions: [], scannedAt: new Date().toISOString() };
 
       // Shared session data for agent counts and session inventory
       let allSessions: import('@core/modules/acp/types/acp.types').AcpSessionRecord[] = [];

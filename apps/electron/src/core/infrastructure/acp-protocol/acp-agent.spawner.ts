@@ -92,7 +92,7 @@ export class AcpAgentSpawner {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...entry.env },
       windowsHide: true,
-      shell: process.platform === 'win32',
+      shell: false,
     });
 
     const agentProcess: AgentProcess = {

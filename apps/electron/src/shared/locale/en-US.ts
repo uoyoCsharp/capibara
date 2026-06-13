@@ -668,6 +668,7 @@ export const enUS: LocaleMessages = {
       reconnectConfirm: 'Reconnect MCP server? {n} active session(s) will lose their MCP connection.',
       reconnectSuccess: 'MCP server restarted on port {port}.',
       reconnectError: 'Failed to restart MCP server.',
+      lastErrorPrefix: 'Last error: ',
     },
     sessions: {
       title: 'Active Sessions',

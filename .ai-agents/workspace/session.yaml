@@ -3,23 +3,6 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-review
-    completed_at: 2026-06-12T08:10:01.313Z
-    summary: "Reviewed task dependency system (t1-t6): found 1 critical bug in BehaviorEngine.onDependencyResolved (wrong status category filter), 2 warnings (hardcoded terminal statuses, N+1 queries), 2
-      suggestions"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-fix
-    completed_at: 2026-06-12T08:26:51.332Z
-    summary: 修复审查发现的 1 个关键问题和 2 个警告：C-1 BehaviorEngine 状态过滤错误、W-1 硬编码终端状态、W-2 N+1 查询问题
-    change_id: 20260612-task-dependency
-  - skill: /mvt-test
-    completed_at: 2026-06-12T08:33:47.486Z
-    summary: 编写依赖系统单元测试：repository (19 tests), service (14 tests), behavior-engine (11 tests)，共 44 个测试全部通过，计划完成 (7/7)
-    change_id: 20260612-task-dependency
-  - skill: /mvt-fix
-    completed_at: 2026-06-12T09:20:13.946Z
-    summary: 添加 Task Dependency System 多语言支持：types.ts, en-US.ts, zh-CN.ts 中添加 dependencies section
-    change_id: 20260612-task-dependency
   - skill: /mvt-fix
     completed_at: 2026-06-12T09:35:30.109Z
     summary: 修复 planning mode 依赖显示问题：MCP tool 描述添加 dependsOn 说明、PlanDraftNodeRecord 类型添加 dependsOn 字段、PlanTreeReview 和 PlanPreviewPane 渲染依赖信息
@@ -43,6 +26,22 @@ history:
   - skill: /mvt-bug-detect
     completed_at: 2026-06-12T10:09:23.090Z
     summary: "分析OpenCode agent启动失败: 确认为外部agent错误而非Capibara bug"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-12T14:58:11.055Z
+    summary: "Identified module resolution bug: @agentclientprotocol/claude-agent-acp missing from root package.json, causing path truncation error at space in 'Git Repos'"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-12T15:10:52.203Z
+    summary: Fixed module resolution bug by using app.getAppPath() instead of import.meta.url to avoid pnpm symlink + space path issue
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-12T15:15:38.919Z
+    summary: "Fixed agent spawn shell parameter issue - changed shell: true to shell: false to avoid path truncation on Windows"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-12T15:39:16.606Z
+    summary: "分析 MCP 连接失败 bug: 候选根因为 HTTP transport 错误静默、缺就绪探针、SSE 单槽位污染、opencode 在 Windows 的 shell 回归风险"
     change_id: 20260612-task-dependency
 active_change:
   id: 20260612-task-dependency

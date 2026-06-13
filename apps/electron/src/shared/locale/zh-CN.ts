@@ -665,6 +665,7 @@ export const zhCN: LocaleMessages = {
       reconnectConfirm: '重新连接 MCP 服务器？{n} 个活动会话将失去 MCP 连接。',
       reconnectSuccess: 'MCP 服务器已重启，端口 {port}。',
       reconnectError: '重启 MCP 服务器失败。',
+      lastErrorPrefix: '最近错误：',
     },
     sessions: {
       title: '活动会话',

@@ -174,6 +174,11 @@ function McpSection({ snapshot, onReconnect }: { snapshot: DiagnosticSnapshot; o
           <span>{mcp.sseClientConnected ? t.devPanel.mcp.sseConnected : t.devPanel.mcp.sseDisconnected}</span>
           <span>{mcp.httpTransportReady ? t.devPanel.mcp.httpReady : t.devPanel.mcp.httpNotReady}</span>
         </div>
+        {mcp.lastError && (
+          <p className="text-[11px] text-red-500 break-all" title={mcp.lastError}>
+            {t.devPanel.mcp.lastErrorPrefix}{mcp.lastError}
+          </p>
+        )}
         <button
           onClick={onReconnect}
           className="flex items-center gap-1 mt-1 px-2 py-1 text-[11px] rounded border border-border hover:bg-accent transition-colors"
