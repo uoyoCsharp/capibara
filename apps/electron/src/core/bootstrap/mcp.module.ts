@@ -13,8 +13,8 @@ import { buildCapibaraMcpServer, type McpServerDeps } from '@core/infrastructure
 import { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 
 export interface McpModule {
-  mcpServer: McpServer;
   mcpTransport: McpHttpTransportManager;
+  serverFactory: () => McpServer;
 }
 
 export function registerMcpModule(
@@ -41,9 +41,8 @@ export function registerMcpModule(
     collaborationConfig,
   };
 
-  const mcpServer = buildCapibaraMcpServer(deps);
-
+  const serverFactory = () => buildCapibaraMcpServer(deps);
   const mcpTransport = new McpHttpTransportManager(logger, deps);
 
-  return { mcpServer, mcpTransport };
+  return { mcpTransport, serverFactory };
 }

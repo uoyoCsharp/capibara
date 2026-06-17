@@ -675,6 +675,7 @@ export interface LocaleMessages {
       sseDisconnected: string;
       httpReady: string;
       httpNotReady: string;
+      activeSessions: string;
       reconnect: string;
       reconnectConfirm: string;
       reconnectSuccess: string;

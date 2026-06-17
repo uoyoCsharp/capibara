@@ -173,6 +173,7 @@ function McpSection({ snapshot, onReconnect }: { snapshot: DiagnosticSnapshot; o
           <span>{t.devPanel.mcp.port}: {mcp.port}</span>
           <span>{mcp.sseClientConnected ? t.devPanel.mcp.sseConnected : t.devPanel.mcp.sseDisconnected}</span>
           <span>{mcp.httpTransportReady ? t.devPanel.mcp.httpReady : t.devPanel.mcp.httpNotReady}</span>
+          <span>{t.devPanel.mcp.activeSessions}: {mcp.activeSessionCount}</span>
         </div>
         {mcp.lastError && (
           <p className="text-[11px] text-red-500 break-all" title={mcp.lastError}>

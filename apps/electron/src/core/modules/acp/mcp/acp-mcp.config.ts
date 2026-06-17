@@ -23,9 +23,10 @@ export class AcpMcpConfigBuilder {
 
   /**
    * Build MCP server config list for an ACP session.
+   * @param sessionKey - Internal session ID used as the URL path component for session routing
    * @param transport - Preferred transport type: 'http' (default) or 'sse'
    */
-  buildMcpServers(transport: McpTransportType = 'http'): acp.McpServer[] {
+  buildMcpServers(sessionKey: string, transport: McpTransportType = 'http'): acp.McpServer[] {
     if (this.mcpHttpPort === 0) {
       this.logger.warn('MCP HTTP port not set, returning empty MCP servers');
       return [];
@@ -36,7 +37,7 @@ export class AcpMcpConfigBuilder {
         {
           type: 'http' as const,
           name: 'capibara',
-          url: `http://127.0.0.1:${this.mcpHttpPort}/mcp`,
+          url: `http://127.0.0.1:${this.mcpHttpPort}/mcp/${sessionKey}`,
           headers: [],
         },
       ];

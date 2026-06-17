@@ -313,8 +313,9 @@ export async function bootstrap(): Promise<void> {
     acpModule.suspensionManager, config.collaboration,
   );
 
-  const mcpPort = await mcp.mcpTransport.start(mcp.mcpServer);
+  const mcpPort = await mcp.mcpTransport.start(mcp.serverFactory);
   acpModule.mcpConfigBuilder.setHttpPort(mcpPort);
+  acpModule.sessionManager.setMcpTransportPool(mcp.mcpTransport);
 
   const prompt = registerPromptModule(
     workflow.taskRepo,

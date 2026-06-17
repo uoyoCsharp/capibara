@@ -4,44 +4,44 @@ session:
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
   - skill: /mvt-fix
-    completed_at: 2026-06-12T09:35:30.109Z
-    summary: 修复 planning mode 依赖显示问题：MCP tool 描述添加 dependsOn 说明、PlanDraftNodeRecord 类型添加 dependsOn 字段、PlanTreeReview 和 PlanPreviewPane 渲染依赖信息
-    change_id: 20260612-task-dependency
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-12T09:40:34.253Z
-    summary: "确认设置页切换agent后模型选择区域不显示的bug: AgentConfigPanel条件渲染在agent无缓存模型状态时隐藏了ModelSelector"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-fix
-    completed_at: 2026-06-12T09:44:15.142Z
-    summary: "修复设置页切换agent后模型选择区域不显示: 移除AgentConfigPanel中多余的modelSupported条件渲染,ModelSelector始终显示"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-12T09:53:12.905Z
-    summary: "确认DevPanel操作导致Planning输入框禁用的bug: sessionManager.expire/close不触发run:cancelled事件,isAIBusy卡在true"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-fix
-    completed_at: 2026-06-12T10:03:13.300Z
-    summary: "修复DevPanel操作导致Planning输入框禁用: 在session终止时触发run:cancelled事件"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-12T10:09:23.090Z
-    summary: "分析OpenCode agent启动失败: 确认为外部agent错误而非Capibara bug"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-12T14:58:11.055Z
-    summary: "Identified module resolution bug: @agentclientprotocol/claude-agent-acp missing from root package.json, causing path truncation error at space in 'Git Repos'"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-fix
-    completed_at: 2026-06-12T15:10:52.203Z
-    summary: Fixed module resolution bug by using app.getAppPath() instead of import.meta.url to avoid pnpm symlink + space path issue
-    change_id: 20260612-task-dependency
-  - skill: /mvt-fix
     completed_at: 2026-06-12T15:15:38.919Z
     summary: "Fixed agent spawn shell parameter issue - changed shell: true to shell: false to avoid path truncation on Windows"
     change_id: 20260612-task-dependency
   - skill: /mvt-bug-detect
     completed_at: 2026-06-12T15:39:16.606Z
     summary: "分析 MCP 连接失败 bug: 候选根因为 HTTP transport 错误静默、缺就绪探针、SSE 单槽位污染、opencode 在 Windows 的 shell 回归风险"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-17T06:31:06.650Z
+    summary: 诊断 opencode-agent 检测模型失败 Bug：Windows 下 spawn shell:false 无法执行 npm 提供的 .cmd shim
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-17T06:39:26.273Z
+    summary: 应用 Bug 修复：spawn shell 选项按 .cmd/.bat 后缀区分，opencode 在 Windows 上可正常 spawn；新增 4 个回归测试覆盖 .cmd/.bat/.exe/non-Windows 四种场景
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-17T08:03:29.304Z
+    summary: 诊断 MCP 偶发 'Mcp-Session-Id header is required' Bug：Streamable HTTP 单 transport 共享 sessionId，多客户端 initialize 竞态
+    change_id: 20260612-task-dependency
+  - skill: /mvt-design
+    completed_at: 2026-06-17T08:36:51.003Z
+    summary: 设计 MCP Streamable HTTP 多客户端 transport 池方案：每 ACP session 独立 transport，URL 路径路由，生命周期钩子回收
+    change_id: 20260612-task-dependency
+  - skill: /mvt-implement
+    completed_at: 2026-06-17T08:58:16.255Z
+    summary: 实现 MCP Streamable HTTP 多客户端 transport 池：每 ACP session 独立 transport，URL 路径路由 /mcp/{sessionKey}，生命周期钩子回收，18 文件修改，283 测试通过
+    change_id: 20260612-task-dependency
+  - skill: /mvt-review
+    completed_at: 2026-06-17T09:01:32.328Z
+    summary: 审查 MCP 多客户端 transport 池实现：0 Critical, 2 Warning (并发 slot 分配竞态, 池无上限), 2 Suggestion, 批准附带意见
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-17T09:06:13.751Z
+    summary: 修复 MCP transport pool 审查发现：并发 slot 分配竞态（pendingAllocations 序列化）、池大小警告阈值、serverFactory 运行时守卫
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-17T09:22:31.235Z
+    summary: 诊断了两个 bug：AI 输出逐字显示（RunOutputPanel 未使用 assistantText），以及任务完成后仍显示运行中（RunOutputPanel 不刷新 runs）
     change_id: 20260612-task-dependency
 active_change:
   id: 20260612-task-dependency

@@ -3,6 +3,7 @@ import type { ExecutorInput, ExecutorOutput } from '@core/modules/execution/type
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { IRoleRepository } from '@core/modules/organization/interfaces/i-role.repository';
 import type { IConversationRepository } from '@core/modules/conversation/interfaces/i-conversation.repository';
+import { randomUUID } from 'node:crypto';
 import type { IAcpSessionManager } from '@core/modules/acp/interfaces/i-acp-session.manager';
 import type { ISessionSuspensionManager } from '@core/modules/acp/interfaces/i-session-suspension.manager';
 import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
@@ -105,7 +106,8 @@ export class AcpExecutor implements IExecutor {
 
     // 2. Build MCP server config (use agent's preferred transport)
     const agentEntry = this.agentConfig.registry.find((e) => e.id === agentId);
-    const mcpServers = this.mcpConfigBuilder.buildMcpServers(agentEntry?.mcpTransport);
+    const sessionKey = randomUUID();
+    const mcpServers = this.mcpConfigBuilder.buildMcpServers(sessionKey, agentEntry?.mcpTransport);
 
     // 3. Resolve allowed paths from role's file access policy
     let allowedPaths: string[] | undefined;
@@ -126,6 +128,7 @@ export class AcpExecutor implements IExecutor {
       cwd: input.projectDir,
       mcpServers,
       allowedPaths,
+      sessionKey,
     });
 
     // 5. Build prompt content

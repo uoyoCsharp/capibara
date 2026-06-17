@@ -88,11 +88,12 @@ export class AcpAgentSpawner {
       throw new Error(`Agent not registered: ${agentId}; available: [${available}]`);
     }
 
+    const isCmdShim = /\.(cmd|bat)$/i.test(entry.command);
     const child = spawn(entry.command, entry.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...entry.env },
       windowsHide: true,
-      shell: false,
+      shell: process.platform === 'win32' && isCmdShim,
     });
 
     const agentProcess: AgentProcess = {

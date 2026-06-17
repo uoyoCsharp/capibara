@@ -664,6 +664,7 @@ export const enUS: LocaleMessages = {
       sseDisconnected: 'SSE Disconnected',
       httpReady: 'Streamable HTTP Ready',
       httpNotReady: 'Streamable HTTP Not Ready',
+      activeSessions: 'Active Sessions',
       reconnect: 'Reconnect',
       reconnectConfirm: 'Reconnect MCP server? {n} active session(s) will lose their MCP connection.',
       reconnectSuccess: 'MCP server restarted on port {port}.',

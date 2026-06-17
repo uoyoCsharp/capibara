@@ -661,6 +661,7 @@ export const zhCN: LocaleMessages = {
       sseDisconnected: 'SSE 未连接',
       httpReady: 'Streamable HTTP 已就绪',
       httpNotReady: 'Streamable HTTP 未就绪',
+      activeSessions: '活动会话数',
       reconnect: '重连',
       reconnectConfirm: '重新连接 MCP 服务器？{n} 个活动会话将失去 MCP 连接。',
       reconnectSuccess: 'MCP 服务器已重启，端口 {port}。',

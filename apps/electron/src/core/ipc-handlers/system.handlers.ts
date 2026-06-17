@@ -193,7 +193,7 @@ export function registerSystemHandlers(deps: SystemHandlersDeps): void {
   // ─── Dev Diagnostics (ADR-2) ──────────────────────────────────────
   ipcMain.handle('capibara:dev:diagnose', async () => {
     try {
-      const snapshot: DiagnosticSnapshot = { agents: [], mcpTransport: { listening: false, port: 0, sseClientConnected: false, httpTransportReady: false, lastError: null }, sessions: [], scannedAt: new Date().toISOString() };
+      const snapshot: DiagnosticSnapshot = { agents: [], mcpTransport: { listening: false, port: 0, sseClientConnected: false, httpTransportReady: false, activeSessionCount: 0, lastError: null }, sessions: [], scannedAt: new Date().toISOString() };
 
       // Shared session data for agent counts and session inventory
       let allSessions: import('@core/modules/acp/types/acp.types').AcpSessionRecord[] = [];
@@ -265,8 +265,7 @@ export function registerSystemHandlers(deps: SystemHandlersDeps): void {
   ipcMain.handle('capibara:dev:restart-mcp', async () => {
     try {
       mcpTransportManager.stop();
-      const newServer = buildCapibaraMcpServer(mcpServerDeps);
-      const newPort = await mcpTransportManager.start(newServer);
+      const newPort = await mcpTransportManager.start(() => buildCapibaraMcpServer(mcpServerDeps));
       mcpConfigBuilder.setHttpPort(newPort);
       logger.info('MCP server restarted', { newPort });
       return ok({ newPort });

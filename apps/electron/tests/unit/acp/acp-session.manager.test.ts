@@ -13,7 +13,9 @@ class FakeAcpSessionRepository implements IAcpSessionRepository {
   private rows = new Map<string, AcpSessionRecord>();
 
   create(input: CreateAcpSessionInput): AcpSessionRecord {
-    const record: AcpSessionRecord = { id: randomUUID(), createdAt: new Date().toISOString(), ...input };
+    const id = input.id && !this.rows.has(input.id) ? input.id : randomUUID();
+    const { id: _inputId, ...rest } = input;
+    const record: AcpSessionRecord = { id, createdAt: new Date().toISOString(), ...rest };
     this.rows.set(record.id, record);
     return record;
   }
@@ -112,6 +114,7 @@ const CREATE_PARAMS = {
   taskId: 'task-1',
   cwd: '/workspace',
   mcpServers: [],
+  sessionKey: randomUUID(),
 } as const;
 
 describe('AcpSessionManager', () => {

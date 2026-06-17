@@ -272,8 +272,10 @@ export interface McpTransportDiagnostic {
   port: number;
   /** Whether an SSE client is currently connected via the /sse endpoint. */
   sseClientConnected: boolean;
-  /** Whether the Streamable HTTP transport is initialized and ready to accept connections. */
+  /** Whether the Streamable HTTP transport pool is initialized and ready to accept connections. */
   httpTransportReady: boolean;
+  /** Number of active session slots in the HTTP transport pool. */
+  activeSessionCount: number;
   /**
    * Most recent transport-level error message observed since start
    * (onerror callback, /mcp handler throw, or readiness-probe failure).

@@ -179,6 +179,8 @@ export interface CreateSessionParams {
   cwd: string;
   mcpServers: schema.McpServer[];
   allowedPaths?: string[];
+  /** Pre-generated internal session ID used as the MCP URL path component. */
+  sessionKey: string;
 }
 
 // ── Prompt ───────────────────────────────────────────────

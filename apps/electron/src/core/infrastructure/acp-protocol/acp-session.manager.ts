@@ -17,6 +17,7 @@ import type {
 import type { AcpAgentSpawner, SessionContext } from './acp-agent.spawner';
 import type { AcpUpdateHandler } from '@core/modules/acp/handlers/acp-update.handler';
 import type { IModelPreferenceStore } from '@core/modules/acp/interfaces/i-model-preference.store';
+import type { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 import { assertTransition } from './session-lifecycle';
 import { normalizeModelState } from './model-state';
 
@@ -55,6 +56,7 @@ export class AcpSessionManager implements IAcpSessionManager {
   /** Live runtime context keyed by internal session id; present only while the connection is alive. */
   private live = new Map<string, SessionRuntimeContext>();
   private rebuilder: SessionRebuilder | null = null;
+  private mcpTransportPool: McpHttpTransportManager | null = null;
 
   constructor(
     private readonly repo: IAcpSessionRepository,
@@ -67,6 +69,11 @@ export class AcpSessionManager implements IAcpSessionManager {
     // Spawner fs/permission callbacks resolve context by the in-flight prompt's session id (ADR-4),
     // so this resolver just maps an acpSessionId to its live context — no global "current" sentinel.
     this.spawner.setSessionContextResolver((acpSessionId: string) => this.resolveByAcpSessionId(acpSessionId));
+  }
+
+  /** Inject the MCP transport pool for lifecycle cleanup (releaseSession on close/expire). */
+  setMcpTransportPool(pool: McpHttpTransportManager): void {
+    this.mcpTransportPool = pool;
   }
 
   /** Inject the rebuild context provider (wired by t7/t8 with role+org config). */
@@ -91,7 +98,7 @@ export class AcpSessionManager implements IAcpSessionManager {
   }
 
   async createSession(params: CreateSessionParams): Promise<AcpSessionRecord> {
-    const { agentId, roleId, orgId, runId, taskId, conversationId, cwd, mcpServers, allowedPaths } = params;
+    const { agentId, roleId, orgId, runId, taskId, conversationId, cwd, mcpServers, allowedPaths, sessionKey } = params;
 
     const agentProcess = await this.spawner.getOrSpawn(agentId);
     const connection = agentProcess.connection!;
@@ -106,6 +113,7 @@ export class AcpSessionManager implements IAcpSessionManager {
 
     const now = new Date().toISOString();
     const record = this.repo.create({
+      id: sessionKey,
       acpSessionId: response.sessionId,
       agentId,
       roleId,
@@ -259,6 +267,7 @@ export class AcpSessionManager implements IAcpSessionManager {
       closedAt: new Date().toISOString(),
     });
     this.evict(sessionId);
+    this.mcpTransportPool?.releaseSession(sessionId);
     this.logger.info('ACP session closed', { sessionId, reason });
   }
 
@@ -268,6 +277,7 @@ export class AcpSessionManager implements IAcpSessionManager {
     await this.protocolClose(record);
     this.repo.updateStatus(sessionId, 'expired', { lastActivityAt: new Date().toISOString() });
     this.evict(sessionId);
+    this.mcpTransportPool?.releaseSession(sessionId);
     this.logger.info('ACP session expired', { sessionId });
   }
 
@@ -401,6 +411,10 @@ export class AcpSessionManager implements IAcpSessionManager {
   }
 
   async shutdown(): Promise<void> {
+    // Release all MCP transport pool entries for live sessions
+    for (const sessionId of this.live.keys()) {
+      this.mcpTransportPool?.releaseSession(sessionId);
+    }
     // Leave persisted records non-terminal so reconcileOnStartup expires them next launch.
     this.live.clear();
     await this.spawner.shutdown();

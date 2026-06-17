@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { McpHttpTransportManager } from '@core/infrastructure/mcp-protocol/mcp-http-transport';
 import type { ILogger } from '@core/foundation/interfaces/i-logger';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { McpServerDeps } from '@core/modules/mcp/mcp-server.builder';
+import type { McpServerDeps } from '@core/infrastructure/mcp-protocol/mcp-server.builder';
 import http from 'node:http';
 
 function stubLogger(): ILogger {
@@ -17,6 +17,7 @@ function stubLogger(): ILogger {
 function stubMcpServer(): McpServer {
   return {
     connect: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
   } as unknown as McpServer;
 }
 
@@ -27,6 +28,7 @@ function stubDeps(): McpServerDeps {
     processEngine: {} as McpServerDeps['processEngine'],
     conversationService: {} as McpServerDeps['conversationService'],
     roleService: {} as McpServerDeps['roleService'],
+    planningService: {} as McpServerDeps['planningService'],
     eventPublisher: {} as McpServerDeps['eventPublisher'],
     suspensionManager: null,
     collaborationConfig: null,
@@ -36,13 +38,13 @@ function stubDeps(): McpServerDeps {
 describe('McpHttpTransportManager', () => {
   let manager: McpHttpTransportManager;
   let logger: ILogger;
-  let mcpServer: McpServer;
   let deps: McpServerDeps;
+  let serverFactory: () => McpServer;
 
   beforeEach(() => {
     logger = stubLogger();
-    mcpServer = stubMcpServer();
     deps = stubDeps();
+    serverFactory = () => stubMcpServer();
     manager = new McpHttpTransportManager(logger, deps);
   });
 
@@ -52,38 +54,32 @@ describe('McpHttpTransportManager', () => {
 
   describe('start()', () => {
     it('binds to a random port on 127.0.0.1 and returns the port number', async () => {
-      const port = await manager.start(mcpServer);
+      const port = await manager.start(serverFactory);
 
       expect(port).toBeGreaterThan(0);
       expect(port).toBeLessThan(65536);
     });
 
-    it('connects the McpServer to the Streamable HTTP transport at startup', async () => {
-      await manager.start(mcpServer);
-
-      expect(mcpServer.connect).toHaveBeenCalled();
-    });
-
     it('logs the port on startup', async () => {
-      const port = await manager.start(mcpServer);
+      const port = await manager.start(serverFactory);
 
-      expect(logger.info).toHaveBeenCalledWith('MCP server started (SSE + Streamable HTTP)', { port });
+      expect(logger.info).toHaveBeenCalledWith('MCP server started (SSE + Streamable HTTP pool)', { port });
     });
 
     it('getPort() returns the bound port after start', async () => {
-      const port = await manager.start(mcpServer);
+      const port = await manager.start(serverFactory);
 
       expect(manager.getPort()).toBe(port);
     });
   });
 
-  describe('Streamable HTTP endpoint', () => {
-    it('accepts POST /mcp requests', async () => {
-      const port = await manager.start(mcpServer);
+  describe('session-routed Streamable HTTP endpoint', () => {
+    it('accepts POST /mcp/{sessionKey} requests and allocates a session slot', async () => {
+      const port = await manager.start(serverFactory);
 
       const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
         const req = http.request(
-          { hostname: '127.0.0.1', port, path: '/mcp', method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' } },
+          { hostname: '127.0.0.1', port, path: '/mcp/test-session-key', method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' } },
           resolve,
         );
         req.on('error', reject);
@@ -93,12 +89,56 @@ describe('McpHttpTransportManager', () => {
 
       expect(response.statusCode).toBeDefined();
       response.resume();
+      expect(manager.getActiveSessionKeys()).toContain('test-session-key');
+    });
+
+    it('returns 400 for POST /mcp without session key', async () => {
+      const port = await manager.start(serverFactory);
+
+      const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/mcp', method: 'POST', headers: { 'Content-Type': 'application/json' } },
+          resolve,
+        );
+        req.on('error', reject);
+        req.write('{}');
+        req.end();
+      });
+
+      expect(response.statusCode).toBe(400);
+      response.resume();
+    });
+  });
+
+  describe('releaseSession()', () => {
+    it('removes the session slot from the pool', async () => {
+      const port = await manager.start(serverFactory);
+
+      await new Promise<http.IncomingMessage>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/mcp/session-to-release', method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' } },
+          resolve,
+        );
+        req.on('error', reject);
+        req.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } } }));
+        req.end();
+      });
+
+      expect(manager.getActiveSessionKeys()).toContain('session-to-release');
+
+      manager.releaseSession('session-to-release');
+
+      expect(manager.getActiveSessionKeys()).not.toContain('session-to-release');
+    });
+
+    it('is a no-op for unknown session keys', () => {
+      manager.releaseSession('nonexistent');
     });
   });
 
   describe('request routing', () => {
     it('returns 404 for unknown paths', async () => {
-      const port = await manager.start(mcpServer);
+      const port = await manager.start(serverFactory);
 
       const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
         const req = http.request(
@@ -115,7 +155,7 @@ describe('McpHttpTransportManager', () => {
     });
 
     it('returns 400 for POST /messages without active SSE connection', async () => {
-      const port = await manager.start(mcpServer);
+      const port = await manager.start(serverFactory);
 
       const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
         const req = http.request(
@@ -135,7 +175,7 @@ describe('McpHttpTransportManager', () => {
 
   describe('stop()', () => {
     it('closes the server and resets port to 0', async () => {
-      await manager.start(mcpServer);
+      await manager.start(serverFactory);
       expect(manager.getPort()).toBeGreaterThan(0);
 
       manager.stop();
@@ -144,7 +184,7 @@ describe('McpHttpTransportManager', () => {
     });
 
     it('logs shutdown message', async () => {
-      await manager.start(mcpServer);
+      await manager.start(serverFactory);
       manager.stop();
 
       expect(logger.info).toHaveBeenCalledWith('MCP server stopped');
@@ -156,13 +196,43 @@ describe('McpHttpTransportManager', () => {
     });
 
     it('releases the port so it can be reused', async () => {
-      await manager.start(mcpServer);
+      await manager.start(serverFactory);
       manager.stop();
 
       const manager2 = new McpHttpTransportManager(logger, deps);
-      const port2 = await manager2.start(stubMcpServer());
+      const port2 = await manager2.start(serverFactory);
       expect(port2).toBeGreaterThan(0);
       manager2.stop();
+    });
+
+    it('clears all session slots on stop', async () => {
+      const port = await manager.start(serverFactory);
+
+      await new Promise<http.IncomingMessage>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/mcp/session-a', method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' } },
+          resolve,
+        );
+        req.on('error', reject);
+        req.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } } }));
+        req.end();
+      });
+
+      expect(manager.getActiveSessionKeys().length).toBe(1);
+      manager.stop();
+      expect(manager.getActiveSessionKeys().length).toBe(0);
+    });
+  });
+
+  describe('getDiagnostic()', () => {
+    it('includes activeSessionCount', async () => {
+      await manager.start(serverFactory);
+
+      const diag = manager.getDiagnostic();
+      expect(diag).toHaveProperty('activeSessionCount');
+      expect(typeof diag.activeSessionCount).toBe('number');
+      expect(diag).toHaveProperty('listening', true);
+      expect(diag).toHaveProperty('httpTransportReady', true);
     });
   });
 
@@ -172,7 +242,7 @@ describe('McpHttpTransportManager', () => {
     });
 
     it('returns 0 after stop is called', async () => {
-      await manager.start(mcpServer);
+      await manager.start(serverFactory);
       manager.stop();
       expect(manager.getPort()).toBe(0);
     });

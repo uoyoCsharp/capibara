@@ -67,7 +67,7 @@ export class SqliteAcpSessionRepository implements IAcpSessionRepository {
   constructor(private readonly connection: ISqliteConnection) {}
 
   create(input: CreateAcpSessionInput): AcpSessionRecord {
-    const id = randomUUID();
+    const id = input.id ?? randomUUID();
     this.connection.getDb()
       .prepare(`
         INSERT INTO acp_sessions (
