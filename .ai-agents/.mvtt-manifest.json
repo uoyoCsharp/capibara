@@ -1,7 +1,7 @@
 {
-  "mvtt_version": "2.0.0-beta.6",
+  "mvtt_version": "2.0.0",
   "installed_at": "2026-05-27T10:48:04.265Z",
-  "last_updated_at": "2026-06-12T03:59:26.607Z",
+  "last_updated_at": "2026-06-17T06:16:28.055Z",
   "platforms": [
     "claude"
   ],
@@ -139,15 +139,15 @@
       "category": "create_once"
     },
     ".ai-agents/scripts/epic-update.cjs": {
-      "hash": "sha256:5074250d21cefe4e320d3eb3e2ebfaa07d05292d2b005058fec2d9153e1efa29",
+      "hash": "sha256:db818022bbf9cd57175b2fc8fa4590af6f3c7de17aaf34d6563cf5f820699550",
       "category": "generated"
     },
     ".ai-agents/scripts/plan-update.cjs": {
-      "hash": "sha256:cfb76ff4750ca954d022facedea18c14d77aa2e8c047db1807179a8f18fa5648",
+      "hash": "sha256:9d847dfea9bf76214676e22d9578ee5320bed87e5e0bf11cb19ea9fb5829e039",
       "category": "generated"
     },
     ".ai-agents/scripts/session-update.cjs": {
-      "hash": "sha256:9849f0d43883030573b9816c2ca23e904e914f69ee34bec9389ef5a66ac6e83a",
+      "hash": "sha256:54c3f450c5cbd14f4cc4e020738e82d40727047296c6c41a23cf86bc422043dd",
       "category": "generated"
     },
     ".ai-agents/config.yaml": {
@@ -155,11 +155,11 @@
       "category": "create_once"
     },
     ".ai-agents/workspace/session.yaml": {
-      "hash": "sha256:0e712332d3cfdb069a6d7ad59d83caa1e6bf732d77d5b9c697c8e01d18944a88",
+      "hash": "sha256:fe2575160a9c65502abd0193a4514877734e42e74314887bb639143520c29a4a",
       "category": "create_once"
     },
     ".ai-agents/workspace/project-context.yaml": {
-      "hash": "sha256:d0d97aaea0cdf0f09a0de506fb2954d43c86841ee9904701646920f01463282e",
+      "hash": "sha256:180eecbce7b519ba6b87e0a5fcd642c58db9c89de6b1e554f54cf03f2faa0eaf",
       "category": "create_once"
     }
   }
