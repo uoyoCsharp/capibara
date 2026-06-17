@@ -117,6 +117,9 @@ export class TaskOrchestrator {
       })
       .catch((err) => {
         this.logger.error('RunCoordinator failed for task', { taskId, roleId, error: String(err) });
+        try { this.scheduleNext(orgId); } catch (e) {
+          this.logger.error('Recovery scheduleNext failed', { taskId, error: String(e) });
+        }
       });
   }
 

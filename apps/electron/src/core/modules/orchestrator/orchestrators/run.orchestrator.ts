@@ -31,8 +31,11 @@ export class RunOrchestrator {
 
   start(): void {
     this.eventBus.on('run:failed', (e) => {
-      this.onRunFailed(e);
-      this.onRunEnded(e.payload.orgId);
+      const retryScheduled = this.onRunFailed(e);
+      const dispatched = this.drainPendingWakes(e.payload.orgId);
+      if (!dispatched && !retryScheduled) {
+        this.taskOrchestrator.scheduleNext(e.payload.orgId);
+      }
     });
     this.eventBus.on('run:succeeded', (e) => this.onRunEnded(e.payload.orgId));
     this.eventBus.on('run:cancelled', (e) => this.onRunEnded(e.payload.orgId));
@@ -40,8 +43,8 @@ export class RunOrchestrator {
     this.logger.info('RunOrchestrator started');
   }
 
-  private onRunFailed(event: DomainEvent<'run:failed'>): void {
-    this.retryScheduler.scheduleRetry(event.payload.runId);
+  private onRunFailed(event: DomainEvent<'run:failed'>): boolean {
+    return this.retryScheduler.scheduleRetry(event.payload.runId);
   }
 
   private onRunEnded(orgId: string): void {
@@ -100,6 +103,9 @@ export class RunOrchestrator {
         .executeForConversation(next.conversationId, next.roleId, orgId, this.locale)
         .catch((err) => {
           this.logger.error('Pending wake execution failed', { error: String(err) });
+          try { this.taskOrchestrator.scheduleNext(orgId); } catch (e) {
+            this.logger.error('Recovery scheduleNext failed', { error: String(e) });
+          }
         });
       return true;
     }
@@ -115,6 +121,9 @@ export class RunOrchestrator {
         )
         .catch((err) => {
           this.logger.error('Pending wake execution failed', { error: String(err) });
+          try { this.taskOrchestrator.scheduleNext(orgId); } catch (e) {
+            this.logger.error('Recovery scheduleNext failed', { error: String(e) });
+          }
         });
       return true;
     }

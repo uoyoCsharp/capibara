@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { CircleNotch, CheckCircle, XCircle, Clock, Terminal, FolderOpen, Pause, ArrowsClockwise } from '@phosphor-icons/react';
 import { MarkdownContent } from '../ui/markdown-content';
-import type { RunRecord, ToolCallLogRecord } from '@core/shared/types';
+import type { RunRecord, ToolCallLogRecord, DesktopEvent } from '@core/shared/types';
 import { useRunLogs } from '../../hooks/use-run-logs';
 import { useToolCalls } from '../../hooks/use-tool-calls';
 import { Badge } from '../ui/badge';
@@ -33,7 +33,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? null;
   const isRunning = selectedRun?.status === 'running';
 
-  const { entries } = useRunLogs(isRunning ? selectedRunId : null);
+  const { entries, assistantText } = useRunLogs(isRunning ? selectedRunId : null);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const initialScrollDoneRef = useRef(false);
   const [historicToolCalls, setHistoricToolCalls] = useState<ToolCallLogRecord[]>([]);
@@ -49,9 +49,34 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
     });
   }, [taskId]);
 
+  const refreshRuns = useCallback(async () => {
+    const res = await api().getRunsByTaskId(taskId);
+    if (res.ok && res.data) {
+      setRuns(res.data);
+      setSelectedRunId((prev) => {
+        if (prev && res.data.some((r) => r.id === prev)) return prev;
+        return res.data.length > 0 ? res.data[0].id : null;
+      });
+    }
+  }, [taskId]);
+
   useEffect(() => {
     initialScrollDoneRef.current = false;
   }, [selectedRunId]);
+
+  useEffect(() => {
+    if (!selectedRunId) return;
+    const unsub = api().subscribe((event) => {
+      const typed = event as DesktopEvent;
+      if (
+        (typed.type === 'run:completed' && typed.runId === selectedRunId) ||
+        (typed.type === 'run:changed')
+      ) {
+        void refreshRuns();
+      }
+    });
+    return unsub;
+  }, [selectedRunId, refreshRuns]);
 
   useEffect(() => {
     if (!selectedRunId || isRunning) {
@@ -142,7 +167,7 @@ export function RunOutputPanel({ taskId }: RunOutputPanelProps) {
           statusIcon={statusIcon}
         />
         <LiveLoadingView
-          entries={entries}
+          assistantText={assistantText}
           selectedRun={selectedRun}
           statusIcon={statusIcon}
           statusLabel={statusLabel}
@@ -297,79 +322,25 @@ function RunOutputHeader({ runs, selectedRunId, onSelectRun, onOpenLogDir, statu
 }
 
 interface LiveLoadingViewProps {
-  entries: ReturnType<typeof useRunLogs>['entries'];
+  assistantText: ReturnType<typeof useRunLogs>['assistantText'];
   selectedRun: RunRecord;
   statusIcon: (status: string) => React.ReactNode;
   statusLabel: (status: string) => string;
   t: ReturnType<typeof useT>;
 }
 
-function isStructuredMarker(chunk: string): boolean {
-  try {
-    const parsed = JSON.parse(chunk);
-    return parsed.type === 'tool_call_start' || parsed.type === 'tool_call_update' || parsed.type === 'plan';
-  } catch {
-    return false;
-  }
-}
-
-function parseLogChunk(raw: string): string | null {
-  if (isStructuredMarker(raw)) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed.type === 'input') {
-      return `Prompt: ${parsed.roleId ?? 'unknown'} / ${parsed.wakeReason ?? 'wake'}`;
-    }
-    if (parsed.tool) return parsed.tool;
-    if (parsed.title) return parsed.title;
-    if (parsed.message) return parsed.message;
-    return null;
-  } catch {
-    const trimmed = raw.trim();
-    return trimmed.length > 200 ? trimmed.slice(0, 200) + '...' : trimmed;
-  }
-}
-
-function LiveLoadingView({ entries, selectedRun, statusIcon, statusLabel, t }: LiveLoadingViewProps) {
-  const [displayText, setDisplayText] = useState<string | null>(null);
-  const [isVisible, setIsVisible] = useState(true);
-  const pendingTextRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+function LiveLoadingView({ assistantText, selectedRun, statusIcon, statusLabel, t }: LiveLoadingViewProps) {
   const { toolCalls } = useToolCalls(selectedRun.id);
   const activeToolCall = toolCalls.find(tc => tc.status === 'running');
-
-  const latestPlainEntry = useMemo(() => {
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const parsed = parseLogChunk(entries[i].chunk);
-      if (parsed !== null) return parsed;
-    }
-    return null;
-  }, [entries]);
+  const textContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const newText = activeToolCall?.title || latestPlainEntry;
-    if (newText !== displayText && newText !== null) {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      pendingTextRef.current = newText;
-      setIsVisible(false);
-      timerRef.current = setTimeout(() => {
-        setDisplayText(pendingTextRef.current);
-        setIsVisible(true);
-        timerRef.current = null;
-      }, 150);
-    } else if (newText === null && displayText !== null) {
-      setDisplayText(null);
+    if (textContainerRef.current) {
+      textContainerRef.current.scrollTop = textContainerRef.current.scrollHeight;
     }
-  }, [activeToolCall?.title, latestPlainEntry]);
+  }, [assistantText]);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+  const hasContent = !!assistantText || !!activeToolCall;
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
@@ -385,19 +356,28 @@ function LiveLoadingView({ entries, selectedRun, statusIcon, statusLabel, t }: L
         </div>
       </div>
 
-      <div className="px-4 py-6 min-h-[80px] flex items-center">
-        {displayText ? (
-          <div className={`flex items-center gap-2 w-full transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
-            <span className="text-sm text-foreground truncate">{displayText}</span>
-          </div>
-        ) : (
-          <div className={`flex items-center gap-2 w-full text-muted-foreground transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+      {hasContent ? (
+        <div className="px-4 py-4 space-y-3 max-h-[400px] overflow-auto" ref={textContainerRef}>
+          {activeToolCall && (
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
+              <span className="text-sm text-foreground">{activeToolCall.title}</span>
+            </div>
+          )}
+          {assistantText && (
+            <div className="text-sm text-foreground">
+              <MarkdownContent content={assistantText} />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="px-4 py-6 min-h-20 flex items-center">
+          <div className="flex items-center gap-2 w-full text-muted-foreground">
             <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-pulse flex-shrink-0" />
             <span className="text-sm">{t.runOutput.waitingForOutput}</span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

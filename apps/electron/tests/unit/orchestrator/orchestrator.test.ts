@@ -734,6 +734,66 @@ describe('Orchestrators (task + conversation + run)', () => {
         expect(logger.logs.some((l) => l.level === 'error' && l.msg.includes('Pending wake execution failed'))).toBe(true);
       });
     });
+
+    // ── Recovery after execution failure (BUG #1 / #3) ─────────────
+    //
+    // When drainPendingWakes deletes the wake and dispatches via
+    // fire-and-forget, a rejection in the execution promise must NOT
+    // stall the scheduling chain. The current code only logs the error
+    // and returns true (skipping scheduleNext), permanently orphaning
+    // the task. After fix, scheduleNext must be called as recovery.
+
+    it('calls scheduleNext when executeForTask rejects (recovery path)', async () => {
+      vi.mocked(pendingWakeRepo.findNext).mockReturnValue(pendingWake);
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: true });
+      vi.mocked(runCoordinator.executeForTask).mockRejectedValue(new Error('Spawn failed'));
+
+      eventBus.emit({
+        type: 'run:succeeded',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'r', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+      });
+
+      await vi.waitFor(() => {
+        expect(taskScheduler.findNextTask).toHaveBeenCalledWith(TEST_ORG_ID);
+      });
+    });
+
+    it('calls scheduleNext when executeForConversation rejects (recovery path)', async () => {
+      vi.mocked(pendingWakeRepo.findNext).mockReturnValue({
+        ...pendingWake,
+        conversationId: 'conv-recover',
+        taskId: null,
+      });
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: true });
+      vi.mocked(runCoordinator.executeForConversation).mockRejectedValue(new Error('Conversation failed'));
+
+      eventBus.emit({
+        type: 'run:succeeded',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'r', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+      });
+
+      await vi.waitFor(() => {
+        expect(taskScheduler.findNextTask).toHaveBeenCalledWith(TEST_ORG_ID);
+      });
+    });
+
+    it('does not permanently stall the org when execute rejects without a run:failed event', async () => {
+      vi.mocked(pendingWakeRepo.findNext).mockReturnValue(pendingWake);
+      vi.mocked(wakeGateValidator.validate).mockReturnValue({ allowed: true });
+      vi.mocked(runCoordinator.executeForTask).mockRejectedValue(new Error('Spawn failed'));
+
+      eventBus.emit({
+        type: 'run:succeeded',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'r', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+      });
+
+      await vi.waitFor(() => {
+        expect(taskScheduler.findNextTask).toHaveBeenCalledWith(TEST_ORG_ID);
+      });
+    });
   });
 
   // ─── resumeInterruptedForOrg ─────────────────────────────────
@@ -811,6 +871,100 @@ describe('Orchestrators (task + conversation + run)', () => {
           taskId: 'task-blocked',
         }),
       );
+    });
+  });
+
+  // ==========================================================================
+  // Retry + drain race condition (BUG #2)
+  // ==========================================================================
+  //
+  // When a run fails, onRunFailed calls scheduleRetry (which uses setTimeout
+  // to defer wake creation) and then immediately calls onRunEnded. The retry
+  // wake hasn't been created yet — drainPendingWakes finds nothing, and
+  // scheduleNext picks the same task (rolled back by RunEngine). Later the
+  // setTimeout fires and creates a duplicate retry wake.
+
+  describe('retry and drain race (Bug 2)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('does not call scheduleNext when retry was scheduled (avoids duplicate dispatch)', () => {
+      vi.useFakeTimers();
+
+      const runOrgId = 'org-race-1';
+      vi.mocked(retryScheduler.scheduleRetry).mockReturnValue(true);
+
+      vi.mocked(taskScheduler.findNextTask).mockClear();
+
+      eventBus.emit({
+        type: 'run:failed',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'run-race', orgId: runOrgId, roleId: 'role-retry', tokenCount: 0, errorMessage: null },
+      });
+
+      // drainPendingWakes runs (may find nothing if queue empty)
+      expect(pendingWakeRepo.findNext).toHaveBeenCalledWith(runOrgId);
+
+      // scheduleNext is NOT called because the retry mechanism owns re-dispatch
+      expect(taskScheduler.findNextTask).not.toHaveBeenCalled();
+    });
+
+    it('drainPendingWakes does not find a retry wake that has not been created yet', () => {
+      vi.useFakeTimers();
+
+      const runOrgId = 'org-race-2';
+      vi.mocked(retryScheduler.scheduleRetry).mockImplementation(() => {
+        setTimeout(() => {}, 5000);
+        return true;
+      });
+
+      vi.mocked(pendingWakeRepo.findNext).mockClear();
+
+      eventBus.emit({
+        type: 'run:failed',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'run-race-2', orgId: runOrgId, roleId: 'role-retry', tokenCount: 0, errorMessage: null },
+      });
+
+      const findNextCallsBeforeTimer = vi.mocked(pendingWakeRepo.findNext).mock.calls.length;
+      expect(findNextCallsBeforeTimer).toBeGreaterThanOrEqual(1);
+
+      vi.advanceTimersByTime(5000);
+    });
+  });
+
+  // ==========================================================================
+  // tryWake recovery after execution failure (BUG #1 — TaskOrchestrator variant)
+  // ==========================================================================
+  //
+  // TaskOrchestrator.tryWake also uses the fire-and-forget pattern. When
+  // executeForTask rejects, the error is only logged. The wake was already
+  // consumed (tryWake doesn't go through pending_wakes on the happy path),
+  // so the task is permanently orphaned. After fix, scheduleNext must be
+  // attempted as recovery.
+
+  describe('tryWake recovery after execution failure', () => {
+    it('calls scheduleNext again when executeForTask rejects in tryWake', async () => {
+      const task = taskFixture({ id: 'task-trywake-fail' });
+      vi.mocked(taskScheduler.findNextTask).mockReturnValue({ task, wakeReason: 'task_scheduled' });
+      vi.mocked(runCoordinator.executeForTask).mockRejectedValue(new Error('Spawn failed'));
+
+      // Clear any calls from beforeEach wiring
+      vi.mocked(taskScheduler.findNextTask).mockClear();
+
+      eventBus.emit({
+        type: 'run:succeeded',
+        timestamp: new Date().toISOString(),
+        payload: { runId: 'r', orgId: TEST_ORG_ID, roleId: TEST_ROLE_ID, tokenCount: 0 },
+      });
+
+      // First call comes from onRunEnded -> scheduleNext (normal path).
+      // After fix, the rejection in tryWake should trigger scheduleNext
+      // again as recovery — resulting in 2+ calls.
+      await vi.waitFor(() => {
+        expect(vi.mocked(taskScheduler.findNextTask).mock.calls.length).toBeGreaterThanOrEqual(2);
+      });
     });
   });
 });

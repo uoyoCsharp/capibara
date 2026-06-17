@@ -3,30 +3,6 @@ session:
   last_command: /mvt-update-plan
   last_synced_at: 2026-06-04T04:20:57.563Z
 history:
-  - skill: /mvt-fix
-    completed_at: 2026-06-12T15:15:38.919Z
-    summary: "Fixed agent spawn shell parameter issue - changed shell: true to shell: false to avoid path truncation on Windows"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-12T15:39:16.606Z
-    summary: "分析 MCP 连接失败 bug: 候选根因为 HTTP transport 错误静默、缺就绪探针、SSE 单槽位污染、opencode 在 Windows 的 shell 回归风险"
-    change_id: 20260612-task-dependency
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-17T06:31:06.650Z
-    summary: 诊断 opencode-agent 检测模型失败 Bug：Windows 下 spawn shell:false 无法执行 npm 提供的 .cmd shim
-    change_id: 20260612-task-dependency
-  - skill: /mvt-fix
-    completed_at: 2026-06-17T06:39:26.273Z
-    summary: 应用 Bug 修复：spawn shell 选项按 .cmd/.bat 后缀区分，opencode 在 Windows 上可正常 spawn；新增 4 个回归测试覆盖 .cmd/.bat/.exe/non-Windows 四种场景
-    change_id: 20260612-task-dependency
-  - skill: /mvt-bug-detect
-    completed_at: 2026-06-17T08:03:29.304Z
-    summary: 诊断 MCP 偶发 'Mcp-Session-Id header is required' Bug：Streamable HTTP 单 transport 共享 sessionId，多客户端 initialize 竞态
-    change_id: 20260612-task-dependency
-  - skill: /mvt-design
-    completed_at: 2026-06-17T08:36:51.003Z
-    summary: 设计 MCP Streamable HTTP 多客户端 transport 池方案：每 ACP session 独立 transport，URL 路径路由，生命周期钩子回收
-    change_id: 20260612-task-dependency
   - skill: /mvt-implement
     completed_at: 2026-06-17T08:58:16.255Z
     summary: 实现 MCP Streamable HTTP 多客户端 transport 池：每 ACP session 独立 transport，URL 路径路由 /mcp/{sessionKey}，生命周期钩子回收，18 文件修改，283 测试通过
@@ -42,6 +18,30 @@ history:
   - skill: /mvt-bug-detect
     completed_at: 2026-06-17T09:22:31.235Z
     summary: 诊断了两个 bug：AI 输出逐字显示（RunOutputPanel 未使用 assistantText），以及任务完成后仍显示运行中（RunOutputPanel 不刷新 runs）
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-17T09:30:01.163Z
+    summary: 修复了两个bug：LiveLoadingView 使用累加的 assistantText 显示 AI 输出（非逐字），RunOutputPanel 订阅 run:changed/run:completed 事件刷新 runs 状态
+    change_id: 20260612-task-dependency
+  - skill: /mvt-bug-detect
+    completed_at: 2026-06-17T09:38:14.353Z
+    summary: 确认了调度系统中三个连锁缺陷导致任务永久丢失：fire-and-forget 提前删除 PendingWake、drainPendingWakes 虚假返回 true、retry 与立即调度竞态
+    change_id: 20260612-task-dependency
+  - skill: /mvt-test
+    completed_at: 2026-06-17T09:49:44.311Z
+    summary: "添加了 6 个单元测试覆盖调度系统 recovery 路径（BUG #1/#2/#3）：4 个 recovery 测试验证执行失败后 scheduleNext 是否被调用（当前均失败确认 bug），2 个 retry 竞态测试记录时序问题"
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-17T09:54:10.507Z
+    summary: 修复调度系统三个连锁缺陷：1) drainPendingWakes 和 tryWake 的 .catch() 中加入 scheduleNext 恢复路径 2) run:failed 不再无条件调用 onRunEnded 避免与 retry 竞态 3) onRunFailed 返回 retry 调度结果控制后续流程
+    change_id: 20260612-task-dependency
+  - skill: /mvt-review
+    completed_at: 2026-06-17T09:56:05.339Z
+    summary: 审查调度系统recovery修复：0 Critical, 1 Warning (double-fault风险), 2 Suggestions (重复测试、conversation scope), 批准附带意见
+    change_id: 20260612-task-dependency
+  - skill: /mvt-fix
+    completed_at: 2026-06-17T10:01:43.107Z
+    summary: 修复 review 发现的2个问题：W-01 三个 .catch() 中的 scheduleNext 用 try/catch 包裹防止双故障；S-02 conversation.orchestrator onResponseNeeded 执行失败后重新入队 PendingWake
     change_id: 20260612-task-dependency
 active_change:
   id: 20260612-task-dependency

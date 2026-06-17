@@ -79,6 +79,7 @@ export class ConversationOrchestrator {
       .executeForConversation(conversationId, roleId, orgId, this.locale)
       .catch((err) => {
         this.logger.error('RunCoordinator failed for conversation', { conversationId, error: String(err) });
+        this.pendingWakeRepo.create({ roleId, orgId, reason: 'respondent_woken', taskId: null, conversationId, priority: 0 });
       });
   }
 
